@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.accounts.models import CustomerProfile
 from apps.catalog.models import Category,Product,ProductVariant
-from apps.commerce.models import Order,OrderItem,Payment,Sale
+from apps.commerce.models import Cart,CartItem,Order,OrderItem,Payment,Sale
 from apps.commerce.services import complete_reserved_order
 from apps.core.models import Store
 from apps.core.setup import ensure_initial_setup
@@ -27,10 +27,9 @@ def test_create_owner_fresh_database(monkeypatch):
 def test_role_permissions_are_real():
     _,groups=ensure_initial_setup();assert groups["Cashier"].permissions.filter(codename="add_sale").exists();assert groups["Stock Controller"].permissions.filter(content_type__app_label="inventory").exists();assert groups["Manager"].permissions.filter(content_type__app_label="commerce").exists();assert not groups["Ecommerce Customer"].permissions.exists()
 @pytest.mark.django_db
-def test_customer_cannot_access_locations_or_staff_login():
+def test_customer_cannot_access_internal_locations():
     ensure_initial_setup();user=User.objects.create_user("customer",password="Strong-pass-1296");CustomerProfile.objects.create(user=user);user.groups.add(Group.objects.get(name="Ecommerce Customer"));client=APIClient();client.force_authenticate(user)
     assert client.get("/api/v1/locations/zones/").status_code==403
-    client.force_authenticate(None);response=client.post("/api/v1/auth/staff/login/",{"username":"customer","password":"Strong-pass-1296"});assert response.status_code==403;assert response.json()["detail"]=="Staff access required."
 @pytest.fixture
 def reserved_order(db):
     ensure_initial_setup();customer=User.objects.create_user("buyer",password="Strong-pass-1296");owner=User.objects.create_superuser("owner","o@x.test","Strong-pass-1296");store=Store.objects.first();zone=Zone.objects.get(store=store,code="LEFT");shelf=Shelf.objects.create(zone=zone,code="L-SH-0999",display_name="Covers",x=1,y=2,width=33,height=17,created_by=owner);cat=Category.objects.create(name="Cases",slug="cases");product=Product.objects.create(name="A05 Cover",slug="a05-cover",category=cat);variant=ProductVariant.objects.create(product=product,name="Black",sku="A05-X",selling_price=250);lot=receive_stock(variant=variant,placements=[{"shelf":shelf,"quantity":1}],unit_cost=120,reference="PO-X",user=owner)
@@ -51,8 +50,33 @@ def test_anonymous_cart_survives_registration_and_checkout(reserved_order):
     balance=StockBalance.objects.get(lot=lot,shelf=shelf);balance.reserved=0;balance.save()
     variant=lot.variant;client=APIClient()
     assert client.post("/api/v1/commerce/cart/",{"variant_id":variant.id,"quantity":1},format="json").status_code==200
-    registered=client.post("/api/v1/auth/register/",{"username":"newbuyer","email":"new@buyer.test","first_name":"New Buyer","password":"Strong-pass-1296"},format="json")
+    registered=client.post("/api/v1/auth/register/",{"username":"newbuyer","email":"new@buyer.test","first_name":"New Buyer","password":"Strong-pass-1296","confirm_password":"Strong-pass-1296"},format="json")
     assert registered.status_code==201
     cart=client.get("/api/v1/commerce/cart/").json();assert len(cart["items"])==1
     checkout=client.post("/api/v1/commerce/checkout/",{"fulfillment_method":"PICKUP","payment_method":"CASH_ON_PICKUP"},format="json")
     assert checkout.status_code==201;assert checkout.json()["items"][0]["unit_price"]=="250.00";assert StockBalance.objects.get().reserved==1
+
+@pytest.mark.django_db
+def test_shared_login_accepts_customer_staff_and_email():
+    ensure_initial_setup();customer=User.objects.create_user("customer-login","buyer@lintech.test","Strong-pass-1296");CustomerProfile.objects.create(user=customer);staff=User.objects.create_user("staff-login","staff@lintech.test","Strong-pass-1296",is_staff=True)
+    customer_response=APIClient().post("/api/v1/auth/login/",{"credential":"buyer@lintech.test","password":"Strong-pass-1296"},format="json");staff_response=APIClient().post("/api/v1/auth/login/",{"credential":"staff-login","password":"Strong-pass-1296"},format="json")
+    assert customer_response.status_code==200 and not customer_response.json()["is_staff"];assert staff_response.status_code==200 and staff_response.json()["is_staff"]
+
+@pytest.mark.django_db
+def test_anonymous_cart_survives_customer_login(reserved_order):
+    _,reservation,lot,_,_=reserved_order;OrderItem.objects.filter(reservation=reservation).delete();reservation.delete();balance=StockBalance.objects.get(lot=lot);balance.reserved=0;balance.save();customer=User.objects.create_user("returning","returning@lintech.test","Strong-pass-1296");client=APIClient();client.post("/api/v1/commerce/cart/",{"variant_id":lot.variant_id,"quantity":2},format="json")
+    response=client.post("/api/v1/auth/login/",{"credential":"returning","password":"Strong-pass-1296"},format="json");cart=client.get("/api/v1/commerce/cart/").json()
+    assert response.status_code==200;assert len(cart["items"])==1 and cart["items"][0]["quantity"]=="2.000"
+
+@pytest.mark.django_db
+def test_anonymous_and_customer_carts_merge_one_line(reserved_order):
+    _,reservation,lot,_,_=reserved_order;OrderItem.objects.filter(reservation=reservation).delete();reservation.delete();balance=StockBalance.objects.get(lot=lot);balance.reserved=0;balance.quantity=5;balance.save();customer=User.objects.create_user("merge-user",password="Strong-pass-1296");owned=Cart.objects.create(customer=customer);CartItem.objects.create(cart=owned,variant=lot.variant,quantity=2);client=APIClient();client.post("/api/v1/commerce/cart/",{"variant_id":lot.variant_id,"quantity":1},format="json")
+    client.post("/api/v1/auth/login/",{"credential":"merge-user","password":"Strong-pass-1296"},format="json");cart=client.get("/api/v1/commerce/cart/").json()
+    assert len(cart["items"])==1 and cart["items"][0]["quantity"]=="3.000"
+
+@pytest.mark.django_db
+def test_failed_authentication_never_discards_cart(reserved_order):
+    _,reservation,lot,_,_=reserved_order;OrderItem.objects.filter(reservation=reservation).delete();reservation.delete();balance=StockBalance.objects.get(lot=lot);balance.reserved=0;balance.save();client=APIClient();client.post("/api/v1/commerce/cart/",{"variant_id":lot.variant_id,"quantity":1},format="json")
+    assert client.post("/api/v1/auth/login/",{"credential":"missing","password":"wrong"},format="json").status_code==400
+    assert client.post("/api/v1/auth/register/",{"username":"x","email":"bad","password":"short","confirm_password":"different"},format="json").status_code==400
+    cart=client.get("/api/v1/commerce/cart/").json();assert len(cart["items"])==1 and cart["items"][0]["quantity"]=="1.000"

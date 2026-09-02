@@ -31,28 +31,27 @@ def identity(user):
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def me(request): return Response(identity(request.user) if request.user.is_authenticated else {"authenticated":False,"is_staff":False,"is_superuser":False,"roles":[],"permissions":[]})
-def do_login(request,staff=False):
+def login_account(request):
     anonymous_cart=get_cart(request)
-    user=authenticate(request,username=request.data.get("username"),password=request.data.get("password"))
+    credential=(request.data.get("credential") or request.data.get("username") or "").strip();username=credential
+    if "@" in credential:
+        matches=list(User.objects.filter(email__iexact=credential,is_active=True).values_list("username",flat=True)[:2])
+        if len(matches)!=1:return Response({"detail":"Invalid credentials."},status=400)
+        username=matches[0]
+    user=authenticate(request,username=username,password=request.data.get("password"))
     if not user or not user.is_active:return Response({"detail":"Invalid credentials."},status=400)
-    if staff and not user.is_staff:return Response({"detail":"Staff access required."},status=403)
-    if not staff and user.is_staff:return Response({"detail":"Use staff login for an internal account."},status=403)
     login(request,user); adopt_cart(anonymous_cart,user); return Response(identity(user))
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 @throttle_classes([LoginThrottle])
-def customer_login(request): return do_login(request)
-@api_view(["POST"])
-@permission_classes([permissions.AllowAny])
-@throttle_classes([LoginThrottle])
-def staff_login(request): return do_login(request,staff=True)
+def account_login(request): return login_account(request)
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 @throttle_classes([LoginThrottle])
 def register(request):
     anonymous_cart=get_cart(request); serializer=RegistrationSerializer(data=request.data); serializer.is_valid(raise_exception=True); user=serializer.save(); login(request,user); adopt_cart(anonymous_cart,user); return Response(identity(user),status=201)
 class RegistrationSerializer(serializers.Serializer):
-    username=serializers.CharField(max_length=150); email=serializers.EmailField(); first_name=serializers.CharField(max_length=150); phone=serializers.CharField(max_length=30,required=False,allow_blank=True); password=serializers.CharField(write_only=True)
+    username=serializers.CharField(max_length=150); email=serializers.EmailField(); first_name=serializers.CharField(max_length=150); phone=serializers.CharField(max_length=30,required=False,allow_blank=True); password=serializers.CharField(write_only=True); confirm_password=serializers.CharField(write_only=True)
     def validate_username(self,value):
         if User.objects.filter(username__iexact=value).exists():raise serializers.ValidationError("Username already exists.")
         return value
@@ -60,6 +59,13 @@ class RegistrationSerializer(serializers.Serializer):
         try: password_validation.validate_password(value)
         except DjangoValidationError as exc: raise serializers.ValidationError(exc.messages) from exc
         return value
+    def validate_email(self,value):
+        if User.objects.filter(email__iexact=value).exists():raise serializers.ValidationError("An account with this email already exists.")
+        return value.lower()
+    def validate(self,data):
+        confirmation=data.pop("confirm_password")
+        if data["password"]!=confirmation:raise serializers.ValidationError({"confirm_password":"Passwords do not match."})
+        return data
     def create(self,data):
         phone=data.pop("phone",""); ensure_initial_setup(); user=User.objects.create_user(**data,is_staff=False); CustomerProfile.objects.create(user=user,phone=phone); user.groups.add(Group.objects.get(name="Ecommerce Customer")); return user
 @api_view(["POST"])

@@ -1,12 +1,15 @@
 from django.db.models import F,Sum
 from rest_framework import permissions,serializers,viewsets
-from apps.catalog.models import ProductVariant
+from rest_framework.decorators import api_view,permission_classes
+from rest_framework.response import Response
+from apps.catalog.models import Category,ProductVariant
+from apps.core.models import Store
 from apps.inventory.models import Shelf,StockBalance,Zone
 from apps.inventory.services import archive_shelf,create_shelf,update_shelf
 from .permissions import HasLinTechPermission,IsInternalStaff
 class PublicVariantSerializer(serializers.ModelSerializer):
     product_name=serializers.CharField(source="product.name");slug=serializers.CharField(source="product.slug");description=serializers.CharField(source="product.description");category=serializers.CharField(source="product.category.name");brand=serializers.CharField(source="product.brand.name",allow_null=True);images=serializers.SerializerMethodField();available=serializers.SerializerMethodField()
-    class Meta:model=ProductVariant;fields=["id","product_name","slug","description","category","brand","images","name","sku","barcode","selling_price","available"]
+    class Meta:model=ProductVariant;fields=["id","product_name","slug","description","category","brand","images","name","selling_price","available"]
     def get_images(self,obj):return [{"url":x.image_url,"alt":x.alt_text} for x in obj.product.images.all()]
     def get_available(self,obj):
         if obj.product.product_type=="SERVICE":return None
@@ -15,6 +18,14 @@ class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes=[permissions.AllowAny];serializer_class=PublicVariantSerializer
     queryset=ProductVariant.objects.select_related("product","product__category","product__brand").prefetch_related("product__images").filter(active=True,product__active=True,product__ecommerce_visible=True)
     filterset_fields=["product__category","product__brand"];search_fields=["product__name","product__description","name","sku","barcode"]
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def public_home(request):
+    categories=list(Category.objects.filter(active=True).values("id","name","slug","parent_id").order_by("name"))
+    store=Store.objects.first();store_data={"name":store.name,"phone":store.phone,"email":store.email,"address":store.address} if store else {"name":"LinTech Digital Point","phone":"","email":"","address":""}
+    products=PublicVariantSerializer(PublicProductViewSet.queryset[:8],many=True).data
+    services=PublicVariantSerializer(PublicProductViewSet.queryset.filter(product__product_type="SERVICE")[:6],many=True).data
+    return Response({"store":store_data,"categories":categories,"featured_products":products,"services":services})
 class ShelfSerializer(serializers.ModelSerializer):
     total_quantity=serializers.SerializerMethodField();contents=serializers.SerializerMethodField()
     class Meta:model=Shelf;fields=["id","code","display_name","zone","parent","x","y","width","height","depth","rotation","sort_order","capacity","active","notes","total_quantity","contents"];read_only_fields=["code"]

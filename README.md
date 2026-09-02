@@ -43,9 +43,9 @@ Backend: activate .venv, enter backend, then run python manage.py runserver.
 Frontend: enter frontend, run npm ci, then npm run dev.
 
 - Storefront: http://localhost:5173/
-- Customer login/register: http://localhost:5173/login and /register
-- Staff login: http://localhost:5173/staff/login
-- Staff application: http://localhost:5173/admin-app/dashboard
+- Shared customer/staff login: http://localhost:5173/login
+- Customer registration: http://localhost:5173/register
+- Staff application (after signing in): http://localhost:5173/admin-app/dashboard
 - POS: http://localhost:5173/admin-app/pos
 - Digital Shop: http://localhost:5173/admin-app/digital-shop
 - Django Admin: http://localhost:8000/admin/
@@ -57,7 +57,7 @@ Vite proxies /api to Django.
 
 Customers browse and maintain an anonymous server-side cart. Login or registration preserves it across session rotation. Checkout requires authentication, freezes server prices, creates an order and reserves exact inventory. Account routes expose only the signed-in customer's profile, addresses and orders.
 
-Staff use the separate staff login. Backend permissions protect every internal API. POS supports barcode/SKU/text search, shelf pick locations, products/services, permitted discounts, payments and printable receipts. Online fulfillment displays reserved picks and consumes them idempotently.
+Customers and staff use the same login page; role-aware routing sends each account to an authorized destination. Backend permissions protect every internal API. POS supports barcode/SKU/text search, shelf pick locations, products/services, permitted discounts, payments and printable receipts. Online fulfillment displays reserved picks and consumes them idempotently.
 
 Digital Shop starts with real zones but no fake shelves. Configure existing walls and unequal shelves with persisted geometry. Permanent codes use a locked allocator. Shelf changes write ShelfHistory and AuditLog. Receiving requires physical placement.
 
@@ -70,4 +70,3 @@ Backend: ruff check, manage.py check, makemigrations --check, and pytest from ba
 Frontend: npm run lint, npm run typecheck, npm test, npm run build, and npm run test:e2e.
 
 Playwright needs Chromium and both dev servers for local E2E. CI provisions PostgreSQL and runs backend/frontend checks.
-

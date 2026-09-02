@@ -27,9 +27,9 @@ def get_cart(request):
     cart,_=Cart.objects.get_or_create(session_key=session_key,customer__isnull=True,active=True); return cart
 @transaction.atomic
 def adopt_cart(cart,user):
-    target=Cart.objects.filter(customer=user,active=True).first()
+    cart=Cart.objects.select_for_update().get(pk=cart.pk);target=Cart.objects.select_for_update().filter(customer=user,active=True).first()
     if target and target.pk!=cart.pk:
-        for item in cart.items.all():
+        for item in cart.items.select_for_update().all():
             existing,created=CartItem.objects.get_or_create(cart=target,variant=item.variant,defaults={"quantity":item.quantity})
             if not created:existing.quantity=F("quantity")+item.quantity;existing.save(update_fields=["quantity","updated_at"])
         cart.active=False;cart.save(update_fields=["active","updated_at"]);return target
