@@ -1,0 +1,2 @@
+import{ShoppingBag}from"lucide-react";import{Link}from"react-router-dom";export function HomePage(){return <main><section className="hero"><div><span className="eyebrow">Technology for everyday life</span><h1>Your trusted digital point.</h1><p>Mobile accessories, electrical essentials, computing products and professional cyber services.</p><Link className="button"to="/shop">Shop products</Link></div><div className="heroCard"><ShoppingBag size={50}/><b>Quality products.<br/>Local service.</b><span>Prices in Kenyan Shillings</span></div></section></main>}
+

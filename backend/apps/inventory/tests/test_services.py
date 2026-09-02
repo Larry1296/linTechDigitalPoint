@@ -7,7 +7,7 @@ from apps.catalog.models import Category,Product,ProductVariant
 from apps.commerce.models import SaleAllocation
 from apps.core.models import Store
 from apps.inventory.models import Shelf,StockBalance,Zone
-from apps.inventory.services import complete_sale,receive_stock,reserve_stock,release_reservation,transfer_stock
+from apps.inventory.services import complete_sale,create_shelf,receive_stock,reserve_stock,release_reservation,transfer_stock,update_shelf
 @pytest.fixture
 def data(db):
     user=User.objects.create_user("owner",password="test"); store=Store.objects.create(name="LinTech Digital Point"); zone=Zone.objects.create(store=store,code="LEFT",name="Left Wall",width=Decimal("300"),height=Decimal("220"))
@@ -46,3 +46,11 @@ def test_service_sale_has_no_inventory(data):
     user,a,b,v=data; v.product.product_type="SERVICE"; v.product.save(); v.service_cost=Decimal("10"); v.save()
     sale=complete_sale(lines=[{"variant":v,"quantity":2}],channel="POS",number="LT-SVC",user=user)
     assert sale.cogs==20 and not StockBalance.objects.exists()
+
+@pytest.mark.django_db
+def test_shelf_code_is_collision_safe_and_history_preserves_identity(data):
+    user,a,b,v=data;zone=a.zone;zone.next_shelf_number=1;zone.save()
+    shelf=create_shelf(zone=zone,user=user,display_name="New shelf",x=4,y=8,width=47,height=19)
+    assert shelf.code=="L-SH-0003"
+    original=shelf.code;update_shelf(shelf=shelf,user=user,display_name="Repurposed shelf")
+    shelf.refresh_from_db();assert shelf.code==original;assert list(shelf.history.values_list("event",flat=True))==["CREATED","RENAMED"]

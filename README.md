@@ -1,41 +1,73 @@
 # LinTech Digital Point
 
-A Django/React business platform whose inventory mirrors the real shop: every stocked unit belongs to a cost lot and a physical shelf. POS and ecommerce share the same balances and reservations.
+LinTech Digital Point is a Django REST Framework and React/TypeScript platform joining the real shop, POS and ecommerce to one PostgreSQL lot/location inventory ledger.
 
 ## Architecture
 
-    React + TypeScript -> session/CSRF DRF API -> transactional services -> PostgreSQL
-                                                        |-> immutable movement ledger
-                                                        |-> lots and shelf balances
+    Storefront / Customer / Staff React routes
+                    |
+            session + CSRF API v1
+                    |
+    accounts | catalog | inventory | commerce
+                    |
+       transactional service layer
+                    |
+              PostgreSQL
 
-The backend is split into core, catalog, inventory, and commerce. Stock writes happen through atomic services; FIFO allocations freeze historical COGS. Public serializers expose price and availability but never costs or shelf locations. The responsive frontend includes System/Light/Dark themes and a geometry-driven Digital Shop.
+Stock remains in cost-bearing lots and physical shelf balances. Transfers conserve total stock. POS consumes FIFO unreserved stock. Ecommerce checkout reserves exact lot/shelf allocations; payment completion consumes those same allocations exactly once. Public serializers never include buying price, lots, COGS, profit, suppliers or shelf locations.
 
-## Setup
+## Requirements and PostgreSQL
 
-Requirements: Python 3.12+, Node 22+, npm, PostgreSQL 16+.
+Use Python 3.12+, Node 22+, npm and PostgreSQL 16+. No SQLite fallback exists.
 
-1. Copy `.env.example` to `.env` and configure PostgreSQL plus a strong secret.
-2. Create database `lintech_digital_point` and its dedicated role.
-3. Run `./scripts/bootstrap.sh`.
-4. Set `OWNER_PASSWORD` temporarily if desired. Otherwise bootstrap prints a generated password once.
+Create an application database/role, then copy .env.example to .env and set the PostgreSQL variables plus a strong DJANGO_SECRET_KEY. The local development database name is lintech_digital_point.
 
-Backend: activate `.venv`, enter `backend`, run `python manage.py migrate`, `python manage.py seed_initial`, `python manage.py bootstrap_owner`, then `python manage.py runserver`.
+## Initial setup
 
-Frontend: enter `frontend`, run `npm ci`, then `npm run dev`.
+From the project root:
 
-URLs: storefront/admin http://localhost:5173; API http://localhost:8000/api/v1/; Swagger http://localhost:8000/api/docs/; Django Admin http://localhost:8000/admin/. Vite proxies `/api` to Django.
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r backend/requirements.txt
+    cd backend
+    python manage.py migrate
+    python manage.py seed_initial
+    python manage.py create_owner
+
+create_owner interactively requests username, email, display name and validated password. It safely creates or repairs the Store, zones, roles and permissions. Existing intended owners keep their password unless explicitly confirmed. Normal createsuperuser remains available. bootstrap_owner is a compatibility alias.
+
+## Run and URLs
+
+Backend: activate .venv, enter backend, then run python manage.py runserver.
+
+Frontend: enter frontend, run npm ci, then npm run dev.
+
+- Storefront: http://localhost:5173/
+- Customer login/register: http://localhost:5173/login and /register
+- Staff login: http://localhost:5173/staff/login
+- Staff application: http://localhost:5173/admin-app/dashboard
+- POS: http://localhost:5173/admin-app/pos
+- Digital Shop: http://localhost:5173/admin-app/digital-shop
+- Django Admin: http://localhost:8000/admin/
+- Swagger: http://localhost:8000/api/docs/
+
+Vite proxies /api to Django.
+
+## Workflows
+
+Customers browse and maintain an anonymous server-side cart. Login or registration preserves it across session rotation. Checkout requires authentication, freezes server prices, creates an order and reserves exact inventory. Account routes expose only the signed-in customer's profile, addresses and orders.
+
+Staff use the separate staff login. Backend permissions protect every internal API. POS supports barcode/SKU/text search, shelf pick locations, products/services, permitted discounts, payments and printable receipts. Online fulfillment displays reserved picks and consumes them idempotently.
+
+Digital Shop starts with real zones but no fake shelves. Configure existing walls and unequal shelves with persisted geometry. Permanent codes use a locked allocator. Shelf changes write ShelfHistory and AuditLog. Receiving requires physical placement.
+
+Cash, bank, manual M-Pesa, other and cash-on-pickup states work locally. Live Daraja requires external credentials and a public HTTPS callback.
 
 ## Quality
 
-Backend: `cd backend && ../.venv/bin/ruff check . && ../.venv/bin/pytest`
+Backend: ruff check, manage.py check, makemigrations --check, and pytest from backend using ../.venv.
 
-Frontend: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build`
+Frontend: npm run lint, npm run typecheck, npm test, npm run build, and npm run test:e2e.
 
-## Core behavior
-
-Zones and shelves use real configurable dimensions. Shelf codes are permanent while names can change. Products can span shelves/lots. Transfers conserve total quantity. FIFO sales create immutable cost allocations. Online reservations reduce availability without creating separate ecommerce stock. Initial setup creates the store, five zones and roles, but no fictional shelves.
-
-Cash, manual M-Pesa, bank, other, and cash-on-pickup records work locally. Live Daraja credentials are optional secrets; live service cannot be asserted until credentials and public callback hosting exist.
-
-See `docs/` for architecture, invariants, Digital Shop, API and deployment guidance.
+Playwright needs Chromium and both dev servers for local E2E. CI provisions PostgreSQL and runs backend/frontend checks.
 

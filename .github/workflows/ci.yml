@@ -31,4 +31,27 @@ jobs:
         working-directory: frontend
       - run: npm run lint && npm run typecheck && npm test && npm run build
         working-directory: frontend
-
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: {POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U lintech" --health-interval 5s --health-timeout 5s --health-retries 10
+    env: {POSTGRES_HOST: localhost, POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point, DJANGO_SECRET_KEY: ci-only}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: pip install -r backend/requirements.txt
+      - run: python manage.py migrate && python manage.py seed_initial && python manage.py runserver 127.0.0.1:8000 &
+        working-directory: backend
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run dev -- --host 127.0.0.1 &
+        working-directory: frontend
+      - run: npx wait-on http://127.0.0.1:5173 http://127.0.0.1:8000/api/v1/auth/me/ && npm run test:e2e
+        working-directory: frontend

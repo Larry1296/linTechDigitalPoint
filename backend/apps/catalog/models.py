@@ -15,3 +15,7 @@ class ProductVariant(TimeStamped):
     def __str__(self): return f"{self.product} — {self.name}"
 class PriceHistory(models.Model):
     variant=models.ForeignKey(ProductVariant,related_name="price_history",on_delete=models.CASCADE); price=models.DecimalField(max_digits=14,decimal_places=2); effective_at=models.DateTimeField(auto_now_add=True); changed_by=models.ForeignKey("auth.User",null=True,on_delete=models.SET_NULL)
+
+class ProductImage(TimeStamped):
+    product=models.ForeignKey(Product,related_name="images",on_delete=models.CASCADE); image_url=models.URLField(max_length=500,blank=True); alt_text=models.CharField(max_length=180,blank=True); sort_order=models.PositiveIntegerField(default=0)
+    class Meta: ordering=["sort_order","id"]

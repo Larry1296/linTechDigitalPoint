@@ -9,9 +9,8 @@ command -v psql >/dev/null || { echo "PostgreSQL client required"; exit 1; }
 cd backend
 ../.venv/bin/python manage.py migrate
 ../.venv/bin/python manage.py seed_initial
-../.venv/bin/python manage.py bootstrap_owner
+../.venv/bin/python manage.py create_owner --noinput
 cd ../frontend
 npm install
 npm run build
 echo "LinTech Digital Point is ready."
-
