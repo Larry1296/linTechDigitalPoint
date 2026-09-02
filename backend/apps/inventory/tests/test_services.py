@@ -3,11 +3,11 @@ import pytest
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from catalog.models import Category,Product,ProductVariant
-from commerce.models import SaleAllocation
-from core.models import Store
-from inventory.models import Shelf,StockBalance,Zone
-from inventory.services import complete_sale,receive_stock,reserve_stock,release_reservation,transfer_stock
+from apps.catalog.models import Category,Product,ProductVariant
+from apps.commerce.models import SaleAllocation
+from apps.core.models import Store
+from apps.inventory.models import Shelf,StockBalance,Zone
+from apps.inventory.services import complete_sale,receive_stock,reserve_stock,release_reservation,transfer_stock
 @pytest.fixture
 def data(db):
     user=User.objects.create_user("owner",password="test"); store=Store.objects.create(name="LinTech Digital Point"); zone=Zone.objects.create(store=store,code="LEFT",name="Left Wall",width=Decimal("300"),height=Decimal("220"))
@@ -46,4 +46,3 @@ def test_service_sale_has_no_inventory(data):
     user,a,b,v=data; v.product.product_type="SERVICE"; v.product.save(); v.service_cost=Decimal("10"); v.save()
     sale=complete_sale(lines=[{"variant":v,"quantity":2}],channel="POS",number="LT-SVC",user=user)
     assert sale.cogs==20 and not StockBalance.objects.exists()
-

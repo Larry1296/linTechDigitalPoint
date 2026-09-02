@@ -1,7 +1,7 @@
 from django.contrib.auth.models import Group,Permission,User
 from django.core.management.base import BaseCommand
-from core.models import Store
-from inventory.models import Zone
+from apps.core.models import Store
+from apps.inventory.models import Zone
 class Command(BaseCommand):
     def handle(self,*args,**opts):
         store,_=Store.objects.get_or_create(name="LinTech Digital Point",defaults={"currency":"KES","timezone":"Africa/Nairobi"})
@@ -9,4 +9,3 @@ class Command(BaseCommand):
         for name in ["Owner","Manager","Cashier","Stock Controller","Ecommerce Customer"]: Group.objects.get_or_create(name=name)
         owner=Group.objects.get(name="Owner"); owner.permissions.set(Permission.objects.all())
         self.stdout.write(self.style.SUCCESS("Initial store, zones, and roles are ready."))
-

@@ -50,7 +50,7 @@ def release_reservation(reservation,user=None):
     reservation.active=False; reservation.save(update_fields=["active","updated_at"]); return reservation
 @transaction.atomic
 def complete_sale(*,lines,channel,number,user=None,discount=0,payment_method="CASH",idempotency_key=None):
-    from commerce.models import Payment,Sale,SaleAllocation,SaleItem
+    from apps.commerce.models import Payment,Sale,SaleAllocation,SaleItem
     sale=Sale.objects.create(number=number,channel=channel,created_by=user,discount=_d(discount))
     subtotal=Decimal("0"); cogs=Decimal("0")
     for line in lines:
@@ -69,4 +69,3 @@ def complete_sale(*,lines,channel,number,user=None,discount=0,payment_method="CA
     sale.subtotal=subtotal; sale.total=subtotal-_d(discount); sale.cogs=cogs; sale.gross_profit=sale.total-cogs; sale.save()
     Payment.objects.create(sale=sale,method=payment_method,amount=sale.total,idempotency_key=idempotency_key or number)
     return sale
-

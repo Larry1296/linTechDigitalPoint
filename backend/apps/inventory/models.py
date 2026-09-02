@@ -2,8 +2,8 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
-from core.models import Store,TimeStamped
-from catalog.models import ProductVariant
+from apps.core.models import Store,TimeStamped
+from apps.catalog.models import ProductVariant
 class Zone(TimeStamped):
     store=models.ForeignKey(Store,related_name="zones",on_delete=models.CASCADE); code=models.CharField(max_length=20); name=models.CharField(max_length=120); active=models.BooleanField(default=True); width=models.DecimalField(max_digits=10,decimal_places=2,default=100); height=models.DecimalField(max_digits=10,decimal_places=2,default=100)
     class Meta: constraints=[models.UniqueConstraint(fields=["store","code"],name="unique_zone_code")]
@@ -23,4 +23,3 @@ class Movement(models.Model):
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); lot=models.ForeignKey(StockLot,null=True,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); source=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_out"); destination=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_in"); movement_type=models.CharField(max_length=30,choices=TYPES); reference=models.CharField(max_length=100); performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL); notes=models.TextField(blank=True); created_at=models.DateTimeField(auto_now_add=True)
 class Reservation(TimeStamped):
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); active=models.BooleanField(default=True); reference=models.CharField(max_length=100); expires_at=models.DateTimeField(); allocations=models.JSONField(default=list)
-

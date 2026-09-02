@@ -4,8 +4,8 @@ from rest_framework import permissions,serializers,status,viewsets
 from rest_framework.decorators import action,api_view,permission_classes,throttle_classes
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from catalog.models import Category,Product,ProductVariant
-from inventory.models import Shelf,StockBalance,Zone
+from apps.catalog.models import ProductVariant
+from apps.inventory.models import Shelf,StockBalance,Zone
 class LoginThrottle(AnonRateThrottle): scope="auth"
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])

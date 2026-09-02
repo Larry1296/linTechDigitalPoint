@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.db import models
-from core.models import TimeStamped
+from apps.core.models import TimeStamped
 class Category(TimeStamped):
     name=models.CharField(max_length=120); slug=models.SlugField(unique=True); parent=models.ForeignKey("self",null=True,blank=True,on_delete=models.PROTECT); active=models.BooleanField(default=True)
     def __str__(self): return self.name
@@ -15,4 +15,3 @@ class ProductVariant(TimeStamped):
     def __str__(self): return f"{self.product} — {self.name}"
 class PriceHistory(models.Model):
     variant=models.ForeignKey(ProductVariant,related_name="price_history",on_delete=models.CASCADE); price=models.DecimalField(max_digits=14,decimal_places=2); effective_at=models.DateTimeField(auto_now_add=True); changed_by=models.ForeignKey("auth.User",null=True,on_delete=models.SET_NULL)
-
