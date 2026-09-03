@@ -128,7 +128,6 @@ export function AppFooter() {
           </>
         )}
       </div>
-      <ThemePicker />
     </footer>
   );
 }

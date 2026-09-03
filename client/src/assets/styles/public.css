@@ -81,7 +81,7 @@
 }
 .appFooter {
   display: grid;
-  grid-template-columns: 2fr 1fr 2fr auto;
+  grid-template-columns: 2fr 1fr 2fr;
   gap: 35px;
   text-align: left;
   background: var(--chrome);
@@ -106,12 +106,10 @@
 .appNavbar .brand span,
 .appFooter .brand span,
 .admin aside .brand span,
-.appNavbar .theme,
-.appFooter .theme {
+.appNavbar .theme {
   color: var(--chrome-muted);
 }
-.appNavbar .theme select,
-.appFooter .theme select {
+.appNavbar .theme select {
   background: #102b50;
   color: var(--chrome-text);
   border-color: var(--chrome-line);

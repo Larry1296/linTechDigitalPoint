@@ -177,7 +177,7 @@ main {
   top: 70px;
   height: calc(100vh - 70px);
   align-self: start;
-  overflow-y: auto;
+  overflow-y: hidden;
   z-index: 9;
 }
 .admin aside nav {
