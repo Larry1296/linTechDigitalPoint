@@ -8,13 +8,15 @@ button {
   border: 0;
   border-radius: 9px;
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   padding: 11px 16px;
   font-weight: 700;
   cursor: pointer;
 }
 button:disabled {
-  opacity: 0.45;
+  background: var(--line);
+  color: var(--muted);
+  opacity: 1;
   cursor: not-allowed;
 }
 input,
