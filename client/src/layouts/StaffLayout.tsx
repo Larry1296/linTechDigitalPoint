@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
-import { ThemePicker } from "../components/ThemePicker";
+import { AppFooter, AppNavbar } from "../components/AppChrome";
 const links = [
   {
     to: "/admin-app/dashboard",
@@ -63,26 +63,27 @@ export function StaffLayout() {
       user?.permissions.includes(x.permission),
   );
   return (
-    <div className="admin">
-      <aside>
-        <Link className="brand" to="/">
-          LinTech<span>Digital Point</span>
-        </Link>
-        <small>Signed in as {user?.first_name || user?.username}</small>
-        <strong>{user?.is_superuser ? "Owner" : "Staff"}</strong>
-        <ThemePicker />
-        <nav>
-          {visible.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to}>
-              <Icon />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <main>
-        <Outlet />
-      </main>
-    </div>
+    <>
+      <AppNavbar />
+      <div className="admin">
+        <aside>
+          <Link className="brand" to="/">
+            LinTech<span>Digital Point</span>
+          </Link>
+          <nav>
+            {visible.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to}>
+                <Icon />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        </aside>
+        <main>
+          <Outlet />
+        </main>
+      </div>
+      <AppFooter />
+    </>
   );
 }
