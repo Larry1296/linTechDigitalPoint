@@ -281,6 +281,26 @@ test("new customer keeps the full cart through registration and checkout", async
   await expect(page.getByText("Your cart is empty.")).toBeVisible();
 });
 
+test("existing customer sees the anonymous cart on their dashboard after login", async ({
+  page,
+}) => {
+  await mockShop(page);
+  await page.goto("/shop");
+  await page.getByRole("button", { name: "Add to cart" }).first().click();
+  await page.goto("/login");
+  await page.getByLabel("Username or email").fill("buyer");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(
+    page.getByRole("heading", { name: "Your shopping cart" }),
+  ).toBeVisible();
+  await expect(page.getByText("Samsung A05 Cover")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Continue to checkout" }),
+  ).toHaveAttribute("href", "/checkout");
+});
+
 test("staff use the shared login and return to their intended page", async ({
   page,
 }) => {

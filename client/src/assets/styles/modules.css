@@ -450,6 +450,13 @@ footer {
 .productForm {
   max-width: 980px;
 }
+.accountCart {
+  margin-bottom: 24px;
+}
+.accountCart .cardActions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
 @media (max-width: 800px) {
   .productDetail,
   .checkoutGrid,
