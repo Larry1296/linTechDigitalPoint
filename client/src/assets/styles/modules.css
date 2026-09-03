@@ -371,15 +371,52 @@ footer {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.shelfPanel {
+.shelfOverlay {
   position: fixed;
-  right: 20px;
-  top: 20px;
-  bottom: 20px;
+  inset: 70px 0 0;
+  z-index: 30;
+  background: rgb(0 0 0 / 58%);
+  backdrop-filter: blur(2px);
+}
+.shelfPanel {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  bottom: 16px;
   width: min(440px, calc(100vw - 40px));
-  z-index: 20;
-  overflow: auto;
-  box-shadow: 0 20px 70px #0006;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  opacity: 1;
+  isolation: isolate;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 72%);
+}
+.shelfPanelHeader {
+  position: sticky;
+  top: -20px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -20px -20px 18px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.shelfClose {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+  .shelfPanel {
+    inset: 10px;
+    width: auto;
+  }
 }
 .shelfPanel article,
 .productLocation {

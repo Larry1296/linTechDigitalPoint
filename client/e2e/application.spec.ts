@@ -184,6 +184,18 @@ async function mockShop(page: Page) {
       ];
       return route.fulfill({ status: 201, json: stacks[0] });
     }
+    if (/\/locations\/shelves\/\d+\/contents\/$/.test(path))
+      return route.fulfill({
+        json: {
+          shelf: {
+            code: "RIGHT-R01-L01-S01",
+            display_name: "Level 1 Compartment 1",
+            physical_label: "",
+          },
+          items: [],
+          recent_movements: [],
+        },
+      });
     if (path.endsWith("/commerce/cart/") && request.method() === "POST") {
       const variant = Number(request.postDataJSON().variant_id);
       const product = products.find((item) => item.id === variant)!;
@@ -301,4 +313,15 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await expect(
     page.getByText("Phone Accessories Rack", { exact: true }).first(),
   ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: /RIGHT-R01-L01-S01/ }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Shelf details" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close shelf details" }).click();
+  await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
+    0,
+  );
 });
