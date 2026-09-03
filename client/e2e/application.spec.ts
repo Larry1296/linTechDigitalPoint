@@ -1,41 +1,151 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const products = [
-  { id: 1, product_name: "Samsung A05 Cover", name: "Black", category: "Phone Accessories", selling_price: "250.00", available: "8.000", images: [] },
-  { id: 2, product_name: "Type-C Cable", name: "Standard", category: "Chargers & Cables", selling_price: "300.00", available: "7.000", images: [] },
+  {
+    id: 1,
+    product_name: "Samsung A05 Cover",
+    name: "Black",
+    category: "Phone Accessories",
+    selling_price: "250.00",
+    available: "8.000",
+    images: [],
+  },
+  {
+    id: 2,
+    product_name: "Type-C Cable",
+    name: "Standard",
+    category: "Chargers & Cables",
+    selling_price: "300.00",
+    available: "7.000",
+    images: [],
+  },
 ];
 
 async function mockShop(page: Page) {
   let authenticated = false;
   let staff = false;
   let items: Array<Record<string, unknown>> = [];
-  const cart = () => ({ id: 1, items, total: items.reduce((sum, item) => sum + Number(item.line_total), 0).toFixed(2) });
-  await page.route("**/api/v1/**", async route => {
+  const cart = () => ({
+    id: 1,
+    items,
+    total: items
+      .reduce((sum, item) => sum + Number(item.line_total), 0)
+      .toFixed(2),
+  });
+  await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (path.endsWith("/auth/csrf/")) return route.fulfill({ json: { csrfToken: "test" } });
-    if (path.endsWith("/auth/me/")) return route.fulfill({ json: authenticated ? { id: 5, username: staff ? "owner" : "buyer", authenticated: true, is_staff: staff, is_superuser: staff, roles: staff ? ["Owner"] : ["Ecommerce Customer"], permissions: [] } : { authenticated: false, is_staff: false, is_superuser: false, roles: [], permissions: [] } });
+    if (path.endsWith("/auth/csrf/"))
+      return route.fulfill({ json: { csrfToken: "test" } });
+    if (path.endsWith("/auth/me/"))
+      return route.fulfill({
+        json: authenticated
+          ? {
+              id: 5,
+              username: staff ? "owner" : "buyer",
+              authenticated: true,
+              is_staff: staff,
+              is_superuser: staff,
+              roles: staff ? [] : ["Ecommerce Customer"],
+              permissions: [],
+            }
+          : {
+              authenticated: false,
+              is_staff: false,
+              is_superuser: false,
+              roles: [],
+              permissions: [],
+            },
+      });
     if (path.endsWith("/auth/register/") || path.endsWith("/auth/login/")) {
       authenticated = true;
-      staff = path.endsWith("/auth/login/") && request.postDataJSON().credential === "owner";
-      return route.fulfill({ status: path.endsWith("/auth/register/") ? 201 : 200, json: { id: 5, username: staff ? "owner" : "buyer", authenticated: true, is_staff: staff, is_superuser: staff, roles: staff ? ["Owner"] : ["Ecommerce Customer"], permissions: [] } });
+      staff =
+        path.endsWith("/auth/login/") &&
+        request.postDataJSON().credential === "owner";
+      return route.fulfill({
+        status: path.endsWith("/auth/register/") ? 201 : 200,
+        json: {
+          id: 5,
+          username: staff ? "owner" : "buyer",
+          authenticated: true,
+          is_staff: staff,
+          is_superuser: staff,
+          roles: staff ? [] : ["Ecommerce Customer"],
+          permissions: [],
+        },
+      });
     }
-    if (path.endsWith("/store/home/")) return route.fulfill({ json: { store: { name: "LinTech Digital Point", phone: "", email: "", address: "" }, categories: [], featured_products: products, services: [] } });
-    if (path.endsWith("/store/products/")) return route.fulfill({ json: products });
+    if (path.endsWith("/store/home/"))
+      return route.fulfill({
+        json: {
+          store: {
+            name: "LinTech Digital Point",
+            phone: "",
+            email: "",
+            address: "",
+          },
+          categories: [],
+          featured_products: products,
+          services: [],
+        },
+      });
+    if (path.endsWith("/store/products/"))
+      return route.fulfill({ json: products });
+    if (path.endsWith("/inventory/dashboard/"))
+      return route.fulfill({
+        json: {
+          today: { revenue: 0, cogs: 0, profit: 0, sales: 0 },
+          inventory: {
+            cost: 0,
+            retail: 0,
+            potential_margin: 0,
+            low_stock: 0,
+            total_skus: 0,
+          },
+          orders: {},
+        },
+      });
     if (path.endsWith("/commerce/cart/") && request.method() === "POST") {
       const variant = Number(request.postDataJSON().variant_id);
-      const product = products.find(item => item.id === variant)!;
-      items.push({ id: variant, variant, product_name: product.product_name, variant_name: product.name, quantity: "1.000", unit_price: product.selling_price, line_total: product.selling_price, available: product.available });
+      const product = products.find((item) => item.id === variant)!;
+      items.push({
+        id: variant,
+        variant,
+        product_name: product.product_name,
+        variant_name: product.name,
+        quantity: "1.000",
+        unit_price: product.selling_price,
+        line_total: product.selling_price,
+        available: product.available,
+      });
       return route.fulfill({ json: cart() });
     }
-    if (path.endsWith("/commerce/cart/")) return route.fulfill({ json: cart() });
-    if (path.endsWith("/commerce/checkout/")) { items = []; return route.fulfill({ status: 201, json: { id: 42, number: "LT-WEB-00042", items: [], total: "550.00" } }); }
-    if (path.endsWith("/commerce/orders/42/")) return route.fulfill({ json: { id: 42, number: "LT-WEB-00042", items: [], total: "550.00", status: "AWAITING_PAYMENT" } });
+    if (path.endsWith("/commerce/cart/"))
+      return route.fulfill({ json: cart() });
+    if (path.endsWith("/commerce/checkout/")) {
+      items = [];
+      return route.fulfill({
+        status: 201,
+        json: { id: 42, number: "LT-WEB-00042", items: [], total: "550.00" },
+      });
+    }
+    if (path.endsWith("/commerce/orders/42/"))
+      return route.fulfill({
+        json: {
+          id: 42,
+          number: "LT-WEB-00042",
+          items: [],
+          total: "550.00",
+          status: "AWAITING_PAYMENT",
+        },
+      });
     return route.fulfill({ json: [] });
   });
 }
 
-test("new customer keeps the full cart through registration and checkout", async ({ page }) => {
+test("new customer keeps the full cart through registration and checkout", async ({
+  page,
+}) => {
   await mockShop(page);
   await page.goto("/shop");
   await page.getByRole("button", { name: "Add to cart" }).nth(0).click();
@@ -62,7 +172,9 @@ test("new customer keeps the full cart through registration and checkout", async
   await expect(page.getByText("Your cart is empty.")).toBeVisible();
 });
 
-test("staff use the shared login and return to their intended page", async ({ page }) => {
+test("staff use the shared login and return to their intended page", async ({
+  page,
+}) => {
   await mockShop(page);
   await page.goto("/admin-app/digital-shop");
   await expect(page).toHaveURL(/\/login\?next=%2Fadmin-app%2Fdigital-shop/);
@@ -70,4 +182,16 @@ test("staff use the shared login and return to their intended page", async ({ pa
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/digital-shop$/);
+});
+
+test("Django superuser is displayed as Owner and defaults to the admin dashboard", async ({
+  page,
+}) => {
+  await mockShop(page);
+  await page.goto("/login");
+  await page.getByLabel("Username or email").fill("owner");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
+  await expect(page.getByText("Owner", { exact: true })).toBeVisible();
 });

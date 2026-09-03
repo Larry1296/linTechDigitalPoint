@@ -69,6 +69,7 @@ export function StaffLayout() {
           LinTech<span>Digital Point</span>
         </Link>
         <small>Signed in as {user?.first_name || user?.username}</small>
+        <strong>{user?.is_superuser ? "Owner" : "Staff"}</strong>
         <ThemePicker />
         <nav>
           {visible.map(({ to, label, icon: Icon }) => (

@@ -1,8 +1,7 @@
-import os
 from decimal import Decimal
 import pytest
 from django.contrib.auth.models import Group,User
-from django.core.management import call_command
+from django.test import Client
 from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.accounts.models import CustomerProfile
@@ -14,22 +13,48 @@ from apps.core.setup import ensure_initial_setup
 from apps.inventory.models import Reservation,Shelf,StockBalance,Zone
 from apps.inventory.services import receive_stock
 @pytest.mark.django_db
-def test_create_owner_repairs_existing_user(monkeypatch):
-    user=User.objects.create_user("larry",password="preserve-me"); monkeypatch.setenv("OWNER_USERNAME","larry")
-    call_command("create_owner","--noinput","--username","larry","--email","owner@lintech.test","--first-name","Larry")
-    user.refresh_from_db();assert user.is_staff and user.is_superuser and user.is_active;assert user.groups.filter(name="Owner").exists();assert user.check_password("preserve-me");assert Store.objects.filter(name="LinTech Digital Point").exists();assert Zone.objects.count()==5
+def test_django_superuser_is_owner_in_both_admin_interfaces():
+    ensure_initial_setup()
+    owner=User.objects.create_superuser("owner","owner@lintech.test","Strong-pass-1296")
+    assert owner.is_active and owner.is_staff and owner.is_superuser
+    assert not owner.groups.filter(name="Owner").exists()
+
+    api=APIClient()
+    response=api.post("/api/v1/auth/login/",{"credential":"owner","password":"Strong-pass-1296"},format="json")
+    assert response.status_code==200
+    assert response.json()["is_staff"] is True and response.json()["is_superuser"] is True
+    assert api.get("/api/v1/locations/zones/").status_code==200
+    assert api.get("/api/v1/commerce/pos/catalog/").status_code==200
+    assert api.get("/api/v1/inventory/dashboard/").status_code==200
+    assert api.get("/api/v1/catalog/products/").status_code==200
+
+    django_admin=Client();django_admin.force_login(owner)
+    assert django_admin.get("/admin/").status_code==200
+
 @pytest.mark.django_db
-def test_create_owner_fresh_database(monkeypatch):
-    monkeypatch.setenv("OWNER_PASSWORD","A-strong-owner-password-1296")
-    call_command("create_owner","--noinput","--username","first-owner","--email","owner@lintech.test","--first-name","Larry")
-    user=User.objects.get(username="first-owner");assert user.is_active and user.is_staff and user.is_superuser;assert user.groups.get().name=="Owner"
+def test_initial_setup_uses_staff_roles_without_owner_group():
+    _,groups=ensure_initial_setup()
+    assert set(groups)=={"Manager","Cashier","Stock Controller","Ecommerce Customer"}
+    assert not Group.objects.filter(name="Owner").exists()
 @pytest.mark.django_db
 def test_role_permissions_are_real():
     _,groups=ensure_initial_setup();assert groups["Cashier"].permissions.filter(codename="add_sale").exists();assert groups["Stock Controller"].permissions.filter(content_type__app_label="inventory").exists();assert groups["Manager"].permissions.filter(content_type__app_label="commerce").exists();assert not groups["Ecommerce Customer"].permissions.exists()
 @pytest.mark.django_db
+def test_cashier_is_staff_but_not_owner_and_remains_permission_limited():
+    _,groups=ensure_initial_setup();cashier=User.objects.create_user("cashier",password="Strong-pass-1296",is_staff=True);cashier.groups.add(groups["Cashier"])
+    assert cashier.is_staff and not cashier.is_superuser
+    api=APIClient();api.force_authenticate(cashier)
+    assert api.get("/api/v1/commerce/pos/catalog/").status_code==200
+    assert api.get("/api/v1/catalog/categories/").status_code==403
+    assert api.post("/api/v1/inventory/receive/",{},format="json").status_code==403
+    django_admin=Client();django_admin.force_login(cashier)
+    assert django_admin.get("/admin/auth/user/").status_code==403
+@pytest.mark.django_db
 def test_customer_cannot_access_internal_locations():
     ensure_initial_setup();user=User.objects.create_user("customer",password="Strong-pass-1296");CustomerProfile.objects.create(user=user);user.groups.add(Group.objects.get(name="Ecommerce Customer"));client=APIClient();client.force_authenticate(user)
     assert client.get("/api/v1/locations/zones/").status_code==403
+    django_admin=Client();django_admin.force_login(user)
+    assert django_admin.get("/admin/").status_code==302
 @pytest.fixture
 def reserved_order(db):
     ensure_initial_setup();customer=User.objects.create_user("buyer",password="Strong-pass-1296");owner=User.objects.create_superuser("owner","o@x.test","Strong-pass-1296");store=Store.objects.first();zone=Zone.objects.get(store=store,code="LEFT");shelf=Shelf.objects.create(zone=zone,code="L-SH-0999",display_name="Covers",x=1,y=2,width=33,height=17,created_by=owner);cat=Category.objects.create(name="Cases",slug="cases");product=Product.objects.create(name="A05 Cover",slug="a05-cover",category=cat);variant=ProductVariant.objects.create(product=product,name="Black",sku="A05-X",selling_price=250);lot=receive_stock(variant=variant,placements=[{"shelf":shelf,"quantity":1}],unit_cost=120,reference="PO-X",user=owner)

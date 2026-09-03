@@ -68,7 +68,7 @@ Confirm PostgreSQL is ready before Django setup:
 pg_isready -h localhost -p 5432
 ```
 
-## Server setup and owner creation
+## Server setup and Owner/Admin creation
 
 With `.venv` activated:
 
@@ -76,11 +76,13 @@ With `.venv` activated:
 cd server
 python manage.py migrate
 python manage.py seed_initial
-python manage.py create_owner
+python manage.py createsuperuser
 python manage.py check
 ```
 
-`create_owner` interactively requests username, email, display name, and a validated password. It safely creates or repairs the Store, zones, roles, and permissions. Existing intended owners keep their password unless explicitly confirmed. `bootstrap_owner` remains as a compatibility alias, and Django's standard `createsuperuser` remains available.
+Django's standard `createsuperuser` command interactively requests the administrator credentials. The Django superuser is the LinTech Owner/Admin: the same account has unrestricted access to Django Admin at `/admin/` and the LinTech administrative application through the shared `/login` page. `seed_initial` creates only the Store, zones, staff/customer groups, and their permissions; it never creates a user.
+
+On an existing installation, any account previously provisioned with `is_superuser=True` remains a valid Owner/Admin. Do not create a second account unless another true system administrator is deliberately required.
 
 ## Client setup
 
@@ -164,4 +166,14 @@ After creating the PostgreSQL role/database and configuring `.env`:
 ./scripts/bootstrap.sh
 ```
 
-The script verifies PostgreSQL readiness, installs dependencies, migrates and seeds Django, creates the configured owner non-interactively, checks Django, and builds the client.
+The script verifies PostgreSQL readiness, installs dependencies, migrates and seeds Django, checks Django, and builds the client. It does not create an administrator. After it completes, deliberately create the Owner/Admin interactively if one does not already exist:
+
+```bash
+cd server
+python manage.py createsuperuser
+```
+
+That one account signs into both administrative interfaces:
+
+- Django system administration: http://localhost:8000/admin/
+- Everyday LinTech administration: http://localhost:5173/login → `/admin-app/dashboard`

@@ -13,9 +13,12 @@ fi
 cd server
 ../.venv/bin/python manage.py migrate
 ../.venv/bin/python manage.py seed_initial
-../.venv/bin/python manage.py create_owner --noinput
 ../.venv/bin/python manage.py check
 cd ../client
 npm install
 npm run build
-echo "LinTech Digital Point is ready."
+echo "Database and LinTech base configuration are ready."
+echo
+echo "If you have not created the administrator yet, run:"
+echo "  cd server"
+echo "  python manage.py createsuperuser"

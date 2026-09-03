@@ -126,8 +126,6 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
 # LINTECH BUSINESS SETTINGS
-OWNER_USERNAME = config("OWNER_USERNAME", default="larry")
-OWNER_PASSWORD = config("OWNER_PASSWORD", default="")
 EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="LinTech Digital Point <noreply@lintech.local>")
 
