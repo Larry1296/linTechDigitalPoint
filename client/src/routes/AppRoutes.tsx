@@ -20,11 +20,11 @@ import {
   AnalyticsPage,
   DashboardPage,
   PosPage,
-  ProductsAdminPage,
-  ReceivePage,
   StaffOrdersPage,
 } from "../modules/admin/AdminPages";
-import { DigitalShopPage } from "../modules/admin/DigitalShopPage";
+import { DigitalShopPage } from "../modules/digital-shop/DigitalShopPage";
+import { ProductsPage } from "../modules/products/ProductsPage";
+import { ReceivePage } from "../modules/receiving/ReceivePage";
 import { CustomerProtectedRoute, StaffProtectedRoute } from "./ProtectedRoutes";
 
 export function AppRoutes() {
@@ -100,7 +100,7 @@ export function AppRoutes() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="pos" element={<PosPage />} />
         <Route path="orders" element={<StaffOrdersPage />} />
-        <Route path="products" element={<ProductsAdminPage />} />
+        <Route path="products" element={<ProductsPage />} />
         <Route path="receive" element={<ReceivePage />} />
         <Route path="digital-shop" element={<DigitalShopPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />

@@ -3,11 +3,12 @@ import pytest
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
+from rest_framework.test import APIClient
 from apps.catalog.models import Category,Product,ProductVariant
 from apps.commerce.models import SaleAllocation
 from apps.core.models import Store
-from apps.inventory.models import Shelf,StockBalance,Zone
-from apps.inventory.services import complete_sale,create_shelf,receive_stock,reserve_stock,release_reservation,transfer_stock,update_shelf
+from apps.inventory.models import Movement,Shelf,ShelfLevel,ShelfStack,StockBalance,VariantPreferredLocation,Zone
+from apps.inventory.services import archive_shelf_stack,complete_sale,create_product_with_opening_stock,create_shelf,create_shelf_stack,receive_stock,reserve_stock,release_reservation,transfer_stock,update_shelf,update_shelf_stack
 @pytest.fixture
 def data(db):
     user=User.objects.create_user("owner",password="test"); store=Store.objects.create(name="LinTech Digital Point"); zone=Zone.objects.create(store=store,code="LEFT",name="Left Wall",width=Decimal("300"),height=Decimal("220"))
@@ -54,3 +55,40 @@ def test_shelf_code_is_collision_safe_and_history_preserves_identity(data):
     assert shelf.code=="L-SH-0003"
     original=shelf.code;update_shelf(shelf=shelf,user=user,display_name="Repurposed shelf")
     shelf.refresh_from_db();assert shelf.code==original;assert list(shelf.history.values_list("event",flat=True))==["CREATED","RENAMED"]
+
+@pytest.mark.django_db
+def test_stack_creation_builds_unequal_levels_and_permanent_codes(data):
+    user,a,b,v=data;stack=create_shelf_stack(zone=a.zone,user=user,display_name="Phone Accessories Rack",x=20,y=0,width=180,height=210,depth=40,level_definitions=[{"compartments":2},{"compartments":2},{"compartments":3},{"compartments":3}])
+    assert stack.code=="LEFT-R01" and stack.number_of_levels==4
+    assert ShelfLevel.objects.filter(stack=stack).count()==4 and Shelf.objects.filter(level__stack=stack).count()==10
+    assert list(stack.levels.values_list("shelves__position_in_level",flat=True)).count(3)==2
+    original=stack.code;update_shelf_stack(stack=stack,user=user,display_name="Renamed Rack",x=25);stack.refresh_from_db();assert stack.code==original
+    shelf=Shelf.objects.filter(level__stack=stack).first();shelf_code=shelf.code;update_shelf(shelf=shelf,user=user,display_name="Phone Covers",width=70);shelf.refresh_from_db();assert shelf.code==shelf_code
+
+@pytest.mark.django_db
+def test_product_preference_opening_stock_and_multiple_locations(data):
+    user,a,b,v=data;stack=create_shelf_stack(zone=a.zone,user=user,display_name="Rack",x=0,y=0,width=180,height=200,depth=35,level_definitions=[{"compartments":2}]);shelves=list(Shelf.objects.filter(level__stack=stack).order_by("position_in_level"));category=Category.objects.create(name="Chargers",slug="chargers")
+    product,variant=create_product_with_opening_stock(user=user,product_data={"name":"Type-C Cable","category":category},variant_data={"name":"Standard","sku":"TYPE-C-NEW","selling_price":300},preferred_shelf=shelves[0],opening_quantity=10,opening_unit_cost=120)
+    assert VariantPreferredLocation.objects.get(variant=variant).shelf==shelves[0]
+    assert StockBalance.objects.get(lot__variant=variant,shelf=shelves[0]).quantity==10
+    assert Movement.objects.get(variant=variant).movement_type=="OPENING_STOCK"
+    receive_stock(variant=variant,placements=[{"shelf":shelves[1],"quantity":5}],unit_cost=125,reference="PO-2",user=user)
+    assert StockBalance.objects.filter(lot__variant=variant,shelf__in=shelves).count()==2
+    _,zero=create_product_with_opening_stock(user=user,product_data={"name":"Zero Cable","category":category},variant_data={"name":"Standard","sku":"ZERO-CABLE","selling_price":200},preferred_shelf=shelves[1],opening_quantity=0)
+    assert zero.preferred_location.shelf==shelves[1] and not StockBalance.objects.filter(lot__variant=zero).exists()
+
+@pytest.mark.django_db
+def test_stack_with_stock_cannot_be_archived(data):
+    user,a,b,v=data;stack=create_shelf_stack(zone=a.zone,user=user,display_name="Stock Rack",x=0,y=0,width=100,height=100,depth=30,level_definitions=[{"compartments":1}]);shelf=Shelf.objects.get(level__stack=stack);receive_stock(variant=v,placements=[{"shelf":shelf,"quantity":1}],unit_cost=1,reference="PO",user=user)
+    with pytest.raises(ValidationError,match="still contains stock"):archive_shelf_stack(stack=stack,user=user)
+
+@pytest.mark.django_db
+def test_acceptance_stack_and_product_round_trip():
+    owner=User.objects.create_superuser("rack-owner","rack@example.test","Strong-pass-1296");store=Store.objects.create(name="LinTech Digital Point");zone=Zone.objects.create(store=store,code="RIGHT",name="Right Wall",width=500,height=250);category=Category.objects.create(name="Phone Accessories",slug="phone-accessories");client=APIClient();client.force_authenticate(owner)
+    response=client.post("/api/v1/locations/stacks/",{"zone":zone.id,"display_name":"Phone Accessories Rack","width":"180","height":"210","depth":"40","x":"20","y":"0","levels":[{"compartments":2},{"compartments":2},{"compartments":3},{"compartments":3}]},format="json")
+    assert response.status_code==201;assert response.json()["code"]=="RIGHT-R01";assert sum(len(level["shelves"]) for level in response.json()["levels"])==10
+    shelf=Shelf.objects.get(code="RIGHT-R01-L03-S02")
+    created=client.post("/api/v1/catalog/products/create-with-stock/",{"name":"Samsung Galaxy A05 Cover","category_id":category.id,"product_type":"STOCK_ITEM","variant_name":"Black","sku":"A05-BLK-ACCEPTANCE","selling_price":"250","preferred_shelf_id":shelf.id,"opening_unit_cost":"120","opening_quantity":"10"},format="json")
+    assert created.status_code==201
+    contents=client.get(f"/api/v1/locations/shelves/{shelf.id}/contents/");assert contents.status_code==200;assert contents.json()["items"][0]["product"]=="Samsung Galaxy A05 Cover";assert contents.json()["items"][0]["quantity"]==10.0
+    reloaded=client.get(f"/api/v1/locations/stacks/{response.json()['id']}/");assert reloaded.status_code==200;assert reloaded.json()["width"]=="180.00";assert len(reloaded.json()["levels"])==4

@@ -1,6 +1,6 @@
 # LinTech Digital Point
 
-LinTech Digital Point is a Django REST Framework and React/TypeScript platform for a public storefront, customer accounts, ecommerce, POS, inventory, shelf mapping, and business administration. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
+LinTech Digital Point is a Django REST Framework and React/TypeScript platform for a public storefront, customer accounts, ecommerce, POS, inventory, and business administration. Its Digital Shop is a digital twin of the real hierarchy: Zone → Shelf Stack → Level → Shelf → Stock. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
 
 ## Project structure
 

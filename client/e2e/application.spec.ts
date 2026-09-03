@@ -25,6 +25,20 @@ async function mockShop(page: Page) {
   let authenticated = false;
   let staff = false;
   let items: Array<Record<string, unknown>> = [];
+  let stacks: Array<Record<string, unknown>> = [];
+  const zones = () => [
+    {
+      id: 3,
+      code: "RIGHT",
+      name: "Right Wall",
+      width: "500.00",
+      height: "250.00",
+      active: true,
+      stacks,
+      shelves: [],
+      unassigned_shelves: [],
+    },
+  ];
   const cart = () => ({
     id: 1,
     items,
@@ -105,6 +119,52 @@ async function mockShop(page: Page) {
           orders: {},
         },
       });
+    if (path.endsWith("/locations/zones/"))
+      return route.fulfill({ json: zones() });
+    if (path.endsWith("/locations/stacks/") && request.method() === "POST") {
+      const input = request.postDataJSON();
+      stacks = [
+        {
+          id: 9,
+          zone: 3,
+          zone_name: "Right Wall",
+          code: "RIGHT-R01",
+          display_name: input.display_name,
+          x: String(input.x),
+          y: String(input.y),
+          width: String(input.width),
+          height: String(input.height),
+          depth: String(input.depth),
+          rotation: String(input.rotation),
+          number_of_levels: input.levels.length,
+          active: true,
+          notes: "",
+          measurement_unit: "cm",
+          levels: input.levels.map(
+            (level: { compartments: number }, levelIndex: number) => ({
+              id: levelIndex + 1,
+              stack: 9,
+              level_number: levelIndex + 1,
+              y_position: "0",
+              height: "52.5",
+              active: true,
+              shelves: Array.from(
+                { length: level.compartments },
+                (_, shelfIndex) => ({
+                  id: levelIndex * 10 + shelfIndex + 1,
+                  code: `RIGHT-R01-L${String(levelIndex + 1).padStart(2, "0")}-S${String(shelfIndex + 1).padStart(2, "0")}`,
+                  display_name: `Level ${levelIndex + 1} Compartment ${shelfIndex + 1}`,
+                  physical_label: "",
+                  total_quantity: "0",
+                  active: true,
+                }),
+              ),
+            }),
+          ),
+        },
+      ];
+      return route.fulfill({ status: 201, json: stacks[0] });
+    }
     if (path.endsWith("/commerce/cart/") && request.method() === "POST") {
       const variant = Number(request.postDataJSON().variant_id);
       const product = products.find((item) => item.id === variant)!;
@@ -194,4 +254,28 @@ test("Django superuser is displayed as Owner and defaults to the admin dashboard
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
   await expect(page.getByText("Owner", { exact: true })).toBeVisible();
+});
+
+test("Owner previews and creates a complete unequal shelf stack", async ({
+  page,
+}) => {
+  await mockShop(page);
+  await page.goto("/login");
+  await page.getByLabel("Username or email").fill("owner");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.goto("/admin-app/digital-shop");
+  await page.getByRole("button", { name: "Create First Shelf Stack" }).click();
+  await page.getByLabel("Stack name").fill("Phone Accessories Rack");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("L4-S3", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create Shelf Stack" }).click();
+  await expect(
+    page.getByText("RIGHT-R01", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Phone Accessories Rack", { exact: true }).first(),
+  ).toBeVisible();
 });

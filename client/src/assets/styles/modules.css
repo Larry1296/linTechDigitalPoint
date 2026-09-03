@@ -289,6 +289,119 @@ footer {
 .receipt {
   break-inside: avoid;
 }
+.wizard,
+.onboarding,
+.stackPreview,
+.shelfPanel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+}
+.wizardSteps,
+.wizardActions,
+.shelfActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.wizardSteps span {
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  padding: 8px;
+}
+.wizardSteps .active {
+  color: var(--text);
+  border-color: var(--primary);
+}
+.shopLayout {
+  position: relative;
+  min-height: 560px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: auto;
+}
+.placedStack {
+  position: absolute;
+  min-width: 280px;
+}
+.stackPreview header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stackPreview header div {
+  display: grid;
+}
+.rackFrame {
+  border: 7px solid var(--text);
+  margin-top: 14px;
+  background: color-mix(in srgb, var(--surface), var(--primary) 5%);
+}
+.rackLevel {
+  display: flex;
+  min-height: 70px;
+  border-top: 4px solid var(--text);
+}
+.rackLevel:first-child {
+  border-top: 0;
+}
+.rackLevel > * {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  display: grid;
+  place-content: center;
+  padding: 8px;
+  text-align: center;
+  background: transparent;
+  color: var(--text);
+}
+.rackLevel > *:first-child {
+  border-left: 0;
+}
+.rackLevel span,
+.rackLevel small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shelfPanel {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  bottom: 20px;
+  width: min(440px, calc(100vw - 40px));
+  z-index: 20;
+  overflow: auto;
+  box-shadow: 0 20px 70px #0006;
+}
+.shelfPanel article,
+.productLocation {
+  display: grid;
+  gap: 5px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+.locationPicker {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.placementRow {
+  grid-column: 1 / -1;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.productForm {
+  max-width: 980px;
+}
 @media (max-width: 800px) {
   .productDetail,
   .checkoutGrid,

@@ -50,8 +50,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
         request=self.context.get("request")
         if not request or not request.user.is_staff:return None
         if not obj.reservation:return []
-        shelves={s.id:s for s in __import__("apps.inventory.models",fromlist=["Shelf"]).Shelf.objects.filter(id__in=[a["shelf_id"] for a in obj.reservation.allocations]).select_related("zone")}
-        return [{"shelf_id":a["shelf_id"],"shelf_code":shelves[a["shelf_id"]].code,"shelf_name":shelves[a["shelf_id"]].display_name,"zone":shelves[a["shelf_id"]].zone.name,"lot_id":a["lot_id"],"quantity":a["quantity"]} for a in obj.reservation.allocations]
+        shelves={s.id:s for s in __import__("apps.inventory.models",fromlist=["Shelf"]).Shelf.objects.filter(id__in=[a["shelf_id"] for a in obj.reservation.allocations]).select_related("zone","level__stack")}
+        return [{"shelf_id":a["shelf_id"],"shelf_code":shelves[a["shelf_id"]].code,"shelf_name":shelves[a["shelf_id"]].display_name,"zone":shelves[a["shelf_id"]].zone.name,"stack":shelves[a["shelf_id"]].level.stack.display_name if shelves[a["shelf_id"]].level_id else None,"level":shelves[a["shelf_id"]].level.level_number if shelves[a["shelf_id"]].level_id else None,"lot_id":a["lot_id"],"quantity":a["quantity"]} for a in obj.reservation.allocations]
 class OrderSerializer(serializers.ModelSerializer):
     items=OrderItemSerializer(many=True,read_only=True); payment_method=serializers.SerializerMethodField()
     class Meta:model=Order;fields=["id","number","status","payment_status","fulfillment_status","fulfillment_method","subtotal","discount","total","notes","created_at","items","payment_method"]
@@ -82,8 +82,8 @@ def pos_catalog(request):
     if search:rows=rows.filter(product__name__icontains=search)|rows.filter(sku__iexact=search)|rows.filter(barcode__iexact=search)
     result=[]
     for v in rows[:50]:
-        balances=StockBalance.objects.filter(lot__variant=v,quantity__gt=0).select_related("shelf__zone")
-        result.append({"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"product_type":v.product.product_type,"selling_price":v.selling_price,"available":sum((x.quantity-x.reserved for x in balances),Decimal("0")),"locations":[{"zone":x.shelf.zone.name,"shelf_code":x.shelf.code,"shelf_name":x.shelf.display_name,"available":x.quantity-x.reserved} for x in balances]})
+        balances=StockBalance.objects.filter(lot__variant=v,quantity__gt=0).select_related("shelf__zone","shelf__level__stack")
+        result.append({"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"product_type":v.product.product_type,"selling_price":v.selling_price,"available":sum((x.quantity-x.reserved for x in balances),Decimal("0")),"locations":[{"zone":x.shelf.zone.name,"stack":x.shelf.level.stack.display_name if x.shelf.level_id else None,"level":x.shelf.level.level_number if x.shelf.level_id else None,"shelf_code":x.shelf.code,"shelf_name":x.shelf.display_name,"available":x.quantity-x.reserved} for x in balances]})
     return Response(result)
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])

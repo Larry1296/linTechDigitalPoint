@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
-import type { Order, Product, Zone } from "../../types";
+import type { Order } from "../../types";
 function useLoad<T>(url: string) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState("");
@@ -71,6 +71,8 @@ type PosProduct = {
   available: string;
   locations: {
     zone: string;
+    stack: string | null;
+    level: number | null;
     shelf_code: string;
     shelf_name: string;
     available: string;
@@ -165,7 +167,8 @@ export function PosPage() {
                 </small>
                 {p.locations.map((l) => (
                   <em key={l.shelf_code}>
-                    {l.zone} · {l.shelf_code} — {l.available}
+                    {l.zone} → {l.stack || "Unassigned stack"} → Level{" "}
+                    {l.level || "—"} → {l.shelf_code} — {l.available}
                   </em>
                 ))}
               </button>
@@ -219,140 +222,6 @@ export function PosPage() {
     </>
   );
 }
-export function ProductsAdminPage() {
-  const { data, error, load } = useLoad<Product[]>("/api/v1/store/products/");
-  if (error) return <ErrorState message={error} retry={load} />;
-  if (!data) return <Loading />;
-  return (
-    <>
-      <span className="eyebrow">Catalog</span>
-      <h1>Products</h1>
-      {!data.length ? (
-        <Empty>
-          Add products through the catalog API or Django back office.
-        </Empty>
-      ) : (
-        <div className="table">
-          {data.map((p) => (
-            <div key={p.id}>
-              <b>{p.product_name}</b>
-              <span>{p.name}</span>
-              <span>{p.sku}</span>
-              <span>KSh {p.selling_price}</span>
-              <span>
-                {p.available === null ? "Service" : p.available + " available"}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-export function ReceivePage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [msg, setMsg] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => {
-    Promise.all([
-      api<Product[]>("/api/v1/store/products/"),
-      api<Zone[]>("/api/v1/locations/zones/"),
-    ])
-      .then(([p, z]) => {
-        setProducts(p);
-        setZones(z);
-      })
-      .catch((e) => setError(e.message));
-  }, []);
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.currentTarget));
-    try {
-      await api("/api/v1/inventory/receive/", {
-        method: "POST",
-        body: JSON.stringify({
-          variant_id: f.variant_id,
-          unit_cost: f.unit_cost,
-          selling_price: f.selling_price,
-          reference: f.reference,
-          supplier_name: f.supplier_name,
-          placements: [{ shelf_id: f.shelf_id, quantity: f.quantity }],
-        }),
-      });
-      setMsg("Stock received and placed successfully.");
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-  return (
-    <>
-      <span className="eyebrow">Purchasing & placement</span>
-      <h1>Receive Stock</h1>
-      {msg && <div className="success">{msg}</div>}
-      {error && <p className="formError">{error}</p>}
-      <form className="formCard wide" onSubmit={submit}>
-        <label>
-          Product variant
-          <select name="variant_id" required>
-            {products.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.product_name} — {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Quantity
-          <input
-            name="quantity"
-            type="number"
-            step=".001"
-            min=".001"
-            required
-          />
-        </label>
-        <label>
-          Buying price per unit
-          <input name="unit_cost" type="number" step=".01" min="0" required />
-        </label>
-        <label>
-          Current/new selling price
-          <input
-            name="selling_price"
-            type="number"
-            step=".01"
-            min="0"
-            required
-          />
-        </label>
-        <label>
-          Supplier
-          <input name="supplier_name" />
-        </label>
-        <label>
-          Invoice/reference
-          <input name="reference" required />
-        </label>
-        <label>
-          Physical shelf
-          <select name="shelf_id" required>
-            {zones.flatMap((z) =>
-              z.shelves
-                .filter((s) => s.active)
-                .map((s) => (
-                  <option value={s.id} key={s.id}>
-                    {z.name} · {s.code} — {s.display_name}
-                  </option>
-                )),
-            )}
-          </select>
-        </label>
-        <button>Receive and place stock</button>
-      </form>
-    </>
-  );
-}
 export function StaffOrdersPage() {
   const { data, error, load } = useLoad<Order[]>(
     "/api/v1/commerce/staff/orders/",
@@ -390,7 +259,9 @@ export function StaffOrdersPage() {
                     {i.pick_locations?.map((a) => (
                       <em key={a.shelf_id}>
                         {" "}
-                        · Pick shelf #{a.shelf_id}: {a.quantity}
+                        · Pick {a.quantity} from {a.zone} →{" "}
+                        {a.stack || "Unassigned stack"} → Level {a.level || "—"}{" "}
+                        → {a.shelf_code}
                       </em>
                     ))}
                   </p>

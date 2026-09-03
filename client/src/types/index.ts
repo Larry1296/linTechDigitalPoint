@@ -40,7 +40,13 @@ export type Shelf = {
   id: number;
   code: string;
   display_name: string;
+  physical_label: string;
   zone: number;
+  level: number | null;
+  stack_id: number | null;
+  stack_name: string | null;
+  level_number: number | null;
+  position_in_level: number | null;
   x: string;
   y: string;
   width: string;
@@ -54,7 +60,35 @@ export type Shelf = {
     lot__variant__product__name: string;
     lot__variant__name: string;
     quantity: string;
+    reserved: string;
   }[];
+};
+export type ShelfLevel = {
+  id: number;
+  stack: number;
+  level_number: number;
+  y_position: string;
+  height: string;
+  active: boolean;
+  shelves: Shelf[];
+};
+export type ShelfStack = {
+  id: number;
+  zone: number;
+  zone_name: string;
+  code: string;
+  display_name: string;
+  x: string;
+  y: string;
+  width: string;
+  height: string;
+  depth: string;
+  rotation: string;
+  number_of_levels: number;
+  active: boolean;
+  notes: string;
+  measurement_unit: string;
+  levels: ShelfLevel[];
 };
 export type Zone = {
   id: number;
@@ -63,6 +97,8 @@ export type Zone = {
   width: string;
   height: string;
   active: boolean;
+  stacks: ShelfStack[];
+  unassigned_shelves: Shelf[];
   shelves: Shelf[];
 };
 export type Order = {
@@ -81,6 +117,16 @@ export type Order = {
     variant_name: string;
     quantity: string;
     unit_price: string;
-    pick_locations?: { shelf_id: number; quantity: string }[] | null;
+    pick_locations?:
+      | {
+          shelf_id: number;
+          shelf_code: string;
+          shelf_name: string;
+          zone: string;
+          stack: string | null;
+          level: number | null;
+          quantity: string;
+        }[]
+      | null;
   }[];
 };

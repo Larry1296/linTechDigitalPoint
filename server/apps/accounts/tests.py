@@ -24,6 +24,7 @@ def test_django_superuser_is_owner_in_both_admin_interfaces():
     assert response.status_code==200
     assert response.json()["is_staff"] is True and response.json()["is_superuser"] is True
     assert api.get("/api/v1/locations/zones/").status_code==200
+    assert api.get("/api/v1/locations/stacks/").status_code==200
     assert api.get("/api/v1/commerce/pos/catalog/").status_code==200
     assert api.get("/api/v1/inventory/dashboard/").status_code==200
     assert api.get("/api/v1/catalog/products/").status_code==200
@@ -47,12 +48,14 @@ def test_cashier_is_staff_but_not_owner_and_remains_permission_limited():
     assert api.get("/api/v1/commerce/pos/catalog/").status_code==200
     assert api.get("/api/v1/catalog/categories/").status_code==403
     assert api.post("/api/v1/inventory/receive/",{},format="json").status_code==403
+    assert api.post("/api/v1/locations/stacks/",{},format="json").status_code==403
     django_admin=Client();django_admin.force_login(cashier)
     assert django_admin.get("/admin/auth/user/").status_code==403
 @pytest.mark.django_db
 def test_customer_cannot_access_internal_locations():
     ensure_initial_setup();user=User.objects.create_user("customer",password="Strong-pass-1296");CustomerProfile.objects.create(user=user);user.groups.add(Group.objects.get(name="Ecommerce Customer"));client=APIClient();client.force_authenticate(user)
     assert client.get("/api/v1/locations/zones/").status_code==403
+    assert client.get("/api/v1/locations/stacks/").status_code==403
     django_admin=Client();django_admin.force_login(user)
     assert django_admin.get("/admin/").status_code==302
 @pytest.fixture

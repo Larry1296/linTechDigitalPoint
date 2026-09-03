@@ -4,11 +4,54 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from apps.core.models import AuditLog
-from .models import Movement,Reservation,Shelf,ShelfHistory,StockBalance,StockLot,Zone
+from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,VariantPreferredLocation,Zone
 def _d(value): return Decimal(str(value))
 def _audit(action,obj,user,before=None,after=None):
     AuditLog.objects.create(action=action,object_type=obj.__class__.__name__,object_id=str(obj.pk),user=user,before=before or {},after=after or {})
 def _shelf_snapshot(s): return {"code":s.code,"name":s.display_name,"zone":s.zone_id,"x":str(s.x),"y":str(s.y),"width":str(s.width),"height":str(s.height),"active":s.active}
+def _stack_snapshot(stack):return {"code":stack.code,"name":stack.display_name,"zone":stack.zone_id,"x":str(stack.x),"y":str(stack.y),"width":str(stack.width),"height":str(stack.height),"depth":str(stack.depth),"rotation":str(stack.rotation),"levels":stack.number_of_levels,"active":stack.active}
+def _location_history(obj,event,user):LocationHistory.objects.create(object_type=obj.__class__.__name__,object_id=obj.pk,event=event,snapshot=_stack_snapshot(obj) if isinstance(obj,ShelfStack) else {"stack":obj.stack_id,"level":obj.level_number,"height":str(obj.height),"y":str(obj.y_position),"active":obj.active},changed_by=user)
+@transaction.atomic
+def create_shelf_stack(*,zone,user,display_name,x,y,width,height,depth,level_definitions,rotation=0,notes=""):
+    zone=Zone.objects.select_for_update().get(pk=zone.pk)
+    number=ShelfStack.objects.filter(zone=zone).count()+1
+    while ShelfStack.objects.filter(code=f"{zone.code}-R{number:02d}").exists():number+=1
+    code=f"{zone.code}-R{number:02d}";levels_count=len(level_definitions)
+    if not levels_count:raise ValidationError("At least one level is required.")
+    stack=ShelfStack.objects.create(zone=zone,code=code,display_name=display_name,x=x,y=y,width=width,height=height,depth=depth,rotation=rotation,number_of_levels=levels_count,notes=notes,created_by=user,updated_by=user)
+    level_height=_d(height)/levels_count
+    for index,definition in enumerate(level_definitions,1):
+        count=int(definition.get("compartments",0))
+        if count<1:raise ValidationError(f"Level {index} requires at least one compartment.")
+        level=ShelfLevel.objects.create(stack=stack,level_number=index,y_position=level_height*(index-1),height=definition.get("height") or level_height)
+        _location_history(level,"LEVEL_ADDED",user)
+        shelf_width=_d(width)/count
+        labels=definition.get("physical_labels",[])
+        for position in range(1,count+1):
+            shelf=Shelf.objects.create(zone=zone,level=level,code=f"{code}-L{index:02d}-S{position:02d}",physical_label=labels[position-1] if position<=len(labels) else "",display_name=f"Level {index} Compartment {position}",position_in_level=position,x=shelf_width*(position-1),y=level.y_position,width=shelf_width,height=level.height,depth=depth,sort_order=position,created_by=user,updated_by=user)
+            snapshot=_shelf_snapshot(shelf);ShelfHistory.objects.create(shelf=shelf,event="CREATED",snapshot=snapshot,changed_by=user);_audit("SHELF_CREATED",shelf,user,after=snapshot)
+    snapshot=_stack_snapshot(stack);_location_history(stack,"STACK_CREATED",user);_audit("STACK_CREATED",stack,user,after=snapshot);return stack
+@transaction.atomic
+def update_shelf_stack(*,stack,user,**changes):
+    stack=ShelfStack.objects.select_for_update().get(pk=stack.pk);before=_stack_snapshot(stack);changes.pop("code",None);changes.pop("number_of_levels",None)
+    for field,value in changes.items():setattr(stack,field,value)
+    stack.updated_by=user;stack.save();after=_stack_snapshot(stack);event="STACK_MOVED" if any(before[k]!=after[k] for k in ["x","y","rotation","zone"]) else "STACK_RESIZED" if any(before[k]!=after[k] for k in ["width","height","depth"]) else "STACK_UPDATED";_location_history(stack,event,user);_audit(event,stack,user,before,after);return stack
+@transaction.atomic
+def archive_shelf_stack(*,stack,user):
+    if StockBalance.objects.filter(shelf__level__stack=stack,quantity__gt=0).exists():raise ValidationError("This shelf stack still contains stock. Transfer or clear stock before removing it.")
+    stack.active=False;stack.updated_by=user;stack.save(update_fields=["active","updated_by","updated_at"]);stack.levels.update(active=False);Shelf.objects.filter(level__stack=stack).update(active=False);_location_history(stack,"STACK_DEACTIVATED",user);_audit("STACK_DEACTIVATED",stack,user);return stack
+@transaction.atomic
+def create_product_with_opening_stock(*,user,product_data,variant_data,preferred_shelf=None,opening_quantity=0,opening_unit_cost=0,opening_reference="OPENING"):
+    from django.utils.text import slugify
+    from apps.catalog.models import Product,ProductVariant
+    product=Product.objects.create(slug=product_data.pop("slug",slugify(product_data["name"])),**product_data);variant=ProductVariant.objects.create(product=product,**variant_data)
+    if product.product_type==Product.SERVICE:preferred_shelf=None
+    if preferred_shelf:VariantPreferredLocation.objects.create(variant=variant,shelf=preferred_shelf,updated_by=user)
+    quantity=_d(opening_quantity)
+    if product.product_type==Product.STOCK_ITEM and quantity>0:
+        if not preferred_shelf:raise ValidationError("Opening stock requires an exact shelf.")
+        lot=StockLot.objects.create(variant=variant,reference=opening_reference,received_quantity=quantity,remaining_quantity=quantity,unit_cost=_d(opening_unit_cost),received_at=timezone.now());StockBalance.objects.create(lot=lot,shelf=preferred_shelf,quantity=quantity);Movement.objects.create(variant=variant,lot=lot,quantity=quantity,destination=preferred_shelf,movement_type="OPENING_STOCK",reference=opening_reference,performed_by=user)
+    _audit("PRODUCT_CREATED",product,user,after={"variant":variant.id,"preferred_shelf":preferred_shelf.id if preferred_shelf else None,"opening_quantity":str(quantity)});return product,variant
 @transaction.atomic
 def create_shelf(*,zone,user,display_name,x,y,width,height,**extra):
     zone=Zone.objects.select_for_update().get(pk=zone.pk); number=zone.next_shelf_number; prefix=zone.code[:1].upper()

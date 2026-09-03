@@ -1,4 +1,3 @@
 from django.contrib import admin
-from .models import Movement,Reservation,Shelf,ShelfHistory,StockBalance,StockLot,Zone
-for model in [Zone,Shelf,ShelfHistory,StockLot,StockBalance,Movement,Reservation]: admin.site.register(model)
-
+from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,VariantPreferredLocation,Zone
+for model in [Zone,ShelfStack,ShelfLevel,Shelf,ShelfHistory,LocationHistory,VariantPreferredLocation,StockLot,StockBalance,Movement,Reservation]: admin.site.register(model)
