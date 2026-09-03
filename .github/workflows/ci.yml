@@ -1,7 +1,7 @@
 name: CI
 on: [push, pull_request]
 jobs:
-  backend:
+  server:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -9,28 +9,30 @@ jobs:
         env: {POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point}
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U lintech" --health-interval 5s --health-timeout 5s --health-retries 10
-    env: {POSTGRES_HOST: localhost, POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point, DJANGO_SECRET_KEY: ci-only}
+    env: {DB_HOST: localhost, DB_PORT: 5432, DB_USER: lintech, DB_PASSWORD: lintech, DB_NAME: lintech_digital_point, SECRET_KEY: ci-only}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.13"}
-      - run: pip install -r backend/requirements.txt
+      - run: pip install -r server/requirements.txt
       - run: ruff check .
-        working-directory: backend
+        working-directory: server
+      - run: python manage.py check
+        working-directory: server
       - run: python manage.py makemigrations --check --dry-run
-        working-directory: backend
+        working-directory: server
       - run: pytest
-        working-directory: backend
-  frontend:
+        working-directory: server
+  client:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json}
+        with: {node-version: 24, cache: npm, cache-dependency-path: client/package-lock.json}
       - run: npm ci
-        working-directory: frontend
+        working-directory: client
       - run: npm run lint && npm run typecheck && npm test && npm run build
-        working-directory: frontend
+        working-directory: client
   e2e:
     runs-on: ubuntu-latest
     services:
@@ -39,19 +41,19 @@ jobs:
         env: {POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point}
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U lintech" --health-interval 5s --health-timeout 5s --health-retries 10
-    env: {POSTGRES_HOST: localhost, POSTGRES_USER: lintech, POSTGRES_PASSWORD: lintech, POSTGRES_DB: lintech_digital_point, DJANGO_SECRET_KEY: ci-only}
+    env: {DB_HOST: localhost, DB_PORT: 5432, DB_USER: lintech, DB_PASSWORD: lintech, DB_NAME: lintech_digital_point, SECRET_KEY: ci-only}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.13"}
       - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm, cache-dependency-path: frontend/package-lock.json}
-      - run: pip install -r backend/requirements.txt
+        with: {node-version: 24, cache: npm, cache-dependency-path: client/package-lock.json}
+      - run: pip install -r server/requirements.txt
       - run: python manage.py migrate && python manage.py seed_initial && python manage.py runserver 127.0.0.1:8000 &
-        working-directory: backend
+        working-directory: server
       - run: npm ci && npx playwright install --with-deps chromium
-        working-directory: frontend
+        working-directory: client
       - run: npm run dev -- --host 127.0.0.1 &
-        working-directory: frontend
+        working-directory: client
       - run: npx wait-on http://127.0.0.1:5173 http://127.0.0.1:8000/api/v1/auth/me/ && npm run test:e2e
-        working-directory: frontend
+        working-directory: client

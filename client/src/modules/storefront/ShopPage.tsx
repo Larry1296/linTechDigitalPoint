@@ -1,0 +1,113 @@
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { api } from "../../core/api/client";
+import { useCart } from "../../core/cart/CartContext";
+import { Empty, ErrorState, Loading } from "../../components/States";
+import type { Product } from "../../types";
+function availability(value: string | null) {
+  if (value === null) return "Available";
+  const count = +value;
+  return count <= 0
+    ? "Out of stock"
+    : count <= 3
+      ? "Only " + count + " left"
+      : "In stock";
+}
+export function ShopPage() {
+  const [params] = useSearchParams();
+  const [rows, setRows] = useState<Product[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const { refreshCart } = useCart();
+  const load = () => {
+    const search = new URLSearchParams();
+    if (query) search.set("search", query);
+    if (params.get("category"))
+      search.set("product__category", params.get("category")!);
+    api<Product[]>("/api/v1/store/products/?" + search)
+      .then(setRows)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => {
+    document.title = "Shop | LinTech Digital Point";
+    void load();
+  }, [params]);
+  const add = async (p: Product) => {
+    await api("/api/v1/commerce/cart/", {
+      method: "POST",
+      body: JSON.stringify({ variant_id: p.id, quantity: 1 }),
+    });
+    await refreshCart();
+  };
+  return (
+    <main>
+      <div className="heading">
+        <div>
+          <span className="eyebrow">Products & accessories</span>
+          <h1>Shop</h1>
+          <p className="muted">
+            Browse products and everyday essentials available from LinTech
+            Digital Point.
+          </p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            load();
+          }}
+        >
+          <input
+            aria-label="Search products"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="What are you looking for?"
+          />
+          <button>Search</button>
+        </form>
+      </div>
+      {loading ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState message={error} retry={load} />
+      ) : !rows.length ? (
+        <Empty>No products match your search.</Empty>
+      ) : (
+        <div className="productGrid">
+          {rows.map((p) => (
+            <article className="productCard" key={p.id}>
+              <div className="productImage">
+                {p.images[0] ? (
+                  <img src={p.images[0].url} alt={p.images[0].alt} />
+                ) : (
+                  p.product_name[0]
+                )}
+              </div>
+              <small>{p.category}</small>
+              <h2>{p.product_name}</h2>
+              {p.name !== "Standard" && <p>{p.name}</p>}
+              <b>KSh {p.selling_price}</b>
+              <span
+                className={p.available && +p.available > 0 ? "stock" : "out"}
+              >
+                {availability(p.available)}
+              </span>
+              <div className="cardActions">
+                <Link className="button secondary" to={"/products/" + p.id}>
+                  View
+                </Link>
+                <button
+                  onClick={() => void add(p)}
+                  disabled={p.available !== null && +p.available <= 0}
+                >
+                  Add to cart
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}

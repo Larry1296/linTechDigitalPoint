@@ -1,0 +1,22 @@
+export const Loading = () => (
+  <div className="state">
+    <span className="spinner" />
+    Loading…
+  </div>
+);
+export const Empty = ({ children }: { children: React.ReactNode }) => (
+  <div className="state">{children}</div>
+);
+export const ErrorState = ({
+  message,
+  retry,
+}: {
+  message: string;
+  retry?: () => void;
+}) => (
+  <div className="state error">
+    <b>Something went wrong</b>
+    <span>{message}</span>
+    {retry && <button onClick={retry}>Retry</button>}
+  </div>
+);

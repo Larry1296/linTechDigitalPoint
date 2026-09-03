@@ -1,72 +1,167 @@
 # LinTech Digital Point
 
-LinTech Digital Point is a Django REST Framework and React/TypeScript platform joining the real shop, POS and ecommerce to one PostgreSQL lot/location inventory ledger.
+LinTech Digital Point is a Django REST Framework and React/TypeScript platform for a public storefront, customer accounts, ecommerce, POS, inventory, shelf mapping, and business administration. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
 
-## Architecture
+## Project structure
 
-    Storefront / Customer / Staff React routes
-                    |
-            session + CSRF API v1
-                    |
-    accounts | catalog | inventory | commerce
-                    |
-       transactional service layer
-                    |
-              PostgreSQL
+```text
+client/   React + TypeScript application
+server/   Django application and top-level API composition
+docs/     Architecture and feature documentation
+scripts/  Development bootstrap utilities
+```
 
-Stock remains in cost-bearing lots and physical shelf balances. Transfers conserve total stock. POS consumes FIFO unreserved stock. Ecommerce checkout reserves exact lot/shelf allocations; payment completion consumes those same allocations exactly once. Public serializers never include buying price, lots, COGS, profit, suppliers or shelf locations.
+The Python virtual environment and application configuration are different things: `.venv/` is the local Python environment directory, while `.env` is the root configuration text file. Both are ignored by Git. `.env.example` is the committed, secret-free template.
 
-## Requirements and PostgreSQL
+## Runtime requirements
 
-Use Python 3.12+, Node 22+, npm and PostgreSQL 16+. No SQLite fallback exists.
+- Python 3.13 (declared in `.python-version`)
+- Node.js 22 or newer and npm
+- PostgreSQL 16 or newer
+- PostgreSQL client tools, including `pg_isready`
 
-Create an application database/role, then copy .env.example to .env and set the PostgreSQL variables plus a strong DJANGO_SECRET_KEY. The local development database name is lintech_digital_point.
+LinTech is PostgreSQL-only during normal runtime; there is no SQLite fallback.
 
-## Initial setup
+## Environment setup
 
 From the project root:
 
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r backend/requirements.txt
-    cd backend
-    python manage.py migrate
-    python manage.py seed_initial
-    python manage.py create_owner
+```bash
+cp .env.example .env
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r server/requirements.txt
+```
 
-create_owner interactively requests username, email, display name and validated password. It safely creates or repairs the Store, zones, roles and permissions. Existing intended owners keep their password unless explicitly confirmed. Normal createsuperuser remains available. bootstrap_owner is a compatibility alias.
+Set a strong `SECRET_KEY` and local database password in `.env`. Never commit this file and never place it inside `.venv/`. Browser-visible Vite variables must not contain server secrets or Daraja credentials.
 
-## Run and URLs
+If upgrading an existing environment from the former dependency set:
 
-Backend: activate .venv, enter backend, then run python manage.py runserver.
+```bash
+source .venv/bin/activate
+pip uninstall -y python-dotenv
+pip install -r server/requirements.txt
+```
 
-Frontend: enter frontend, run npm ci, then npm run dev.
+## PostgreSQL setup
+
+Create the development role and database using your PostgreSQL administration workflow:
+
+```sql
+CREATE ROLE lintech WITH LOGIN PASSWORD 'your-local-password';
+CREATE DATABASE lintech_digital_point OWNER lintech;
+```
+
+Store the password only in `.env`. The standard connection is:
+
+```env
+DB_NAME=lintech_digital_point
+DB_USER=lintech
+DB_PASSWORD=your-local-password
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+Confirm PostgreSQL is ready before Django setup:
+
+```bash
+pg_isready -h localhost -p 5432
+```
+
+## Server setup and owner creation
+
+With `.venv` activated:
+
+```bash
+cd server
+python manage.py migrate
+python manage.py seed_initial
+python manage.py create_owner
+python manage.py check
+```
+
+`create_owner` interactively requests username, email, display name, and a validated password. It safely creates or repairs the Store, zones, roles, and permissions. Existing intended owners keep their password unless explicitly confirmed. `bootstrap_owner` remains as a compatibility alias, and Django's standard `createsuperuser` remains available.
+
+## Client setup
+
+In a second terminal:
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Vite proxies `/api` to Django at `http://127.0.0.1:8000`.
+
+## Running the system
+
+Server:
+
+```bash
+source .venv/bin/activate
+cd server
+python manage.py runserver
+```
+
+Client:
+
+```bash
+cd client
+npm run dev
+```
+
+Useful URLs:
 
 - Storefront: http://localhost:5173/
 - Shared customer/staff login: http://localhost:5173/login
 - Customer registration: http://localhost:5173/register
-- Staff application (after signing in): http://localhost:5173/admin-app/dashboard
+- Customer account: http://localhost:5173/account
+- Staff dashboard: http://localhost:5173/admin-app/dashboard
 - POS: http://localhost:5173/admin-app/pos
 - Digital Shop: http://localhost:5173/admin-app/digital-shop
 - Django Admin: http://localhost:8000/admin/
-- Swagger: http://localhost:8000/api/docs/
+- Swagger API docs: http://localhost:8000/api/docs/
 
-Vite proxies /api to Django.
+Customers can browse and maintain an anonymous cart, then log in or register during checkout without losing it. Customers and staff share `/login`; role-aware routing sends each account to an authorized destination.
 
-## Workflows
+## Tests and quality checks
 
-Customers browse and maintain an anonymous server-side cart. Login or registration preserves it across session rotation. Checkout requires authentication, freezes server prices, creates an order and reserves exact inventory. Account routes expose only the signed-in customer's profile, addresses and orders.
+Server:
 
-Customers and staff use the same login page; role-aware routing sends each account to an authorized destination. Backend permissions protect every internal API. POS supports barcode/SKU/text search, shelf pick locations, products/services, permitted discounts, payments and printable receipts. Online fulfillment displays reserved picks and consumes them idempotently.
+```bash
+cd server
+python manage.py check
+python manage.py makemigrations --check --dry-run
+pytest
+ruff check .
+```
 
-Digital Shop starts with real zones but no fake shelves. Configure existing walls and unequal shelves with persisted geometry. Permanent codes use a locked allocator. Shelf changes write ShelfHistory and AuditLog. Receiving requires physical placement.
+Client:
 
-Cash, bank, manual M-Pesa, other and cash-on-pickup states work locally. Live Daraja requires external credentials and a public HTTPS callback.
+```bash
+cd client
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-## Quality
+End-to-end tests require PostgreSQL plus both development servers:
 
-Backend: ruff check, manage.py check, makemigrations --check, and pytest from backend using ../.venv.
+```bash
+cd client
+npm run test:e2e
+```
 
-Frontend: npm run lint, npm run typecheck, npm test, npm run build, and npm run test:e2e.
+CI provisions PostgreSQL and runs the server, client, and Playwright checks using the same `server`/`client` paths.
 
-Playwright needs Chromium and both dev servers for local E2E. CI provisions PostgreSQL and runs backend/frontend checks.
+## Automated bootstrap
+
+After creating the PostgreSQL role/database and configuring `.env`:
+
+```bash
+./scripts/bootstrap.sh
+```
+
+The script verifies PostgreSQL readiness, installs dependencies, migrates and seeds Django, creates the configured owner non-interactively, checks Django, and builds the client.

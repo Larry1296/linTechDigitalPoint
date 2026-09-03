@@ -1,0 +1,29 @@
+import { SunMoon } from "lucide-react";
+import { useEffect, useState } from "react";
+type Theme = "system" | "light" | "dark";
+export function ThemePicker() {
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("theme") as Theme) || "system",
+  );
+  useEffect(() => {
+    const media = matchMedia("(prefers-color-scheme: dark)");
+    const apply = () =>
+      (document.documentElement.dataset.theme =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme);
+    apply();
+    media.addEventListener("change", apply);
+    localStorage.setItem("theme", theme);
+    return () => media.removeEventListener("change", apply);
+  }, [theme]);
+  return (
+    <label className="theme">
+      <SunMoon size={17} />
+      <span className="sr">Theme</span>
+      <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  );
+}

@@ -1,0 +1,70 @@
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { ShoppingCart } from "lucide-react";
+import { ThemePicker } from "../components/ThemePicker";
+import { useAuth } from "../core/auth/AuthContext";
+import { useCart } from "../core/cart/CartContext";
+export function PublicLayout() {
+  const { user, logout } = useAuth();
+  const { count, refreshCart } = useCart();
+  const signOut = async () => {
+    await logout();
+    await refreshCart();
+  };
+  return (
+    <>
+      <header>
+        <Link className="brand" to="/">
+          LinTech<span>Digital Point</span>
+        </Link>
+        <nav>
+          <NavLink to="/">Home</NavLink>
+          <NavLink to="/shop">Shop</NavLink>
+          <Link to="/#categories">Categories</Link>
+          <Link to="/#services">Services</Link>
+          <Link to="/#contact">Contact</Link>
+          <NavLink to="/cart">
+            <ShoppingCart size={18} />
+            Cart <span className="cartBadge">{count}</span>
+          </NavLink>
+          {user?.is_staff ? (
+            <NavLink to="/admin-app/dashboard">Admin Dashboard</NavLink>
+          ) : user ? (
+            <>
+              <NavLink to="/account">My Account</NavLink>
+              <NavLink to="/account/orders">Orders</NavLink>
+            </>
+          ) : (
+            <NavLink to="/login">Login</NavLink>
+          )}
+        </nav>
+        {user && (
+          <button className="linkButton" onClick={() => void signOut()}>
+            Logout
+          </button>
+        )}
+        <ThemePicker />
+      </header>
+      <Outlet />
+      <footer>
+        <div>
+          <Link className="brand" to="/">
+            LinTech<span>Digital Point</span>
+          </Link>
+          <p>Technology, accessories and everyday services you can count on.</p>
+        </div>
+        <div>
+          <b>Quick links</b>
+          <Link to="/shop">Shop</Link>
+          <Link to="/cart">Cart</Link>
+          {user && !user.is_staff && <Link to="/account">My Account</Link>}
+        </div>
+        <div>
+          <b>Customer help</b>
+          <Link to="/#contact">Contact us</Link>
+          <span>Pickup and delivery information is provided at checkout.</span>
+        </div>
+        <ThemePicker />
+      </footer>
+    </>
+  );
+}

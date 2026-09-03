@@ -1,0 +1,30 @@
+import { createContext, useContext, useEffect, useState } from "react";
+import { api } from "../api/client";
+import type { Cart } from "../../types";
+type CartValue = {
+  cart: Cart | null;
+  count: number;
+  refreshCart: () => Promise<void>;
+  setCart: (cart: Cart) => void;
+};
+const CartContext = createContext<CartValue | null>(null);
+export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [cart, setCart] = useState<Cart | null>(null);
+  const refreshCart = async () =>
+    setCart(await api<Cart>("/api/v1/commerce/cart/"));
+  useEffect(() => {
+    void refreshCart();
+  }, []);
+  const count =
+    cart?.items.reduce((sum, item) => sum + Number(item.quantity), 0) || 0;
+  return (
+    <CartContext.Provider value={{ cart, count, refreshCart, setCart }}>
+      {children}
+    </CartContext.Provider>
+  );
+}
+export function useCart() {
+  const value = useContext(CartContext);
+  if (!value) throw new Error("CartProvider missing");
+  return value;
+}

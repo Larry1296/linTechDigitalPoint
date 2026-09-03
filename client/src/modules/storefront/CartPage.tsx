@@ -1,0 +1,76 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../../core/api/client";
+import { useCart } from "../../core/cart/CartContext";
+import { Empty, ErrorState, Loading } from "../../components/States";
+import type { Cart } from "../../types";
+export function CartPage() {
+  const { cart, setCart, refreshCart } = useCart();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    document.title = "Cart | LinTech Digital Point";
+    refreshCart().catch((e) => setError(e.message));
+  }, []);
+  if (error)
+    return (
+      <main>
+        <ErrorState message={error} retry={refreshCart} />
+      </main>
+    );
+  if (!cart) return <Loading />;
+  const update = async (path: string, options: RequestInit) =>
+    setCart(await api<Cart>(path, options));
+  return (
+    <main>
+      <h1>Your cart</h1>
+      {!cart.items.length ? (
+        <Empty>
+          Your cart is empty. <Link to="/shop">Continue shopping</Link>
+        </Empty>
+      ) : (
+        <>
+          <div className="list">
+            {cart.items.map((i) => (
+              <article key={i.id}>
+                <div>
+                  <b>{i.product_name}</b>
+                  <small>{i.variant_name}</small>
+                </div>
+                <input
+                  aria-label={"Quantity for " + i.product_name}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={i.quantity}
+                  onChange={(e) =>
+                    void update("/api/v1/commerce/cart/items/" + i.id + "/", {
+                      method: "PATCH",
+                      body: JSON.stringify({ quantity: e.target.value }),
+                    })
+                  }
+                />
+                <span>KSh {i.line_total}</span>
+                <button
+                  className="danger"
+                  onClick={() =>
+                    void update("/api/v1/commerce/cart/items/" + i.id + "/", {
+                      method: "DELETE",
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </article>
+            ))}
+          </div>
+          <div className="cartTotal">
+            <b>Total: KSh {cart.total}</b>
+            <Link className="button" to="/checkout">
+              Proceed to checkout
+            </Link>
+          </div>
+        </>
+      )}
+    </main>
+  );
+}

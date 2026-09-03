@@ -1,5 +1,18 @@
+# Environment / secrets
 .env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+client/.env
+client/.env.*
+!client/.env.example
+
+# Python / Django server
 .venv/
+server/.venv/
+server/venv/
 .pgdata/
 __pycache__/
 *.py[cod]
@@ -7,16 +20,22 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-backend/staticfiles/
-backend/media/
-frontend/node_modules/
-frontend/dist/
-frontend/*.tsbuildinfo
-frontend/vite.config.js
-frontend/vite.config.d.ts
+server/staticfiles/
+server/media/
+
+# React / TypeScript client
+client/node_modules/
+client/dist/
+client/.vite/
+client/*.tsbuildinfo
+client/vite.config.js
+client/vite.config.d.ts
 playwright-report/
 test-results/
+client/playwright-report/
+client/test-results/
 *.log
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
