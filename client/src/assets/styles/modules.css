@@ -49,7 +49,7 @@ label {
   gap: 8px;
   min-width: min(100%, 420px);
 }
-header nav a {
+.appNavbar nav a {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -273,7 +273,7 @@ header nav a {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-footer {
+.appFooter {
   text-align: center;
   padding: 35px;
   color: var(--muted);

@@ -79,23 +79,48 @@
   flex-direction: column;
   gap: 10px;
 }
-footer {
+.appFooter {
   display: grid;
   grid-template-columns: 2fr 1fr 2fr auto;
   gap: 35px;
   text-align: left;
-  background: var(--surface);
-  border-top: 1px solid var(--line);
+  background: var(--chrome);
+  color: var(--chrome-text);
+  border-top: 1px solid var(--chrome-line);
   padding: 42px max(5vw, 20px);
 }
-footer > div {
+.appFooter > div {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  color: var(--muted);
+  color: var(--chrome-muted);
 }
-footer b {
-  color: var(--text);
+.appFooter b {
+  color: var(--chrome-text);
+}
+.appNavbar .brand,
+.appFooter .brand,
+.admin aside .brand {
+  color: #7db5ff;
+}
+.appNavbar .brand span,
+.appFooter .brand span,
+.admin aside .brand span,
+.appNavbar .theme,
+.appFooter .theme {
+  color: var(--chrome-muted);
+}
+.appNavbar .theme select,
+.appFooter .theme select {
+  background: #102b50;
+  color: var(--chrome-text);
+  border-color: var(--chrome-line);
+}
+.appNavbar .linkButton {
+  color: var(--chrome-text);
+}
+.appNavbar nav a.active {
+  color: #7db5ff;
 }
 .formCard hr {
   width: 100%;
@@ -105,7 +130,7 @@ footer b {
 @media (max-width: 760px) {
   .benefits,
   .contactSection,
-  footer {
+  .appFooter {
     grid-template-columns: 1fr;
   }
   .heroActions,
@@ -117,17 +142,17 @@ footer b {
     width: 100%;
     text-align: center;
   }
-  header {
+  .appNavbar {
     height: auto;
     min-height: 70px;
     gap: 12px;
     flex-wrap: wrap;
     padding-block: 12px;
   }
-  header .brand {
+  .appNavbar .brand {
     margin-right: auto;
   }
-  header nav {
+  .appNavbar nav {
     display: flex;
     order: 4;
     width: 100%;
@@ -135,7 +160,7 @@ footer b {
     overflow-x: auto;
     padding: 4px 0;
   }
-  header nav a {
+  .appNavbar nav a {
     white-space: nowrap;
   }
 }

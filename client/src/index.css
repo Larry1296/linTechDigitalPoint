@@ -1,25 +1,33 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui;
-  --bg: #f7f9f8;
+  --bg: #f4f7fc;
   --surface: #fff;
-  --text: #13221b;
-  --muted: #607068;
-  --line: #dce5e0;
-  --primary: #087f5b;
+  --text: #10213d;
+  --muted: #60708a;
+  --line: #d6e1f0;
+  --primary: #1d4ed8;
   --on-primary: #ffffff;
-  --primary2: #d8f5e8;
-  --shadow: 0 16px 40px #163c2914;
+  --primary2: #dbeafe;
+  --chrome: #081d3a;
+  --chrome-text: #f8fbff;
+  --chrome-muted: #b9d4fa;
+  --chrome-line: #183b67;
+  --shadow: 0 16px 40px #123b7517;
   color-scheme: light;
 }
 [data-theme="dark"] {
-  --bg: #0d1511;
-  --surface: #142019;
-  --text: #edf8f2;
-  --muted: #9aaca3;
-  --line: #293a31;
-  --primary: #3ddc97;
-  --on-primary: #07130d;
-  --primary2: #183b2a;
+  --bg: #06101f;
+  --surface: #0d1c30;
+  --text: #edf5ff;
+  --muted: #9db1cf;
+  --line: #223a5a;
+  --primary: #2563eb;
+  --on-primary: #ffffff;
+  --primary2: #142f55;
+  --chrome: #030d1c;
+  --chrome-text: #f4f8ff;
+  --chrome-muted: #a8c7f2;
+  --chrome-line: #17345b;
   --shadow: 0 16px 40px #0005;
   color-scheme: dark;
 }
@@ -35,14 +43,15 @@ a {
   color: inherit;
   text-decoration: none;
 }
-header {
+.appNavbar {
   height: 70px;
   display: flex;
   align-items: center;
   padding: 0 max(5vw, 20px);
   gap: 34px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--chrome);
+  color: var(--chrome-text);
+  border-bottom: 1px solid var(--chrome-line);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -61,7 +70,7 @@ header {
   text-transform: uppercase;
   color: var(--muted);
 }
-header nav {
+.appNavbar nav {
   display: flex;
   gap: 24px;
 }
@@ -119,7 +128,7 @@ main {
   font-weight: 700;
 }
 .heroCard {
-  background: linear-gradient(145deg, var(--primary), #07543e);
+  background: linear-gradient(145deg, #2563eb, #0b2f6b);
   color: white;
   min-height: 320px;
   border-radius: 28px;
@@ -161,8 +170,9 @@ main {
 }
 .admin aside {
   padding: 28px 18px;
-  border-right: 1px solid var(--line);
-  background: var(--surface);
+  border-right: 1px solid var(--chrome-line);
+  background: var(--chrome);
+  color: var(--chrome-text);
   position: sticky;
   top: 70px;
   height: calc(100vh - 70px);
@@ -186,7 +196,8 @@ main {
   width: 19px;
 }
 .admin aside nav a.active {
-  background: var(--primary2);
+  background: #1d4ed8;
+  color: #ffffff;
 }
 .admin main {
   width: 100%;
@@ -266,7 +277,7 @@ main {
   overflow: hidden;
 }
 @media (max-width: 760px) {
-  header nav {
+  .appNavbar nav {
     display: none;
   }
   .hero {
