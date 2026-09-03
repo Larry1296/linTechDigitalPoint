@@ -1,4 +1,7 @@
 let csrfToken: string | undefined;
+export function resetCsrfToken() {
+  csrfToken = undefined;
+}
 export class ApiError extends Error {
   constructor(
     public status: number,

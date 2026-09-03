@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../core/api/client";
+import { api, resetCsrfToken } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { useCart } from "../../core/cart/CartContext";
 import type { Identity } from "../../types";
@@ -28,6 +28,7 @@ export function LoginPage() {
         method: "POST",
         body: JSON.stringify(Object.fromEntries(form)),
       });
+      resetCsrfToken();
       await Promise.all([refresh(), refreshCart()]);
       if (next?.startsWith("/admin-app") && !user.is_staff)
         nav("/forbidden", { replace: true });
@@ -91,6 +92,7 @@ export function RegisterPage() {
         method: "POST",
         body: JSON.stringify(data),
       });
+      resetCsrfToken();
       await Promise.all([refresh(), refreshCart()]);
       nav(next || "/account", { replace: true });
     } catch (err) {

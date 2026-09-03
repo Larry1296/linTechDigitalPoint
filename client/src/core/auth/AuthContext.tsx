@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, resetCsrfToken } from "../api/client";
 import type { Identity } from "../../types";
 type AuthValue = {
   user: Identity | null;
@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const logout = async () => {
     await api("/api/v1/auth/logout/", { method: "POST" });
+    resetCsrfToken();
     setUser(null);
   };
   return (

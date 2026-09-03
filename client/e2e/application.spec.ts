@@ -93,6 +93,11 @@ async function mockShop(page: Page) {
         },
       });
     }
+    if (path.endsWith("/auth/logout/")) {
+      authenticated = false;
+      staff = false;
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (path.endsWith("/store/home/"))
       return route.fulfill({
         json: {
@@ -299,6 +304,9 @@ test("existing customer sees the anonymous cart on their dashboard after login",
   await expect(
     page.getByRole("link", { name: "Continue to checkout" }),
   ).toHaveAttribute("href", "/checkout");
+  await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Faccount/);
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
 
 test("staff use the shared login and return to their intended page", async ({
