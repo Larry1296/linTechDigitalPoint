@@ -134,7 +134,7 @@ export function HomePage() {
           </section>
           <section id="services" className="homeSection">
             <span className="eyebrow">At your service</span>
-            <h2>Printing and digital services</h2>
+            <h2>M-Pesa and software services</h2>
             {data.services.length ? (
               <div className="categoryGrid">
                 {data.services.map((s) => (
@@ -147,8 +147,9 @@ export function HomePage() {
               </div>
             ) : (
               <p className="muted">
-                Ask us about printing, photocopying, scanning, lamination,
-                binding and typing.
+                Ask us about M-Pesa services, Windows installation, Microsoft
+                Office setup, drivers, antivirus and other software
+                installation.
               </p>
             )}
           </section>

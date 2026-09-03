@@ -85,21 +85,23 @@ export function ProductForm({
           onChange={(e) => setType(e.target.value)}
         >
           <option value="STOCK_ITEM">Stock item</option>
-          <option value="SERVICE">Service</option>
+          <option value="SERVICE">Service (M-Pesa / software)</option>
         </select>
       </label>
       <label>
-        Variant
+        {type === "SERVICE" ? "Service option" : "Variant"}
         <input name="variant_name" defaultValue="Standard" required />
       </label>
       <label>
-        SKU
+        {type === "SERVICE" ? "Service code" : "SKU"}
         <input name="sku" required />
       </label>
-      <label>
-        Barcode
-        <input name="barcode" />
-      </label>
+      {type === "STOCK_ITEM" && (
+        <label>
+          Barcode
+          <input name="barcode" />
+        </label>
+      )}
       <label>
         Product image URL
         <input name="image_url" type="url" />
@@ -108,26 +110,48 @@ export function ProductForm({
         Selling price
         <input name="selling_price" type="number" min="0" step=".01" required />
       </label>
-      <label>
-        Minimum stock
-        <input
-          name="minimum_stock"
-          type="number"
-          min="0"
-          step=".001"
-          defaultValue="0"
-        />
-      </label>
-      <label>
-        Target stock
-        <input
-          name="target_stock"
-          type="number"
-          min="0"
-          step=".001"
-          defaultValue="0"
-        />
-      </label>
+      {type === "SERVICE" ? (
+        <>
+          <label>
+            Service cost
+            <input
+              name="service_cost"
+              type="number"
+              min="0"
+              step=".01"
+              defaultValue="0"
+            />
+          </label>
+          <p className="muted serviceHint">
+            Examples: Windows installation, Microsoft Office setup, drivers,
+            antivirus, application installation or an M-Pesa service. Services
+            do not use shelves or stock quantities.
+          </p>
+        </>
+      ) : (
+        <>
+          <label>
+            Minimum stock
+            <input
+              name="minimum_stock"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+          </label>
+          <label>
+            Target stock
+            <input
+              name="target_stock"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+          </label>
+        </>
+      )}
       <label>
         <input name="ecommerce_visible" type="checkbox" defaultChecked />{" "}
         Visible online

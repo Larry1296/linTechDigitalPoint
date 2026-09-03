@@ -146,6 +146,7 @@ class ProductViewSet(SecuredModelViewSet):
                 "sku": request.data.get("sku"),
                 "barcode": request.data.get("barcode") or None,
                 "selling_price": request.data.get("selling_price", 0),
+                "service_cost": request.data.get("service_cost", 0),
                 "minimum_stock": request.data.get("minimum_stock", 0),
                 "target_stock": request.data.get("target_stock", 0),
             },

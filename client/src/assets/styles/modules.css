@@ -450,6 +450,10 @@ footer {
 .productForm {
   max-width: 980px;
 }
+.serviceHint {
+  align-self: end;
+  margin: 0;
+}
 .accountCart {
   margin-bottom: 24px;
 }
