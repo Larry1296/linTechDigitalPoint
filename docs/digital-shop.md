@@ -6,6 +6,8 @@ Digital Shop is a digital twin of the shelving that physically exists at LinTech
 Store → Zone → ShelfStack → ShelfLevel → Shelf → StockBalance → StockLot/ProductVariant
 ```
 
+Zones are user-defined physical areas, not a fixed list. A shop may use any names—for example a window, aisle, room, wall, counter, floor, or warehouse bay—and records each area's actual dimensions. Fresh setup does not generate sample zones or shelving.
+
 The Owner chooses a zone, records the stack's real position and dimensions in the Store measurement unit (normally centimetres), defines each level's compartment count, previews the full rack, and creates it transactionally. Codes such as `RIGHT-R01-L03-S02` are permanent; friendly names and physical sticker labels remain editable.
 
 Existing pre-stack shelves remain valid with `level = null` and appear as unassigned physical shelves. Their balances are never deleted.

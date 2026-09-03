@@ -80,7 +80,7 @@ python manage.py createsuperuser
 python manage.py check
 ```
 
-Django's standard `createsuperuser` command interactively requests the administrator credentials. The Django superuser is the LinTech Owner/Admin: the same account has unrestricted access to Django Admin at `/admin/` and the LinTech administrative application through the shared `/login` page. `seed_initial` creates only the Store, zones, staff/customer groups, and their permissions; it never creates a user.
+Django's standard `createsuperuser` command interactively requests the administrator credentials. The Django superuser is the LinTech Owner/Admin: the same account has unrestricted access to Django Admin at `/admin/` and the LinTech administrative application through the shared `/login` page. `seed_initial` creates only the Store, staff/customer groups, and their permissions; it never creates users, zones, or sample shelving. Physical areas are defined freely in Digital Shop using the real shop's names and dimensions.
 
 On an existing installation, any account previously provisioned with `is_superuser=True` remains a valid Owner/Admin. Do not create a second account unless another true system administrator is deliberately required.
 

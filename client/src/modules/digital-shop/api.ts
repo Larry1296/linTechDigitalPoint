@@ -2,6 +2,15 @@ import { api } from "../../core/api/client";
 import type { ShelfStack, Zone } from "../../types";
 
 export const loadZones = () => api<Zone[]>("/api/v1/locations/zones/");
+export const createZone = (payload: {
+  name: string;
+  width: number;
+  height: number;
+}) =>
+  api<Zone>("/api/v1/locations/zones/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 export const createStack = (payload: unknown) =>
   api<ShelfStack>("/api/v1/locations/stacks/", {
     method: "POST",

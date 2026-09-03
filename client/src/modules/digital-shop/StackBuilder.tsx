@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Zone } from "../../types";
-import { createStack } from "./api";
+import { createStack, createZone } from "./api";
 import { StackPreview } from "./StackPreview";
 
 export function StackBuilder({
@@ -9,11 +9,15 @@ export function StackBuilder({
   onCancel,
 }: {
   zones: Zone[];
-  onCreated: () => void;
+  onCreated: (zoneId: number) => void;
   onCancel: () => void;
 }) {
   const [step, setStep] = useState(1);
   const [zone, setZone] = useState(zones[0]?.id || 0);
+  const [newArea, setNewArea] = useState(zones.length === 0);
+  const [areaName, setAreaName] = useState("");
+  const [areaWidth, setAreaWidth] = useState(500);
+  const [areaHeight, setAreaHeight] = useState(300);
   const [name, setName] = useState("");
   const [width, setWidth] = useState(180);
   const [height, setHeight] = useState(210);
@@ -33,8 +37,15 @@ export function StackBuilder({
   );
   const save = async () => {
     try {
+      const selectedZone = newArea
+        ? await createZone({
+            name: areaName,
+            width: areaWidth,
+            height: areaHeight,
+          })
+        : undefined;
       await createStack({
-        zone,
+        zone: selectedZone?.id || zone,
         display_name: name,
         width,
         height,
@@ -44,7 +55,7 @@ export function StackBuilder({
         rotation,
         levels,
       });
-      onCreated();
+      onCreated(selectedZone?.id || zone);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -63,15 +74,59 @@ export function StackBuilder({
         <div className="formCard">
           <h2>Where does this stack stand?</h2>
           <label>
-            Zone
-            <select value={zone} onChange={(e) => setZone(+e.target.value)}>
+            Shop area
+            <select
+              value={newArea ? "new" : zone}
+              onChange={(e) => {
+                setNewArea(e.target.value === "new");
+                if (e.target.value !== "new") setZone(+e.target.value);
+              }}
+            >
               {zones.map((z) => (
                 <option value={z.id} key={z.id}>
                   {z.name}
                 </option>
               ))}
+              <option value="new">+ Define another area</option>
             </select>
           </label>
+          {newArea && (
+            <>
+              <label>
+                Area name
+                <input
+                  value={areaName}
+                  onChange={(e) => setAreaName(e.target.value)}
+                  placeholder="Front window, Centre aisle, Upstairs…"
+                  required
+                />
+              </label>
+              <div className="formGrid">
+                <label>
+                  Area width (cm)
+                  <input
+                    type="number"
+                    min="1"
+                    value={areaWidth}
+                    onChange={(e) => setAreaWidth(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  Area height (cm)
+                  <input
+                    type="number"
+                    min="1"
+                    value={areaHeight}
+                    onChange={(e) => setAreaHeight(+e.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="muted">
+                Use any name and real dimensions that match this shop. Areas are
+                never limited to walls or counters.
+              </p>
+            </>
+          )}
           <label>
             Stack name
             <input
@@ -197,7 +252,7 @@ export function StackBuilder({
         </button>
         {step < 4 ? (
           <button
-            disabled={step === 1 && !name}
+            disabled={step === 1 && (!name || (newArea ? !areaName : !zone))}
             onClick={() => setStep(step + 1)}
           >
             Continue

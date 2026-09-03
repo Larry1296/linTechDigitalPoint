@@ -26,6 +26,7 @@ async function mockShop(page: Page) {
   let staff = false;
   let items: Array<Record<string, unknown>> = [];
   let stacks: Array<Record<string, unknown>> = [];
+  let customZone: Record<string, unknown> | undefined;
   const zones = () => [
     {
       id: 3,
@@ -34,10 +35,13 @@ async function mockShop(page: Page) {
       width: "500.00",
       height: "250.00",
       active: true,
-      stacks,
+      stacks: stacks.filter((stack) => stack.zone === 3),
       shelves: [],
       unassigned_shelves: [],
     },
+    ...(customZone
+      ? [{ ...customZone, stacks: stacks.filter((stack) => stack.zone === 4) }]
+      : []),
   ];
   const cart = () => ({
     id: 1,
@@ -119,6 +123,20 @@ async function mockShop(page: Page) {
           orders: {},
         },
       });
+    if (path.endsWith("/locations/zones/") && request.method() === "POST") {
+      const input = request.postDataJSON();
+      customZone = {
+        id: 4,
+        code: "UPSTAIRSWINDOWDI",
+        name: input.name,
+        width: String(input.width),
+        height: String(input.height),
+        active: true,
+        shelves: [],
+        unassigned_shelves: [],
+      };
+      return route.fulfill({ status: 201, json: customZone });
+    }
     if (path.endsWith("/locations/zones/"))
       return route.fulfill({ json: zones() });
     if (path.endsWith("/locations/stacks/") && request.method() === "POST") {
@@ -126,9 +144,10 @@ async function mockShop(page: Page) {
       stacks = [
         {
           id: 9,
-          zone: 3,
-          zone_name: "Right Wall",
-          code: "RIGHT-R01",
+          zone: input.zone,
+          zone_name:
+            input.zone === 4 ? "Upstairs Window Display" : "Right Wall",
+          code: input.zone === 4 ? "UPSTAIRSWINDOWDI-R01" : "RIGHT-R01",
           display_name: input.display_name,
           x: String(input.x),
           y: String(input.y),
@@ -266,6 +285,10 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.goto("/admin-app/digital-shop");
   await page.getByRole("button", { name: "Create First Shelf Stack" }).click();
+  await page.getByLabel("Shop area").selectOption("new");
+  await page.getByLabel("Area name").fill("Upstairs Window Display");
+  await page.getByLabel("Area width (cm)").fill("725");
+  await page.getByLabel("Area height (cm)").fill("315");
   await page.getByLabel("Stack name").fill("Phone Accessories Rack");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -273,7 +296,7 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await expect(page.getByText("L4-S3", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Create Shelf Stack" }).click();
   await expect(
-    page.getByText("RIGHT-R01", { exact: true }).first(),
+    page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
   ).toBeVisible();
   await expect(
     page.getByText("Phone Accessories Rack", { exact: true }).first(),

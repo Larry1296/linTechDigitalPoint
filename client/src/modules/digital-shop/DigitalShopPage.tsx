@@ -29,8 +29,9 @@ export function DigitalShopPage() {
       <StackBuilder
         zones={zones}
         onCancel={() => setBuilder(false)}
-        onCreated={() => {
+        onCreated={(zoneId) => {
           setBuilder(false);
+          setSelected(zoneId);
           void load();
         }}
       />
@@ -60,7 +61,9 @@ export function DigitalShopPage() {
             Digital Point.
           </p>
           <ol>
-            <li>Choose an area</li>
+            <li>
+              Define any area that exists in your shop and enter its real size
+            </li>
             <li>Add the shelving unit that physically stands there</li>
             <li>Enter its dimensions and levels</li>
             <li>Create and label each compartment</li>
