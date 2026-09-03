@@ -148,7 +148,7 @@ class ZoneSerializer(serializers.ModelSerializer):
 
     def get_stacks(self, obj):
         return ShelfStackSerializer(
-            obj.stacks.prefetch_related("levels__shelves__balances__lot__variant__product"), many=True
+            obj.stacks.filter(active=True).prefetch_related("levels__shelves__balances__lot__variant__product"), many=True
         ).data
 
     def get_unassigned_shelves(self, obj):

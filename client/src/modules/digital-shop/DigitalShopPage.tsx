@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
-import type { Zone } from "../../types";
+import type { ShelfStack, Zone } from "../../types";
 import { loadZones } from "./api";
 import { ShelfDetails } from "./ShelfDetails";
 import { StackBuilder } from "./StackBuilder";
+import { StackEditor } from "./StackEditor";
 import { StackPreview } from "./StackPreview";
 
 export function DigitalShopPage() {
@@ -11,6 +12,7 @@ export function DigitalShopPage() {
   const [selected, setSelected] = useState<number>();
   const [builder, setBuilder] = useState(false);
   const [shelf, setShelf] = useState<number>();
+  const [editingStack, setEditingStack] = useState<ShelfStack>();
   const [error, setError] = useState("");
   const load = () =>
     loadZones()
@@ -105,6 +107,7 @@ export function DigitalShopPage() {
                 depth={+stack.depth}
                 levels={[]}
                 onShelf={setShelf}
+                onEdit={setEditingStack}
               />
             </div>
           ))}
@@ -127,6 +130,18 @@ export function DigitalShopPage() {
           shelfId={shelf}
           onClose={() => setShelf(undefined)}
           onUpdated={() => void load()}
+        />
+      )}
+      {editingStack && (
+        <StackEditor
+          stack={editingStack}
+          zones={zones}
+          onClose={() => setEditingStack(undefined)}
+          onChanged={(zoneId) => {
+            setEditingStack(undefined);
+            if (zoneId) setSelected(zoneId);
+            void load();
+          }}
         />
       )}
     </>

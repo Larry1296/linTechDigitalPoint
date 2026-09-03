@@ -412,6 +412,15 @@ footer {
   color: var(--text);
   border: 1px solid var(--line);
 }
+.rackEdit {
+  margin-left: auto;
+  padding: 7px 10px;
+}
+.dangerZone {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
 @media (max-width: 600px) {
   .shelfPanel {
     inset: 10px;

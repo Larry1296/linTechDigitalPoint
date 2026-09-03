@@ -230,6 +230,21 @@ def test_stack_with_stock_cannot_be_archived(data):
 
 
 @pytest.mark.django_db
+def test_empty_stack_can_move_between_areas_and_be_archived(data):
+    user, a, _, _ = data
+    destination = Zone.objects.create(store=a.zone.store, code="WINDOW", name="Window", width=24, height=10)
+    stack = create_shelf_stack(zone=a.zone, user=user, display_name="Movable Rack", x=1, y=1, width=6, height=7, depth=1.5, level_definitions=[{"compartments": 2}])
+    permanent_code = stack.code
+    update_shelf_stack(stack=stack, user=user, zone=destination, x=4, y=2, rotation=90)
+    stack.refresh_from_db()
+    assert stack.zone == destination and stack.x == 4 and stack.code == permanent_code
+    assert not Shelf.objects.filter(level__stack=stack).exclude(zone=destination).exists()
+    archive_shelf_stack(stack=stack, user=user)
+    stack.refresh_from_db()
+    assert not stack.active and not Shelf.objects.filter(level__stack=stack, active=True).exists()
+
+
+@pytest.mark.django_db
 def test_acceptance_stack_and_product_round_trip():
     owner = User.objects.create_superuser("rack-owner", "rack@example.test", "Strong-pass-1296")
     store = Store.objects.create(name="LinTech Digital Point")

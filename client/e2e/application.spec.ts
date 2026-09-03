@@ -184,6 +184,24 @@ async function mockShop(page: Page) {
       ];
       return route.fulfill({ status: 201, json: stacks[0] });
     }
+    if (path.endsWith("/locations/stacks/9/") && request.method() === "PATCH") {
+      const input = request.postDataJSON();
+      stacks[0] = {
+        ...stacks[0],
+        ...input,
+        zone: Number(input.zone),
+        zone_name:
+          Number(input.zone) === 3 ? "Right Wall" : "Upstairs Window Display",
+      };
+      return route.fulfill({ json: stacks[0] });
+    }
+    if (
+      path.endsWith("/locations/stacks/9/") &&
+      request.method() === "DELETE"
+    ) {
+      stacks = [];
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (/\/locations\/shelves\/\d+\/contents\/$/.test(path))
       return route.fulfill({
         json: {
@@ -324,4 +342,17 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
     0,
   );
+  await page.getByRole("button", { name: "Move / Edit Rack" }).click();
+  await page.getByLabel("Shop area").selectOption("3");
+  await page.getByLabel("X position (ft)").fill("5");
+  await page.getByRole("button", { name: "Save rack position" }).click();
+  await expect(
+    page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Move / Edit Rack" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove empty rack" }).click();
+  await expect(
+    page.getByRole("button", { name: "Move / Edit Rack" }),
+  ).toHaveCount(0);
 });

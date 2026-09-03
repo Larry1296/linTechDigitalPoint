@@ -16,6 +16,13 @@ export const createStack = (payload: unknown) =>
     method: "POST",
     body: JSON.stringify(payload),
   });
+export const updateStack = (id: number, payload: unknown) =>
+  api<ShelfStack>(`/api/v1/locations/stacks/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+export const removeStack = (id: number) =>
+  api<void>(`/api/v1/locations/stacks/${id}/`, { method: "DELETE" });
 export const updateShelf = (id: number, payload: unknown) =>
   api(`/api/v1/locations/shelves/${id}/`, {
     method: "PATCH",

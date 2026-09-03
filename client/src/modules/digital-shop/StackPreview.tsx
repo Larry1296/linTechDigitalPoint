@@ -10,6 +10,7 @@ export function StackPreview({
   levels,
   onShelf,
   stack,
+  onEdit,
 }: {
   name: string;
   code?: string;
@@ -19,6 +20,7 @@ export function StackPreview({
   levels: PreviewLevel[];
   onShelf?: (id: number) => void;
   stack?: ShelfStack;
+  onEdit?: (stack: ShelfStack) => void;
 }) {
   const rows = stack
     ? [...stack.levels]
@@ -43,6 +45,11 @@ export function StackPreview({
         <small>
           {width} × {height} × {depth} ft
         </small>
+        {stack && onEdit && (
+          <button className="secondary rackEdit" onClick={() => onEdit(stack)}>
+            Move / Edit Rack
+          </button>
+        )}
       </header>
       <div className="rackFrame">
         {rows.map((level) => (

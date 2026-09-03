@@ -33,9 +33,11 @@ def create_shelf_stack(*,zone,user,display_name,x,y,width,height,depth,level_def
     snapshot=_stack_snapshot(stack);_location_history(stack,"STACK_CREATED",user);_audit("STACK_CREATED",stack,user,after=snapshot);return stack
 @transaction.atomic
 def update_shelf_stack(*,stack,user,**changes):
-    stack=ShelfStack.objects.select_for_update().get(pk=stack.pk);before=_stack_snapshot(stack);changes.pop("code",None);changes.pop("number_of_levels",None)
+    stack=ShelfStack.objects.select_for_update().get(pk=stack.pk);before=_stack_snapshot(stack);changes.pop("code",None);changes.pop("number_of_levels",None);old_zone_id=stack.zone_id
     for field,value in changes.items():setattr(stack,field,value)
-    stack.updated_by=user;stack.save();after=_stack_snapshot(stack);event="STACK_MOVED" if any(before[k]!=after[k] for k in ["x","y","rotation","zone"]) else "STACK_RESIZED" if any(before[k]!=after[k] for k in ["width","height","depth"]) else "STACK_UPDATED";_location_history(stack,event,user);_audit(event,stack,user,before,after);return stack
+    stack.updated_by=user;stack.save()
+    if old_zone_id!=stack.zone_id:Shelf.objects.filter(level__stack=stack).update(zone=stack.zone,updated_by=user)
+    after=_stack_snapshot(stack);event="STACK_MOVED" if any(before[k]!=after[k] for k in ["x","y","rotation","zone"]) else "STACK_RESIZED" if any(before[k]!=after[k] for k in ["width","height","depth"]) else "STACK_UPDATED";_location_history(stack,event,user);_audit(event,stack,user,before,after);return stack
 @transaction.atomic
 def archive_shelf_stack(*,stack,user):
     if StockBalance.objects.filter(shelf__level__stack=stack,quantity__gt=0).exists():raise ValidationError("This shelf stack still contains stock. Transfer or clear stock before removing it.")
