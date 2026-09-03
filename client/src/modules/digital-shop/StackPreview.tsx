@@ -41,7 +41,7 @@ export function StackPreview({
           <small>{stack?.code || code}</small>
         </div>
         <small>
-          {width} × {height} × {depth} cm
+          {width} × {height} × {depth} ft
         </small>
       </header>
       <div className="rackFrame">

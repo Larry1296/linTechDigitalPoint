@@ -158,7 +158,7 @@ async function mockShop(page: Page) {
           number_of_levels: input.levels.length,
           active: true,
           notes: "",
-          measurement_unit: "cm",
+          measurement_unit: "ft",
           levels: input.levels.map(
             (level: { compartments: number }, levelIndex: number) => ({
               id: levelIndex + 1,
@@ -287,8 +287,8 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await page.getByRole("button", { name: "Create First Shelf Stack" }).click();
   await page.getByLabel("Shop area").selectOption("new");
   await page.getByLabel("Area name").fill("Upstairs Window Display");
-  await page.getByLabel("Area width (cm)").fill("725");
-  await page.getByLabel("Area height (cm)").fill("315");
+  await page.getByLabel("Area width (ft)").fill("24");
+  await page.getByLabel("Area height (ft)").fill("10.5");
   await page.getByLabel("Stack name").fill("Phone Accessories Rack");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();

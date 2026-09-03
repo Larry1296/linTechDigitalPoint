@@ -16,12 +16,12 @@ export function StackBuilder({
   const [zone, setZone] = useState(zones[0]?.id || 0);
   const [newArea, setNewArea] = useState(zones.length === 0);
   const [areaName, setAreaName] = useState("");
-  const [areaWidth, setAreaWidth] = useState(500);
-  const [areaHeight, setAreaHeight] = useState(300);
+  const [areaWidth, setAreaWidth] = useState(20);
+  const [areaHeight, setAreaHeight] = useState(10);
   const [name, setName] = useState("");
-  const [width, setWidth] = useState(180);
-  const [height, setHeight] = useState(210);
-  const [depth, setDepth] = useState(40);
+  const [width, setWidth] = useState(6);
+  const [height, setHeight] = useState(7);
+  const [depth, setDepth] = useState(1.5);
   const [x, setX] = useState(0);
   const [y, setY] = useState(0);
   const [rotation, setRotation] = useState(0);
@@ -103,7 +103,7 @@ export function StackBuilder({
               </label>
               <div className="formGrid">
                 <label>
-                  Area width (cm)
+                  Area width (ft)
                   <input
                     type="number"
                     min="1"
@@ -112,7 +112,7 @@ export function StackBuilder({
                   />
                 </label>
                 <label>
-                  Area height (cm)
+                  Area height (ft)
                   <input
                     type="number"
                     min="1"
@@ -140,7 +140,7 @@ export function StackBuilder({
       )}
       {step === 2 && (
         <div className="formCard">
-          <h2>Real physical dimensions (cm)</h2>
+          <h2>Real physical dimensions (ft)</h2>
           <div className="formGrid">
             <label>
               Width
