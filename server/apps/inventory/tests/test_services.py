@@ -284,7 +284,6 @@ def test_acceptance_stack_and_product_round_trip():
 @pytest.mark.django_db
 def test_owner_defines_any_shop_area_without_seeded_zone_choices():
     owner = User.objects.create_superuser("area-owner", "area@example.test", "Strong-pass-1296")
-    Store.objects.create(name="Any Shop", measurement_unit="ft")
     client = APIClient()
     client.force_authenticate(owner)
     response = client.post(
@@ -295,3 +294,4 @@ def test_owner_defines_any_shop_area_without_seeded_zone_choices():
     assert response.json()["code"] == "UPSTAIRSWINDOWDI"
     assert response.json()["width"] == "24.00"
     assert response.json()["height"] == "10.50"
+    assert Store.objects.get().measurement_unit == "ft"

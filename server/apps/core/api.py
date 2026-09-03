@@ -155,9 +155,7 @@ class ZoneSerializer(serializers.ModelSerializer):
         return ShelfSerializer(obj.shelves.filter(level__isnull=True), many=True).data
 
     def create(self, validated_data):
-        store = Store.objects.first()
-        if store is None:
-            raise serializers.ValidationError("Configure the store before adding a physical area.")
+        store = Store.objects.first() or Store.objects.create(name="LinTech Digital Point", measurement_unit="ft")
         base = (slugify(validated_data["name"]).replace("-", "")[:16] or "AREA").upper()
         code = base
         suffix = 2
