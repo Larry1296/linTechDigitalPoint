@@ -60,6 +60,7 @@ export function AppNavbar() {
         <nav
           className={mobileMenuOpen ? "mobileMenuOpen" : undefined}
           aria-label="Main navigation"
+          onClick={() => setMobileMenuOpen(false)}
         >
           <NavLink to="/">Home</NavLink>
           <NavLink to="/shop">Shop</NavLink>
