@@ -38,6 +38,22 @@
 }
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
 }
 body {
   margin: 0;
@@ -277,8 +293,13 @@ main {
   align-self: start;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  scrollbar-width: none;
   z-index: 9;
+}
+.admin aside::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .admin aside nav {
   display: grid;
