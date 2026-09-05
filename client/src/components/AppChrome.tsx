@@ -1,5 +1,5 @@
-import { ShoppingCart } from "lucide-react";
-import { Link, NavLink } from "react-router-dom";
+import { Bell, ShoppingCart } from "lucide-react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
 import { useCart } from "../core/cart/CartContext";
 import { ThemePicker } from "./ThemePicker";
@@ -28,48 +28,60 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
 export function AppNavbar() {
   const { user, logout } = useAuth();
   const { count, refreshCart } = useCart();
+  const location = useLocation();
+  const isDashboard = location.pathname.startsWith("/admin-app");
   const signOut = async () => {
     await logout();
     await refreshCart();
   };
   return (
-    <header className="appNavbar">
+    <header className={`appNavbar${isDashboard ? " dashboardNavbar" : ""}`}>
       <Link
         className="brand"
         to={user?.is_staff ? "/admin-app/dashboard" : "/"}
       >
         <BrandLogo />
       </Link>
-      <nav aria-label="Main navigation">
-        <NavLink to="/">Home</NavLink>
-        <NavLink to="/shop">Shop</NavLink>
-        <Link to="/#categories">Categories</Link>
-        <Link to="/#services">Services</Link>
-        <NavLink to="/cart">
-          <ShoppingCart size={18} /> Cart{" "}
-          <span className="cartBadge">{count}</span>
-        </NavLink>
-        {user?.is_staff ? (
-          <NavLink className="staffPortalLink" to="/admin-app/dashboard">
-            Admin
+      {!isDashboard && (
+        <nav aria-label="Main navigation">
+          <NavLink to="/">Home</NavLink>
+          <NavLink to="/shop">Shop</NavLink>
+          <Link to="/#categories">Categories</Link>
+          <Link to="/#services">Services</Link>
+          <NavLink to="/cart">
+            <ShoppingCart size={18} /> Cart{" "}
+            <span className="cartBadge">{count}</span>
           </NavLink>
-        ) : user ? (
-          <>
-            <NavLink to="/account">My Account</NavLink>
-            <NavLink to="/account/orders">Orders</NavLink>
-          </>
-        ) : (
-          <NavLink className="authEntryLink" to="/login">
-            Login/Register
-          </NavLink>
-        )}
-      </nav>
+          {user?.is_staff ? (
+            <NavLink className="staffPortalLink" to="/admin-app/dashboard">
+              Admin
+            </NavLink>
+          ) : user ? (
+            <>
+              <NavLink to="/account">My Account</NavLink>
+              <NavLink to="/account/orders">Orders</NavLink>
+            </>
+          ) : (
+            <NavLink className="authEntryLink" to="/login">
+              Login/Register
+            </NavLink>
+          )}
+        </nav>
+      )}
       <div className="navActions">
+        {isDashboard && (
+          <div className="dashboardNotification" title="Live notifications">
+            <Bell size={21} aria-hidden="true" />
+            <span className="liveDot" aria-hidden="true" />
+            <span className="sr">Live notifications</span>
+          </div>
+        )}
         <ThemePicker />
         {user && (
           <div className="navIdentity">
             <span className="navUserName">
               {user.first_name || user.username} ({displayRole(user)})
+              {isDashboard && <small className="dashboardLabel">Dashboard</small>}
             </span>
             <button
               className="linkButton logoutLink"

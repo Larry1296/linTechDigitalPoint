@@ -79,6 +79,9 @@ a {
   top: 0;
   z-index: 10;
 }
+.appNavbar.dashboardNavbar {
+  grid-template-columns: 1fr auto;
+}
 .brand {
   font-weight: 800;
   font-size: 20px;
@@ -178,6 +181,37 @@ a {
 .navUserName {
   color: #4ade80;
   font-weight: 800;
+}
+.dashboardNotification {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  color: var(--chrome-text);
+  border: 1px solid var(--chrome-line);
+  border-radius: 50%;
+  background: #102b50;
+}
+.liveDot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--chrome);
+  border-radius: 50%;
+  background: #4ade80;
+}
+.dashboardLabel {
+  display: block;
+  margin-top: 2px;
+  color: var(--chrome-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .appNavbar .logoutLink {
   color: #fca5a5;
