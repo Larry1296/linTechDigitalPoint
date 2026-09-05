@@ -1,6 +1,6 @@
 # LinTech Digital Point
 
-LinTech Digital Point is a Django REST Framework and React/TypeScript platform for a public storefront, customer accounts, ecommerce, POS, inventory, and business administration. Its Digital Shop is a digital twin of the real hierarchy: Zone → Shelf Stack → Level → Shelf → Stock. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
+LinTech Digital Point is a Django REST Framework and React/TypeScript platform for three related business units: Retail/Ecommerce, Cyber Services, and M-Pesa Agency operations. Its Digital Shop is a digital twin of the real hierarchy: Zone → Shelf Stack → Level → Shelf → Stock. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
 
 ## Project structure
 
@@ -121,11 +121,34 @@ Useful URLs:
 - Customer account: http://localhost:5173/account
 - Staff dashboard: http://localhost:5173/admin-app/dashboard
 - POS: http://localhost:5173/admin-app/pos
+- Cyber Desk: http://localhost:5173/admin-app/cyber
+- M-Pesa Agent Desk: http://localhost:5173/admin-app/mpesa
 - Digital Shop: http://localhost:5173/admin-app/digital-shop
 - Django Admin: http://localhost:8000/admin/
 - Swagger API docs: http://localhost:8000/api/docs/
 
 Customers can browse and maintain an anonymous cart, then log in or register during checkout without losing it. Customers and staff share `/login`; role-aware routing sends each account to an authorized destination.
+
+## Business domains and accounting boundaries
+
+Retail and ecommerce stock items use the existing Product → Sale → Payment workflow and FIFO inventory allocation. Genuine billable services remain `Product.product_type=SERVICE`; `ecommerce_visible` controls whether a product/service is shown publicly, while `online_orderable` separately controls whether it can enter the online cart.
+
+Cyber adds service configuration, job lines, job states, and counter checkout. Configure a `CyberServiceProfile` against an existing SERVICE variant and set its billing unit and visibility. A job moves through queued, in-progress, waiting-customer, ready, and completed states. Quick services use the same job ledger with a short workflow. Financial completion atomically creates exactly one Commerce `Sale` with `channel=CYBER` and one Commerce `Payment`, producing the Cyber receipt number. Customer document contents are not stored; never enter passwords, PINs, OTPs, or other credentials in job metadata.
+
+Optional `ServiceMaterialRequirement` rows consume measurable STOCK_ITEM materials (paper, pouches, binding combs) through FIFO at job completion. When at least one material requirement is configured, actual material cost is Cyber COGS and `service_cost` is not added. When no materials are configured, `ProductVariant.service_cost × billable quantity` is the fallback cost. This prevents double-counting.
+
+M-Pesa Agency is a separate append-only operational ledger. An operator opens an outlet shift with physical cash and electronic float, posts deposits or withdrawals, and closes it with expected-versus-actual reconciliation. Deposits increase cash and decrease float; withdrawals decrease cash and increase float. The backend computes these effects under database locks, prevents negative balances, rejects duplicate provider references, and uses idempotency keys. Errors are corrected by a reversing entry; originals remain in history. Float top-ups, rebalances, adjustments, reversals, and commission entry are restricted operational actions.
+
+`Payment.method=MPESA` means an M-Pesa payment for a LinTech retail, ecommerce, or Cyber sale. It does not create an agency ledger entry. M-Pesa agency deposits and withdrawals are `MpesaTransaction` records, are not Commerce sales, and their principal is never business revenue. Only separately recognized `MpesaCommissionEntry` amounts contribute to total revenue. M-Pesa cash/float and transaction volume are reported separately from retail cash, stock, and revenue.
+
+Run `python manage.py seed_initial` after migrating to provision/update the Manager, Cyber Operator, and M-Pesa Operator permission groups. The command creates structural roles only and never creates sample prices, jobs, outlet balances, or customer transactions. Configure real outlets and service profiles through the protected application/API or Django Admin.
+
+API namespaces:
+
+- `/api/v1/cyber/services/`, `/jobs/`, `/materials/`, and `/dashboard/`
+- `/api/v1/mpesa/outlets/`, `/sessions/`, `/transactions/`, `/reconciliation/`, `/commission/`, and `/dashboard/`
+
+M-Pesa APIs require authenticated staff permissions. Only the Cyber advertised-service listing is public; no operational queue, customer metadata, COGS, cash, float, commission, or agency ledger data is exposed on the public website.
 
 ## Tests and quality checks
 

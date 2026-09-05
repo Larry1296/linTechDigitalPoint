@@ -26,6 +26,8 @@ import { DigitalShopPage } from "../modules/digital-shop/DigitalShopPage";
 import { ProductsPage } from "../modules/products/ProductsPage";
 import { ReceivePage } from "../modules/receiving/ReceivePage";
 import { CustomerProtectedRoute, StaffProtectedRoute } from "./ProtectedRoutes";
+import { CyberDashboardPage } from "../modules/cyber/CyberDashboardPage";
+import { MpesaDashboardPage } from "../modules/mpesa/MpesaDashboardPage";
 
 export function AppRoutes() {
   return (
@@ -104,6 +106,12 @@ export function AppRoutes() {
         <Route path="receive" element={<ReceivePage />} />
         <Route path="digital-shop" element={<DigitalShopPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="cyber" element={<CyberDashboardPage />} />
+        <Route path="cyber/jobs" element={<CyberDashboardPage />} />
+        <Route path="cyber/services" element={<CyberDashboardPage />} />
+        <Route path="mpesa" element={<MpesaDashboardPage />} />
+        <Route path="mpesa/transactions" element={<MpesaDashboardPage />} />
+        <Route path="mpesa/reconciliation" element={<MpesaDashboardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

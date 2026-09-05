@@ -6,6 +6,8 @@ import {
   PackagePlus,
   Receipt,
   ShoppingCart,
+  MonitorCog,
+  Smartphone,
 } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
@@ -54,14 +56,20 @@ const links = [
     permission: "commerce.view_sale",
   },
 ];
+const operations = [
+  { title: "Overview", links: [links[0]] },
+  { title: "Sales", links: [links[1], links[2]] },
+  { title: "Cyber", links: [
+    { to: "/admin-app/cyber", label: "Cyber Desk", icon: MonitorCog, permission: "cyber.view_cyberjob" },
+  ] },
+  { title: "M-Pesa", links: [
+    { to: "/admin-app/mpesa", label: "M-Pesa Agent", icon: Smartphone, permission: "mpesa.view_mpesasession" },
+  ] },
+  { title: "Inventory", links: [links[3], links[4], links[5]] },
+  { title: "Business", links: [links[6]] },
+];
 export function StaffLayout() {
   const { user } = useAuth();
-  const visible = links.filter(
-    (x) =>
-      !x.permission ||
-      user?.is_superuser ||
-      user?.permissions.includes(x.permission),
-  );
   return (
     <>
       <AppNavbar />
@@ -71,12 +79,10 @@ export function StaffLayout() {
             LinTech<span>Digital Point</span>
           </Link>
           <nav>
-            {visible.map(({ to, label, icon: Icon }) => (
-              <NavLink key={to} to={to}>
-                <Icon />
-                {label}
-              </NavLink>
-            ))}
+            {operations.map((section) => {
+              const visible = section.links.filter((item) => !item.permission || user?.is_superuser || user?.permissions.includes(item.permission));
+              return visible.length ? <section key={section.title}><small>{section.title.toUpperCase()}</small>{visible.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to}><Icon />{label}</NavLink>)}</section> : null;
+            })}
           </nav>
         </aside>
         <main>

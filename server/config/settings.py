@@ -35,6 +35,8 @@ LOCAL_APPS = [
     "apps.catalog.apps.CatalogConfig",
     "apps.inventory.apps.InventoryConfig",
     "apps.commerce.apps.CommerceConfig",
+    "apps.cyber.apps.CyberConfig",
+    "apps.mpesa.apps.MpesaConfig",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 

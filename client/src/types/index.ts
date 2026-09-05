@@ -23,6 +23,7 @@ export type Product = {
   barcode: string | null;
   selling_price: string;
   available: string | null;
+  online_orderable: boolean;
 };
 export type CartItem = {
   id: number;

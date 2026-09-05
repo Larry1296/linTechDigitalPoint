@@ -1,9 +1,9 @@
 from django.contrib.auth.models import Group, Permission
 from apps.core.models import Store
 
-ROLES = ["Manager", "Cashier", "Stock Controller", "Ecommerce Customer"]
+ROLES = ["Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator", "Ecommerce Customer"]
 ROLE_RULES = {
-    "Manager": {"catalog", "inventory", "commerce", "accounts"},
+    "Manager": {"catalog", "inventory", "commerce", "accounts", "cyber", "mpesa"},
     "Cashier": {
         "commerce.add_sale",
         "commerce.view_sale",
@@ -23,6 +23,28 @@ ROLE_RULES = {
         "catalog.add_productvariant",
         "catalog.change_productvariant",
         "inventory",
+    },
+    "Cyber Operator": {
+        "cyber.view_cyberserviceprofile",
+        "cyber.view_cyberjob",
+        "cyber.add_cyberjob",
+        "cyber.change_cyberjob",
+        "cyber.view_cyberjobline",
+        "cyber.add_cyberjobline",
+        "cyber.complete_cyber_job",
+        "commerce.add_sale",
+        "commerce.add_payment",
+        "commerce.view_sale",
+    },
+    "M-Pesa Operator": {
+        "mpesa.view_mpesaoutlet",
+        "mpesa.view_mpesasession",
+        "mpesa.add_mpesasession",
+        "mpesa.change_mpesasession",
+        "mpesa.view_mpesatransaction",
+        "mpesa.add_mpesatransaction",
+        "mpesa.view_mpesareconciliation",
+        "mpesa.add_mpesareconciliation",
     },
     "Ecommerce Customer": set(),
 }

@@ -40,6 +40,7 @@ def checkout_cart(*,request,fulfillment_method,address=None,payment_method="CASH
     if not request.user.is_authenticated:raise ValidationError("Authentication required.")
     cart=get_cart(request); items=list(cart.items.select_related("variant__product"))
     if not items:raise ValidationError("Cart is empty.")
+    if any(not item.variant.product.online_orderable for item in items):raise ValidationError("This cart contains a service that is not available for online ordering.")
     number=f"LT-WEB-{timezone.now():%y%m%d}-{uuid4().hex[:6].upper()}"; subtotal=cart_total(cart)
     order=Order.objects.create(number=number,customer=request.user,subtotal=subtotal,total=subtotal,fulfillment_method=fulfillment_method,address=address,notes=notes,status="AWAITING_PAYMENT")
     timeout=Store.objects.first().reservation_timeout_minutes if Store.objects.exists() else 30

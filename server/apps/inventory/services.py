@@ -111,6 +111,40 @@ def release_reservation(reservation,user=None):
     for a in reservation.allocations:
         row=StockBalance.objects.select_for_update().get(pk=a["balance_id"]); qty=_d(a["quantity"]); row.reserved-=qty; row.save(update_fields=["reserved","updated_at"]); Movement.objects.create(variant=reservation.variant,lot=row.lot,quantity=qty,destination=row.shelf,movement_type="RESERVATION_RELEASE",reference=reservation.reference,performed_by=user)
     reservation.active=False; reservation.status=Reservation.RELEASED; reservation.save(update_fields=["active","status","updated_at"]); return reservation
+
+
+def consume_stock_fifo(*, variant, quantity, reference, movement_type, user=None):
+    """Consume unreserved stock under the caller's transaction and return actual FIFO cost."""
+    need = _d(quantity)
+    rows = list(
+        StockBalance.objects.select_for_update()
+        .select_related("lot", "shelf")
+        .filter(lot__variant=variant, quantity__gt=F("reserved"))
+        .order_by("lot__received_at", "lot_id", "shelf_id")
+    )
+    available = sum((row.quantity - row.reserved for row in rows), Decimal("0"))
+    if need <= 0 or available < need:
+        raise ValidationError(f"Only {available} units of {variant} are available. Requested quantity: {need}.")
+    cost = Decimal("0")
+    for row in rows:
+        take = min(need, row.quantity - row.reserved)
+        row.quantity -= take
+        row.save(update_fields=["quantity", "updated_at"])
+        StockLot.objects.filter(pk=row.lot_id).update(remaining_quantity=F("remaining_quantity") - take)
+        Movement.objects.create(
+            variant=variant,
+            lot=row.lot,
+            quantity=take,
+            source=row.shelf,
+            movement_type=movement_type,
+            reference=reference,
+            performed_by=user,
+        )
+        cost += take * row.lot.unit_cost
+        need -= take
+        if need == 0:
+            break
+    return cost
 @transaction.atomic
 def complete_sale(*,lines,channel,number,user=None,customer=None,discount=0,payment_method="CASH",payment_status="COMPLETED",payment_reference="",idempotency_key=None):
     from apps.commerce.models import Payment,Sale,SaleAllocation,SaleItem

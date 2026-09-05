@@ -25,7 +25,7 @@ def cart_payload(cart):
 def cart(request):
     current=get_cart(request)
     if request.method=="POST":
-        variant=ProductVariant.objects.select_related("product").filter(pk=request.data.get("variant_id"),active=True,product__active=True).first()
+        variant=ProductVariant.objects.select_related("product").filter(pk=request.data.get("variant_id"),active=True,product__active=True,product__online_orderable=True).first()
         if not variant:return Response({"detail":"Product variant not found."},status=404)
         quantity=Decimal(str(request.data.get("quantity",1)))
         if quantity<=0:return Response({"detail":"Quantity must be positive."},status=400)

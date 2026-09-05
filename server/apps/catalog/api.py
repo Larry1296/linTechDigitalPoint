@@ -140,6 +140,7 @@ class ProductViewSet(SecuredModelViewSet):
                 "description": request.data.get("description", ""),
                 "product_type": request.data.get("product_type", "STOCK_ITEM"),
                 "ecommerce_visible": request.data.get("ecommerce_visible", True),
+                "online_orderable": request.data.get("online_orderable", True),
             },
             variant_data={
                 "name": request.data.get("variant_name", "Standard"),

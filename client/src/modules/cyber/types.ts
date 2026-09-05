@@ -1,0 +1,4 @@
+export type CyberService = { id: number; variant: number; name: string; variant_name: string; selling_price: string; billing_unit: string; requires_job: boolean; active: boolean; publicly_advertised: boolean; online_orderable: boolean; notes: string };
+export type CyberJobLine = { id: number; variant: number; service_name: string; quantity: string; billing_unit: string; unit_price: string; line_total: string; service_details: Record<string, unknown> };
+export type CyberJob = { id: number; number: string; walk_in_customer_name: string; phone: string; status: string; notes: string; total: string; created_at: string; completed_at: string | null; payment_method: string | null; lines: CyberJobLine[] };
+export type CyberDashboard = { today: { revenue: string; jobs: number; average: string; cogs: string; profit: string }; active_jobs: number; ready_jobs: number; queued_today: number; top_service: { service_name: string } | null };

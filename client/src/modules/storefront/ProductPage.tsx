@@ -60,9 +60,9 @@ export function ProductPage() {
         <p className="stock">{availability(p.available)}</p>
         <button
           onClick={() => void add()}
-          disabled={p.available !== null && +p.available <= 0}
+          disabled={!p.online_orderable || (p.available !== null && +p.available <= 0)}
         >
-          Add to cart
+          {p.online_orderable ? "Add to cart" : "Available in store"}
         </button>
       </section>
     </main>

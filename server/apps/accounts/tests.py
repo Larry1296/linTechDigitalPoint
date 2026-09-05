@@ -39,7 +39,7 @@ def test_django_superuser_is_owner_in_both_admin_interfaces():
 @pytest.mark.django_db
 def test_initial_setup_uses_staff_roles_without_owner_group():
     store, groups = ensure_initial_setup()
-    assert set(groups) == {"Manager", "Cashier", "Stock Controller", "Ecommerce Customer"}
+    assert set(groups) == {"Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator", "Ecommerce Customer"}
     assert not Group.objects.filter(name="Owner").exists()
     assert not Zone.objects.filter(store=store).exists()
 
@@ -50,6 +50,9 @@ def test_role_permissions_are_real():
     assert groups["Cashier"].permissions.filter(codename="add_sale").exists()
     assert groups["Stock Controller"].permissions.filter(content_type__app_label="inventory").exists()
     assert groups["Manager"].permissions.filter(content_type__app_label="commerce").exists()
+    assert groups["Cyber Operator"].permissions.filter(codename="complete_cyber_job").exists()
+    assert groups["M-Pesa Operator"].permissions.filter(codename="add_mpesatransaction").exists()
+    assert not groups["M-Pesa Operator"].permissions.filter(codename="add_mpesacommissionentry").exists()
     assert not groups["Ecommerce Customer"].permissions.exists()
 
 

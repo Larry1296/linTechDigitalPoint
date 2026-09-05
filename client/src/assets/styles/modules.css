@@ -34,6 +34,7 @@ label {
   gap: 6px;
   color: var(--muted);
   font-size: 13px;
+  font-weight: 700;
 }
 .heading,
 .cartTotal,
@@ -191,11 +192,14 @@ label {
   padding: 28px;
   border-radius: 15px;
   box-shadow: var(--shadow);
-  width: min(100%, 440px);
+  /* Keep forms comfortably wide and centered on the page.  This gives
+     multi-field workflows room to breathe while remaining responsive. */
+  width: min(100%, 760px);
+  margin-inline: auto;
 }
 .formCard.wide {
   grid-template-columns: 1fr 1fr;
-  width: min(100%, 800px);
+  width: min(100%, 1040px);
 }
 .formCard.wide button {
   grid-column: 1/-1;
@@ -448,7 +452,7 @@ label {
   padding: 10px 0;
 }
 .productForm {
-  max-width: 980px;
+  width: min(100%, 1100px);
 }
 .serviceHint {
   align-self: end;
@@ -460,6 +464,73 @@ label {
 .accountCart .cardActions {
   justify-content: flex-end;
   margin-top: 18px;
+}
+.deskGrid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr);
+  gap: 24px;
+  align-items: start;
+  margin: 24px 0;
+}
+.operatorForm input,
+.operatorForm select,
+.operatorForm button {
+  min-height: 48px;
+}
+.jobLine {
+  display: grid;
+  grid-template-columns: 1fr 110px auto;
+  gap: 8px;
+}
+.jobActions,
+.deskActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.privacyNotice,
+.serviceSpotlight {
+  border-left: 4px solid var(--primary);
+  background: var(--primary2);
+  padding: 16px 20px;
+  border-radius: 8px;
+}
+.serviceGrid,
+.businessUnits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.serviceGrid article,
+.businessUnits > a {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.businessUnits .metrics {
+  grid-template-columns: 1fr 1fr;
+}
+.businessUnits .metrics article {
+  box-shadow: none;
+  padding: 10px;
+}
+.ledgerTable > div {
+  grid-template-columns: 1.4fr 1.4fr 1fr 1fr 1fr auto;
+}
+.admin aside nav section {
+  display: grid;
+  gap: 3px;
+  margin-top: 14px;
+}
+.admin aside nav section > small {
+  padding: 0 12px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  font-size: 10px;
 }
 @media (max-width: 800px) {
   .productDetail,
@@ -484,11 +555,27 @@ label {
   .productList {
     grid-template-columns: 1fr;
   }
+  .deskGrid {
+    grid-template-columns: 1fr;
+  }
+  .ledgerTable > div {
+    grid-template-columns: 1fr 1fr;
+  }
   .table > div {
     grid-template-columns: 1fr 1fr;
   }
   .table > div span:nth-last-child(-n + 2) {
     text-align: right;
+  }
+}
+@media (max-width: 600px) {
+  .jobLine {
+    grid-template-columns: 1fr;
+  }
+  .deskActions button,
+  .jobActions button {
+    flex: 1 1 140px;
+    min-height: 48px;
   }
 }
 @media print {

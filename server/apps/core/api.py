@@ -15,6 +15,7 @@ from apps.inventory.services import (
     update_shelf,
     update_shelf_stack,
 )
+from apps.cyber.models import CyberServiceProfile
 from .permissions import HasLinTechPermission, IsInternalStaff
 
 
@@ -40,7 +41,10 @@ class PublicVariantSerializer(serializers.ModelSerializer):
             "name",
             "selling_price",
             "available",
+            "online_orderable",
         ]
+
+    online_orderable = serializers.BooleanField(source="product.online_orderable", read_only=True)
 
     def get_images(self, obj):
         return [{"url": x.image_url, "alt": x.alt_text} for x in obj.product.images.all()]
@@ -77,8 +81,12 @@ def public_home(request):
     services = PublicVariantSerializer(
         PublicProductViewSet.queryset.filter(product__product_type="SERVICE")[:6], many=True
     ).data
+    cyber_services = [
+        {"name": profile.variant.product.name, "price": profile.variant.selling_price, "billing_unit": profile.billing_unit}
+        for profile in CyberServiceProfile.objects.filter(active=True, publicly_advertised=True, variant__active=True, variant__product__active=True).select_related("variant__product")[:8]
+    ]
     return Response(
-        {"store": store_data, "categories": categories, "featured_products": products, "services": services}
+        {"store": store_data, "categories": categories, "featured_products": products, "services": services, "cyber_services": cyber_services}
     )
 
 

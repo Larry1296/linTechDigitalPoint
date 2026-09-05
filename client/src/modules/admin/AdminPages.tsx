@@ -18,15 +18,10 @@ export function DashboardPage() {
   const { data, error, load } = useLoad<any>("/api/v1/inventory/dashboard/");
   if (error) return <ErrorState message={error} retry={load} />;
   if (!data) return <Loading />;
-  const metrics = [
-    ["Revenue", data.today.revenue],
-    ["COGS", data.today.cogs],
-    ["Gross profit", data.today.profit],
-    ["Sales", data.today.sales],
-    ["Stock cost", data.inventory.cost],
-    ["Retail value", data.inventory.retail],
-    ["Potential margin", data.inventory.potential_margin],
-    ["Low stock", data.inventory.low_stock],
+  const units = [
+    { title: "Shop", href: "/admin-app/pos", metrics: [["Revenue", data.retail.revenue], ["Gross profit", data.retail.profit], ["Sales", data.retail.sales], ["Low stock", data.inventory.low_stock]] },
+    { title: "Cyber", href: "/admin-app/cyber", metrics: [["Today's revenue", data.cyber.revenue], ["Gross profit", data.cyber.profit], ["Active jobs", data.cyber.active_jobs], ["Ready jobs", data.cyber.ready_jobs]] },
+    { title: "M-Pesa", href: "/admin-app/mpesa", metrics: [["Cash", data.mpesa.cash], ["Float", data.mpesa.float], ["Transactions", data.mpesa.transaction_count], ["Commission", data.mpesa.commission]] },
   ];
   return (
     <>
@@ -45,18 +40,8 @@ export function DashboardPage() {
           </a>
         </div>
       )}
-      <div className="metrics">
-        {metrics.map(([label, value]) => (
-          <article key={label}>
-            <span>{label}</span>
-            <strong>
-              {typeof value === "number" && label === "Sales"
-                ? value
-                : "KSh " + value}
-            </strong>
-          </article>
-        ))}
-      </div>
+      <div className="callout"><div><b>Total recognized business revenue</b><p>Retail + ecommerce + Cyber sales + recognized M-Pesa commission</p></div><strong>KSh {data.today.revenue}</strong></div>
+      <div className="businessUnits">{units.map((unit) => <a href={unit.href} key={unit.title}><h2>{unit.title}</h2><div className="metrics">{unit.metrics.map(([label, value]) => <article key={label}><span>{label}</span><strong>{["Sales", "Low stock", "Active jobs", "Ready jobs", "Transactions"].includes(label as string) ? value : `KSh ${value}`}</strong></article>)}</div></a>)}</div>
     </>
   );
 }

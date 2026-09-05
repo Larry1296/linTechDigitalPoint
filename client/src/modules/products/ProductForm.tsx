@@ -37,6 +37,7 @@ export function ProductForm({
           ...data,
           preferred_shelf_id: type === "STOCK_ITEM" ? shelf : null,
           ecommerce_visible: data.ecommerce_visible === "on",
+          online_orderable: data.online_orderable === "on",
         }),
       });
       onSaved();
@@ -85,7 +86,7 @@ export function ProductForm({
           onChange={(e) => setType(e.target.value)}
         >
           <option value="STOCK_ITEM">Stock item</option>
-          <option value="SERVICE">Service (M-Pesa / software)</option>
+          <option value="SERVICE">Billable service</option>
         </select>
       </label>
       <label>
@@ -124,8 +125,8 @@ export function ProductForm({
           </label>
           <p className="muted serviceHint">
             Examples: Windows installation, Microsoft Office setup, drivers,
-            antivirus, application installation or an M-Pesa service. Services
-            do not use shelves or stock quantities.
+            antivirus, printing, scanning, typing or application installation.
+            M-Pesa agency operations belong in the separate M-Pesa desk.
           </p>
         </>
       ) : (
@@ -155,6 +156,10 @@ export function ProductForm({
       <label>
         <input name="ecommerce_visible" type="checkbox" defaultChecked />{" "}
         Visible online
+      </label>
+      <label>
+        <input name="online_orderable" type="checkbox" defaultChecked />{" "}
+        Can be purchased through online checkout
       </label>
       {type === "STOCK_ITEM" && (
         <>

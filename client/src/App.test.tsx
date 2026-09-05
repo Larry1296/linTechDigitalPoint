@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ThemePicker } from "./components/ThemePicker";
+import { AppNavbar } from "./components/AppChrome";
 import { AuthProvider } from "./core/auth/AuthContext";
 import { CartProvider } from "./core/cart/CartContext";
 import { LoginPage } from "./modules/auth/AuthPages";
@@ -45,5 +46,29 @@ describe("authentication experience", () => {
     expect(
       screen.getByRole("link", { name: "Create account" }),
     ).toHaveAttribute("href", "/register?next=%2Fcheckout");
+  });
+
+  it("shows only customer-facing navigation before login", () => {
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <CartProvider>
+            <AppNavbar />
+          </CartProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Main navigation",
+    });
+    expect(within(navigation).getByRole("link", { name: "Login" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(within(navigation).queryByText("Owner Login")).not.toBeInTheDocument();
+    expect(within(navigation).queryByText("Storefront")).not.toBeInTheDocument();
+    expect(within(navigation).queryByText("Dashboard")).not.toBeInTheDocument();
+    expect(within(navigation).queryByText("POS")).not.toBeInTheDocument();
   });
 });

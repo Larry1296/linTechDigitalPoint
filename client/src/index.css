@@ -309,6 +309,13 @@ main {
     display: flex;
     margin: 0;
   }
+  .admin aside nav section {
+    display: flex;
+    margin: 0;
+  }
+  .admin aside nav section > small {
+    display: none;
+  }
   .admin aside nav a {
     white-space: nowrap;
   }

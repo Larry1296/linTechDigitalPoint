@@ -99,9 +99,9 @@ export function ShopPage() {
                 </Link>
                 <button
                   onClick={() => void add(p)}
-                  disabled={p.available !== null && +p.available <= 0}
+                  disabled={!p.online_orderable || (p.available !== null && +p.available <= 0)}
                 >
-                  Add to cart
+                  {p.online_orderable ? "Add to cart" : "Visit us for this service"}
                 </button>
               </div>
             </article>

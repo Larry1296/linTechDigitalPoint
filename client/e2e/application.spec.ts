@@ -8,6 +8,7 @@ const products = [
     category: "Phone Accessories",
     selling_price: "250.00",
     available: "8.000",
+    online_orderable: true,
     images: [],
   },
   {
@@ -17,6 +18,7 @@ const products = [
     category: "Chargers & Cables",
     selling_price: "300.00",
     available: "7.000",
+    online_orderable: true,
     images: [],
   },
 ];
@@ -110,6 +112,7 @@ async function mockShop(page: Page) {
           categories: [],
           featured_products: products,
           services: [],
+          cyber_services: [],
         },
       });
     if (path.endsWith("/store/products/"))
@@ -118,6 +121,9 @@ async function mockShop(page: Page) {
       return route.fulfill({
         json: {
           today: { revenue: 0, cogs: 0, profit: 0, sales: 0 },
+          retail: { revenue: 0, cogs: 0, profit: 0, sales: 0 },
+          cyber: { revenue: 0, profit: 0, active_jobs: 0, ready_jobs: 0 },
+          mpesa: { cash: 0, float: 0, transaction_count: 0, commission: 0 },
           inventory: {
             cost: 0,
             retail: 0,

@@ -15,6 +15,7 @@ type HomeData = {
   categories: { id: number; name: string; slug: string }[];
   featured_products: Product[];
   services: Product[];
+  cyber_services: { name: string; price: string; billing_unit: string }[];
 };
 export function HomePage() {
   const [data, setData] = useState<HomeData>();
@@ -134,24 +135,29 @@ export function HomePage() {
           </section>
           <section id="services" className="homeSection">
             <span className="eyebrow">At your service</span>
-            <h2>M-Pesa and software services</h2>
-            {data.services.length ? (
+            <h2>Cyber services</h2>
+            {data.cyber_services.length ? (
               <div className="categoryGrid">
-                {data.services.map((s) => (
-                  <Link to={"/products/" + s.id} key={s.id}>
+                {data.cyber_services.map((service) => (
+                  <article key={service.name}>
                     <Headphones />
-                    {s.product_name}
-                    <span>KSh {s.selling_price}</span>
-                  </Link>
+                    <b>{service.name}</b>
+                    <span>KSh {service.price} · {service.billing_unit.replaceAll("_", " ").toLowerCase()}</span>
+                  </article>
                 ))}
               </div>
             ) : (
               <p className="muted">
-                Ask us about M-Pesa services, Windows installation, Microsoft
-                Office setup, drivers, antivirus and other software
-                installation.
+                Ask us about printing, photocopying, scanning, lamination,
+                binding, typing, Windows setup and software installation.
               </p>
             )}
+          </section>
+          <section className="homeSection serviceSpotlight">
+            <span className="eyebrow">Available at our counter</span>
+            <h2>M-Pesa services</h2>
+            <p>Convenient M-Pesa agent cash deposit and cash withdrawal services are available at LinTech Digital Point.</p>
+            <small>Visit us for service. Charges and applicable limits are confirmed at the counter.</small>
           </section>
           <section id="contact" className="contactSection">
             <div>

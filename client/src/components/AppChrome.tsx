@@ -24,39 +24,23 @@ export function AppNavbar() {
         LinTech<span>Digital Point</span>
       </Link>
       <nav aria-label="Main navigation">
+        <NavLink to="/">Home</NavLink>
+        <NavLink to="/shop">Shop</NavLink>
+        <Link to="/#categories">Categories</Link>
+        <Link to="/#services">Services</Link>
+        <NavLink to="/cart">
+          <ShoppingCart size={18} /> Cart{" "}
+          <span className="cartBadge">{count}</span>
+        </NavLink>
         {user?.is_staff ? (
+          <NavLink to="/admin-app/dashboard">Admin</NavLink>
+        ) : user ? (
           <>
-            <NavLink to="/">Storefront</NavLink>
-            <NavLink to="/admin-app/dashboard">Dashboard</NavLink>
-            {can("commerce.add_sale", user) && (
-              <NavLink to="/admin-app/pos">POS</NavLink>
-            )}
-            {can("commerce.view_order", user) && (
-              <NavLink to="/admin-app/orders">Orders</NavLink>
-            )}
-            {can("catalog.view_product", user) && (
-              <NavLink to="/admin-app/products">Products</NavLink>
-            )}
+            <NavLink to="/account">My Account</NavLink>
+            <NavLink to="/account/orders">Orders</NavLink>
           </>
         ) : (
-          <>
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/shop">Shop</NavLink>
-            <Link to="/#categories">Categories</Link>
-            <Link to="/#services">Services</Link>
-            <NavLink to="/cart">
-              <ShoppingCart size={18} /> Cart{" "}
-              <span className="cartBadge">{count}</span>
-            </NavLink>
-            {user ? (
-              <>
-                <NavLink to="/account">My Account</NavLink>
-                <NavLink to="/account/orders">Orders</NavLink>
-              </>
-            ) : (
-              <NavLink to="/login">Login</NavLink>
-            )}
-          </>
+          <NavLink to="/login">Login</NavLink>
         )}
       </nav>
       {user && (
