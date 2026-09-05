@@ -206,13 +206,16 @@ main {
   top: 104px;
   height: calc(100vh - 104px);
   align-self: start;
-  overflow-y: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   z-index: 9;
 }
 .admin aside nav {
   display: grid;
   gap: 7px;
-  margin-top: 35px;
+  margin: 35px 0 0;
+  padding-bottom: 28px;
 }
 .admin aside nav a {
   display: flex;
@@ -337,6 +340,7 @@ main {
   .admin aside nav {
     display: flex;
     margin: 0;
+    padding: 0;
   }
   .admin aside nav section {
     display: flex;
