@@ -31,13 +31,18 @@ export function AppNavbar() {
   const { count, refreshCart } = useCart();
   const location = useLocation();
   const isDashboard = location.pathname.startsWith("/admin-app");
+  const isAuthPage = ["/login", "/register"].includes(location.pathname);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const signOut = async () => {
     await logout();
     await refreshCart();
   };
   return (
-    <header className={`appNavbar${isDashboard ? " dashboardNavbar" : ""}`}>
+    <header
+      className={`appNavbar${isDashboard ? " dashboardNavbar" : ""}${
+        isAuthPage ? " authNavbar" : ""
+      }`}
+    >
       <Link
         className="brand"
         to={user?.is_staff ? "/admin-app/dashboard" : "/"}

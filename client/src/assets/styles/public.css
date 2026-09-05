@@ -229,6 +229,11 @@
 /* Final narrow-screen dashboard order: logo, title, identity, theme,
    notification, then logout. */
 @media (max-width: 760px) {
+  .appNavbar.authNavbar nav,
+  .appNavbar.authNavbar .mobileMenuButton {
+    display: none !important;
+  }
+
   .appNavbar.dashboardNavbar > .dashboardTitle {
     display: block;
     grid-column: 1;
