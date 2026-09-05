@@ -346,13 +346,28 @@ label {
   margin-top: 14px;
   background: color-mix(in srgb, var(--surface), var(--primary) 5%);
 }
+.rackLevelGroup {
+  position: relative;
+  padding-top: 22px;
+  border-top: 4px solid var(--text);
+}
+.rackLevelGroup:first-child {
+  border-top: 0;
+}
+.rackLevelLabel {
+  position: absolute;
+  top: 3px;
+  left: 8px;
+  z-index: 1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .rackLevel {
   display: flex;
   min-height: 70px;
-  border-top: 4px solid var(--text);
-}
-.rackLevel:first-child {
-  border-top: 0;
 }
 .rackLevel > * {
   flex: 1;

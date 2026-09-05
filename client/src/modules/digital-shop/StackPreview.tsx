@@ -53,27 +53,32 @@ export function StackPreview({
       </header>
       <div className="rackFrame">
         {rows.map((level) => (
-          <div className="rackLevel" key={level.number}>
-            {level.shelves.length
-              ? level.shelves.map((shelf) => (
-                  <button
-                    type="button"
-                    key={shelf.id}
-                    onClick={() => onShelf?.(shelf.id)}
-                  >
-                    <b>{shelf.code}</b>
-                    <span>{shelf.display_name}</span>
-                    <small>{shelf.total_quantity} units</small>
-                  </button>
-                ))
-              : Array.from({ length: level.compartments }, (_, index) => (
-                  <div key={index}>
-                    <b>
-                      L{level.number}-S{index + 1}
-                    </b>
-                  </div>
-                ))}
-          </div>
+          <section className="rackLevelGroup" key={level.number}>
+            <small className="rackLevelLabel">Level {level.number}</small>
+            <div className="rackLevel">
+              {level.shelves.length
+                ? level.shelves.map((shelf) => (
+                    <button
+                      type="button"
+                      key={shelf.id}
+                      title={`${shelf.code} — ${shelf.display_name}`}
+                      aria-label={`Level ${level.number}, ${shelf.physical_label || `Shelf ${shelf.position_in_level}`}, ${shelf.total_quantity} units`}
+                      onClick={() => onShelf?.(shelf.id)}
+                    >
+                      <b>
+                        {shelf.physical_label ||
+                          `Shelf ${shelf.position_in_level}`}
+                      </b>
+                      <small>{shelf.total_quantity} units</small>
+                    </button>
+                  ))
+                : Array.from({ length: level.compartments }, (_, index) => (
+                    <div key={index}>
+                      <b>Shelf {index + 1}</b>
+                    </div>
+                  ))}
+            </div>
+          </section>
         ))}
       </div>
     </article>
