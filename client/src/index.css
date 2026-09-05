@@ -71,6 +71,7 @@ a {
   margin-left: 1px;
   overflow: hidden;
   line-height: 0;
+  border-radius: 999px;
 }
 .brand span {
   display: block;
@@ -93,6 +94,9 @@ a {
   height: 96px;
   object-fit: contain;
   object-position: center;
+}
+.appNavbar .brandLogo {
+  border-radius: 999px;
 }
 .brandLogo.compact {
   width: 142px;
