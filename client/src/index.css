@@ -226,13 +226,23 @@ a {
   text-transform: uppercase;
 }
 .appNavbar .logoutLink {
-  color: #fca5a5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  padding: 9px 14px;
+  border: 1px solid #f87171;
+  border-radius: 999px;
+  background: #b91c1c;
+  color: #ffffff;
   font-weight: 850;
+  box-shadow: 0 4px 12px rgb(185 28 28 / 28%);
 }
 .appNavbar .logoutLink:hover,
 .appNavbar .logoutLink:focus-visible {
   color: #ffffff;
-  background: #b91c1c;
+  background: #dc2626;
+  border-color: #fca5a5;
 }
 nav a.active {
   color: var(--primary);
