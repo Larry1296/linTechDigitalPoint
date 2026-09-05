@@ -44,7 +44,7 @@ a {
   text-decoration: none;
 }
 .appNavbar {
-  min-height: 96px;
+  height: 104px;
   display: grid;
   grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
   align-items: center;
@@ -62,6 +62,13 @@ a {
   font-size: 20px;
   color: var(--primary);
   justify-self: start;
+}
+.appNavbar > .brand {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  line-height: 0;
 }
 .brand span {
   display: block;
@@ -81,8 +88,9 @@ a {
 .brandLogo {
   display: block;
   width: 150px;
-  height: 92px;
+  height: 96px;
   object-fit: contain;
+  object-position: center;
 }
 .brandLogo.compact {
   width: 142px;
@@ -186,7 +194,7 @@ main {
 .admin {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: calc(100vh - 96px);
+  min-height: calc(100vh - 104px);
   max-width: none;
 }
 .admin aside {
@@ -195,8 +203,8 @@ main {
   background: var(--chrome);
   color: var(--chrome-text);
   position: sticky;
-  top: 96px;
-  height: calc(100vh - 96px);
+  top: 104px;
+  height: calc(100vh - 104px);
   align-self: start;
   overflow-y: hidden;
   z-index: 9;

@@ -9,9 +9,9 @@ import {
   MonitorCog,
   Smartphone,
 } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
-import { AppFooter, AppNavbar, BrandLogo } from "../components/AppChrome";
+import { AppFooter, AppNavbar } from "../components/AppChrome";
 const links = [
   {
     to: "/admin-app/dashboard",
@@ -75,9 +75,6 @@ export function StaffLayout() {
       <AppNavbar />
       <div className="admin">
         <aside>
-          <Link className="brand" to="/">
-            <BrandLogo compact />
-          </Link>
           <nav>
             {operations.map((section) => {
               const visible = section.links.filter((item) => !item.permission || user?.is_superuser || user?.permissions.includes(item.permission));
