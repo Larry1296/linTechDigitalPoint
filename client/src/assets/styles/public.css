@@ -201,7 +201,110 @@
 
   .appNavbar.dashboardNavbar .navUserName {
     max-width: 100%;
-    font-size: 18px;
+    font-size: 18px; /* FINAL_NARROW_DASHBOARD */
+  }
+
+  .appNavbar.dashboardNavbar > .dashboardTitle {
+    display: block !important;
+    grid-row: 2 !important;
+    justify-self: center;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-row: 3 !important;
+    width: 100% !important;
+    justify-self: stretch !important;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardMobileTitle {
+    display: none !important;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName { order: 1 !important; }
+  .appNavbar.dashboardNavbar .theme { order: 2 !important; }
+  .appNavbar.dashboardNavbar .dashboardNotification { order: 3 !important; }
+  .appNavbar.dashboardNavbar .logoutLink { order: 4 !important; }
+}
+
+/* Final narrow-screen dashboard order: logo, title, identity, theme,
+   notification, then logout. */
+@media (max-width: 760px) {
+  .appNavbar.dashboardNavbar > .dashboardTitle {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+    font-size: 24px;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-row: 3;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardMobileTitle {
+    display: none;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName { order: 1; }
+  .appNavbar.dashboardNavbar .theme { order: 2; }
+  .appNavbar.dashboardNavbar .dashboardNotification { order: 3; }
+  .appNavbar.dashboardNavbar .logoutLink { order: 4; }
+}
+
+@media (max-width: 760px) {
+  .appNavbar.dashboardNavbar > .dashboardTitle {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+    font-size: 24px;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-row: 3;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardMobileTitle {
+    display: none;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName { order: 1; }
+  .appNavbar.dashboardNavbar .theme { order: 2; }
+  .appNavbar.dashboardNavbar .dashboardNotification { order: 3; }
+  .appNavbar.dashboardNavbar .logoutLink { order: 4; }
+}
+
+@media (max-width: 760px) {
+  .appNavbar.dashboardNavbar > .dashboardTitle {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+    font-size: 24px;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-row: 3;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardMobileTitle {
+    display: none;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    order: 1;
+  }
+
+  .appNavbar.dashboardNavbar .theme {
+    order: 2;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardNotification {
+    order: 3;
+  }
+
+  .appNavbar.dashboardNavbar .logoutLink {
+    order: 4;
   }
 }
 
