@@ -44,7 +44,9 @@ export function AppNavbar() {
           <span className="cartBadge">{count}</span>
         </NavLink>
         {user?.is_staff ? (
-          <NavLink to="/admin-app/dashboard">Admin</NavLink>
+          <NavLink className="staffPortalLink" to="/admin-app/dashboard">
+            Admin
+          </NavLink>
         ) : user ? (
           <>
             <NavLink to="/account">My Account</NavLink>

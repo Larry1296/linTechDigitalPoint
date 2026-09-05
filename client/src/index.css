@@ -90,6 +90,11 @@ a {
   justify-content: center;
   justify-self: center;
 }
+.appNavbar nav .staffPortalLink {
+  margin-left: 10px;
+  padding-left: 24px;
+  border-left: 1px solid var(--chrome-line);
+}
 .brandLogo {
   display: block;
   width: 150px;
