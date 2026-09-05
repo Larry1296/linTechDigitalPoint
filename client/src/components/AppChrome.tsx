@@ -55,17 +55,17 @@ export function AppNavbar() {
         )}
       </nav>
       <div className="navActions">
+        <ThemePicker />
         {user && (
           <div className="navIdentity">
-            <small>
-              {user.is_superuser ? "Owner" : user.is_staff ? "Staff" : "Customer"}
-            </small>
+            <span className="navUserName">
+              {user.first_name || user.username}
+            </span>
             <button className="linkButton" onClick={() => void signOut()}>
               Logout
             </button>
           </div>
         )}
-        <ThemePicker />
       </div>
     </header>
   );

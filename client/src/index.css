@@ -111,8 +111,18 @@ a {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 14px;
+  gap: 20px;
   min-width: 190px;
+}
+.navIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+.navUserName {
+  color: var(--chrome-text);
+  font-weight: 700;
 }
 nav a.active {
   color: var(--primary);

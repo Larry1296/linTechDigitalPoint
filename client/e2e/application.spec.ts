@@ -327,7 +327,7 @@ test("staff use the shared login and return to their intended page", async ({
   await expect(page).toHaveURL(/\/admin-app\/digital-shop$/);
 });
 
-test("Django superuser is displayed as Owner and defaults to the admin dashboard", async ({
+test("Django superuser name is displayed and defaults to the admin dashboard", async ({
   page,
 }) => {
   await mockShop(page);
@@ -336,7 +336,7 @@ test("Django superuser is displayed as Owner and defaults to the admin dashboard
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
-  await expect(page.getByText("Owner", { exact: true })).toBeVisible();
+  await expect(page.getByText("owner", { exact: true })).toBeVisible();
 });
 
 test("Owner previews and creates a complete unequal shelf stack", async ({
