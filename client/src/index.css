@@ -49,6 +49,7 @@ a {
   grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
   align-items: center;
   padding: 0 max(5vw, 20px);
+  padding-left: 0;
   gap: 28px;
   background: var(--chrome);
   color: var(--chrome-text);
@@ -67,6 +68,7 @@ a {
   height: 100%;
   display: flex;
   align-items: center;
+  margin-left: 1px;
   overflow: hidden;
   line-height: 0;
 }
