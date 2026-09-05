@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
-import { AppFooter, AppNavbar } from "../components/AppChrome";
+import { AppFooter, AppNavbar, BrandLogo } from "../components/AppChrome";
 const links = [
   {
     to: "/admin-app/dashboard",
@@ -76,7 +76,7 @@ export function StaffLayout() {
       <div className="admin">
         <aside>
           <Link className="brand" to="/">
-            LinTech<span>Digital Point</span>
+            <BrandLogo compact />
           </Link>
           <nav>
             {operations.map((section) => {

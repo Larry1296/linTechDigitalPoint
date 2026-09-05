@@ -3,9 +3,20 @@ import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
 import { useCart } from "../core/cart/CartContext";
 import { ThemePicker } from "./ThemePicker";
+import logoUrl from "../assets/images/logo.png";
 
 function can(permission: string, user: ReturnType<typeof useAuth>["user"]) {
   return Boolean(user?.is_superuser || user?.permissions.includes(permission));
+}
+
+export function BrandLogo({ compact = false }: { compact?: boolean }) {
+  return (
+    <img
+      className={`brandLogo${compact ? " compact" : ""}`}
+      src={logoUrl}
+      alt="LinTech Digital Point"
+    />
+  );
 }
 
 export function AppNavbar() {
@@ -21,7 +32,7 @@ export function AppNavbar() {
         className="brand"
         to={user?.is_staff ? "/admin-app/dashboard" : "/"}
       >
-        LinTech<span>Digital Point</span>
+        <BrandLogo />
       </Link>
       <nav aria-label="Main navigation">
         <NavLink to="/">Home</NavLink>
@@ -43,17 +54,19 @@ export function AppNavbar() {
           <NavLink to="/login">Login</NavLink>
         )}
       </nav>
-      {user && (
-        <div className="navIdentity">
-          <small>
-            {user.is_superuser ? "Owner" : user.is_staff ? "Staff" : "Customer"}
-          </small>
-          <button className="linkButton" onClick={() => void signOut()}>
-            Logout
-          </button>
-        </div>
-      )}
-      <ThemePicker />
+      <div className="navActions">
+        {user && (
+          <div className="navIdentity">
+            <small>
+              {user.is_superuser ? "Owner" : user.is_staff ? "Staff" : "Customer"}
+            </small>
+            <button className="linkButton" onClick={() => void signOut()}>
+              Logout
+            </button>
+          </div>
+        )}
+        <ThemePicker />
+      </div>
     </header>
   );
 }
@@ -64,7 +77,7 @@ export function AppFooter() {
     <footer className="appFooter">
       <div>
         <Link className="brand" to="/">
-          LinTech<span>Digital Point</span>
+          <BrandLogo compact />
         </Link>
         <p>
           {user?.is_staff

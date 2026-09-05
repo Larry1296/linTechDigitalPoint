@@ -146,14 +146,24 @@
     gap: 12px;
     flex-wrap: wrap;
     padding-block: 12px;
+    grid-template-columns: 1fr auto;
   }
   .appNavbar .brand {
-    margin-right: auto;
+    justify-self: start;
+  }
+  .appNavbar .brandLogo {
+    width: 132px;
+    height: 82px;
+  }
+  .navActions {
+    min-width: 0;
+    justify-self: end;
   }
   .appNavbar nav {
     display: flex;
     order: 4;
     width: 100%;
+    grid-column: 1 / -1;
     gap: 18px;
     overflow-x: auto;
     padding: 4px 0;
