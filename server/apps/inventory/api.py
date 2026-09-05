@@ -13,7 +13,8 @@ from .services import receive_stock,transfer_stock
 @permission_classes([HasLinTechPermission])
 def receive(request):
     if not request.user.has_perm("inventory.add_stocklot"):return Response({"detail":"Receiving permission required."},status=403)
-    variant=ProductVariant.objects.filter(pk=request.data.get("variant_id")).first()
+    variant=ProductVariant.objects.select_related("product").filter(pk=request.data.get("variant_id"),active=True,product__active=True,product__product_type="STOCK_ITEM").first()
+    if not variant:return Response({"detail":"Choose an active stock-item product variant."},status=400)
     placements=[]
     for raw in request.data.get("placements",[]):
         shelf=Shelf.objects.filter(pk=raw.get("shelf_id"),active=True).first()

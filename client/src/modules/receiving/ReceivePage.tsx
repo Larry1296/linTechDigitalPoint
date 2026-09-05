@@ -1,21 +1,31 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
-import type { Product, Zone } from "../../types";
+import type { Zone } from "../../types";
 
 type Placement = { shelf_id?: number; quantity: string };
+type StockVariant = {
+  id: number;
+  product_name: string;
+  product_type: string;
+  name: string;
+  sku: string;
+  selling_price: string;
+  active: boolean;
+};
 export function ReceivePage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<StockVariant[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [placements, setPlacements] = useState<Placement[]>([{ quantity: "" }]);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     void Promise.all([
-      api<Product[]>("/api/v1/store/products/"),
+      api<StockVariant[]>("/api/v1/catalog/variants/"),
       api<Zone[]>("/api/v1/locations/zones/"),
     ]).then(([p, z]) => {
-      setProducts(p);
+      setProducts(p.filter((variant) => variant.active && variant.product_type === "STOCK_ITEM"));
       setZones(z);
     });
   }, []);
@@ -38,13 +48,32 @@ export function ReceivePage() {
       <h1>Receive Stock</h1>
       {msg && <div className="success">{msg}</div>}
       {error && <p className="formError">{error}</p>}
+      {!products.length && (
+        <div className="callout">
+          <div>
+            <b>No stock products have been defined yet.</b>
+            <p>Create the product, SKU/variant, prices, and preferred shelf first. Then return here to receive additional stock.</p>
+          </div>
+          <Link className="button" to="/admin-app/products">Create Product</Link>
+        </div>
+      )}
+      {!zones.length && (
+        <div className="callout">
+          <div>
+            <b>No physical shelves have been configured yet.</b>
+            <p>Build the Zone → Shelf Stack → Level → Shelf layout before receiving stock.</p>
+          </div>
+          <Link className="button" to="/admin-app/digital-shop">Configure Digital Shop</Link>
+        </div>
+      )}
       <form className="formCard wide" onSubmit={submit}>
         <label>
           Product
-          <select name="variant_id">
+          <select name="variant_id" required disabled={!products.length}>
+            <option value="">Choose a defined product</option>
             {products.map((p) => (
               <option value={p.id} key={p.id}>
-                {p.product_name} — {p.name}
+                {p.product_name} — {p.name} · {p.sku}
               </option>
             ))}
           </select>
@@ -126,7 +155,7 @@ export function ReceivePage() {
         >
           Split across another shelf
         </button>
-        <button>Receive Stock</button>
+        <button disabled={!products.length || !zones.length}>Receive Stock</button>
       </form>
     </>
   );

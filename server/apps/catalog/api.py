@@ -30,6 +30,8 @@ class ImageSerializer(serializers.ModelSerializer):
 class VariantSerializer(serializers.ModelSerializer):
     physical = serializers.DecimalField(max_digits=14, decimal_places=3, read_only=True)
     reserved = serializers.DecimalField(max_digits=14, decimal_places=3, read_only=True)
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_type = serializers.CharField(source="product.product_type", read_only=True)
 
     class Meta:
         model = ProductVariant
