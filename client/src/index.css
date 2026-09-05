@@ -91,6 +91,9 @@ a {
   font-weight: 900;
   letter-spacing: 0.02em;
 }
+.dashboardMobileTitle {
+  display: none;
+}
 .brand {
   font-weight: 800;
   font-size: 20px;

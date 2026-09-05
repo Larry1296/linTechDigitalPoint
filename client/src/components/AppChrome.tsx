@@ -95,6 +95,7 @@ export function AppNavbar() {
           </div>
         )}
         <ThemePicker />
+        {isDashboard && <div className="dashboardMobileTitle">Dashboard</div>}
         {user && (
           <div className="navIdentity">
             <span className="navUserName">

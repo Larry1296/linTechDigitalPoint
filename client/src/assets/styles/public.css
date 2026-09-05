@@ -459,6 +459,70 @@
   }
 }
 
+@media (max-width: 760px) {
+  .appNavbar.dashboardNavbar {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .appNavbar.dashboardNavbar > .brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+
+  .appNavbar.dashboardNavbar > .dashboardTitle {
+    display: none;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-self: stretch;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .appNavbar.dashboardNavbar .navIdentity {
+    display: contents;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    order: 1;
+    max-width: none;
+    font-size: 18px;
+    text-align: center;
+  }
+
+  .appNavbar.dashboardNavbar .theme {
+    order: 2;
+    justify-content: center;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardMobileTitle {
+    display: block;
+    order: 3;
+    color: var(--chrome-text);
+    font-size: 24px;
+    font-weight: 900;
+    text-align: center;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardNotification {
+    order: 4;
+    align-self: center;
+  }
+
+  .appNavbar.dashboardNavbar .logoutLink {
+    order: 5;
+    align-self: center;
+  }
+}
+
 @media (max-width: 480px) {
   .appNavbar {
     min-height: 145px;
