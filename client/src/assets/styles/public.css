@@ -152,8 +152,13 @@
     justify-self: start;
   }
   .appNavbar .brandLogo {
-    width: 132px;
+    width: 82px;
     height: 82px;
+  }
+  .appNavbar > .brand {
+    width: 82px;
+    height: 82px;
+    flex-basis: 82px;
   }
   .navActions {
     min-width: 0;

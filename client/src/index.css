@@ -65,13 +65,15 @@ a {
   justify-self: start;
 }
 .appNavbar > .brand {
-  height: 100%;
+  width: 96px;
+  height: 96px;
+  flex: 0 0 96px;
   display: flex;
   align-items: center;
   margin-left: 1px;
   overflow: hidden;
   line-height: 0;
-  border-radius: 999px;
+  border-radius: 50%;
 }
 .brand span {
   display: block;
@@ -96,7 +98,10 @@ a {
   object-position: center;
 }
 .appNavbar .brandLogo {
-  border-radius: 999px;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 50%;
 }
 .brandLogo.compact {
   width: 142px;
