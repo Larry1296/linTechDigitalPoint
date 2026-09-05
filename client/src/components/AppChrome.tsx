@@ -9,6 +9,12 @@ function can(permission: string, user: ReturnType<typeof useAuth>["user"]) {
   return Boolean(user?.is_superuser || user?.permissions.includes(permission));
 }
 
+function displayRole(user: NonNullable<ReturnType<typeof useAuth>["user"]>) {
+  if (user.is_superuser) return "Admin";
+  if (user.is_staff) return user.roles.join(", ") || "Staff";
+  return "Customer";
+}
+
 export function BrandLogo({ compact = false }: { compact?: boolean }) {
   return (
     <img
@@ -61,7 +67,7 @@ export function AppNavbar() {
         {user && (
           <div className="navIdentity">
             <span className="navUserName">
-              {user.first_name || user.username}
+              {user.first_name || user.username} ({displayRole(user)})
             </span>
             <button className="linkButton" onClick={() => void signOut()}>
               Logout

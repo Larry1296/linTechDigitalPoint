@@ -336,7 +336,7 @@ test("Django superuser name is displayed and defaults to the admin dashboard", a
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
-  await expect(page.getByText("owner", { exact: true })).toBeVisible();
+  await expect(page.getByText("owner (Admin)", { exact: true })).toBeVisible();
 });
 
 test("Owner previews and creates a complete unequal shelf stack", async ({
