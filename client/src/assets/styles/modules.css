@@ -197,6 +197,15 @@ label {
   place-items: center;
   min-height: calc(100vh - 140px);
 }
+.authBackButton {
+  justify-self: start;
+  color: var(--muted);
+  font-weight: 700;
+}
+.authBackButton:hover,
+.authBackButton:focus-visible {
+  color: var(--primary);
+}
 .formCard {
   display: grid;
   gap: 15px;

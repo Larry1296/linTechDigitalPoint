@@ -43,6 +43,9 @@ export function LoginPage() {
   return (
     <main className="authPage">
       <form className="formCard" onSubmit={submit}>
+        <Link className="authBackButton" to="/">
+          ← Back
+        </Link>
         <span className="eyebrow">LinTech Digital Point</span>
         <h1>Welcome back</h1>
         {error && <p className="formError">{error}</p>}
@@ -102,6 +105,9 @@ export function RegisterPage() {
   return (
     <main className="authPage">
       <form className="formCard" onSubmit={submit}>
+        <Link className="authBackButton" to="/">
+          ← Back
+        </Link>
         <span className="eyebrow">LinTech customer</span>
         <h1>Create account</h1>
         {error && <p className="formError">{error}</p>}
