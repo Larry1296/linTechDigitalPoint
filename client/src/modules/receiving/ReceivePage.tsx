@@ -23,11 +23,11 @@ export function ReceivePage() {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget));
     try {
-      await api("/api/v1/inventory/receive/", {
+      const result = await api<{ reference: string }>("/api/v1/inventory/receive/", {
         method: "POST",
         body: JSON.stringify({ ...f, placements }),
       });
-      setMsg("Stock received into exact physical shelves.");
+      setMsg(`Stock received into the selected physical shelf placement. Receipt ${result.reference}.`);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -68,10 +68,13 @@ export function ReceivePage() {
           <input name="supplier_name" />
         </label>
         <label>
-          Reference
-          <input name="reference" required />
+          Supplier invoice / delivery note (optional)
+          <input name="reference" placeholder="A receipt reference is generated when left blank" />
         </label>
-        <h2>Physical placement</h2>
+        <div className="placementHeading">
+          <h2>Where will this stock be placed?</h2>
+          <p className="muted">Choose the exact shop shelf for every quantity received. This location is what staff use to find the item.</p>
+        </div>
         {placements.map((placement, index) => (
           <div className="placementRow" key={index}>
             <PhysicalLocationPicker

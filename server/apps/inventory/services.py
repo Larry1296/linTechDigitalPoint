@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import IntegrityError,transaction
 from django.db.models import F
 from django.utils import timezone
+from uuid import uuid4
 from rest_framework.exceptions import ValidationError
 from apps.core.models import AuditLog
 from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,VariantPreferredLocation,Zone
@@ -76,6 +77,7 @@ def archive_shelf(*,shelf,user):
     return update_shelf(shelf=shelf,user=user,active=False)
 @transaction.atomic
 def receive_stock(*,variant,placements,unit_cost,reference,user=None,supplier_name=""):
+    reference=(reference or "").strip() or f"RCV-{timezone.now():%y%m%d}-{uuid4().hex[:8].upper()}"
     total=sum((_d(p["quantity"]) for p in placements),Decimal("0"))
     if total<=0: raise ValidationError("Received quantity must be positive.")
     lot=StockLot.objects.create(variant=variant,reference=reference,received_quantity=total,remaining_quantity=total,unit_cost=_d(unit_cost),supplier_name=supplier_name,received_at=timezone.now())

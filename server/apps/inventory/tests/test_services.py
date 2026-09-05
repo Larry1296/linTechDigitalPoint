@@ -69,6 +69,21 @@ def test_dynamic_shelves_and_multiple_locations(data):
 
 
 @pytest.mark.django_db
+def test_receiving_generates_audit_reference_when_supplier_reference_is_blank(data):
+    user, shelf, _, variant = data
+    lot = receive_stock(
+        variant=variant,
+        placements=[{"shelf": shelf, "quantity": 2}],
+        unit_cost=120,
+        reference="",
+        user=user,
+    )
+    assert lot.reference.startswith("RCV-")
+    assert Movement.objects.get(lot=lot).reference == lot.reference
+    assert StockBalance.objects.get(lot=lot).shelf == shelf
+
+
+@pytest.mark.django_db
 def test_batches_fifo_sale_and_profit(data):
     user, a, b, v = data
     first = receive_stock(

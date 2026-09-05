@@ -23,7 +23,7 @@ def receive(request):
     if request.data.get("selling_price") is not None and str(variant.selling_price)!=str(request.data["selling_price"]):
         if not request.user.has_perm("catalog.change_productvariant"):return Response({"detail":"Price-change permission required."},status=403)
         variant.selling_price=request.data["selling_price"];variant.save()
-    return Response({"lot_id":lot.id,"quantity":lot.received_quantity},status=201)
+    return Response({"lot_id":lot.id,"quantity":lot.received_quantity,"reference":lot.reference},status=201)
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def transfer(request):
