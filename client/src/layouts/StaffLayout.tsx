@@ -8,8 +8,11 @@ import {
   ShoppingCart,
   MonitorCog,
   Smartphone,
+  Menu,
+  X,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "../core/auth/AuthContext";
 import { AppFooter, AppNavbar } from "../components/AppChrome";
 const links = [
@@ -70,15 +73,26 @@ const operations = [
 ];
 export function StaffLayout() {
   const { user } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <>
       <AppNavbar />
       <div className="admin">
-        <aside>
+        <button
+          className="sidebarToggle"
+          type="button"
+          aria-label={sidebarOpen ? "Close dashboard menu" : "Open dashboard menu"}
+          aria-expanded={sidebarOpen}
+          onClick={() => setSidebarOpen((open) => !open)}
+        >
+          {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          <span>Menu</span>
+        </button>
+        <aside className={sidebarOpen ? "sidebarOpen" : undefined}>
           <nav>
             {operations.map((section) => {
               const visible = section.links.filter((item) => !item.permission || user?.is_superuser || user?.permissions.includes(item.permission));
-              return visible.length ? <section key={section.title}><small>{section.title.toUpperCase()}</small>{visible.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to}><Icon />{label}</NavLink>)}</section> : null;
+              return visible.length ? <section key={section.title}><small>{section.title.toUpperCase()}</small>{visible.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)}><Icon />{label}</NavLink>)}</section> : null;
             })}
           </nav>
         </aside>
