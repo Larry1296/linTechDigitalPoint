@@ -141,6 +141,7 @@ a {
   border-color: #93c5fd;
 }
 .appNavbar nav .authEntryLink {
+  margin-inline: 12px;
   padding: 11px 18px;
   border: 1px solid #86efac;
   border-radius: 999px;
