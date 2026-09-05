@@ -59,6 +59,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  min-width: 0;
+  overflow-x: hidden;
 }
 a {
   color: inherit;
