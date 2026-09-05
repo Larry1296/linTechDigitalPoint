@@ -445,3 +445,37 @@
     min-height: 44px;
   }
 }
+
+/* Keep the public navbar's full desktop link set available on phones. The
+   row can be swiped horizontally instead of hiding links behind a menu. */
+@media (max-width: 760px) {
+  .appNavbar:not(.dashboardNavbar) .mobileMenuButton {
+    display: none;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav,
+  .appNavbar:not(.dashboardNavbar) nav:not(.mobileMenuOpen) {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 14px;
+    margin: 0;
+    padding: 6px 2px 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    scrollbar-width: thin;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav a,
+  .appNavbar:not(.dashboardNavbar) nav .authEntryLink,
+  .appNavbar:not(.dashboardNavbar) nav .staffPortalLink {
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 9px 12px;
+  }
+}
