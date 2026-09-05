@@ -51,7 +51,7 @@ export function AppNavbar() {
             <NavLink to="/account/orders">Orders</NavLink>
           </>
         ) : (
-          <NavLink to="/login">Login</NavLink>
+          <NavLink to="/login">Login/Register</NavLink>
         )}
       </nav>
       <div className="navActions">

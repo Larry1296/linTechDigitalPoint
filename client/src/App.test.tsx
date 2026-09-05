@@ -62,7 +62,7 @@ describe("authentication experience", () => {
     const navigation = screen.getByRole("navigation", {
       name: "Main navigation",
     });
-    expect(within(navigation).getByRole("link", { name: "Login" })).toHaveAttribute(
+    expect(within(navigation).getByRole("link", { name: "Login/Register" })).toHaveAttribute(
       "href",
       "/login",
     );
