@@ -29,6 +29,19 @@ textarea {
   border-radius: 9px;
   padding: 11px;
 }
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
 label {
   display: grid;
   gap: 6px;

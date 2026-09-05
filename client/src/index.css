@@ -19,17 +19,22 @@
   --bg: #06101f;
   --surface: #0d1c30;
   --text: #edf5ff;
-  --muted: #9db1cf;
-  --line: #223a5a;
-  --primary: #2563eb;
-  --on-primary: #ffffff;
-  --primary2: #142f55;
+  --muted: #b8c8df;
+  --line: #365477;
+  --primary: #7db5ff;
+  --on-primary: #06101f;
+  --primary2: #17365f;
   --chrome: #030d1c;
   --chrome-text: #f4f8ff;
   --chrome-muted: #a8c7f2;
   --chrome-line: #17345b;
   --shadow: 0 16px 40px #0005;
   color-scheme: dark;
+}
+[data-theme="dark"] .error,
+[data-theme="dark"] .formError,
+[data-theme="dark"] .out {
+  color: #fca5a5;
 }
 * {
   box-sizing: border-box;
