@@ -392,22 +392,27 @@ label {
 }
 .shelfOverlay {
   position: fixed;
-  inset: 70px 0 0;
+  inset: 0;
   z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
   background: rgb(0 0 0 / 58%);
   backdrop-filter: blur(2px);
 }
 .shelfPanel {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  bottom: 16px;
-  width: min(440px, calc(100vw - 40px));
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   background: var(--surface);
   color: var(--text);
   opacity: 1;
   isolation: isolate;
+  border: 1px solid var(--line);
+  border-radius: 18px;
   box-shadow: 0 24px 80px rgb(0 0 0 / 72%);
 }
 .shelfPanelHeader {
@@ -431,6 +436,20 @@ label {
   color: var(--text);
   border: 1px solid var(--line);
 }
+.shelfPanel .shelfActions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  margin: 20px -20px -20px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.shelfPanel .shelfActions button {
+  min-height: 46px;
+}
 .rackEdit {
   margin-left: auto;
   padding: 7px 10px;
@@ -441,9 +460,16 @@ label {
   border-top: 1px solid var(--line);
 }
 @media (max-width: 600px) {
+  .shelfOverlay {
+    padding: 10px;
+  }
   .shelfPanel {
-    inset: 10px;
-    width: auto;
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+  .shelfPanel .shelfActions {
+    grid-template-columns: 1fr;
   }
 }
 .shelfPanel article,
