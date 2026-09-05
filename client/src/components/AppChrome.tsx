@@ -1,4 +1,5 @@
-import { Bell, ShoppingCart } from "lucide-react";
+import { Bell, Menu, ShoppingCart, X } from "lucide-react";
+import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
 import { useCart } from "../core/cart/CartContext";
@@ -30,6 +31,7 @@ export function AppNavbar() {
   const { count, refreshCart } = useCart();
   const location = useLocation();
   const isDashboard = location.pathname.startsWith("/admin-app");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const signOut = async () => {
     await logout();
     await refreshCart();
@@ -44,7 +46,21 @@ export function AppNavbar() {
       </Link>
       {isDashboard && <div className="dashboardTitle">Dashboard</div>}
       {!isDashboard && (
-        <nav aria-label="Main navigation">
+        <button
+          className="mobileMenuButton"
+          type="button"
+          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((open) => !open)}
+        >
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      )}
+      {!isDashboard && (
+        <nav
+          className={mobileMenuOpen ? "mobileMenuOpen" : undefined}
+          aria-label="Main navigation"
+        >
           <NavLink to="/">Home</NavLink>
           <NavLink to="/shop">Shop</NavLink>
           <Link to="/#categories">Categories</Link>

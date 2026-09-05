@@ -178,10 +178,80 @@
   }
 }
 
+.mobileMenuButton {
+  display: none;
+}
+
 /* Phone-first layout refinements. Keep every primary workflow usable without
    horizontal page scrolling while allowing intentionally wide data areas to
    scroll inside their own containers. */
 @media (max-width: 760px) {
+  .appNavbar:not(.dashboardNavbar) {
+    grid-template-columns: 1fr auto auto;
+    min-height: 112px;
+    align-items: center;
+  }
+
+  .appNavbar:not(.dashboardNavbar) .mobileMenuButton {
+    display: inline-flex;
+    grid-column: 2;
+    grid-row: 1;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--chrome-line);
+    border-radius: 10px;
+    background: #102b50;
+    color: var(--chrome-text);
+  }
+
+  .appNavbar:not(.dashboardNavbar) .navActions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav,
+  .appNavbar:not(.dashboardNavbar) nav.mobileMenuOpen {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-height: min(60vh, 360px);
+    overflow-y: auto;
+    gap: 4px;
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 14px;
+    background: #0b2545;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav:not(.mobileMenuOpen) {
+    display: none;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav a,
+  .appNavbar:not(.dashboardNavbar) nav .authEntryLink,
+  .appNavbar:not(.dashboardNavbar) nav .staffPortalLink {
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 9px;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav a:hover,
+  .appNavbar:not(.dashboardNavbar) nav a:focus-visible {
+    background: #123d70;
+  }
+
+  .appNavbar:not(.dashboardNavbar) nav .authEntryLink {
+    justify-content: center;
+    margin-top: 6px;
+  }
+
   main,
   .admin main {
     padding: 26px 16px;
