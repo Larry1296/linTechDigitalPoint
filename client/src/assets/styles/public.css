@@ -142,7 +142,7 @@
   }
   .appNavbar {
     height: auto;
-    min-height: 70px;
+    min-height: 170px;
     gap: 12px;
     flex-wrap: wrap;
     padding-block: 12px;
@@ -152,13 +152,13 @@
     justify-self: start;
   }
   .appNavbar .brandLogo {
-    width: 82px;
-    height: 82px;
+    width: 122px;
+    height: 122px;
   }
   .appNavbar > .brand {
-    width: 82px;
-    height: 82px;
-    flex-basis: 82px;
+    width: 122px;
+    height: 122px;
+    flex-basis: 122px;
   }
   .navActions {
     min-width: 0;

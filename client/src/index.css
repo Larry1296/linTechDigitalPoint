@@ -49,9 +49,9 @@ a {
   text-decoration: none;
 }
 .appNavbar {
-  height: 104px;
+  height: 184px;
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+  grid-template-columns: minmax(230px, 1fr) auto minmax(230px, 1fr);
   align-items: center;
   padding: 0 max(5vw, 20px);
   padding-left: 0;
@@ -70,9 +70,9 @@ a {
   justify-self: start;
 }
 .appNavbar > .brand {
-  width: 96px;
-  height: 96px;
-  flex: 0 0 96px;
+  width: 172px;
+  height: 172px;
+  flex: 0 0 172px;
   display: flex;
   align-items: center;
   margin-left: 1px;
@@ -137,8 +137,8 @@ a {
   object-position: center;
 }
 .appNavbar .brandLogo {
-  width: 96px;
-  height: 96px;
+  width: 172px;
+  height: 172px;
   object-fit: cover;
   border-radius: 50%;
 }
@@ -263,7 +263,7 @@ main {
 .admin {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: calc(100vh - 104px);
+  min-height: calc(100vh - 184px);
   max-width: none;
 }
 .admin aside {
@@ -272,8 +272,8 @@ main {
   background: var(--chrome);
   color: var(--chrome-text);
   position: sticky;
-  top: 104px;
-  height: calc(100vh - 104px);
+  top: 184px;
+  height: calc(100vh - 184px);
   align-self: start;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -415,6 +415,8 @@ main {
     overflow-x: auto;
     overflow-y: hidden;
     padding: 14px 16px;
+    position: static;
+    top: auto;
   }
   .admin aside > .brand {
     display: none;
