@@ -473,6 +473,53 @@ label {
   border-top: 1px solid var(--line);
 }
 @media (max-width: 600px) {
+  .shopLayout {
+    display: grid;
+    gap: 14px;
+    min-height: 0;
+    aspect-ratio: auto !important;
+    overflow: visible;
+    padding: 10px;
+    background: var(--bg);
+    border: 0;
+  }
+
+  .placedStack {
+    position: static;
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .stackPreview {
+    width: 100%;
+    padding: 14px;
+  }
+
+  .stackPreview header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .rackEdit {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .rackFrame {
+    border-width: 4px;
+  }
+
+  .rackLevel {
+    flex-wrap: wrap;
+  }
+
+  .rackLevel > * {
+    flex: 1 1 72px;
+    min-height: 58px;
+    padding: 6px 4px;
+    font-size: 12px;
+  }
+
   .shelfOverlay {
     padding: 10px;
   }
