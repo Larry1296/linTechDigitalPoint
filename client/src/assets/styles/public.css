@@ -178,6 +178,33 @@
   }
 }
 
+@media (max-width: 480px) {
+  .appNavbar.dashboardNavbar {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .appNavbar.dashboardNavbar > .brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+    align-items: center;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 100%;
+    font-size: 18px;
+  }
+}
+
 .mobileMenuButton {
   display: none;
 }
@@ -393,6 +420,33 @@
 
   .admin aside nav a {
     min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .appNavbar.dashboardNavbar {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .appNavbar.dashboardNavbar > .brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+    align-items: center;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 100%;
+    font-size: 18px;
   }
 }
 
@@ -663,5 +717,32 @@
     flex: 0 0 auto;
     min-height: 42px;
     padding: 9px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .appNavbar.dashboardNavbar {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .appNavbar.dashboardNavbar > .brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+    align-items: center;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 100%;
+    font-size: 18px;
   }
 }
