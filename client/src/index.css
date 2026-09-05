@@ -178,9 +178,21 @@ a {
   gap: 12px;
   white-space: nowrap;
 }
+.dashboardNavbar .navIdentity {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 18px;
+}
 .navUserName {
   color: #4ade80;
   font-weight: 800;
+}
+.dashboardNavbar .navUserName {
+  font-size: 22px;
+  line-height: 1.15;
+  text-align: center;
 }
 .dashboardNotification {
   position: relative;
@@ -208,7 +220,7 @@ a {
   display: block;
   margin-top: 2px;
   color: var(--chrome-muted);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -446,6 +458,13 @@ main {
   overflow: hidden;
 }
 @media (max-width: 760px) {
+  .dashboardNavbar .navIdentity {
+    position: static;
+    transform: none;
+  }
+  .dashboardNavbar .navUserName {
+    font-size: 17px;
+  }
   .appNavbar nav {
     display: none;
   }
