@@ -409,7 +409,36 @@
   }
 
   .appNavbar.dashboardNavbar {
-    min-height: 170px;
+    grid-template-columns: 72px 1fr;
+    min-height: 132px;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .appNavbar.dashboardNavbar > .brand,
+  .appNavbar.dashboardNavbar .brandLogo {
+    width: 64px;
+    height: 64px;
+    flex-basis: 64px;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    min-width: 0;
+    gap: 7px;
+    justify-self: end;
+  }
+
+  .appNavbar.dashboardNavbar .navIdentity {
+    gap: 6px;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 92px;
+    font-size: 12px;
+  }
+
+  .appNavbar.dashboardNavbar .theme span {
+    display: none;
   }
 
   .appNavbar.dashboardNavbar .dashboardTitle {
@@ -417,8 +446,8 @@
   }
 
   .appNavbar.dashboardNavbar .navUserName {
-    max-width: 112px;
-    font-size: 14px;
+    max-width: 92px;
+    font-size: 12px;
   }
 
   .appNavbar.dashboardNavbar .logoutLink {
@@ -429,6 +458,35 @@
   .dashboardNotification {
     width: 36px;
     height: 36px;
+  }
+
+  .admin aside {
+    max-height: 92px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px;
+  }
+
+  .admin aside nav {
+    width: max-content;
+    min-width: 100%;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .admin aside nav section {
+    flex: 0 0 auto;
+    gap: 4px;
+    margin: 0;
+    padding-right: 4px;
+    border-right: 1px solid var(--chrome-line);
+  }
+
+  .admin aside nav a {
+    min-height: 38px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   main,
