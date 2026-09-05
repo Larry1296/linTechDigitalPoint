@@ -177,3 +177,201 @@
     white-space: nowrap;
   }
 }
+
+/* Phone-first layout refinements. Keep every primary workflow usable without
+   horizontal page scrolling while allowing intentionally wide data areas to
+   scroll inside their own containers. */
+@media (max-width: 760px) {
+  main,
+  .admin main {
+    padding: 26px 16px;
+  }
+
+  .appNavbar {
+    padding-inline: 12px;
+  }
+
+  .appNavbar.dashboardNavbar {
+    min-height: 190px;
+  }
+
+  .appNavbar.dashboardNavbar .navActions {
+    gap: 10px;
+  }
+
+  .appNavbar.dashboardNavbar .navIdentity {
+    gap: 7px;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 145px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hero h1 {
+    font-size: clamp(38px, 13vw, 58px);
+    letter-spacing: -2px;
+  }
+
+  .hero p {
+    font-size: 16px;
+  }
+
+  .heroCard {
+    min-height: 220px;
+    padding: 24px;
+    font-size: 21px;
+  }
+
+  .heroActions,
+  .cardActions,
+  .heading,
+  .callout,
+  .cartTotal,
+  .statusRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .heroActions > *,
+  .cardActions > *,
+  .callout > * {
+    width: 100%;
+  }
+
+  .cards,
+  .metrics,
+  .benefits,
+  .contactSection,
+  .appFooter {
+    grid-template-columns: 1fr;
+  }
+
+  .cards article,
+  .metrics article,
+  .panel,
+  .empty,
+  .formCard,
+  .wizard,
+  .onboarding,
+  .stackPreview,
+  .shelfPanel {
+    padding: 16px;
+  }
+
+  .formCard.wide,
+  .formGrid,
+  .locationPicker {
+    grid-template-columns: 1fr;
+  }
+
+  .formCard.wide button,
+  .locationPicker,
+  .placementRow {
+    grid-column: auto;
+  }
+
+  .productDetail,
+  .checkoutGrid,
+  .posGrid,
+  .editorGrid,
+  .deskGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .productImage.large {
+    height: 250px;
+  }
+
+  .list article,
+  .list > a {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .list input {
+    width: 100%;
+  }
+
+  .saleCart article,
+  .jobLine {
+    grid-template-columns: 1fr;
+  }
+
+  .search,
+  .heading form {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table,
+  .ledgerTable {
+    overflow-x: auto;
+  }
+
+  .table > div,
+  .ledgerTable > div {
+    min-width: 620px;
+  }
+
+  .admin aside nav {
+    margin-top: 14px;
+    padding-bottom: 10px;
+  }
+
+  .admin aside nav a {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .appNavbar {
+    min-height: 145px;
+  }
+
+  .appNavbar .brandLogo,
+  .appNavbar > .brand {
+    width: 92px;
+    height: 92px;
+    flex-basis: 92px;
+  }
+
+  .appNavbar.dashboardNavbar {
+    min-height: 170px;
+  }
+
+  .appNavbar.dashboardNavbar .dashboardTitle {
+    font-size: 22px;
+  }
+
+  .appNavbar.dashboardNavbar .navUserName {
+    max-width: 112px;
+    font-size: 14px;
+  }
+
+  .appNavbar.dashboardNavbar .logoutLink {
+    min-width: 68px;
+    padding: 8px 10px;
+  }
+
+  .dashboardNotification {
+    width: 36px;
+    height: 36px;
+  }
+
+  main,
+  .admin main {
+    padding: 20px 12px;
+  }
+
+  .tabs {
+    margin-inline: -4px;
+  }
+
+  .button,
+  button {
+    min-height: 44px;
+  }
+}
