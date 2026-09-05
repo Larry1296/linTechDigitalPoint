@@ -59,7 +59,9 @@ export function AppNavbar() {
             <NavLink to="/account/orders">Orders</NavLink>
           </>
         ) : (
-          <NavLink to="/login">Login/Register</NavLink>
+          <NavLink className="authEntryLink" to="/login">
+            Login/Register
+          </NavLink>
         )}
       </nav>
       <div className="navActions">
@@ -69,7 +71,10 @@ export function AppNavbar() {
             <span className="navUserName">
               {user.first_name || user.username} ({displayRole(user)})
             </span>
-            <button className="linkButton" onClick={() => void signOut()}>
+            <button
+              className="linkButton logoutLink"
+              onClick={() => void signOut()}
+            >
               Logout
             </button>
           </div>
