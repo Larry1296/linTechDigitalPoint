@@ -300,7 +300,7 @@
   .callout,
   .cartTotal,
   .statusRow {
-    align-items: stretch;
+    align-items: center;
     flex-direction: column;
   }
 
@@ -501,6 +501,7 @@
   .appNavbar.dashboardNavbar .theme {
     order: 2;
     justify-content: center;
+    align-self: center;
   }
 
   .appNavbar.dashboardNavbar .dashboardMobileTitle {
