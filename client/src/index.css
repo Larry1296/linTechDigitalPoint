@@ -80,7 +80,14 @@ a {
   z-index: 10;
 }
 .appNavbar.dashboardNavbar {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(172px, 1fr) auto minmax(260px, 1fr);
+}
+.dashboardTitle {
+  justify-self: center;
+  color: var(--chrome-text);
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 .brand {
   font-weight: 800;
@@ -178,21 +185,9 @@ a {
   gap: 12px;
   white-space: nowrap;
 }
-.dashboardNavbar .navIdentity {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  align-items: center;
-  gap: 18px;
-}
 .navUserName {
   color: #4ade80;
   font-weight: 800;
-}
-.dashboardNavbar .navUserName {
-  font-size: 22px;
-  line-height: 1.15;
-  text-align: center;
 }
 .dashboardNotification {
   position: relative;
@@ -215,15 +210,6 @@ a {
   border: 2px solid var(--chrome);
   border-radius: 50%;
   background: #4ade80;
-}
-.dashboardLabel {
-  display: block;
-  margin-top: 2px;
-  color: var(--chrome-muted);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .appNavbar .logoutLink {
   display: inline-flex;
@@ -468,12 +454,17 @@ main {
   overflow: hidden;
 }
 @media (max-width: 760px) {
-  .dashboardNavbar .navIdentity {
-    position: static;
-    transform: none;
+  .dashboardNavbar {
+    grid-template-columns: 1fr auto;
   }
-  .dashboardNavbar .navUserName {
-    font-size: 17px;
+  .dashboardNavbar .dashboardTitle {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 24px;
+  }
+  .dashboardNavbar .navActions {
+    grid-column: 2;
+    grid-row: 1;
   }
   .appNavbar nav {
     display: none;

@@ -42,6 +42,7 @@ export function AppNavbar() {
       >
         <BrandLogo />
       </Link>
+      {isDashboard && <div className="dashboardTitle">Dashboard</div>}
       {!isDashboard && (
         <nav aria-label="Main navigation">
           <NavLink to="/">Home</NavLink>
@@ -81,7 +82,6 @@ export function AppNavbar() {
           <div className="navIdentity">
             <span className="navUserName">
               {user.first_name || user.username} ({displayRole(user)})
-              {isDashboard && <small className="dashboardLabel">Dashboard</small>}
             </span>
             <button
               className="linkButton logoutLink"
