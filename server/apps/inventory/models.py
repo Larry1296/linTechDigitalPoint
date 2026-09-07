@@ -30,6 +30,33 @@ class StockBalance(TimeStamped):
     class Meta: constraints=[models.UniqueConstraint(fields=["lot","shelf"],name="unique_lot_shelf"),models.CheckConstraint(condition=Q(quantity__gte=0)&Q(reserved__gte=0)&Q(reserved__lte=models.F("quantity")),name="valid_stock_balance")]
 class VariantPreferredLocation(TimeStamped):
     variant=models.OneToOneField(ProductVariant,related_name="preferred_location",on_delete=models.CASCADE);shelf=models.ForeignKey(Shelf,related_name="preferred_variants",on_delete=models.PROTECT);updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL)
+class StockReceipt(TimeStamped):
+    COMPLETED="COMPLETED"
+    status=models.CharField(max_length=20,default=COMPLETED,choices=[(COMPLETED,"Completed")])
+    receipt_number=models.CharField(max_length=80,unique=True)
+    external_reference=models.CharField(max_length=120,blank=True)
+    supplier_name=models.CharField(max_length=180,blank=True)
+    received_at=models.DateTimeField()
+    notes=models.TextField(blank=True)
+    created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stock_receipts")
+    idempotency_key=models.CharField(max_length=120,unique=True,null=True,blank=True)
+class StockReceiptLine(TimeStamped):
+    receipt=models.ForeignKey(StockReceipt,related_name="lines",on_delete=models.PROTECT)
+    variant=models.ForeignKey(ProductVariant,related_name="receipt_lines",on_delete=models.PROTECT)
+    received_quantity=models.DecimalField(max_digits=14,decimal_places=3)
+    unit_cost=models.DecimalField(max_digits=14,decimal_places=2)
+    lot=models.OneToOneField(StockLot,null=True,blank=True,related_name="receipt_line",on_delete=models.PROTECT)
+    previous_selling_price=models.DecimalField(max_digits=14,decimal_places=2,null=True,blank=True)
+    new_selling_price=models.DecimalField(max_digits=14,decimal_places=2,null=True,blank=True)
+    class Meta:
+        constraints=[models.CheckConstraint(condition=Q(received_quantity__gt=0)&Q(unit_cost__gte=0),name="positive_receipt_line")]
+class StockReceiptPlacement(TimeStamped):
+    line=models.ForeignKey(StockReceiptLine,related_name="placements",on_delete=models.PROTECT)
+    shelf=models.ForeignKey(Shelf,related_name="receipt_placements",on_delete=models.PROTECT)
+    quantity=models.DecimalField(max_digits=14,decimal_places=3)
+    balance=models.ForeignKey(StockBalance,null=True,blank=True,related_name="receipt_placements",on_delete=models.PROTECT)
+    class Meta:
+        constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_receipt_placement"),models.UniqueConstraint(fields=["line","shelf"],name="unique_receipt_line_shelf")]
 class Movement(models.Model):
     TYPES=[(x,x.replace("_"," ").title()) for x in ["OPENING_STOCK","PURCHASE_RECEIPT","SALE","ONLINE_ORDER","CYBER_CONSUMPTION","TRANSFER","CUSTOMER_RETURN","SUPPLIER_RETURN","DAMAGE","LOSS","STOCKTAKE_ADJUSTMENT","MANUAL_ADJUSTMENT","ORDER_RESERVATION","RESERVATION_RELEASE","OTHER"]]
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); lot=models.ForeignKey(StockLot,null=True,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); source=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_out"); destination=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_in"); movement_type=models.CharField(max_length=30,choices=TYPES); reference=models.CharField(max_length=100); performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL); notes=models.TextField(blank=True); created_at=models.DateTimeField(auto_now_add=True)

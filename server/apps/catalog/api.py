@@ -1,4 +1,5 @@
 from django.db.models import Sum
+from django.utils.text import slugify
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,6 +14,16 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = "__all__"
+
+    def create(self, validated_data):
+        name=validated_data["name"].strip()
+        parent=validated_data.get("parent")
+        if Category.objects.filter(name__iexact=name,parent=parent).exists():
+            raise serializers.ValidationError({"name":"A category with this name already exists under the selected parent."})
+        base=slugify(name) or "category"; slug=base; suffix=2
+        while Category.objects.filter(slug=slug).exists():slug=f"{base}-{suffix}";suffix+=1
+        validated_data["name"]=name;validated_data["slug"]=slug
+        return super().create(validated_data)
 
 
 class BrandSerializer(serializers.ModelSerializer):
@@ -165,6 +176,23 @@ class ProductViewSet(SecuredModelViewSet):
                 alt_text=product.name,
             )
         return Response({"product_id": product.id, "variant_id": variant.id}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="create-inline")
+    def create_inline(self, request):
+        if not request.user.has_perm("catalog.add_product") or not request.user.has_perm("catalog.add_productvariant"):
+            return Response({"detail":"Product creation permission required."},status=403)
+        data=request.data
+        try:
+            category=Category.objects.get(pk=data.get("category_id"),active=True)
+            name=str(data.get("name","")).strip()
+            if not name or not data.get("sku"):raise serializers.ValidationError({"name":"Name and SKU are required."})
+            base=slugify(name) or "product"; slug=base; suffix=2
+            while Product.objects.filter(slug=slug).exists():slug=f"{base}-{suffix}";suffix+=1
+            product=Product.objects.create(name=name,slug=slug,category=category,brand_id=data.get("brand_id") or None,description=data.get("description","") or "",product_type="STOCK_ITEM",ecommerce_visible=bool(data.get("ecommerce_visible",True)),online_orderable=bool(data.get("online_orderable",True)))
+            variant=ProductVariant.objects.create(product=product,name=data.get("variant_name") or "Standard",sku=data["sku"],barcode=data.get("barcode") or None,selling_price=data.get("selling_price",0),minimum_stock=data.get("minimum_stock",0),target_stock=data.get("target_stock",0))
+        except (Category.DoesNotExist, serializers.ValidationError) as exc:
+            return Response(getattr(exc,"detail",{"category_id":"Choose an active category."}),status=400)
+        return Response({"product_id":product.id,"variant_id":variant.id},status=201)
 
 
 class VariantViewSet(SecuredModelViewSet):

@@ -1,183 +1,25 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
+
+const emptyLine = () => ({ variant_id: "", received_quantity: "", unit_cost: "", update_selling_price: false, new_selling_price: "", placements: [{ shelf_id: "", quantity: "" }] });
 export function ReceivePage() {
-  const [products, setProducts] = useState([]);
-  const [zones, setZones] = useState([]);
-  const [placements, setPlacements] = useState([{ quantity: "" }]);
-  const [msg, setMsg] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => {
-    void Promise.all([
-      api("/api/v1/catalog/variants/"),
-      api("/api/v1/locations/zones/"),
-    ]).then(([p, z]) => {
-      setProducts(
-        p.filter(
-          (variant) => variant.active && variant.product_type === "STOCK_ITEM",
-        ),
-      );
-      setZones(z);
-    });
-  }, []);
-  const submit = async (e) => {
-    e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.currentTarget));
-    if (
-      !(await confirmAction({
-        title: "Receive this stock?",
-        text: "This will add inventory to the selected shelf placements.",
-        confirmButtonText: "Receive stock",
-      }))
-    )
-      return;
-    try {
-      const result = await api("/api/v1/inventory/receive/", {
-        method: "POST",
-        body: JSON.stringify({ ...f, placements }),
-      });
-      setMsg(
-        `Stock received into the selected physical shelf placement. Receipt ${result.reference}.`,
-      );
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-  return (
-    <>
-      <span className="eyebrow">Purchasing and exact placement</span>
-      <h1>Receive Stock</h1>
-      {msg && <div className="success">{msg}</div>}
-      {error && <p className="formError">{error}</p>}
-      {!products.length && (
-        <div className="callout">
-          <div>
-            <b>No stock products have been defined yet.</b>
-            <p>
-              Create the product, SKU/variant, prices, and preferred shelf
-              first. Then return here to receive additional stock.
-            </p>
-          </div>
-          <Link className="button" to="/admin-app/products">
-            Create Product
-          </Link>
-        </div>
-      )}
-      {!zones.length && (
-        <div className="callout">
-          <div>
-            <b>No physical shelves have been configured yet.</b>
-            <p>
-              Build the Zone → Shelf Stack → Level → Shelf layout before
-              receiving stock.
-            </p>
-          </div>
-          <Link className="button" to="/admin-app/digital-shop">
-            Configure Digital Shop
-          </Link>
-        </div>
-      )}
-      <form className="formCard wide" onSubmit={submit}>
-        <label>
-          Product
-          <select name="variant_id" required disabled={!products.length}>
-            <option value="">Choose a defined product</option>
-            {products.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.product_name} — {p.name} · {p.sku}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Buying price
-          <input name="unit_cost" type="number" min="0" step=".01" required />
-        </label>
-        <label>
-          Selling price
-          <input
-            name="selling_price"
-            type="number"
-            min="0"
-            step=".01"
-            required
-          />
-        </label>
-        <label>
-          Supplier
-          <input name="supplier_name" />
-        </label>
-        <label>
-          Supplier invoice / delivery note (optional)
-          <input
-            name="reference"
-            placeholder="A receipt reference is generated when left blank"
-          />
-        </label>
-        <div className="placementHeading">
-          <h2>Where will this stock be placed?</h2>
-          <p className="muted">
-            Choose the exact shop shelf for every quantity received. This
-            location is what staff use to find the item.
-          </p>
-        </div>
-        {placements.map((placement, index) => (
-          <div className="placementRow" key={index}>
-            <PhysicalLocationPicker
-              zones={zones}
-              value={placement.shelf_id}
-              onChange={(shelf_id) =>
-                setPlacements((old) =>
-                  old.map((item, i) =>
-                    i === index ? { ...item, shelf_id } : item,
-                  ),
-                )
-              }
-            />
-            <label>
-              Quantity
-              <input
-                type="number"
-                min=".001"
-                step=".001"
-                value={placement.quantity}
-                onChange={(e) =>
-                  setPlacements((old) =>
-                    old.map((item, i) =>
-                      i === index
-                        ? { ...item, quantity: e.target.value }
-                        : item,
-                    ),
-                  )
-                }
-                required
-              />
-            </label>
-            {placements.length > 1 && (
-              <button
-                type="button"
-                onClick={() =>
-                  setPlacements((old) => old.filter((_, i) => i !== index))
-                }
-              >
-                Remove placement
-              </button>
-            )}
-          </div>
-        ))}
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setPlacements((old) => [...old, { quantity: "" }])}
-        >
-          Split across another shelf
-        </button>
-        <button disabled={!products.length || !zones.length}>
-          Receive Stock
-        </button>
-      </form>
-    </>
-  );
+  const [variants, setVariants] = useState([]); const [categories, setCategories] = useState([]); const [zones, setZones] = useState([]); const [query, setQuery] = useState("");
+  const [lines, setLines] = useState([emptyLine()]); const [details, setDetails] = useState({ supplier_name: "", external_reference: "", received_at: new Date().toISOString().slice(0, 16), notes: "" });
+  const [step, setStep] = useState(1); const [error, setError] = useState(""); const [success, setSuccess] = useState(null); const [creating, setCreating] = useState(false); const [newProductOpen, setNewProductOpen] = useState(false); const [newProductLine, setNewProductLine] = useState(0);
+  useEffect(() => { void Promise.all([api("/api/v1/inventory/variants/search/"), api("/api/v1/locations/zones/"), api("/api/v1/catalog/categories/")]).then(([items, locationData, categoryData]) => { setVariants(items); setZones(locationData); setCategories(categoryData); }).catch((err) => setError(err.message)); }, []);
+  const filtered = useMemo(() => { const q = query.toLowerCase(); return variants.filter((item) => !q || [item.product_name, item.variant_name, item.sku, item.barcode, item.brand, item.category].some((value) => String(value || "").toLowerCase().includes(q))).slice(0, 20); }, [variants, query]);
+  const totalUnits = lines.reduce((sum, line) => sum + Number(line.received_quantity || 0), 0); const totalCost = lines.reduce((sum, line) => sum + Number(line.received_quantity || 0) * Number(line.unit_cost || 0), 0);
+  const updateLine = (index, patch) => setLines((old) => old.map((line, i) => i === index ? { ...line, ...patch } : line));
+  const validate = () => { for (const [index, line] of lines.entries()) { const placements = line.placements.reduce((sum, item) => sum + Number(item.quantity || 0), 0); if (!line.variant_id || Number(line.received_quantity) <= 0 || Number(line.unit_cost) < 0) return `Line ${index + 1}: choose a variant and enter a positive quantity and buying price.`; if (placements !== Number(line.received_quantity)) return `Line ${index + 1}: placement quantities must equal the received quantity.`; if (line.placements.some((item) => !item.shelf_id || Number(item.quantity) <= 0)) return `Line ${index + 1}: complete every compartment placement.`; if (line.update_selling_price && line.new_selling_price === "") return `Line ${index + 1}: enter the new selling price.`; } return ""; };
+  const submit = async () => { const validation = validate(); if (validation) { setError(validation); return; } if (!(await confirmAction({ title: "Complete this receipt?", text: "This creates real inventory lots, balances, and purchase movements.", confirmButtonText: "Complete receipt" }))) return; setError(""); setCreating(true); try { const result = await api("/api/v1/inventory/receipts/", { method: "POST", body: JSON.stringify({ ...details, idempotency_key: crypto.randomUUID(), lines: lines.map((line) => ({ ...line, received_quantity: line.received_quantity, placements: line.placements.map(({ shelf_id, quantity }) => ({ shelf_id, quantity })) })) }) }); setSuccess(result); } catch (err) { setError(err.message); } finally { setCreating(false); } };
+  if (success) return <section className="successCard"><span className="eyebrow">Receipt completed</span><h1>{success.receipt_number}</h1><p>{success.lines.length} product lines received · {success.lines.reduce((s, l) => s + Number(l.quantity), 0)} units · KSh {success.lines.reduce((s, l) => s + Number(l.line_cost), 0).toFixed(2)}</p><button onClick={() => { setSuccess(null); setLines([emptyLine()]); setStep(1); }}>Receive another delivery</button><button className="secondary" onClick={() => window.print()}>Print receipt</button></section>;
+  return <section className="receiveWorkflow"><span className="eyebrow">Purchasing and exact placement</span><h1>Receive stock</h1><nav className="workflowSteps"><b className={step === 1 ? "active" : ""}>1. Receipt details</b><b className={step === 2 ? "active" : ""}>2. Items and placement</b><b className={step === 3 ? "active" : ""}>3. Review</b></nav>{error && <p className="formError">{error}</p>}
+    {step === 1 && <div className="formCard wide"><label>Supplier name<input value={details.supplier_name} onChange={(e) => setDetails({ ...details, supplier_name: e.target.value })} required /></label><label>Supplier invoice / delivery note (optional)<input value={details.external_reference} onChange={(e) => setDetails({ ...details, external_reference: e.target.value })} /></label><label>Date received<input type="datetime-local" value={details.received_at} onChange={(e) => setDetails({ ...details, received_at: e.target.value })} required /></label><label>General notes<textarea value={details.notes} onChange={(e) => setDetails({ ...details, notes: e.target.value })} /></label><button onClick={() => setStep(2)}>Continue to items</button></div>}
+    {step === 2 && <div className="receiveLines">{lines.map((line, index) => { const selected = variants.find((item) => item.id === Number(line.variant_id)); return <article className="formCard receiptLine" key={index}><div className="heading"><h2>Product line {index + 1}</h2>{lines.length > 1 && <button type="button" className="secondary" onClick={() => setLines(lines.filter((_, i) => i !== index))}>Remove</button>}</div><label>Search product, SKU, barcode, brand or category<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stock items" /></label><label>Product variant<select value={line.variant_id} onChange={(e) => updateLine(index, { variant_id: e.target.value })} required><option value="">Choose a variant</option>{filtered.map((item) => <option key={item.id} value={item.id}>{item.product_name} — {item.variant_name} · {item.sku} · KSh {item.selling_price}</option>)}</select></label><button type="button" className="secondary" onClick={() => { setNewProductLine(index); setNewProductOpen(true); }}>+ Create new product</button>{selected && <p className="muted">Current selling price: KSh {selected.selling_price}</p>}<div className="formGrid"><label>Received quantity<input type="number" min=".001" step=".001" value={line.received_quantity} onChange={(e) => updateLine(index, { received_quantity: e.target.value })} required /></label><label>Buying price per unit<input type="number" min="0" step=".01" value={line.unit_cost} onChange={(e) => updateLine(index, { unit_cost: e.target.value })} required /></label></div><label className="checkboxRow"><input type="checkbox" checked={line.update_selling_price} onChange={(e) => updateLine(index, { update_selling_price: e.target.checked })} /> Update selling price</label>{line.update_selling_price && <label>New selling price<input type="number" min="0" step=".01" value={line.new_selling_price} onChange={(e) => updateLine(index, { new_selling_price: e.target.value })} required /></label>}<h3>Exact placement</h3>{line.placements.map((placement, pindex) => <div className="placementRow" key={pindex}><PhysicalLocationPicker zones={zones} value={placement.shelf_id} required onChange={(shelf_id) => updateLine(index, { placements: line.placements.map((item, i) => i === pindex ? { ...item, shelf_id } : item) })} /><label>Quantity<input type="number" min=".001" step=".001" value={placement.quantity} onChange={(e) => updateLine(index, { placements: line.placements.map((item, i) => i === pindex ? { ...item, quantity: e.target.value } : item) })} required /></label>{line.placements.length > 1 && <button type="button" className="secondary" onClick={() => updateLine(index, { placements: line.placements.filter((_, i) => i !== pindex) })}>Remove placement</button>}</div>)}<button type="button" className="secondary" onClick={() => updateLine(index, { placements: [...line.placements, { shelf_id: "", quantity: "" }] })}>Split across another compartment</button></article>; })}<button type="button" className="secondary" onClick={() => setLines([...lines, emptyLine()])}>Add another product line</button><button onClick={() => { const validation = validate(); if (validation) setError(validation); else { setError(""); setStep(3); } }}>Review receipt</button></div>}
+    {step === 3 && <div className="formCard wide reviewCard"><h2>Review and confirm</h2><p><b>Supplier:</b> {details.supplier_name} · <b>Reference:</b> {details.external_reference || "System generated"}</p>{lines.map((line, index) => { const product = variants.find((item) => item.id === Number(line.variant_id)); return <div className="reviewLine" key={index}><b>{product?.product_name} — {product?.variant_name}</b><span>{line.received_quantity} units · KSh {line.unit_cost} each · line cost KSh {(Number(line.received_quantity) * Number(line.unit_cost)).toFixed(2)}</span><small>{line.placements.map((p) => `${p.quantity} at shelf ${p.shelf_id}`).join(" · ")}</small></div>; })}<strong>Total: {totalUnits} units · KSh {totalCost.toFixed(2)}</strong><button onClick={submit} disabled={creating}>{creating ? "Saving…" : "Complete receipt"}</button><button type="button" className="secondary" onClick={() => setStep(2)}>Back to edit</button></div>}
+    {creating && <p className="muted">Saving receipt…</p>}
+    {newProductOpen && <div className="modalBackdrop"><form className="formCard modalCard" onSubmit={async (event) => { event.preventDefault(); try { const data = Object.fromEntries(new FormData(event.currentTarget)); const result = await api("/api/v1/catalog/products/create-inline/", { method: "POST", body: JSON.stringify({ ...data, ecommerce_visible: true, online_orderable: true }) }); const fresh = await api(`/api/v1/inventory/variants/search/?q=${encodeURIComponent(data.sku)}`); setVariants((old) => [...old, ...fresh.filter((item) => !old.some((existing) => existing.id === item.id))]); updateLine(newProductLine, { variant_id: String(result.variant_id) }); setNewProductOpen(false); } catch (err) { setError(err.message); } }}><h2>Create product</h2><label>Product name<input name="name" required /></label><label>Category<select name="category_id" required><option value="">Choose category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Variant name<input name="variant_name" defaultValue="Standard" required /></label><label>SKU<input name="sku" required /></label><label>Barcode<input name="barcode" /></label><label>Selling price<input name="selling_price" type="number" min="0" step=".01" required /></label><label>Minimum stock<input name="minimum_stock" type="number" min="0" step=".001" defaultValue="0" /></label><label>Target stock<input name="target_stock" type="number" min="0" step=".001" defaultValue="0" /></label><button>Create and return to receipt</button><button type="button" className="secondary" onClick={() => setNewProductOpen(false)}>Cancel</button></form></div>}
+  </section>;
 }

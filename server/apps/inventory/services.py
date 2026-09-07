@@ -5,7 +5,7 @@ from django.utils import timezone
 from uuid import uuid4
 from rest_framework.exceptions import ValidationError
 from apps.core.models import AuditLog
-from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,VariantPreferredLocation,Zone
+from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,StockReceipt,StockReceiptLine,StockReceiptPlacement,VariantPreferredLocation,Zone
 def _d(value): return Decimal(str(value))
 def _audit(action,obj,user,before=None,after=None):
     AuditLog.objects.create(action=action,object_type=obj.__class__.__name__,object_id=str(obj.pk),user=user,before=before or {},after=after or {})
@@ -86,6 +86,55 @@ def receive_stock(*,variant,placements,unit_cost,reference,user=None,supplier_na
         if qty<=0:raise ValidationError("Placement quantities must be positive.")
         StockBalance.objects.create(lot=lot,shelf=shelf,quantity=qty); Movement.objects.create(variant=variant,lot=lot,quantity=qty,destination=shelf,movement_type="PURCHASE_RECEIPT",reference=reference,performed_by=user)
     _audit("STOCK_RECEIVED",lot,user,after={"quantity":str(total),"unit_cost":str(unit_cost),"reference":reference}); return lot
+
+@transaction.atomic
+def complete_stock_receipt(*, supplier_name="", external_reference="", received_at=None, notes="", lines=(), user=None, idempotency_key=None):
+    """Create a complete receipt and its immutable inventory records atomically."""
+    if idempotency_key:
+        existing=StockReceipt.objects.filter(idempotency_key=idempotency_key).first()
+        if existing:return existing
+    if not lines:raise ValidationError({"lines":"At least one receipt line is required."})
+    received_at=received_at or timezone.now()
+    reference=(external_reference or "").strip() or f"RCV-{timezone.now():%y%m%d}-{uuid4().hex[:8].upper()}"
+    if StockReceipt.objects.filter(receipt_number=reference).exists():
+        raise ValidationError({"external_reference":"This receipt reference already exists."})
+    receipt=StockReceipt.objects.create(receipt_number=reference,external_reference=external_reference or "",supplier_name=supplier_name or "",received_at=received_at,notes=notes or "",created_by=user,idempotency_key=idempotency_key)
+    for index, raw in enumerate(lines):
+        variant=ProductVariant.objects.select_for_update().select_related("product").filter(pk=raw.get("variant_id"),active=True,product__active=True,product__product_type=ProductVariant._meta.get_field("product").remote_field.model.STOCK_ITEM).first()
+        if not variant:raise ValidationError({f"lines[{index}].variant_id":"Choose an active stock-item variant."})
+        qty=_d(raw.get("received_quantity")); cost=_d(raw.get("unit_cost"))
+        if qty<=0:raise ValidationError({f"lines[{index}].received_quantity":"Quantity must be greater than zero."})
+        if cost<0:raise ValidationError({f"lines[{index}].unit_cost":"Buying price cannot be negative."})
+        placements=raw.get("placements") or []; total=sum((_d(p.get("quantity")) for p in placements),Decimal("0"))
+        if total!=qty:raise ValidationError({f"lines[{index}].placements":"Placement quantities must equal received quantity."})
+        shelves=[]
+        for pidx,p in enumerate(placements):
+            pqty=_d(p.get("quantity"))
+            if pqty<=0:raise ValidationError({f"lines[{index}].placements[{pidx}].quantity":"Placement quantity must be greater than zero."})
+            shelf=Shelf.objects.select_for_update().select_related("zone","level__stack").filter(pk=p.get("shelf_id"),active=True,zone__active=True,level__active=True,level__stack__active=True).first()
+            if not shelf:raise ValidationError({f"lines[{index}].placements[{pidx}].shelf_id":"Choose an active exact compartment."})
+            shelves.append((shelf,pqty))
+        update_price=bool(raw.get("update_selling_price")); new_price=raw.get("new_selling_price")
+        if update_price:
+            if not user or not user.has_perm("catalog.change_productvariant"):raise ValidationError({f"lines[{index}].new_selling_price":"Price-change permission required."})
+            if new_price in (None,""):raise ValidationError({f"lines[{index}].new_selling_price":"Enter the new selling price."})
+            new_price=_d(new_price); previous=variant.selling_price
+        else:previous=None;new_price=None
+        line=StockReceiptLine.objects.create(receipt=receipt,variant=variant,received_quantity=qty,unit_cost=cost,previous_selling_price=previous,new_selling_price=new_price)
+        lot=StockLot.objects.create(variant=variant,reference=reference,received_quantity=qty,remaining_quantity=qty,unit_cost=cost,supplier_name=supplier_name or "",received_at=received_at)
+        line.lot=lot;line.save(update_fields=["lot","updated_at"])
+        for shelf,pqty in shelves:
+            balance=StockBalance.objects.create(lot=lot,shelf=shelf,quantity=pqty)
+            StockReceiptPlacement.objects.create(line=line,shelf=shelf,quantity=pqty,balance=balance)
+            Movement.objects.create(variant=variant,lot=lot,quantity=pqty,destination=shelf,movement_type="PURCHASE_RECEIPT",reference=reference,performed_by=user)
+        if not VariantPreferredLocation.objects.filter(variant=variant).exists():VariantPreferredLocation.objects.create(variant=variant,shelf=shelves[0][0],updated_by=user)
+        if update_price:
+            variant.selling_price=new_price;variant.save(update_fields=["selling_price","updated_at"])
+            from apps.catalog.models import PriceHistory
+            PriceHistory.objects.create(variant=variant,price=new_price,changed_by=user)
+            _audit("PRICE_CHANGED",variant,user,before={"price":str(previous)},after={"price":str(new_price)})
+    _audit("STOCK_RECEIPT_COMPLETED",receipt,user,after={"receipt_number":receipt.receipt_number,"lines":receipt.lines.count()})
+    return receipt
 @transaction.atomic
 def transfer_stock(*,variant,source,destination,quantity,reference,user=None):
     need=_d(quantity)

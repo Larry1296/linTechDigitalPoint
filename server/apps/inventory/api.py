@@ -1,4 +1,6 @@
-from django.db.models import DecimalField,ExpressionWrapper,F,Sum
+from django.db.models import DecimalField,ExpressionWrapper,F,Sum,Q
+from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.response import Response
 from apps.catalog.models import ProductVariant
@@ -7,8 +9,8 @@ from apps.cyber.models import CyberJob,CyberJobLine
 from apps.mpesa.models import MpesaCommissionEntry,MpesaSession,MpesaTransaction
 from apps.mpesa.services import session_balances
 from apps.core.permissions import HasLinTechPermission,IsInternalStaff
-from .models import Shelf,StockBalance,StockLot,Zone
-from .services import receive_stock,transfer_stock
+from .models import Shelf,StockBalance,StockLot,StockReceipt,StockReceiptLine,Zone
+from .services import complete_stock_receipt,receive_stock,transfer_stock
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def receive(request):
@@ -20,11 +22,49 @@ def receive(request):
         shelf=Shelf.objects.filter(pk=raw.get("shelf_id"),active=True).first()
         if not shelf:return Response({"detail":"Invalid shelf placement."},status=400)
         placements.append({"shelf":shelf,"quantity":raw.get("quantity")})
+    requested_price=request.data.get("selling_price")
+    if requested_price is not None and str(variant.selling_price)!=str(requested_price) and not request.user.has_perm("catalog.change_productvariant"):
+        return Response({"detail":"Price-change permission required."},status=403)
     lot=receive_stock(variant=variant,placements=placements,unit_cost=request.data.get("unit_cost"),reference=request.data.get("reference"),supplier_name=request.data.get("supplier_name",""),user=request.user)
-    if request.data.get("selling_price") is not None and str(variant.selling_price)!=str(request.data["selling_price"]):
-        if not request.user.has_perm("catalog.change_productvariant"):return Response({"detail":"Price-change permission required."},status=403)
-        variant.selling_price=request.data["selling_price"];variant.save()
+    if requested_price is not None and str(variant.selling_price)!=str(requested_price):
+        from apps.catalog.models import PriceHistory
+        old=variant.selling_price;variant.selling_price=requested_price;variant.save(update_fields=["selling_price","updated_at"])
+        PriceHistory.objects.create(variant=variant,price=variant.selling_price,changed_by=request.user)
+        from apps.core.models import AuditLog
+        AuditLog.objects.create(action="PRICE_CHANGED",object_type="ProductVariant",object_id=str(variant.pk),user=request.user,before={"price":str(old)},after={"price":str(variant.selling_price)})
     return Response({"lot_id":lot.id,"quantity":lot.received_quantity,"reference":lot.reference},status=201)
+
+def _receipt_data(receipt):
+    return {"id":receipt.id,"receipt_number":receipt.receipt_number,"external_reference":receipt.external_reference,"supplier_name":receipt.supplier_name,"received_at":receipt.received_at,"notes":receipt.notes,"created_at":receipt.created_at,"lines":[{"id":line.id,"variant_id":line.variant_id,"product_name":line.variant.product.name,"variant_name":line.variant.name,"sku":line.variant.sku,"quantity":line.received_quantity,"unit_cost":line.unit_cost,"selling_price":line.variant.selling_price,"line_cost":line.received_quantity*line.unit_cost,"placements":[{"shelf_id":p.shelf_id,"code":p.shelf.code,"name":p.shelf.display_name,"zone":p.shelf.zone.name,"stack":p.shelf.level.stack.display_name if p.shelf.level_id else None,"level":p.shelf.level.level_number if p.shelf.level_id else None,"quantity":p.quantity} for p in line.placements.select_related("shelf__zone","shelf__level__stack")] } for line in receipt.lines.select_related("variant__product").prefetch_related("placements__shelf__zone","placements__shelf__level__stack") ]}
+
+@api_view(["GET","POST"])
+@permission_classes([HasLinTechPermission])
+def receipts(request):
+    if request.method=="GET":
+        if not request.user.has_perm("inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
+        rows=StockReceipt.objects.order_by("-received_at")[:100]
+        return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count()} for r in rows])
+    if not request.user.has_perm("inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
+    try:
+        receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("external_reference",request.data.get("reference","")),received_at=request.data.get("received_at") or timezone.now(),notes=request.data.get("notes",""),lines=request.data.get("lines",[]),user=request.user,idempotency_key=request.data.get("idempotency_key"))
+    except ValidationError as exc:return Response(exc.detail,status=400)
+    return Response(_receipt_data(receipt),status=200 if request.data.get("idempotency_key") and receipt.created_by_id==request.user.id else 201)
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
+def receipt_detail(request,pk):
+    if not request.user.has_perm("inventory.view_stockreceipt"):return Response({"detail":"Receipt detail permission required."},status=403)
+    receipt=StockReceipt.objects.filter(pk=pk).first()
+    if not receipt:return Response({"detail":"Receipt not found."},status=404)
+    return Response(_receipt_data(receipt))
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
+def variant_search(request):
+    q=(request.query_params.get("q") or "").strip()
+    qs=ProductVariant.objects.select_related("product","product__category","product__brand").filter(active=True,product__active=True,product__product_type="STOCK_ITEM")
+    if q:qs=qs.filter(Q(product__name__icontains=q)|Q(sku__icontains=q)|Q(barcode__icontains=q)|Q(product__brand__name__icontains=q)|Q(product__category__name__icontains=q))
+    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"selling_price":v.selling_price} for v in qs[:50]])
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def transfer(request):

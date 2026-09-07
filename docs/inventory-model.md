@@ -8,3 +8,6 @@
 - Public APIs never expose costs, COGS, profit, lots, allocations or shelf locations.
 - Services lock balances and reject insufficient availability.
 
+## Receiving
+
+Product category and physical storage are independent dimensions. A category classifies a product; a shop area, rack, level, and compartment describe where a particular quantity is held. A completed `StockReceipt` is immutable and contains one line per variant and one placement per exact compartment. Each line creates one historical `StockLot`; all placements for that line point to the same lot and create purchase-receipt movements. Receipt completion is atomic and idempotent. A preferred location is created only when the variant has no preferred location.
