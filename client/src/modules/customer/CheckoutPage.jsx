@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useCart } from "../../core/cart/CartContext";
+import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 export function CheckoutPage() {
   const { cart, refreshCart } = useCart();
+  const { user } = useAuth();
   const [error, setError] = useState("");
   const nav = useNavigate();
   useEffect(() => {
@@ -20,6 +22,10 @@ export function CheckoutPage() {
   if (!cart) return <Loading />;
   const submit = async (e) => {
     e.preventDefault();
+    if (!user) {
+      nav("/login?next=" + encodeURIComponent("/checkout"));
+      return;
+    }
     try {
       const order = await api("/api/v1/commerce/checkout/", {
         method: "POST",
@@ -65,8 +71,16 @@ export function CheckoutPage() {
             Order notes
             <textarea name="notes" />
           </label>
+          {!user && (
+            <p className="callout">
+              Sign in or create an account when you are ready to pay and place
+              this order. Your cart will stay saved while you do so.
+            </p>
+          )}
           {error && <p className="formError">{error}</p>}
-          <button disabled={!cart.items.length}>Place order</button>
+          <button disabled={!cart.items.length}>
+            {user ? "Place order" : "Sign in to place order"}
+          </button>
         </form>
       </div>
     </main>

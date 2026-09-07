@@ -269,6 +269,11 @@ test("new customer keeps the full cart through registration and checkout", async
   await expect(page.getByText("Samsung A05 Cover")).toBeVisible();
   await expect(page.getByText("Type-C Cable")).toBeVisible();
   await page.getByRole("link", { name: "Proceed to checkout" }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(
+    page.getByRole("button", { name: "Sign in to place order" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign in to place order" }).click();
   await expect(page).toHaveURL(/\/login\?next=%2Fcheckout/);
   await page.getByRole("link", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/register\?next=%2Fcheckout/);

@@ -40,14 +40,7 @@ export function AppRoutes() {
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="password-reset" element={<PasswordResetPage />} />
-        <Route
-          path="checkout"
-          element={
-            <CustomerProtectedRoute>
-              <CheckoutPage />
-            </CustomerProtectedRoute>
-          }
-        />
+        <Route path="checkout" element={<CheckoutPage />} />
         <Route
           path="forbidden"
           element={
