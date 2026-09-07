@@ -23,13 +23,10 @@ htmlcov/
 server/staticfiles/
 server/media/
 
-# React / TypeScript client
+# React / JavaScript client
 client/node_modules/
 client/dist/
 client/.vite/
-client/*.tsbuildinfo
-client/vite.config.js
-client/vite.config.d.ts
 playwright-report/
 test-results/
 client/playwright-report/

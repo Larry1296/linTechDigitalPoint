@@ -1,0 +1,118 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { PublicLayout } from "../layouts/PublicLayout";
+import { StaffLayout } from "../layouts/StaffLayout";
+import {
+  AccountPage,
+  OrderDetailPage,
+  OrdersPage,
+} from "../modules/customer/AccountPage";
+import {
+  AddressesPage,
+  PasswordResetPage,
+} from "../modules/customer/AccountExtras";
+import { CheckoutPage } from "../modules/customer/CheckoutPage";
+import { LoginPage, RegisterPage } from "../modules/auth/AuthPages";
+import { CartPage } from "../modules/storefront/CartPage";
+import { HomePage } from "../modules/storefront/HomePage";
+import { ProductPage } from "../modules/storefront/ProductPage";
+import { ShopPage } from "../modules/storefront/ShopPage";
+import {
+  AnalyticsPage,
+  DashboardPage,
+  PosPage,
+  StaffOrdersPage,
+} from "../modules/admin/AdminPages";
+import { DigitalShopPage } from "../modules/digital-shop/DigitalShopPage";
+import { ProductsPage } from "../modules/products/ProductsPage";
+import { ReceivePage } from "../modules/receiving/ReceivePage";
+import { CustomerProtectedRoute, StaffProtectedRoute } from "./ProtectedRoutes";
+import { CyberDashboardPage } from "../modules/cyber/CyberDashboardPage";
+import { MpesaDashboardPage } from "../modules/mpesa/MpesaDashboardPage";
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<PublicLayout />}>
+        <Route index element={<HomePage />} />
+        <Route path="shop" element={<ShopPage />} />
+        <Route path="products/:id" element={<ProductPage />} />
+        <Route path="cart" element={<CartPage />} />
+        <Route path="login" element={<LoginPage />} />
+        <Route path="register" element={<RegisterPage />} />
+        <Route path="password-reset" element={<PasswordResetPage />} />
+        <Route
+          path="checkout"
+          element={
+            <CustomerProtectedRoute>
+              <CheckoutPage />
+            </CustomerProtectedRoute>
+          }
+        />
+        <Route
+          path="account"
+          element={
+            <CustomerProtectedRoute>
+              <AccountPage />
+            </CustomerProtectedRoute>
+          }
+        />
+        <Route
+          path="account/addresses"
+          element={
+            <CustomerProtectedRoute>
+              <AddressesPage />
+            </CustomerProtectedRoute>
+          }
+        />
+        <Route
+          path="account/orders"
+          element={
+            <CustomerProtectedRoute>
+              <OrdersPage />
+            </CustomerProtectedRoute>
+          }
+        />
+        <Route
+          path="account/orders/:id"
+          element={
+            <CustomerProtectedRoute>
+              <OrderDetailPage />
+            </CustomerProtectedRoute>
+          }
+        />
+        <Route
+          path="forbidden"
+          element={
+            <main className="state">
+              <h1>403</h1>
+              <p>You do not have permission to view this page.</p>
+            </main>
+          }
+        />
+      </Route>
+      <Route
+        path="admin-app"
+        element={
+          <StaffProtectedRoute>
+            <StaffLayout />
+          </StaffProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="pos" element={<PosPage />} />
+        <Route path="orders" element={<StaffOrdersPage />} />
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="receive" element={<ReceivePage />} />
+        <Route path="digital-shop" element={<DigitalShopPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="cyber" element={<CyberDashboardPage />} />
+        <Route path="cyber/jobs" element={<CyberDashboardPage />} />
+        <Route path="cyber/services" element={<CyberDashboardPage />} />
+        <Route path="mpesa" element={<MpesaDashboardPage />} />
+        <Route path="mpesa/transactions" element={<MpesaDashboardPage />} />
+        <Route path="mpesa/reconciliation" element={<MpesaDashboardPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

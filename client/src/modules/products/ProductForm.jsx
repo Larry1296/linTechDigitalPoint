@@ -1,0 +1,185 @@
+import { useEffect, useState } from "react";
+import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
+import { api } from "../../core/api/client";
+export function ProductForm({ zones, onSaved, preferredShelf }) {
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [type, setType] = useState("STOCK_ITEM");
+  const [shelf, setShelf] = useState(preferredShelf);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void Promise.all([
+      api("/api/v1/catalog/categories/"),
+      api("/api/v1/catalog/brands/"),
+    ]).then(([c, b]) => {
+      setCategories(c);
+      setBrands(b);
+    });
+  }, []);
+  const save = async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      await api("/api/v1/catalog/products/create-with-stock/", {
+        method: "POST",
+        body: JSON.stringify({
+          ...data,
+          preferred_shelf_id: type === "STOCK_ITEM" ? shelf : null,
+          ecommerce_visible: data.ecommerce_visible === "on",
+          online_orderable: data.online_orderable === "on",
+        }),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  return (
+    <form className="formCard productForm" onSubmit={save}>
+      <h2>Add Product</h2>
+      {error && <p className="formError">{error}</p>}
+      <label>
+        Product name
+        <input name="name" required />
+      </label>
+      <label>
+        Category
+        <select name="category_id" required>
+          {categories.map((c) => (
+            <option value={c.id} key={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Brand
+        <select name="brand_id">
+          <option value="">No brand</option>
+          {brands.map((b) => (
+            <option value={b.id} key={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Description
+        <textarea name="description" />
+      </label>
+      <label>
+        Product type
+        <select
+          name="product_type"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+        >
+          <option value="STOCK_ITEM">Stock item</option>
+          <option value="SERVICE">Billable service</option>
+        </select>
+      </label>
+      <label>
+        {type === "SERVICE" ? "Service option" : "Variant"}
+        <input name="variant_name" defaultValue="Standard" required />
+      </label>
+      <label>
+        {type === "SERVICE" ? "Service code" : "SKU"}
+        <input name="sku" required />
+      </label>
+      {type === "STOCK_ITEM" && (
+        <label>
+          Barcode
+          <input name="barcode" />
+        </label>
+      )}
+      <label>
+        Product image URL
+        <input name="image_url" type="url" />
+      </label>
+      <label>
+        Selling price
+        <input name="selling_price" type="number" min="0" step=".01" required />
+      </label>
+      {type === "SERVICE" ? (
+        <>
+          <label>
+            Service cost
+            <input
+              name="service_cost"
+              type="number"
+              min="0"
+              step=".01"
+              defaultValue="0"
+            />
+          </label>
+          <p className="muted serviceHint">
+            Examples: Windows installation, Microsoft Office setup, drivers,
+            antivirus, printing, scanning, typing or application installation.
+            M-Pesa agency operations belong in the separate M-Pesa desk.
+          </p>
+        </>
+      ) : (
+        <>
+          <label>
+            Minimum stock
+            <input
+              name="minimum_stock"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+          </label>
+          <label>
+            Target stock
+            <input
+              name="target_stock"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+          </label>
+        </>
+      )}
+      <label>
+        <input name="ecommerce_visible" type="checkbox" defaultChecked />{" "}
+        Visible online
+      </label>
+      <label>
+        <input name="online_orderable" type="checkbox" defaultChecked /> Can be
+        purchased through online checkout
+      </label>
+      {type === "STOCK_ITEM" && (
+        <>
+          <PhysicalLocationPicker
+            zones={zones}
+            value={shelf}
+            onChange={setShelf}
+          />
+          <label>
+            Opening buying price
+            <input
+              name="opening_unit_cost"
+              type="number"
+              min="0"
+              step=".01"
+              defaultValue="0"
+            />
+          </label>
+          <label>
+            Opening quantity
+            <input
+              name="opening_quantity"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+          </label>
+        </>
+      )}
+      <button>Create Product</button>
+    </form>
+  );
+}

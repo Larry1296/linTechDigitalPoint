@@ -5,90 +5,90 @@ textarea {
   font: inherit;
 }
 button {
-  border: 0;
-  border-radius: 9px;
+  @apply tw:[border:0];
+  @apply tw:rounded-[9px];
   background: var(--primary);
-  color: var(--on-primary);
-  padding: 11px 16px;
-  font-weight: 700;
-  cursor: pointer;
+  @apply tw:[color:var(--on-primary)];
+  @apply tw:[padding:11px_16px];
+  @apply tw:font-[700];
+  @apply tw:cursor-pointer;
 }
 button:disabled {
   background: var(--line);
-  color: var(--muted);
-  opacity: 1;
-  cursor: not-allowed;
+  @apply tw:[color:var(--muted)];
+  @apply tw:[opacity:1];
+  @apply tw:cursor-not-allowed;
 }
 input,
 select,
 textarea {
-  width: 100%;
-  border: 1px solid var(--line);
+  @apply tw:w-[100%];
+  @apply tw:[border:1px_solid_var(--line)];
   background: var(--surface);
-  color: var(--text);
-  border-radius: 9px;
-  padding: 11px;
+  @apply tw:[color:var(--text)];
+  @apply tw:rounded-[9px];
+  @apply tw:[padding:11px];
 }
 input::placeholder,
 textarea::placeholder {
-  color: var(--muted);
-  opacity: 1;
+  @apply tw:[color:var(--muted)];
+  @apply tw:[opacity:1];
 }
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid var(--primary);
-  outline-offset: 2px;
+  @apply tw:[outline:3px_solid_var(--primary)];
+  @apply tw:outline-offset-[2px];
 }
 label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  @apply tw:grid;
+  @apply tw:gap-[6px];
+  @apply tw:[color:var(--muted)];
+  @apply tw:text-[13px];
+  @apply tw:font-[700];
 }
 .heading,
 .cartTotal,
 .statusRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
+  @apply tw:flex;
+  @apply tw:justify-between;
+  @apply tw:items-center;
+  @apply tw:gap-[18px];
 }
 .heading form,
 .search {
-  display: flex;
-  gap: 8px;
-  min-width: min(100%, 420px);
+  @apply tw:flex;
+  @apply tw:gap-[8px];
+  @apply tw:min-w-[min(100%,_420px)];
 }
 .appNavbar nav a {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:gap-[5px];
 }
 .linkButton {
   background: transparent;
-  color: var(--text);
-  padding: 5px;
+  @apply tw:[color:var(--text)];
+  @apply tw:[padding:5px];
 }
 .state {
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--muted);
-  text-align: center;
+  @apply tw:min-h-[260px];
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:items-center;
+  @apply tw:justify-center;
+  @apply tw:gap-[12px];
+  @apply tw:[color:var(--muted)];
+  @apply tw:text-center;
 }
 .spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--line);
-  border-top-color: var(--primary);
-  border-radius: 50%;
+  @apply tw:w-[28px];
+  @apply tw:h-[28px];
+  @apply tw:[border:3px_solid_var(--line)];
+  @apply tw:[border-top-color:var(--primary)];
+  @apply tw:rounded-[50%];
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin {
@@ -98,597 +98,597 @@ label {
 }
 .error,
 .formError {
-  color: #c43b3b;
+  @apply tw:[color:#c43b3b];
 }
 .success {
-  padding: 14px;
+  @apply tw:[padding:14px];
   background: var(--primary2);
-  border-radius: 10px;
-  margin-bottom: 18px;
+  @apply tw:rounded-[10px];
+  @apply tw:[margin-bottom:18px];
 }
 .productGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))];
+  @apply tw:gap-[18px];
 }
 .productCard {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:gap-[9px];
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  padding: 16px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[15px];
+  @apply tw:[padding:16px];
 }
 .productCard h2 {
-  font-size: 18px;
-  margin: 0;
+  @apply tw:text-[18px];
+  @apply tw:[margin:0];
 }
 .productImage {
-  height: 160px;
-  display: grid;
-  place-items: center;
+  @apply tw:h-[160px];
+  @apply tw:grid;
+  @apply tw:[place-items:center];
   background: var(--primary2);
-  border-radius: 10px;
-  color: var(--primary);
-  font-size: 50px;
-  font-weight: 800;
-  overflow: hidden;
+  @apply tw:rounded-[10px];
+  @apply tw:[color:var(--primary)];
+  @apply tw:text-[50px];
+  @apply tw:font-[800];
+  @apply tw:overflow-hidden;
 }
 .productImage img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  @apply tw:w-[100%];
+  @apply tw:h-[100%];
+  @apply tw:object-cover;
 }
 .productImage.large {
-  height: 430px;
+  @apply tw:h-[430px];
 }
 .stock {
-  color: var(--primary);
-  font-weight: 700;
+  @apply tw:[color:var(--primary)];
+  @apply tw:font-[700];
 }
 .out {
-  color: #b73b3b;
+  @apply tw:[color:#b73b3b];
 }
 .productDetail {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 50px;
-  align-items: center;
+  @apply tw:grid;
+  @apply tw:grid-cols-[1fr_1fr];
+  @apply tw:gap-[50px];
+  @apply tw:items-center;
 }
 .productDetail .price {
-  display: block;
-  font-size: 30px;
+  @apply tw:block;
+  @apply tw:text-[30px];
 }
 .list {
-  display: grid;
-  gap: 10px;
+  @apply tw:grid;
+  @apply tw:gap-[10px];
 }
 .list article,
 .list > a {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:justify-between;
+  @apply tw:gap-[16px];
+  @apply tw:[padding:16px];
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[10px];
 }
 .list article > div {
-  display: grid;
+  @apply tw:grid;
 }
 .list small {
-  display: block;
-  color: var(--muted);
+  @apply tw:block;
+  @apply tw:[color:var(--muted)];
 }
 .list input {
-  width: 80px;
+  @apply tw:w-[80px];
 }
 .danger {
   background: #9e2f2f;
 }
 .cartTotal {
-  margin-top: 24px;
-  font-size: 20px;
+  @apply tw:[margin-top:24px];
+  @apply tw:text-[20px];
 }
 .authPage {
-  display: grid;
-  place-items: center;
-  min-height: calc(100vh - 140px);
+  @apply tw:grid;
+  @apply tw:[place-items:center];
+  @apply tw:min-h-[calc(100vh_-_140px)];
 }
 .authBackButton {
-  justify-self: start;
-  color: var(--muted);
-  font-weight: 700;
+  @apply tw:[justify-self:start];
+  @apply tw:[color:var(--muted)];
+  @apply tw:font-[700];
 }
 .authBackButton:hover,
 .authBackButton:focus-visible {
-  color: var(--primary);
+  @apply tw:[color:var(--primary)];
 }
 .formCard {
-  display: grid;
-  gap: 15px;
+  @apply tw:grid;
+  @apply tw:gap-[15px];
   background: var(--surface);
-  border: 1px solid var(--line);
-  padding: 28px;
-  border-radius: 15px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:[padding:28px];
+  @apply tw:rounded-[15px];
   box-shadow: var(--shadow);
   /* Keep forms comfortably wide and centered on the page.  This gives
      multi-field workflows room to breathe while remaining responsive. */
-  width: min(100%, 760px);
-  margin-inline: auto;
+  @apply tw:w-[min(100%,_760px)];
+  @apply tw:[margin-inline:auto];
 }
 .formCard.wide {
-  grid-template-columns: 1fr 1fr;
-  width: min(100%, 1040px);
+  @apply tw:grid-cols-[1fr_1fr];
+  @apply tw:w-[min(100%,_1040px)];
 }
 .formCard.wide button {
-  grid-column: 1/-1;
+  @apply tw:[grid-column:1/-1];
 }
 .formGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[1fr_1fr];
+  @apply tw:gap-[10px];
 }
 .checkoutGrid,
 .posGrid,
 .editorGrid {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 22px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[1.2fr_1fr];
+  @apply tw:gap-[22px];
 }
 .checkoutGrid .panel p {
-  display: flex;
-  justify-content: space-between;
+  @apply tw:flex;
+  @apply tw:justify-between;
 }
 .callout {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
+  @apply tw:flex;
+  @apply tw:justify-between;
+  @apply tw:items-center;
+  @apply tw:[padding:20px];
   background: var(--primary2);
-  border: 1px solid var(--primary);
-  border-radius: 12px;
-  margin: 18px 0;
+  @apply tw:[border:1px_solid_var(--primary)];
+  @apply tw:rounded-[12px];
+  @apply tw:[margin:18px_0];
 }
 .productList {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-top: 14px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(2,_1fr)];
+  @apply tw:gap-[8px];
+  @apply tw:[margin-top:14px];
 }
 .productList > button {
   background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--line);
-  text-align: left;
-  display: grid;
-  gap: 5px;
+  @apply tw:[color:var(--text)];
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:text-left;
+  @apply tw:grid;
+  @apply tw:gap-[5px];
 }
 .productList em {
-  font-size: 11px;
-  color: var(--primary);
+  @apply tw:text-[11px];
+  @apply tw:[color:var(--primary)];
 }
 .saleCart {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[12px];
+  @apply tw:[padding:20px];
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:gap-[12px];
 }
 .saleCart article {
-  display: grid;
-  grid-template-columns: 1fr 70px auto;
-  align-items: center;
-  gap: 7px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[1fr_70px_auto];
+  @apply tw:items-center;
+  @apply tw:gap-[7px];
 }
 .table {
-  display: grid;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
+  @apply tw:grid;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[10px];
+  @apply tw:overflow-hidden;
 }
 .table > div {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-  gap: 10px;
-  padding: 13px;
-  border-bottom: 1px solid var(--line);
+  @apply tw:grid;
+  @apply tw:grid-cols-[2fr_1fr_1fr_1fr_1fr];
+  @apply tw:gap-[10px];
+  @apply tw:[padding:13px];
+  @apply tw:[border-bottom:1px_solid_var(--line)];
   background: var(--surface);
 }
 .appFooter {
-  text-align: center;
-  padding: 35px;
-  color: var(--muted);
+  @apply tw:text-center;
+  @apply tw:[padding:35px];
+  @apply tw:[color:var(--muted)];
 }
 .admin aside .theme {
-  margin-top: 16px;
+  @apply tw:[margin-top:16px];
 }
 .admin main > .state {
-  margin: auto;
+  @apply tw:[margin:auto];
 }
 .wall > .state {
-  position: absolute;
-  inset: 0;
+  @apply tw:absolute;
+  @apply tw:inset-[0];
 }
 .receipt {
-  break-inside: avoid;
+  @apply tw:break-inside-avoid;
 }
 .wizard,
 .onboarding,
 .stackPreview,
 .shelfPanel {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[16px];
+  @apply tw:[padding:20px];
 }
 .wizardSteps,
 .wizardActions,
 .shelfActions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 12px 0;
+  @apply tw:flex;
+  @apply tw:gap-[10px];
+  @apply tw:flex-wrap;
+  @apply tw:[margin:12px_0];
 }
 .wizardSteps span {
-  color: var(--muted);
-  border-bottom: 3px solid transparent;
-  padding: 8px;
+  @apply tw:[color:var(--muted)];
+  @apply tw:[border-bottom:3px_solid_transparent];
+  @apply tw:[padding:8px];
 }
 .wizardSteps .active {
-  color: var(--text);
-  border-color: var(--primary);
+  @apply tw:[color:var(--text)];
+  @apply tw:[border-color:var(--primary)];
 }
 .shopLayout {
-  position: relative;
-  min-height: 560px;
+  @apply tw:relative;
+  @apply tw:min-h-[560px];
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  overflow: auto;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[16px];
+  @apply tw:overflow-auto;
 }
 .placedStack {
-  position: absolute;
-  min-width: 280px;
+  @apply tw:absolute;
+  @apply tw:min-w-[280px];
 }
 .stackPreview header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  @apply tw:flex;
+  @apply tw:justify-between;
+  @apply tw:gap-[12px];
 }
 .stackPreview header div {
-  display: grid;
+  @apply tw:grid;
 }
 .rackFrame {
-  border: 7px solid var(--text);
-  margin-top: 14px;
+  @apply tw:[border:7px_solid_var(--text)];
+  @apply tw:[margin-top:14px];
   background: color-mix(in srgb, var(--surface), var(--primary) 5%);
 }
 .rackLevelGroup {
-  position: relative;
-  padding-top: 22px;
-  border-top: 4px solid var(--text);
+  @apply tw:relative;
+  @apply tw:[padding-top:22px];
+  @apply tw:[border-top:4px_solid_var(--text)];
 }
 .rackLevelGroup:first-child {
-  border-top: 0;
+  @apply tw:[border-top:0];
 }
 .rackLevelLabel {
-  position: absolute;
-  top: 3px;
-  left: 8px;
-  z-index: 1;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  @apply tw:absolute;
+  @apply tw:top-[3px];
+  @apply tw:left-[8px];
+  @apply tw:z-[1];
+  @apply tw:[color:var(--muted)];
+  @apply tw:text-[10px];
+  @apply tw:font-[800];
+  @apply tw:tracking-[0.08em];
+  @apply tw:uppercase;
 }
 .rackLevel {
-  display: flex;
-  min-height: 70px;
+  @apply tw:flex;
+  @apply tw:min-h-[70px];
 }
 .rackLevel > * {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  border-left: 2px solid var(--line);
-  border-radius: 0;
-  display: grid;
-  place-content: center;
-  padding: 8px;
-  text-align: center;
+  @apply tw:[flex:1];
+  @apply tw:min-w-[0];
+  @apply tw:[border:0];
+  @apply tw:[border-left:2px_solid_var(--line)];
+  @apply tw:rounded-[0];
+  @apply tw:grid;
+  @apply tw:[place-content:center];
+  @apply tw:[padding:8px];
+  @apply tw:text-center;
   background: transparent;
-  color: var(--text);
+  @apply tw:[color:var(--text)];
 }
 .rackLevel > *:first-child {
-  border-left: 0;
+  @apply tw:[border-left:0];
 }
 .rackLevel span,
 .rackLevel small {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  @apply tw:overflow-hidden;
+  @apply tw:text-ellipsis;
 }
 .shelfOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  @apply tw:fixed;
+  @apply tw:inset-[0];
+  @apply tw:z-[30];
+  @apply tw:grid;
+  @apply tw:[place-items:center];
+  @apply tw:[padding:24px];
   background: rgb(0 0 0 / 58%);
   backdrop-filter: blur(2px);
 }
 .shelfPanel {
-  position: relative;
-  width: min(760px, 100%);
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  @apply tw:relative;
+  @apply tw:w-[min(760px,_100%)];
+  @apply tw:max-h-[calc(100dvh_-_48px)];
+  @apply tw:overflow-y-auto;
+  @apply tw:overscroll-contain;
+  @apply tw:[scrollbar-gutter:stable];
   background: var(--surface);
-  color: var(--text);
-  opacity: 1;
-  isolation: isolate;
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  @apply tw:[color:var(--text)];
+  @apply tw:[opacity:1];
+  @apply tw:isolate;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[18px];
   box-shadow: 0 24px 80px rgb(0 0 0 / 72%);
 }
 .shelfPanelHeader {
-  position: sticky;
-  top: -20px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: -20px -20px 18px;
-  padding: 16px 20px;
+  @apply tw:sticky;
+  @apply tw:top-[-20px];
+  @apply tw:z-[2];
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:justify-between;
+  @apply tw:gap-[12px];
+  @apply tw:[margin:-20px_-20px_18px];
+  @apply tw:[padding:16px_20px];
   background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  @apply tw:[border-bottom:1px_solid_var(--line)];
 }
 .shelfClose {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  @apply tw:inline-flex;
+  @apply tw:items-center;
+  @apply tw:gap-[6px];
   background: var(--primary2);
-  color: var(--text);
-  border: 1px solid var(--line);
+  @apply tw:[color:var(--text)];
+  @apply tw:[border:1px_solid_var(--line)];
 }
 .shelfPanel .shelfActions {
-  position: sticky;
-  bottom: -20px;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-  margin: 20px -20px -20px;
-  padding: 16px 20px;
+  @apply tw:sticky;
+  @apply tw:bottom-[-20px];
+  @apply tw:z-[2];
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(auto-fit,_minmax(145px,_1fr))];
+  @apply tw:[margin:20px_-20px_-20px];
+  @apply tw:[padding:16px_20px];
   background: var(--surface);
-  border-top: 1px solid var(--line);
+  @apply tw:[border-top:1px_solid_var(--line)];
 }
 .shelfPanel .shelfActions button {
-  min-height: 46px;
+  @apply tw:min-h-[46px];
 }
 .rackEdit {
-  margin-left: auto;
-  padding: 7px 10px;
+  @apply tw:[margin-left:auto];
+  @apply tw:[padding:7px_10px];
 }
 .dangerZone {
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+  @apply tw:[margin-top:24px];
+  @apply tw:[padding-top:18px];
+  @apply tw:[border-top:1px_solid_var(--line)];
 }
 @media (max-width: 600px) {
   .shopLayout {
-    display: grid;
-    gap: 14px;
-    min-height: 0;
-    aspect-ratio: auto !important;
-    overflow: visible;
-    padding: 10px;
+    @apply tw:grid;
+    @apply tw:gap-[14px];
+    @apply tw:min-h-[0];
+    @apply tw:[aspect-ratio:auto]!;
+    @apply tw:overflow-visible;
+    @apply tw:[padding:10px];
     background: var(--bg);
-    border: 0;
+    @apply tw:[border:0];
   }
 
   .placedStack {
-    position: static;
-    width: 100% !important;
-    min-width: 0;
+    @apply tw:static;
+    @apply tw:w-[100%]!;
+    @apply tw:min-w-[0];
   }
 
   .stackPreview {
-    width: 100%;
-    padding: 14px;
+    @apply tw:w-[100%];
+    @apply tw:[padding:14px];
   }
 
   .stackPreview header {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    @apply tw:items-start;
+    @apply tw:flex-wrap;
   }
 
   .rackEdit {
-    width: 100%;
-    margin-left: 0;
+    @apply tw:w-[100%];
+    @apply tw:[margin-left:0];
   }
 
   .rackFrame {
-    border-width: 4px;
+    @apply tw:[border-width:4px];
   }
 
   .rackLevel {
-    flex-wrap: wrap;
+    @apply tw:flex-wrap;
   }
 
   .rackLevel > * {
-    flex: 1 1 72px;
-    min-height: 58px;
-    padding: 6px 4px;
-    font-size: 12px;
+    @apply tw:[flex:1_1_72px];
+    @apply tw:min-h-[58px];
+    @apply tw:[padding:6px_4px];
+    @apply tw:text-[12px];
   }
 
   .shelfOverlay {
-    padding: 10px;
+    @apply tw:[padding:10px];
   }
   .shelfPanel {
-    width: 100%;
-    max-height: calc(100dvh - 20px);
-    border-radius: 14px;
+    @apply tw:w-[100%];
+    @apply tw:max-h-[calc(100dvh_-_20px)];
+    @apply tw:rounded-[14px];
   }
   .shelfPanel .shelfActions {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
 }
 .shelfPanel article,
 .productLocation {
-  display: grid;
-  gap: 5px;
-  border-bottom: 1px solid var(--line);
-  padding: 12px 0;
+  @apply tw:grid;
+  @apply tw:gap-[5px];
+  @apply tw:[border-bottom:1px_solid_var(--line)];
+  @apply tw:[padding:12px_0];
 }
 .locationPicker {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  @apply tw:[grid-column:1_/_-1];
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(4,_minmax(0,_1fr))];
+  @apply tw:gap-[10px];
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[10px];
 }
 .placementRow {
-  grid-column: 1 / -1;
-  border-bottom: 1px solid var(--line);
-  padding: 10px 0;
+  @apply tw:[grid-column:1_/_-1];
+  @apply tw:[border-bottom:1px_solid_var(--line)];
+  @apply tw:[padding:10px_0];
 }
 .productForm {
-  width: min(100%, 1100px);
+  @apply tw:w-[min(100%,_1100px)];
 }
 .serviceHint {
-  align-self: end;
-  margin: 0;
+  @apply tw:[align-self:end];
+  @apply tw:[margin:0];
 }
 .accountCart {
-  margin-bottom: 24px;
+  @apply tw:[margin-bottom:24px];
 }
 .accountCart .cardActions {
-  justify-content: flex-end;
-  margin-top: 18px;
+  @apply tw:justify-end;
+  @apply tw:[margin-top:18px];
 }
 .deskGrid {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr);
-  gap: 24px;
-  align-items: start;
-  margin: 24px 0;
+  @apply tw:grid;
+  @apply tw:grid-cols-[minmax(300px,_0.85fr)_minmax(0,_1.4fr)];
+  @apply tw:gap-[24px];
+  @apply tw:[align-items:start];
+  @apply tw:[margin:24px_0];
 }
 .operatorForm input,
 .operatorForm select,
 .operatorForm button {
-  min-height: 48px;
+  @apply tw:min-h-[48px];
 }
 .jobLine {
-  display: grid;
-  grid-template-columns: 1fr 110px auto;
-  gap: 8px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[1fr_110px_auto];
+  @apply tw:gap-[8px];
 }
 .jobActions,
 .deskActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  @apply tw:flex;
+  @apply tw:flex-wrap;
+  @apply tw:gap-[8px];
 }
 .privacyNotice,
 .serviceSpotlight {
-  border-left: 4px solid var(--primary);
+  @apply tw:[border-left:4px_solid_var(--primary)];
   background: var(--primary2);
-  padding: 16px 20px;
-  border-radius: 8px;
+  @apply tw:[padding:16px_20px];
+  @apply tw:rounded-[8px];
 }
 .serviceGrid,
 .businessUnits {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(auto-fit,_minmax(220px,_1fr))];
+  @apply tw:gap-[14px];
 }
 .serviceGrid article,
 .businessUnits > a {
-  display: grid;
-  gap: 7px;
-  padding: 16px;
-  color: var(--text);
+  @apply tw:grid;
+  @apply tw:gap-[7px];
+  @apply tw:[padding:16px];
+  @apply tw:[color:var(--text)];
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[12px];
 }
 .businessUnits .metrics {
-  grid-template-columns: 1fr 1fr;
+  @apply tw:grid-cols-[1fr_1fr];
 }
 .businessUnits .metrics article {
   box-shadow: none;
-  padding: 10px;
+  @apply tw:[padding:10px];
 }
 .ledgerTable > div {
-  grid-template-columns: 1.4fr 1.4fr 1fr 1fr 1fr auto;
+  @apply tw:grid-cols-[1.4fr_1.4fr_1fr_1fr_1fr_auto];
 }
 .admin aside nav section {
-  display: grid;
-  gap: 3px;
-  margin-top: 14px;
+  @apply tw:grid;
+  @apply tw:gap-[3px];
+  @apply tw:[margin-top:14px];
 }
 .admin aside nav section:first-child {
-  margin-top: 0;
+  @apply tw:[margin-top:0];
 }
 .admin aside nav section > small {
-  padding: 0 12px;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  font-size: 10px;
+  @apply tw:[padding:0_12px];
+  @apply tw:[color:var(--muted)];
+  @apply tw:tracking-[0.1em];
+  @apply tw:text-[10px];
 }
 @media (max-width: 800px) {
   .productDetail,
   .checkoutGrid,
   .posGrid,
   .editorGrid {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
   .productImage.large {
-    height: 280px;
+    @apply tw:h-[280px];
   }
   .heading {
-    align-items: stretch;
-    flex-direction: column;
+    @apply tw:items-stretch;
+    @apply tw:flex-col;
   }
   .formCard.wide {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
   .formCard.wide button {
-    grid-column: auto;
+    @apply tw:[grid-column:auto];
   }
   .productList {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
   .deskGrid {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
   .ledgerTable > div {
-    grid-template-columns: 1fr 1fr;
+    @apply tw:grid-cols-[1fr_1fr];
   }
   .table > div {
-    grid-template-columns: 1fr 1fr;
+    @apply tw:grid-cols-[1fr_1fr];
   }
   .table > div span:nth-last-child(-n + 2) {
-    text-align: right;
+    @apply tw:text-right;
   }
 }
 @media (max-width: 600px) {
   .jobLine {
-    grid-template-columns: 1fr;
+    @apply tw:grid-cols-[1fr];
   }
   .deskActions button,
   .jobActions button {
-    flex: 1 1 140px;
-    min-height: 48px;
+    @apply tw:[flex:1_1_140px];
+    @apply tw:min-h-[48px];
   }
 }
 @media print {
@@ -697,12 +697,12 @@ label {
   .search,
   .saleCart,
   .callout button {
-    display: none !important;
+    @apply tw:hidden!;
   }
   .admin {
-    display: block;
+    @apply tw:block;
   }
   .receipt {
-    border: 0;
+    @apply tw:[border:0];
   }
 }

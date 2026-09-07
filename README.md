@@ -1,17 +1,23 @@
 # LinTech Digital Point
 
-LinTech Digital Point is a Django REST Framework and React/TypeScript platform for three related business units: Retail/Ecommerce, Cyber Services, and M-Pesa Agency operations. Its Digital Shop is a digital twin of the real hierarchy: Zone → Shelf Stack → Level → Shelf → Stock. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
+LinTech Digital Point is a Django REST Framework and React/JavaScript platform for three related business units: Retail/Ecommerce, Cyber Services, and M-Pesa Agency operations. Its Digital Shop is a digital twin of the real hierarchy: Zone → Shelf Stack → Level → Shelf → Stock. Django sessions and CSRF protect the API; anonymous server-side carts are adopted after login or registration.
 
 ## Project structure
 
 ```text
-client/   React + TypeScript application
+client/   React + JavaScript + Tailwind CSS application
 server/   Django application and top-level API composition
 docs/     Architecture and feature documentation
 scripts/  Development bootstrap utilities
 ```
 
 The Python virtual environment and application configuration are different things: `.venv/` is the local Python environment directory, while `.env` is the root configuration text file. Both are ignored by Git. `.env.example` is the committed, secret-free template.
+
+## Frontend styling
+
+The frontend uses Tailwind CSS through `@tailwindcss/vite`. `client/src/index.css` is the single stylesheet entry point. Shared, module, and public styles compose Tailwind utilities with `@apply` in the components layer, preserving the existing selectors, exact dimensions, responsive breakpoints, and light/dark theme variables. Custom gradients, shadows, and animations remain CSS where that expresses the design more clearly.
+
+Utilities use the `tw:` prefix (for example, `className="tw:flex tw:items-center tw:gap-[12px]"`) to avoid collisions with existing component classes such as `table`. Tailwind Preflight is intentionally omitted to preserve the existing browser defaults for headings, spacing, and form controls. Add shared component styling in `client/src/assets/styles/` or use prefixed utilities directly in JSX.
 
 ## Runtime requirements
 
@@ -167,7 +173,6 @@ Client:
 ```bash
 cd client
 npm run lint
-npm run typecheck
 npm test
 npm run build
 ```

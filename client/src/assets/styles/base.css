@@ -1,0 +1,567 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui;
+  --bg: #f4f7fc;
+  --surface: #fff;
+  --text: #10213d;
+  --muted: #60708a;
+  --line: #d6e1f0;
+  --primary: #1d4ed8;
+  --on-primary: #ffffff;
+  --primary2: #dbeafe;
+  --chrome: #081d3a;
+  --chrome-text: #f8fbff;
+  --chrome-muted: #b9d4fa;
+  --chrome-line: #183b67;
+  --shadow: 0 16px 40px #123b7517;
+  @apply tw:[color-scheme:light];
+}
+[data-theme="dark"] {
+  --bg: #06101f;
+  --surface: #0d1c30;
+  --text: #edf5ff;
+  --muted: #b8c8df;
+  --line: #365477;
+  --primary: #7db5ff;
+  --on-primary: #06101f;
+  --primary2: #17365f;
+  --chrome: #030d1c;
+  --chrome-text: #f4f8ff;
+  --chrome-muted: #a8c7f2;
+  --chrome-line: #17345b;
+  --shadow: 0 16px 40px #0005;
+  @apply tw:[color-scheme:dark];
+}
+[data-theme="dark"] .error,
+[data-theme="dark"] .formError,
+[data-theme="dark"] .out {
+  @apply tw:[color:#fca5a5];
+}
+* {
+  @apply tw:box-border;
+  @apply tw:[scrollbar-width:thin];
+  @apply tw:[scrollbar-color:var(--muted)_transparent];
+}
+*::-webkit-scrollbar {
+  @apply tw:w-[5px];
+  @apply tw:h-[5px];
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  @apply tw:rounded-[999px];
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+body {
+  @apply tw:[margin:0];
+  background: var(--bg);
+  @apply tw:[color:var(--text)];
+  @apply tw:min-w-[0];
+  @apply tw:overflow-x-hidden;
+}
+a {
+  @apply tw:[color:inherit];
+  @apply tw:no-underline;
+}
+.appNavbar {
+  @apply tw:h-[184px];
+  @apply tw:grid;
+  @apply tw:grid-cols-[172px_minmax(0,_1fr)_minmax(190px,_auto)];
+  @apply tw:items-center;
+  @apply tw:[padding:0_max(5vw,_20px)];
+  @apply tw:[padding-left:0];
+  @apply tw:gap-[18px];
+  background: var(--chrome);
+  @apply tw:[color:var(--chrome-text)];
+  @apply tw:[border-bottom:1px_solid_var(--chrome-line)];
+  @apply tw:sticky;
+  @apply tw:top-[0];
+  @apply tw:z-[10];
+}
+.appNavbar.dashboardNavbar {
+  @apply tw:grid-cols-[172px_minmax(0,_1fr)_minmax(260px,_auto)];
+}
+.dashboardTitle {
+  @apply tw:[justify-self:center];
+  @apply tw:[color:var(--chrome-text)];
+  @apply tw:text-[30px];
+  @apply tw:font-[900];
+  @apply tw:tracking-[0.02em];
+}
+.dashboardMobileTitle {
+  @apply tw:hidden;
+}
+.brand {
+  @apply tw:font-[800];
+  @apply tw:text-[20px];
+  @apply tw:[color:var(--primary)];
+  @apply tw:[justify-self:start];
+}
+.appNavbar > .brand {
+  @apply tw:w-[172px];
+  @apply tw:h-[172px];
+  @apply tw:[flex:0_0_172px];
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:[margin-left:1px];
+  @apply tw:overflow-hidden;
+  @apply tw:leading-[0];
+  @apply tw:rounded-[50%];
+}
+.brand span {
+  @apply tw:block;
+  @apply tw:font-[500];
+  @apply tw:text-[10px];
+  @apply tw:tracking-[2px];
+  @apply tw:uppercase;
+  @apply tw:[color:var(--muted)];
+}
+.appNavbar nav {
+  @apply tw:flex;
+  @apply tw:min-w-[0];
+  @apply tw:gap-[16px];
+  @apply tw:items-center;
+  @apply tw:justify-center;
+  @apply tw:[justify-self:center];
+  @apply tw:flex-wrap;
+}
+.appNavbar nav .staffPortalLink {
+  @apply tw:[margin-left:10px];
+  @apply tw:[padding:10px_18px];
+  @apply tw:[border:1px_solid_#60a5fa];
+  @apply tw:rounded-[999px];
+  background: #123d70;
+  @apply tw:[color:#dbeafe];
+  @apply tw:text-[16px];
+  @apply tw:font-[850];
+  box-shadow: 0 5px 0 #041a35;
+  transform: translateY(-3px);
+}
+.appNavbar nav .staffPortalLink:hover,
+.appNavbar nav .staffPortalLink:focus-visible,
+.appNavbar nav .staffPortalLink.active {
+  background: #2563eb;
+  @apply tw:[color:#ffffff];
+  @apply tw:[border-color:#93c5fd];
+}
+.appNavbar nav .authEntryLink {
+  @apply tw:[margin-inline:12px];
+  @apply tw:[padding:11px_18px];
+  @apply tw:[border:1px_solid_#86efac];
+  @apply tw:rounded-[999px];
+  background: #22c55e;
+  @apply tw:[color:#052e16];
+  @apply tw:font-[850];
+  box-shadow: 0 5px 16px rgb(34 197 94 / 35%);
+}
+.appNavbar nav .authEntryLink:hover,
+.appNavbar nav .authEntryLink:focus-visible,
+.appNavbar nav .authEntryLink.active {
+  background: #4ade80;
+  @apply tw:[color:#052e16];
+}
+.brandLogo {
+  @apply tw:block;
+  @apply tw:w-[150px];
+  @apply tw:h-[96px];
+  @apply tw:object-contain;
+  @apply tw:object-center;
+}
+.appNavbar .brandLogo {
+  @apply tw:w-[172px];
+  @apply tw:h-[172px];
+  @apply tw:object-cover;
+  @apply tw:rounded-[50%];
+}
+.brandLogo.compact {
+  @apply tw:w-[142px];
+  @apply tw:h-[88px];
+}
+.navActions {
+  @apply tw:flex;
+  @apply tw:justify-end;
+  @apply tw:items-center;
+  @apply tw:gap-[20px];
+  @apply tw:min-w-[190px];
+}
+.navIdentity {
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:gap-[12px];
+  @apply tw:whitespace-nowrap;
+}
+.navUserName {
+  @apply tw:[color:#4ade80];
+  @apply tw:font-[800];
+}
+.dashboardNotification {
+  @apply tw:relative;
+  @apply tw:inline-flex;
+  @apply tw:items-center;
+  @apply tw:justify-center;
+  @apply tw:w-[42px];
+  @apply tw:h-[42px];
+  @apply tw:[color:var(--chrome-text)];
+  @apply tw:[border:1px_solid_var(--chrome-line)];
+  @apply tw:rounded-[50%];
+  background: #102b50;
+}
+.liveDot {
+  @apply tw:absolute;
+  @apply tw:top-[7px];
+  @apply tw:right-[7px];
+  @apply tw:w-[8px];
+  @apply tw:h-[8px];
+  @apply tw:[border:2px_solid_var(--chrome)];
+  @apply tw:rounded-[50%];
+  background: #4ade80;
+}
+.appNavbar .logoutLink {
+  @apply tw:inline-flex;
+  @apply tw:items-center;
+  @apply tw:justify-center;
+  @apply tw:min-w-[78px];
+  @apply tw:[padding:9px_14px];
+  @apply tw:[border:1px_solid_#f87171];
+  @apply tw:rounded-[999px];
+  background: #b91c1c;
+  @apply tw:[color:#ffffff];
+  @apply tw:font-[850];
+  box-shadow: 0 4px 12px rgb(185 28 28 / 28%);
+}
+.appNavbar .logoutLink:hover,
+.appNavbar .logoutLink:focus-visible {
+  @apply tw:[color:#ffffff];
+  background: #dc2626;
+  @apply tw:[border-color:#fca5a5];
+}
+nav a.active {
+  @apply tw:[color:var(--primary)];
+}
+.theme {
+  @apply tw:flex;
+  @apply tw:items-center;
+  @apply tw:gap-[6px];
+}
+.theme select {
+  @apply tw:[border:1px_solid_var(--line)];
+  background: var(--surface);
+  @apply tw:[padding:8px];
+  @apply tw:rounded-[8px];
+}
+main {
+  @apply tw:max-w-[1200px];
+  @apply tw:[margin:auto];
+  @apply tw:[padding:42px_28px];
+}
+.hero {
+  @apply tw:min-h-[480px];
+  @apply tw:grid;
+  @apply tw:grid-cols-[1.4fr_1fr];
+  @apply tw:items-center;
+  @apply tw:gap-[60px];
+}
+.hero h1 {
+  @apply tw:text-[clamp(45px,_7vw,_82px)];
+  @apply tw:leading-[0.98];
+  @apply tw:tracking-[-4px];
+  @apply tw:[margin:18px_0];
+}
+.hero p {
+  @apply tw:text-[19px];
+  @apply tw:[color:var(--muted)];
+  @apply tw:max-w-[600px];
+  @apply tw:leading-[1.6];
+}
+.eyebrow {
+  @apply tw:uppercase;
+  @apply tw:[color:var(--primary)];
+  @apply tw:font-[750];
+  @apply tw:tracking-[2px];
+  @apply tw:text-[12px];
+}
+.button {
+  @apply tw:inline-block;
+  background: var(--primary);
+  @apply tw:[color:var(--on-primary)];
+  @apply tw:[padding:14px_22px];
+  @apply tw:rounded-[10px];
+  @apply tw:font-[700];
+}
+.heroCard {
+  background: linear-gradient(145deg, #2563eb, #0b2f6b);
+  @apply tw:[color:white];
+  @apply tw:min-h-[320px];
+  @apply tw:rounded-[28px];
+  box-shadow: var(--shadow);
+  @apply tw:[padding:45px];
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:justify-between;
+  @apply tw:text-[26px];
+}
+.heroCard span {
+  @apply tw:text-[13px];
+}
+.cards,
+.metrics {
+  @apply tw:grid;
+  @apply tw:grid-cols-[repeat(4,_1fr)];
+  @apply tw:gap-[16px];
+}
+.cards article,
+.metrics article,
+.panel,
+.empty {
+  background: var(--surface);
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:rounded-[14px];
+  @apply tw:[padding:24px];
+  box-shadow: var(--shadow);
+}
+.cards p,
+.muted {
+  @apply tw:[color:var(--muted)];
+}
+.admin {
+  @apply tw:grid;
+  @apply tw:grid-cols-[240px_1fr];
+  @apply tw:min-h-[calc(100vh_-_184px)];
+  @apply tw:max-w-[none];
+}
+.admin aside {
+  @apply tw:[padding:28px_18px];
+  @apply tw:[border-right:1px_solid_var(--chrome-line)];
+  background: var(--chrome);
+  @apply tw:[color:var(--chrome-text)];
+  @apply tw:sticky;
+  @apply tw:top-[184px];
+  @apply tw:h-[calc(100vh_-_184px)];
+  @apply tw:[align-self:start];
+  @apply tw:overflow-y-auto;
+  @apply tw:overscroll-contain;
+  @apply tw:[scrollbar-width:none];
+  @apply tw:z-[9];
+}
+.sidebarToggle {
+  @apply tw:hidden;
+}
+.admin aside::-webkit-scrollbar {
+  @apply tw:hidden;
+  @apply tw:w-[0];
+  @apply tw:h-[0];
+}
+.admin aside nav {
+  @apply tw:grid;
+  @apply tw:gap-[7px];
+  @apply tw:[margin:35px_0_0];
+  @apply tw:[padding-bottom:28px];
+}
+.admin aside nav a {
+  @apply tw:flex;
+  @apply tw:gap-[12px];
+  @apply tw:[padding:12px];
+  @apply tw:rounded-[9px];
+  @apply tw:items-center;
+}
+.admin aside nav svg {
+  @apply tw:w-[19px];
+}
+.admin aside nav a.active {
+  background: #1d4ed8;
+  @apply tw:[color:#ffffff];
+}
+.admin main {
+  @apply tw:w-[100%];
+  @apply tw:[margin:0];
+}
+.metrics article {
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:gap-[10px];
+}
+.metrics strong {
+  @apply tw:text-[25px];
+}
+.panel {
+  @apply tw:[margin-top:18px];
+}
+.tabs {
+  @apply tw:flex;
+  @apply tw:gap-[8px];
+  @apply tw:overflow-auto;
+  @apply tw:[margin:20px_0];
+}
+.tabs button {
+  @apply tw:whitespace-nowrap;
+  @apply tw:[border:1px_solid_var(--line)];
+  background: var(--surface);
+  @apply tw:[color:var(--text)];
+  @apply tw:[padding:10px_16px];
+  @apply tw:rounded-[999px];
+}
+.tabs button:hover,
+.tabs button:focus-visible {
+  @apply tw:[border-color:var(--primary)];
+  background: var(--primary2);
+  @apply tw:[color:var(--primary)];
+}
+.tabs button.active {
+  background: var(--primary);
+  @apply tw:[color:var(--on-primary)];
+  @apply tw:[border-color:var(--primary)];
+}
+.tabs button.active:hover,
+.tabs button.active:focus-visible {
+  background: var(--primary);
+  @apply tw:[color:var(--on-primary)];
+}
+.wall {
+  @apply tw:relative;
+  @apply tw:max-h-[650px];
+  @apply tw:min-h-[420px];
+  @apply tw:[border:2px_solid_var(--line)];
+  background:
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    linear-gradient(var(--line) 1px, transparent 1px);
+  @apply tw:[background-size:25px_25px];
+  @apply tw:rounded-[12px];
+  @apply tw:overflow-hidden;
+}
+.shelf {
+  @apply tw:absolute;
+  @apply tw:flex;
+  @apply tw:flex-col;
+  @apply tw:items-start;
+  @apply tw:justify-center;
+  @apply tw:overflow-hidden;
+  background: var(--primary2);
+  @apply tw:[border:2px_solid_var(--primary)];
+  @apply tw:[color:var(--text)];
+  @apply tw:[padding:10px];
+  @apply tw:rounded-[6px];
+}
+.shelf small {
+  @apply tw:[color:var(--muted)];
+}
+.wallEmpty {
+  @apply tw:absolute;
+  @apply tw:inset-[0];
+  @apply tw:grid;
+  @apply tw:[place-content:center];
+  @apply tw:text-center;
+  @apply tw:[color:var(--muted)];
+}
+.wallEmpty svg {
+  @apply tw:[margin:auto];
+}
+.sr {
+  @apply tw:absolute;
+  @apply tw:w-[1px];
+  @apply tw:h-[1px];
+  @apply tw:overflow-hidden;
+}
+@media (max-width: 1100px) and (min-width: 761px) {
+  .appNavbar {
+    @apply tw:grid-cols-[126px_minmax(0,_1fr)_minmax(170px,_auto)];
+    @apply tw:gap-[12px];
+    @apply tw:[padding-right:16px];
+  }
+
+  .appNavbar > .brand,
+  .appNavbar .brandLogo {
+    @apply tw:w-[126px];
+    @apply tw:h-[126px];
+    @apply tw:basis-[126px];
+  }
+
+  .appNavbar nav {
+    @apply tw:gap-[10px];
+    @apply tw:text-[14px];
+  }
+
+  .navActions {
+    @apply tw:gap-[10px];
+    @apply tw:min-w-[0];
+  }
+}
+@media (max-width: 760px) {
+  .dashboardNavbar {
+    @apply tw:grid-cols-[1fr_auto];
+  }
+  .dashboardNavbar .dashboardTitle {
+    @apply tw:[grid-column:1_/_-1];
+    @apply tw:[grid-row:2];
+    @apply tw:text-[24px];
+  }
+  .dashboardNavbar .navActions {
+    @apply tw:[grid-column:2];
+    @apply tw:[grid-row:1];
+  }
+  .appNavbar nav {
+    @apply tw:hidden;
+  }
+  .hero {
+    @apply tw:grid-cols-[1fr];
+    @apply tw:[padding-top:45px];
+  }
+  .heroCard {
+    @apply tw:min-h-[220px];
+  }
+  .cards,
+  .metrics {
+    @apply tw:grid-cols-[1fr_1fr];
+  }
+  .admin {
+    @apply tw:block;
+  }
+  .admin aside {
+    @apply tw:[border-right:0];
+    @apply tw:[border-bottom:1px_solid_var(--line)];
+    @apply tw:h-[auto];
+    @apply tw:overflow-x-auto;
+    @apply tw:overflow-y-hidden;
+    @apply tw:[padding:14px_16px];
+    @apply tw:static;
+    @apply tw:top-[auto];
+  }
+  .admin aside > .brand {
+    @apply tw:hidden;
+  }
+  .admin aside nav {
+    @apply tw:flex;
+    @apply tw:[margin:0];
+    @apply tw:[padding:0];
+  }
+  .admin aside nav section {
+    @apply tw:flex;
+    @apply tw:[margin:0];
+  }
+  .admin aside nav section > small {
+    @apply tw:hidden;
+  }
+  .admin aside nav a {
+    @apply tw:whitespace-nowrap;
+  }
+  .admin aside nav svg {
+    @apply tw:hidden;
+  }
+  .admin main {
+    @apply tw:[padding:24px_16px];
+  }
+  .wall {
+    @apply tw:min-h-[350px];
+  }
+}
+@media (max-width: 440px) {
+  .cards,
+  .metrics {
+    @apply tw:grid-cols-[1fr];
+  }
+  .theme span {
+    @apply tw:hidden;
+  }
+}
