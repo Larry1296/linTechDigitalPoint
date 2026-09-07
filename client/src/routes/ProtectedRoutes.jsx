@@ -4,6 +4,13 @@ import { Loading } from "../components/States";
 function loginTarget(path) {
   return "/login?next=" + encodeURIComponent(path);
 }
+function isCustomerAccount(user) {
+  return Boolean(
+    user?.customer_profile ||
+    user?.roles?.includes("Ecommerce Customer") ||
+    !user?.is_staff,
+  );
+}
 export function CustomerProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -12,7 +19,7 @@ export function CustomerProtectedRoute({ children }) {
     return (
       <Navigate to={loginTarget(location.pathname + location.search)} replace />
     );
-  if (user.is_staff) return <Navigate to="/forbidden" replace />;
+  if (!isCustomerAccount(user)) return <Navigate to="/forbidden" replace />;
   return children;
 }
 export function StaffProtectedRoute({ children }) {

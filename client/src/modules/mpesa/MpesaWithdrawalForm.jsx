@@ -1,10 +1,19 @@
 import { useState } from "react";
 import { postMpesaTransaction } from "./api";
+import { confirmAction } from "../../core/ui/alerts";
 export function MpesaWithdrawalForm({ sessionId, availableCash, onPosted }) {
   const [message, setMessage] = useState("");
   const submit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    if (
+      !(await confirmAction({
+        title: "Record this customer withdrawal?",
+        text: `This will deduct KSh ${form.get("amount")} from the agency ledger.`,
+        confirmButtonText: "Record withdrawal",
+      }))
+    )
+      return;
     const entry = await postMpesaTransaction({
       session: sessionId,
       transaction_type: "CUSTOMER_WITHDRAWAL",

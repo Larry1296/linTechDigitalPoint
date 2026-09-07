@@ -1,10 +1,19 @@
 import { useState } from "react";
 import { postMpesaTransaction } from "./api";
+import { confirmAction } from "../../core/ui/alerts";
 export function MpesaDepositForm({ sessionId, onPosted }) {
   const [message, setMessage] = useState("");
   const submit = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    if (
+      !(await confirmAction({
+        title: "Record this customer deposit?",
+        text: `This will add KSh ${form.get("amount")} to the agency ledger.`,
+        confirmButtonText: "Record deposit",
+      }))
+    )
+      return;
     const entry = await postMpesaTransaction({
       session: sessionId,
       transaction_type: "CUSTOMER_DEPOSIT",

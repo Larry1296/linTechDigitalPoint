@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
+import { confirmAction } from "../../core/ui/alerts";
 export function ReceivePage() {
   const [products, setProducts] = useState([]);
   const [zones, setZones] = useState([]);
@@ -24,6 +25,14 @@ export function ReceivePage() {
   const submit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget));
+    if (
+      !(await confirmAction({
+        title: "Receive this stock?",
+        text: "This will add inventory to the selected shelf placements.",
+        confirmButtonText: "Receive stock",
+      }))
+    )
+      return;
     try {
       const result = await api("/api/v1/inventory/receive/", {
         method: "POST",

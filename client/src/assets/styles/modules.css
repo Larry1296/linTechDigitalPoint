@@ -706,3 +706,143 @@ label {
     @apply tw:[border:0];
   }
 }
+
+/* Customer account navigation uses the dashboard palette in its own layout. */
+.customerDashboard {
+  @apply tw:grid tw:grid-cols-[240px_minmax(0,_1fr)] tw:min-h-[calc(100vh_-_184px)];
+}
+.appNavbar.dashboardNavbar {
+  animation: dashboardTopbarIn 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 50;
+}
+.customerDashboard > main {
+  @apply tw:col-start-2 tw:w-full tw:min-w-0 tw:m-0;
+}
+.customerSidebar {
+  @apply tw:fixed tw:top-[184px] tw:bottom-0 tw:left-0 tw:w-[240px] tw:overflow-y-auto tw:overscroll-contain tw:px-[18px] tw:py-[28px];
+  background: var(--chrome);
+  color: var(--chrome-text);
+  border-right: 1px solid var(--chrome-line);
+}
+.customerDashboard ~ .appFooter {
+  @apply tw:ml-[240px];
+}
+.customerSidebar nav,
+.customerSidebar section {
+  @apply tw:grid;
+}
+.customerSidebar nav {
+  @apply tw:gap-[24px];
+}
+.customerSidebar section {
+  @apply tw:gap-[7px];
+}
+.customerSidebar small {
+  @apply tw:px-[12px] tw:mb-[4px] tw:text-[10px] tw:tracking-[0.1em];
+  color: var(--chrome-muted);
+}
+.customerSidebar a {
+  @apply tw:flex tw:items-center tw:gap-[12px] tw:p-[12px] tw:rounded-[9px];
+}
+.customerSidebar a:hover,
+.customerSidebar a:focus-visible {
+  background: var(--chrome-line);
+}
+.customerSidebar a.active {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+.customerSidebarToggle,
+.customerSidebarBackdrop,
+.customerMobileActions,
+.customerSidebarClose,
+.sidebarClose {
+  @apply tw:hidden;
+}
+@media (max-width: 760px) {
+  .customerDashboard {
+    @apply tw:block tw:min-h-0;
+  }
+  .customerDashboard ~ .appFooter {
+    @apply tw:ml-0;
+  }
+  .appNavbar.dashboardNavbar.customerDashboardNavbar {
+    @apply tw:h-[88px] tw:min-h-[88px] tw:grid-cols-[1fr_auto] tw:gap-[12px] tw:p-[12px];
+  }
+  .appNavbar.dashboardNavbar.customerDashboardNavbar > .brand,
+  .appNavbar.dashboardNavbar.customerDashboardNavbar .brandLogo {
+    @apply tw:w-[64px] tw:h-[64px] tw:basis-[64px] tw:justify-self-start;
+  }
+  .appNavbar.dashboardNavbar.customerDashboardNavbar > .dashboardTitle {
+    @apply tw:hidden!;
+  }
+  .appNavbar.dashboardNavbar.customerDashboardNavbar .navActions {
+    @apply tw:hidden;
+  }
+  .customerDashboardNavbar .customerSidebarToggle {
+    @apply tw:inline-flex tw:items-center tw:justify-center tw:w-[44px] tw:h-[44px] tw:p-0 tw:col-start-2 tw:row-start-1;
+    background: var(--chrome);
+    color: var(--chrome-text);
+    border: 1px solid var(--chrome-line);
+  }
+  .customerSidebar {
+    @apply tw:hidden tw:fixed tw:top-[88px] tw:bottom-0 tw:left-0 tw:z-[40] tw:w-[min(320px,_85vw)] tw:h-auto tw:p-[20px];
+    top: 88px;
+    box-shadow: 8px 0 24px rgb(0 0 0 / 25%);
+  }
+  .customerSidebar.isOpen {
+    @apply tw:flex;
+    animation: dashboardOverlayIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .customerSidebarClose {
+    @apply tw:block tw:absolute tw:right-[24px] tw:top-[24px] tw:w-[44px] tw:h-[44px] tw:p-0;
+    background: transparent;
+    color: var(--chrome-text);
+    border: 1px solid var(--chrome-line);
+  }
+  .customerSidebar nav {
+    @apply tw:w-auto tw:justify-items-stretch;
+  }
+  .customerSidebar section {
+    @apply tw:w-full tw:justify-items-stretch;
+  }
+  .customerSidebar a {
+    @apply tw:w-full tw:justify-start;
+  }
+  .customerSidebarBackdrop {
+    @apply tw:block tw:fixed tw:inset-0 tw:top-[88px] tw:z-[30] tw:rounded-none tw:p-0;
+    background: rgb(0 0 0 / 45%);
+  }
+  .customerMobileActions {
+    @apply tw:grid tw:gap-[18px] tw:mt-[28px] tw:pt-[20px];
+    border-top: 1px solid var(--chrome-line);
+  }
+  .customerMobileActions .theme {
+    color: var(--chrome-muted);
+  }
+  .customerMobileActions .theme span {
+    @apply tw:block;
+  }
+}
+
+@keyframes dashboardTopbarIn {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes dashboardOverlayIn {
+  from {
+    opacity: 0;
+    transform: translateX(-7%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

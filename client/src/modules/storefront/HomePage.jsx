@@ -19,7 +19,7 @@ export function HomePage() {
       .catch((e) => setError(e.message));
   }, []);
   return (
-    <main>
+    <main className="homePage">
       {error ? (
         <ErrorState message={error} />
       ) : !data ? (

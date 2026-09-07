@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { removeStack, updateStack } from "./api";
+import { confirmAction } from "../../core/ui/alerts";
 export function StackEditor({ stack, zones, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -18,9 +19,11 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
   };
   const remove = async () => {
     if (
-      !window.confirm(
-        `Remove ${stack.display_name}? Only an empty rack can be removed.`,
-      )
+      !(await confirmAction({
+        title: `Remove ${stack.display_name}?`,
+        text: "Only an empty rack can be removed. This cannot be undone.",
+        confirmButtonText: "Remove rack",
+      }))
     )
       return;
     setSaving(true);

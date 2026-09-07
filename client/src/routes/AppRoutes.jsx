@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { PublicLayout } from "../layouts/PublicLayout";
+import { CustomerLayout } from "../layouts/CustomerLayout";
 import { StaffLayout } from "../layouts/StaffLayout";
 import {
   AccountPage,
@@ -48,38 +49,6 @@ export function AppRoutes() {
           }
         />
         <Route
-          path="account"
-          element={
-            <CustomerProtectedRoute>
-              <AccountPage />
-            </CustomerProtectedRoute>
-          }
-        />
-        <Route
-          path="account/addresses"
-          element={
-            <CustomerProtectedRoute>
-              <AddressesPage />
-            </CustomerProtectedRoute>
-          }
-        />
-        <Route
-          path="account/orders"
-          element={
-            <CustomerProtectedRoute>
-              <OrdersPage />
-            </CustomerProtectedRoute>
-          }
-        />
-        <Route
-          path="account/orders/:id"
-          element={
-            <CustomerProtectedRoute>
-              <OrderDetailPage />
-            </CustomerProtectedRoute>
-          }
-        />
-        <Route
           path="forbidden"
           element={
             <main className="state">
@@ -88,6 +57,19 @@ export function AppRoutes() {
             </main>
           }
         />
+      </Route>
+      <Route
+        path="account"
+        element={
+          <CustomerProtectedRoute>
+            <CustomerLayout />
+          </CustomerProtectedRoute>
+        }
+      >
+        <Route index element={<AccountPage />} />
+        <Route path="addresses" element={<AddressesPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/:id" element={<OrderDetailPage />} />
       </Route>
       <Route
         path="admin-app"

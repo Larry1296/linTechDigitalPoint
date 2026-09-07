@@ -11,6 +11,7 @@ import {
 } from "./api";
 import { MpesaDepositForm } from "./MpesaDepositForm";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
+import { confirmAction } from "../../core/ui/alerts";
 export function MpesaDashboardPage() {
   const [dashboard, setDashboard] = useState();
   const [outlets, setOutlets] = useState([]);
@@ -39,6 +40,14 @@ export function MpesaDashboardPage() {
   const open = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    if (
+      !(await confirmAction({
+        title: "Open this M-Pesa shift?",
+        text: "Opening balances will be recorded for this agency session.",
+        confirmButtonText: "Open shift",
+      }))
+    )
+      return;
     await openMpesaSession({
       outlet: form.get("outlet"),
       opening_cash: form.get("opening_cash"),
@@ -48,6 +57,17 @@ export function MpesaDashboardPage() {
   };
   const rebalance = async (type) => {
     if (!dashboard.session) return;
+    if (
+      !(await confirmAction({
+        title:
+          type === "FLOAT_TOPUP"
+            ? "Record float top-up?"
+            : "Record cash rebalance?",
+        text: "This will immediately change the agency ledger balances.",
+        confirmButtonText: "Record transaction",
+      }))
+    )
+      return;
     const value = window.prompt(
       type === "FLOAT_TOPUP"
         ? "Float top-up amount"
@@ -66,6 +86,14 @@ export function MpesaDashboardPage() {
   };
   const close = async () => {
     if (!dashboard.session) return;
+    if (
+      !(await confirmAction({
+        title: "Close and reconcile this shift?",
+        text: "The counted cash and float will be recorded as closing balances.",
+        confirmButtonText: "Close shift",
+      }))
+    )
+      return;
     const actualCash = window.prompt("Actual cash counted", dashboard.cash);
     const actualFloat = window.prompt(
       "Actual electronic float",
@@ -217,12 +245,19 @@ export function MpesaDashboardPage() {
                     !entry.reversal_of && (
                       <button
                         className="danger"
-                        onClick={() => {
+                        onClick={async () => {
                           const reason = window.prompt("Reversal reason");
-                          if (reason)
-                            void reverseMpesaTransaction(entry.id, reason).then(
-                              load,
-                            );
+                          if (!reason) return;
+                          if (
+                            !(await confirmAction({
+                              title: "Reverse this M-Pesa transaction?",
+                              text: "This creates a reversal entry in the agency ledger.",
+                              confirmButtonText: "Reverse transaction",
+                            }))
+                          )
+                            return;
+                          await reverseMpesaTransaction(entry.id, reason);
+                          await load();
                         }}
                       >
                         Reverse

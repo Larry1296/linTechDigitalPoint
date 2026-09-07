@@ -9,6 +9,7 @@ import {
   transitionCyberJob,
 } from "./api";
 import { CyberJobForm } from "./CyberJobForm";
+import { confirmAction } from "../../core/ui/alerts";
 export function CyberDashboardPage() {
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
@@ -35,6 +36,14 @@ export function CyberDashboardPage() {
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
   const complete = async (job) => {
+    if (
+      !(await confirmAction({
+        title: `Complete job ${job.number}?`,
+        text: "This records payment and marks the job as completed.",
+        confirmButtonText: "Pay & complete",
+      }))
+    )
+      return;
     const method =
       window.prompt("Payment method: CASH, MPESA, BANK or OTHER", "CASH") ||
       "CASH";
@@ -117,11 +126,19 @@ export function CyberDashboardPage() {
                   <div className="jobActions">
                     {job.status === "QUEUED" && (
                       <button
-                        onClick={() =>
-                          void transitionCyberJob(job.id, "IN_PROGRESS").then(
-                            load,
+                        onClick={async () => {
+                          if (
+                            !(await confirmAction({
+                              title: `Start job ${job.number}?`,
+                              text: "This moves the job into active work.",
+                              confirmButtonText: "Start job",
+                              icon: "question",
+                            }))
                           )
-                        }
+                            return;
+                          await transitionCyberJob(job.id, "IN_PROGRESS");
+                          await load();
+                        }}
                       >
                         Start
                       </button>
@@ -129,9 +146,18 @@ export function CyberDashboardPage() {
                     {job.status !== "READY" &&
                       !["COMPLETED", "CANCELLED"].includes(job.status) && (
                         <button
-                          onClick={() =>
-                            void transitionCyberJob(job.id, "READY").then(load)
-                          }
+                          onClick={async () => {
+                            if (
+                              !(await confirmAction({
+                                title: `Mark ${job.number} ready?`,
+                                text: "The customer will be able to collect this job.",
+                                confirmButtonText: "Mark ready",
+                              }))
+                            )
+                              return;
+                            await transitionCyberJob(job.id, "READY");
+                            await load();
+                          }}
                         >
                           Ready
                         </button>

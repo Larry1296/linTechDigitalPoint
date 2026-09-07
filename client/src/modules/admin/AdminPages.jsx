@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
+import { confirmAction } from "../../core/ui/alerts";
 function useLoad(url) {
   const [data, setData] = useState();
   const [error, setError] = useState("");
@@ -123,6 +124,14 @@ export function PosPage() {
   const complete = async (e) => {
     e.preventDefault();
     const form = Object.fromEntries(new FormData(e.currentTarget));
+    if (
+      !(await confirmAction({
+        title: "Complete this sale?",
+        text: `Charge KSh ${cart.reduce((sum, item) => sum + Number(item.p.selling_price) * item.q, 0).toFixed(2)} and update stock?`,
+        confirmButtonText: "Complete sale",
+      }))
+    )
+      return;
     try {
       setResult(
         await api("/api/v1/commerce/pos/complete/", {
@@ -248,6 +257,14 @@ export function StaffOrdersPage() {
   if (error) return <ErrorState message={error} retry={load} />;
   if (!data) return <Loading />;
   const complete = async (o) => {
+    if (
+      !(await confirmAction({
+        title: `Complete order ${o.number}?`,
+        text: "This confirms payment and consumes the reserved stock.",
+        confirmButtonText: "Complete order",
+      }))
+    )
+      return;
     await api("/api/v1/commerce/staff/orders/" + o.id + "/complete/", {
       method: "POST",
       body: JSON.stringify({

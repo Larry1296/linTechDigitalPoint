@@ -19,6 +19,7 @@
     "react-hook-form": "latest",
     "react-router-dom": "latest",
     "recharts": "latest",
+    "sweetalert2": "^11.26.25",
     "zod": "latest"
   },
   "devDependencies": {

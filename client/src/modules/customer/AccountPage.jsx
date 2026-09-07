@@ -8,7 +8,7 @@ export function AccountPage() {
   const { user } = useAuth();
   const { cart } = useCart();
   return (
-    <main>
+    <>
       <span className="eyebrow">Customer account</span>
       <h1>Hello, {user?.first_name || user?.username}</h1>
       {cart?.items.length ? (
@@ -64,7 +64,7 @@ export function AccountPage() {
           <p>Manage delivery details.</p>
         </Link>
       </div>
-    </main>
+    </>
   );
 }
 export function OrdersPage() {
@@ -78,7 +78,7 @@ export function OrdersPage() {
   if (error) return <ErrorState message={error} />;
   if (!rows) return <Loading />;
   return (
-    <main>
+    <>
       <h1>Your orders</h1>
       {!rows.length ? (
         <Empty>No orders yet.</Empty>
@@ -93,7 +93,7 @@ export function OrdersPage() {
           ))}
         </div>
       )}
-    </main>
+    </>
   );
 }
 export function OrderDetailPage() {
@@ -108,7 +108,7 @@ export function OrderDetailPage() {
   if (error) return <ErrorState message={error} />;
   if (!row) return <Loading />;
   return (
-    <main>
+    <>
       <span className="eyebrow">Order</span>
       <h1>{row.number}</h1>
       <div className="statusRow">
@@ -128,6 +128,6 @@ export function OrderDetailPage() {
         ))}
       </div>
       <h2>Total KSh {row.total}</h2>
-    </main>
+    </>
   );
 }

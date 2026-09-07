@@ -107,6 +107,14 @@ export function StaffLayout() {
           <span>Menu</span>
         </button>
         <aside className={sidebarOpen ? "sidebarOpen" : undefined}>
+          <button
+            className="sidebarClose"
+            type="button"
+            aria-label="Close dashboard menu"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={24} aria-hidden="true" />
+          </button>
           <nav>
             {operations.map((section) => {
               const visible = section.links.filter(

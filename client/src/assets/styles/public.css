@@ -27,6 +27,33 @@
 .homeSection > h2 {
   @apply tw:text-[32px];
 }
+/* Keep section rhythm local to the homepage; retain inset panel padding. */
+.homePage {
+  --home-section-gap: clamp(24px, 4vw, 52px);
+  --home-heading-gap: 28px;
+  --home-card-gap: 22px;
+  --home-product-gap: 24px;
+  @apply tw:grid tw:grid-cols-[minmax(0,_1fr)] tw:gap-[var(--home-section-gap)];
+}
+.homePage > .homeSection:not(.serviceSpotlight),
+.homePage > .benefits {
+  @apply tw:py-0;
+}
+.homePage > .serviceSpotlight {
+  @apply tw:p-[28px];
+}
+.homePage > section > h2,
+.homePage > .hero > div > h1,
+.homePage > .contactSection > div > h2 {
+  @apply tw:mb-[var(--home-heading-gap)];
+}
+.homePage > section > .categoryGrid,
+.homePage > .benefits {
+  @apply tw:gap-[var(--home-card-gap)];
+}
+.homePage > section > .productGrid {
+  @apply tw:gap-[var(--home-product-gap)];
+}
 .categoryGrid {
   @apply tw:grid;
   @apply tw:grid-cols-[repeat(auto-fit,_minmax(190px,_1fr))];
@@ -126,6 +153,17 @@
   @apply tw:[border-top:1px_solid_var(--line)];
 }
 @media (max-width: 760px) {
+  .homePage {
+    --home-section-gap: 28px;
+    --home-heading-gap: 20px;
+    --home-card-gap: 18px;
+    --home-product-gap: 18px;
+  }
+
+  .homePage > .serviceSpotlight {
+    @apply tw:p-[20px];
+  }
+
   .benefits,
   .contactSection,
   .appFooter {
@@ -175,6 +213,44 @@
   }
   .appNavbar nav a {
     @apply tw:whitespace-nowrap;
+  }
+}
+
+/* Open mobile navigation as a full-screen, centered overlay. */
+@media (max-width: 760px) {
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen {
+    @apply tw:fixed tw:inset-0 tw:z-[60] tw:flex tw:flex-col tw:items-center tw:justify-center tw:gap-[28px] tw:h-[100dvh] tw:min-h-[100dvh] tw:overflow-y-auto tw:p-[24px];
+    background: var(--chrome);
+    animation: dashboardOverlayIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen > .brand {
+    @apply tw:absolute tw:left-[24px] tw:top-[24px];
+  }
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen .mobileMenuButton {
+    @apply tw:absolute tw:right-[24px] tw:top-[24px];
+  }
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen nav,
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen .navActions.mobileMenuOpen {
+    @apply tw:static tw:flex tw:w-[min(340px,_100%)] tw:max-w-full tw:flex-col tw:items-center tw:justify-center tw:gap-[18px] tw:p-0 tw:m-0 tw:border-0 tw:rounded-none;
+    background: transparent;
+  }
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen nav a,
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen .navActions > * {
+    @apply tw:w-auto tw:max-w-full tw:justify-center tw:text-center;
+  }
+  .appNavbar:not(.dashboardNavbar).mobileMenuOpen nav a {
+    @apply tw:px-[24px];
+  }
+}
+
+@keyframes dashboardOverlayIn {
+  from {
+    opacity: 0;
+    transform: translateX(-7%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -237,11 +313,6 @@
 /* Final narrow-screen dashboard order: logo, title, identity, theme,
    notification, then logout. */
 @media (max-width: 760px) {
-  .appNavbar.authNavbar nav,
-  .appNavbar.authNavbar .mobileMenuButton {
-    @apply tw:hidden!;
-  }
-
   .appNavbar.dashboardNavbar > .dashboardTitle {
     @apply tw:block;
     @apply tw:[grid-column:1];
@@ -346,9 +417,12 @@
    scroll inside their own containers. */
 @media (max-width: 760px) {
   .appNavbar:not(.dashboardNavbar) {
-    @apply tw:grid-cols-[1fr_auto_auto];
-    @apply tw:min-h-[112px];
-    @apply tw:items-center;
+    @apply tw:grid-cols-[1fr_auto] tw:min-h-[88px] tw:items-center;
+  }
+
+  .appNavbar:not(.dashboardNavbar) > .brand,
+  .appNavbar:not(.dashboardNavbar) .brandLogo {
+    @apply tw:w-[64px] tw:h-[64px] tw:basis-[64px];
   }
 
   .appNavbar:not(.dashboardNavbar) .mobileMenuButton {
@@ -367,8 +441,23 @@
   }
 
   .appNavbar:not(.dashboardNavbar) .navActions {
-    @apply tw:[grid-column:3];
-    @apply tw:[grid-row:1];
+    @apply tw:hidden tw:col-span-full tw:row-start-3 tw:w-full tw:flex-wrap tw:justify-between;
+  }
+
+  .appNavbar:not(.dashboardNavbar) .navActions.mobileMenuOpen {
+    @apply tw:flex;
+  }
+
+  .appNavbar:not(.dashboardNavbar) .navIdentity {
+    @apply tw:flex-wrap tw:min-w-0;
+  }
+
+  .appNavbar:not(.dashboardNavbar) .navUserName {
+    @apply tw:whitespace-normal tw:[overflow-wrap:anywhere];
+  }
+
+  .appNavbar:not(.dashboardNavbar) .theme span {
+    @apply tw:block;
   }
 
   .appNavbar:not(.dashboardNavbar) nav,
@@ -605,42 +694,45 @@
 
   .admin aside,
   .admin aside.sidebarOpen {
-    @apply tw:absolute;
-    @apply tw:top-[62px];
-    @apply tw:left-[12px];
-    @apply tw:right-[12px];
-    @apply tw:z-[8];
+    @apply tw:fixed tw:top-[190px] tw:bottom-[12px] tw:left-[12px] tw:z-[60];
+    top: 190px;
+    z-index: 40;
     @apply tw:hidden;
-    @apply tw:w-[auto];
-    @apply tw:max-h-[min(70vh,_520px)];
-    @apply tw:h-[auto];
-    @apply tw:overflow-y-auto;
-    @apply tw:overflow-x-hidden;
-    @apply tw:[padding:14px];
-    @apply tw:[border:1px_solid_var(--chrome-line)];
-    @apply tw:rounded-[12px];
-    box-shadow: 0 18px 40px rgb(0 0 0 / 35%);
+    @apply tw:w-[min(320px,_85vw)] tw:h-auto tw:max-h-none tw:overflow-y-auto tw:overflow-x-hidden tw:p-[20px];
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: 12px;
+    box-shadow: 8px 0 24px rgb(0 0 0 / 25%);
   }
 
   .admin aside.sidebarOpen {
-    @apply tw:block;
+    @apply tw:flex;
+    animation: dashboardOverlayIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sidebarClose {
+    @apply tw:block tw:absolute tw:right-[12px] tw:top-[12px] tw:w-[44px] tw:h-[44px] tw:p-0;
+    background: transparent;
+    color: var(--chrome-text);
+    border: 1px solid var(--chrome-line);
   }
 
   .admin aside nav {
-    @apply tw:w-[auto];
-    @apply tw:min-w-[0];
+    @apply tw:w-auto;
+    @apply tw:min-w-0;
     @apply tw:grid;
     @apply tw:overflow-visible;
+    @apply tw:justify-items-stretch;
   }
 
   .admin aside nav section {
     @apply tw:grid;
-    @apply tw:w-[auto];
+    @apply tw:w-full tw:justify-items-stretch;
     @apply tw:[border-right:0];
   }
 
   .admin aside nav a {
-    @apply tw:w-[100%];
+    @apply tw:w-full tw:justify-start;
     @apply tw:min-h-[44px];
   }
 }
@@ -815,40 +907,6 @@
   .button,
   button {
     @apply tw:min-h-[44px];
-  }
-}
-
-/* Keep the public navbar's full desktop link set available on phones. The
-   row can be swiped horizontally instead of hiding links behind a menu. */
-@media (max-width: 760px) {
-  .appNavbar:not(.dashboardNavbar) .mobileMenuButton {
-    @apply tw:hidden;
-  }
-
-  .appNavbar:not(.dashboardNavbar) nav,
-  .appNavbar:not(.dashboardNavbar) nav:not(.mobileMenuOpen) {
-    @apply tw:flex;
-    @apply tw:[grid-column:1_/_-1];
-    @apply tw:[grid-row:2];
-    @apply tw:max-h-[none];
-    @apply tw:overflow-x-auto;
-    @apply tw:overflow-y-hidden;
-    @apply tw:gap-[14px];
-    @apply tw:[margin:0];
-    @apply tw:[padding:6px_2px_10px];
-    @apply tw:[border:0];
-    @apply tw:rounded-[0];
-    background: transparent;
-    @apply tw:[scrollbar-width:thin];
-  }
-
-  .appNavbar:not(.dashboardNavbar) nav a,
-  .appNavbar:not(.dashboardNavbar) nav .authEntryLink,
-  .appNavbar:not(.dashboardNavbar) nav .staffPortalLink {
-    @apply tw:w-[auto];
-    @apply tw:[flex:0_0_auto];
-    @apply tw:min-h-[42px];
-    @apply tw:[padding:9px_12px];
   }
 }
 

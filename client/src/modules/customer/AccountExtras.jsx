@@ -23,7 +23,7 @@ export function AddressesPage() {
   if (error) return <ErrorState message={error} />;
   if (!rows) return <Loading />;
   return (
-    <main>
+    <>
       <h1>Addresses</h1>
       {!rows.length && <Empty>No saved addresses.</Empty>}
       <div className="list">
@@ -67,7 +67,7 @@ export function AddressesPage() {
         </label>
         <button>Save address</button>
       </form>
-    </main>
+    </>
   );
 }
 export function PasswordResetPage() {

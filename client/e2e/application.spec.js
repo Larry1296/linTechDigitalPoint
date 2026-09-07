@@ -381,3 +381,180 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
     page.getByRole("button", { name: "Move / Edit Rack" }),
   ).toHaveCount(0);
 });
+
+for (const width of [390, 760, 1440]) {
+  test(`customer sidebar and dashboard topbar at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockShop(page);
+    await page.goto("/account");
+    await expect(page).toHaveURL(/\/login\?next=%2Faccount/);
+    await page.getByLabel("Username or email").fill("buyer");
+    await page.getByLabel("Password", { exact: true }).fill("password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(page.locator("header.dashboardNavbar")).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Main navigation" }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("main")).toHaveCount(1);
+    const navigation = page.getByRole("navigation", {
+      name: "Customer account navigation",
+    });
+    if (width <= 760) {
+      await expect(navigation).toBeHidden();
+      await page.getByRole("button", { name: "Open account menu" }).click();
+      await expect(navigation).toBeVisible();
+      await expect(
+        page
+          .locator(".customerMobileActions")
+          .getByText("buyer (Customer)", { exact: true }),
+      ).toBeVisible();
+      expect(
+        (await page.locator("header").boundingBox()).height,
+      ).toBeLessThanOrEqual(100);
+      expect(
+        await page
+          .locator(".customerSidebar")
+          .evaluate((el) => getComputedStyle(el).position),
+      ).toBe("fixed");
+      await page.keyboard.press("Escape");
+      await expect(navigation).toBeHidden();
+      await expect(
+        page.getByRole("button", { name: "Open account menu" }),
+      ).toBeFocused();
+      await page.getByRole("button", { name: "Open account menu" }).click();
+      await page.getByRole("combobox", { name: "Theme" }).selectOption("dark");
+      await page
+        .getByRole("button", { name: "Close account menu" })
+        .last()
+        .click();
+      await expect(navigation).toBeHidden();
+      await page.getByRole("button", { name: "Open account menu" }).click();
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(page.getByRole("combobox", { name: "Theme" })).toHaveValue(
+        "dark",
+      );
+      await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
+      await page.setViewportSize({ width, height: 900 });
+      await expect(navigation).toBeHidden();
+      await page.getByRole("button", { name: "Open account menu" }).click();
+    }
+    await expect(
+      navigation.getByRole("link", { name: "Dashboard", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(navigation.getByRole("link")).toHaveCount(5);
+    await navigation.getByRole("link", { name: "Orders", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Your orders" }),
+    ).toBeVisible();
+    if (width <= 760) {
+      await expect(navigation).toBeHidden();
+      await page.getByRole("button", { name: "Open account menu" }).click();
+    }
+    await expect(
+      navigation.getByRole("link", { name: "Orders", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      navigation.getByRole("link", { name: "Dashboard", exact: true }),
+    ).not.toHaveAttribute("aria-current");
+    await page.goto("/account/orders/42");
+    await expect(
+      page.getByRole("heading", { name: "LT-WEB-00042" }),
+    ).toBeVisible();
+    await expect(page.getByRole("main")).toHaveCount(1);
+    if (width <= 760)
+      await page.getByRole("button", { name: "Open account menu" }).click();
+    await expect(
+      navigation.getByRole("link", { name: "Orders", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await navigation
+      .getByRole("link", { name: "Addresses", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Addresses", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    if (width > 760) {
+      const sidebar = page.locator(".customerSidebar");
+      const originalTop = (await sidebar.boundingBox()).y;
+      expect(
+        await sidebar.evaluate((el) => el.scrollHeight === el.clientHeight),
+      ).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+      expect((await sidebar.boundingBox()).y).toBe(originalTop);
+      expect(
+        (await page.locator("footer").boundingBox()).x,
+      ).toBeGreaterThanOrEqual(240);
+      await page.setViewportSize({ width, height: 400 });
+      expect(
+        await sidebar.evaluate((el) => el.scrollHeight > el.clientHeight),
+      ).toBe(true);
+      await sidebar.evaluate((el) => {
+        el.scrollTop = 100;
+      });
+      expect(await sidebar.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      await page.setViewportSize({ width, height: 900 });
+    }
+    if (width <= 760)
+      await page.getByRole("button", { name: "Open account menu" }).click();
+    await page.getByRole("button", { name: "Logout" }).click();
+    await expect(page).toHaveURL(/\/login\?next=%2Faccount%2Faddresses/);
+    await expect(navigation).toHaveCount(0);
+  });
+}
+
+for (const width of [390, 760]) {
+  test(`public navbar collapses behind hamburger at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockShop(page);
+    await page.goto("/shop");
+    const navigation = page.getByRole("navigation", {
+      name: "Main navigation",
+    });
+    const toggle = page.getByRole("button", { name: "Open navigation menu" });
+    await expect(navigation).toBeHidden();
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(navigation).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Close navigation menu" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await navigation.getByRole("link", { name: "Login/Register" }).click();
+    await expect(navigation).toBeHidden();
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await page.keyboard.press("Escape");
+    await expect(navigation).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await page.getByLabel("Username or email").fill("buyer");
+    await page.getByLabel("Password", { exact: true }).fill("password");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/account$/);
+    await page.goto("/shop");
+    await expect(navigation).toBeHidden();
+    await toggle.click();
+    await expect(
+      navigation.getByRole("link", { name: "My Account" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(toggle).toBeHidden();
+    await expect(navigation).toBeVisible();
+    await page.setViewportSize({ width, height: 900 });
+    await expect(navigation).toBeHidden();
+  });
+}
