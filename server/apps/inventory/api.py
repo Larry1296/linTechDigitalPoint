@@ -3,13 +3,13 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.response import Response
-from apps.catalog.models import ProductVariant
+from apps.catalog.models import Category,ProductVariant
 from apps.commerce.models import Order,Sale,SaleItem
 from apps.cyber.models import CyberJob,CyberJobLine
 from apps.mpesa.models import MpesaCommissionEntry,MpesaSession,MpesaTransaction
 from apps.mpesa.services import session_balances
 from apps.core.permissions import HasLinTechPermission,IsInternalStaff
-from .models import Shelf,StockBalance,StockLot,StockReceipt,StockReceiptLine,Zone
+from .models import Shelf, ShelfStackCategory,StockBalance,StockLot,StockReceipt,StockReceiptLine,Zone
 from .services import complete_stock_receipt,receive_stock,transfer_stock
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
@@ -64,7 +64,14 @@ def variant_search(request):
     q=(request.query_params.get("q") or "").strip()
     qs=ProductVariant.objects.select_related("product","product__category","product__brand").filter(active=True,product__active=True,product__product_type="STOCK_ITEM")
     if q:qs=qs.filter(Q(product__name__icontains=q)|Q(sku__icontains=q)|Q(barcode__icontains=q)|Q(product__brand__name__icontains=q)|Q(product__category__name__icontains=q))
-    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"selling_price":v.selling_price} for v in qs[:50]])
+    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price} for v in qs[:50]])
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
+def available_categories(request):
+    if not request.user.has_perm("catalog.view_category"):return Response({"detail":"Category permission required."},status=403)
+    rows=Category.objects.filter(active=True,rack_assignments__stack__active=True).distinct().order_by("name")
+    return Response([{"id":c.id,"name":c.name,"rack_names":[a.stack.display_name for a in c.rack_assignments.filter(stack__active=True).select_related("stack")]} for c in rows])
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def transfer(request):

@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { removeStack, updateStack } from "./api";
+import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
 export function StackEditor({ stack, zones, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState((stack.categories || []).map((category) => String(category.id)));
+  useEffect(() => { void api("/api/v1/catalog/categories/").then(setCategories).catch((reason) => setError(reason.message)); }, []);
   const save = async (event) => {
     event.preventDefault();
     setSaving(true);
     setError("");
     const values = Object.fromEntries(new FormData(event.currentTarget));
+    values.category_ids = selectedCategories;
+    values.primary_category_id = selectedCategories[0] || "";
     try {
       await updateStack(stack.id, values);
       onChanged(Number(values.zone));
@@ -82,6 +88,19 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
                     {zone.name}
                   </option>
                 ))}
+            </select>
+          </label>
+          <label>
+            Primary merchandise category (optional)
+            <select value={selectedCategories[0] || ""} onChange={(event) => setSelectedCategories(event.target.value ? [event.target.value, ...selectedCategories.slice(1)] : [])}>
+              <option value="">Leave unassigned</option>
+              {categories.filter((category) => category.active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Additional allowed categories
+            <select multiple value={selectedCategories.slice(1)} onChange={(event) => setSelectedCategories([selectedCategories[0], ...Array.from(event.target.selectedOptions, (option) => option.value)])}>
+              {categories.filter((category) => category.active && String(category.id) !== selectedCategories[0]).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </label>
           <div className="formGrid">

@@ -219,12 +219,119 @@ label {
   @apply tw:w-[min(100%,_760px)];
   @apply tw:[margin-inline:auto];
 }
+
+/* Receiving workflow */
+.receiveWorkflow {
+  @apply tw:grid tw:gap-[24px];
+  @apply tw:[max-width:1080px];
+  @apply tw:[margin-inline:auto];
+}
+.receiveWorkflow > h1 {
+  @apply tw:m-0;
+  @apply tw:text-[clamp(28px,_4vw,_42px)];
+}
+.workflowSteps {
+  @apply tw:grid tw:grid-cols-[repeat(3,_1fr)] tw:gap-[10px];
+  @apply tw:[margin:4px_0_4px];
+}
+.workflowSteps b {
+  @apply tw:block tw:[padding:12px_14px];
+  @apply tw:rounded-[10px];
+  background: var(--surface);
+  @apply tw:[border:1px_solid_var(--line)];
+  @apply tw:[color:var(--muted)];
+  @apply tw:text-[13px];
+}
+.workflowSteps b.active {
+  background: var(--primary2);
+  @apply tw:[border-color:var(--primary)];
+  @apply tw:[color:var(--primary)];
+}
+.receiveWorkflow > .formCard.wide {
+  @apply tw:w-[100%] tw:[max-width:none];
+  @apply tw:[padding:clamp(20px,_4vw,_34px)];
+  @apply tw:gap-[20px];
+}
+.receiveWorkflow > .formCard.wide > label {
+  @apply tw:[max-width:720px];
+}
+.receiveWorkflow .callout {
+  @apply tw:[margin:0_0_4px];
+  @apply tw:items-start;
+  @apply tw:[border-left:4px_solid_var(--primary)];
+}
+.receiveWorkflow .callout p {
+  @apply tw:m-0 tw:[margin-top:6px];
+}
+.receiveWorkflow .callout .button {
+  @apply tw:whitespace-nowrap;
+}
+.receiveWorkflow > .formCard.wide > button,
+.receiveWorkflow .receiveLines > button:last-child,
+.reviewCard > button:first-of-type {
+  @apply tw:[justify-self:start];
+  @apply tw:min-w-[180px];
+}
+.receiveLines {
+  @apply tw:grid tw:gap-[18px];
+}
+.receiptLine {
+  @apply tw:w-[100%] tw:[max-width:none];
+  @apply tw:[padding:clamp(18px,_3vw,_28px)];
+}
+.receiptLine h2,
+.receiptLine h3,
+.reviewCard h2 {
+  @apply tw:m-0;
+}
+.receiptLine > .heading {
+  @apply tw:[padding-bottom:4px];
+  @apply tw:[border-bottom:1px_solid_var(--line)];
+}
+.receiptLine .locationPicker {
+  @apply tw:[margin-top:4px];
+}
+.reviewCard {
+  @apply tw:w-[100%] tw:[max-width:none];
+}
+.reviewLine {
+  @apply tw:grid tw:gap-[5px];
+  @apply tw:[padding:14px_0];
+  @apply tw:[border-bottom:1px_solid_var(--line)];
+}
+.reviewLine span,
+.reviewLine small {
+  @apply tw:[color:var(--muted)];
+}
+.successCard {
+  @apply tw:grid tw:gap-[16px] tw:[max-width:720px] tw:[margin:40px_auto] tw:[padding:clamp(24px,_5vw,_48px)];
+  background: var(--surface);
+  @apply tw:[border:1px_solid_var(--line)] tw:rounded-[16px];
+  box-shadow: var(--shadow);
+}
+@media (max-width: 760px) {
+  .workflowSteps {
+    @apply tw:grid-cols-[1fr];
+  }
+  .workflowSteps b {
+    @apply tw:[padding:10px_12px];
+  }
+  .receiveWorkflow .callout {
+    @apply tw:grid tw:gap-[12px];
+  }
+  .receiveWorkflow .callout .button {
+    @apply tw:w-[100%] tw:text-center;
+  }
+}
 .formCard.wide {
   @apply tw:grid-cols-[1fr_1fr];
   @apply tw:w-[min(100%,_1040px)];
 }
 .formCard.wide button {
   @apply tw:[grid-column:1/-1];
+}
+.receiveWorkflow > .formCard.wide {
+  @apply tw:grid-cols-[1fr];
 }
 .formGrid {
   @apply tw:grid;

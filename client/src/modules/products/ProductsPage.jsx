@@ -46,6 +46,7 @@ export function ProductsPage() {
           <article className="panel" key={product.id}>
             <h2>{product.name}</h2>
             <span>
+              Category: {product.category_name || product.category}
               {product.product_type === "SERVICE"
                 ? "Service — no shelf required"
                 : "Stock item"}
@@ -57,7 +58,7 @@ export function ProductsPage() {
               return (
                 <div className="productLocation" key={variant.id}>
                   <b>
-                    {variant.name} · {variant.sku} · KSh {variant.selling_price}
+                    {variant.name} · {variant.sku} · Latest BP {variant.latest_bp ?? "—"} · SP KSh {variant.selling_price} · Physical {variant.physical ?? 0} · Reserved {variant.reserved ?? 0} · Available {variant.available ?? 0}
                   </b>
                   <span>
                     {location?.preferred_shelf

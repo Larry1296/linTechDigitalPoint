@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Sum
 from django.utils.text import slugify
 from rest_framework import permissions, serializers, viewsets
@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from apps.catalog.models import Category, ProductVariant
 from apps.core.models import Store
-from apps.inventory.models import Movement, Shelf, ShelfLevel, ShelfStack, StockBalance, Zone
+from apps.inventory.models import Movement, Shelf, ShelfLevel, ShelfStack, ShelfStackCategory, StockBalance, Zone
 from apps.inventory.services import (
     archive_shelf,
     archive_shelf_stack,
@@ -186,6 +186,9 @@ class ShelfStackSerializer(serializers.ModelSerializer):
     levels = ShelfLevelSerializer(many=True, read_only=True)
     zone_name = serializers.CharField(source="zone.name", read_only=True)
     measurement_unit = serializers.CharField(source="zone.store.measurement_unit", read_only=True)
+    categories = serializers.SerializerMethodField()
+    category_ids = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
+    primary_category_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = ShelfStack
@@ -205,9 +208,15 @@ class ShelfStackSerializer(serializers.ModelSerializer):
             "active",
             "notes",
             "measurement_unit",
+            "categories",
+            "category_ids",
+            "primary_category_id",
             "levels",
         ]
         read_only_fields = ["code", "number_of_levels"]
+
+    def get_categories(self, obj):
+        return [{"id": a.category_id, "name": a.category.name, "primary": a.is_primary} for a in obj.category_assignments.select_related("category").filter(category__active=True)]
 
 
 class ShelfStackViewSet(viewsets.ModelViewSet):
@@ -222,25 +231,45 @@ class ShelfStackViewSet(viewsets.ModelViewSet):
         if not request.user.has_perm("inventory.add_shelfstack"):
             return Response({"detail": "Shelf-stack configuration permission required."}, status=403)
         zone = Zone.objects.get(pk=request.data.get("zone"))
-        stack = create_shelf_stack(
-            zone=zone,
-            user=request.user,
-            display_name=request.data.get("display_name"),
-            x=request.data.get("x"),
-            y=request.data.get("y"),
-            width=request.data.get("width"),
-            height=request.data.get("height"),
-            depth=request.data.get("depth"),
-            rotation=request.data.get("rotation", 0),
-            notes=request.data.get("notes", ""),
-            level_definitions=request.data.get("levels", []),
-        )
+        with transaction.atomic():
+            stack = create_shelf_stack(
+                zone=zone,
+                user=request.user,
+                display_name=request.data.get("display_name"),
+                x=request.data.get("x"),
+                y=request.data.get("y"),
+                width=request.data.get("width"),
+                height=request.data.get("height"),
+                depth=request.data.get("depth"),
+                rotation=request.data.get("rotation", 0),
+                notes=request.data.get("notes", ""),
+                level_definitions=request.data.get("levels", []),
+            )
+            self._save_categories(stack, request.data.get("category_ids", []), request.data.get("primary_category_id"), allow_empty=True)
         return Response(self.get_serializer(stack).data, status=201)
 
+    def _save_categories(self, stack, category_ids, primary_id=None, allow_empty=False):
+        ids={int(value) for value in category_ids if value}
+        if primary_id: ids.add(int(primary_id))
+        if not ids:
+            if allow_empty: return
+            incompatible=StockBalance.objects.filter(shelf__level__stack=stack,quantity__gt=0).first()
+            if incompatible: raise serializers.ValidationError({"category_ids":"Move existing stock before removing all rack categories."})
+            ShelfStackCategory.objects.filter(stack=stack).delete()
+            return
+        categories=list(Category.objects.filter(pk__in=ids,active=True))
+        if len(categories)!=len(ids): raise serializers.ValidationError({"category_ids":"Every assigned category must be active."})
+        incompatible=StockBalance.objects.filter(shelf__level__stack=stack,quantity__gt=0).exclude(lot__variant__product__category_id__in=ids).select_related("lot__variant__product").first()
+        if incompatible: raise serializers.ValidationError({"category_ids":f"Move existing stock for {incompatible.lot.variant.product.name} before removing its rack category."})
+        primary=int(primary_id) if primary_id else categories[0].id
+        ShelfStackCategory.objects.filter(stack=stack).exclude(category_id__in=ids).delete()
+        for category in categories: ShelfStackCategory.objects.update_or_create(stack=stack,category=category,defaults={"is_primary":category.id==primary})
+
     def perform_update(self, serializer):
-        serializer.instance = update_shelf_stack(
-            stack=serializer.instance, user=self.request.user, **serializer.validated_data
-        )
+        data=dict(serializer.validated_data); ids=data.pop("category_ids",None); primary=data.pop("primary_category_id",None)
+        with transaction.atomic():
+            serializer.instance = update_shelf_stack(stack=serializer.instance, user=self.request.user, **data)
+            if ids is not None or primary is not None: self._save_categories(serializer.instance, ids or list(ShelfStackCategory.objects.filter(stack=serializer.instance).values_list("category_id",flat=True)), primary)
 
     def perform_destroy(self, instance):
         archive_shelf_stack(stack=instance, user=self.request.user)

@@ -13,6 +13,18 @@ class Product(TimeStamped):
 class ProductVariant(TimeStamped):
     product=models.ForeignKey(Product,related_name="variants",on_delete=models.CASCADE); name=models.CharField(max_length=120,default="Standard"); sku=models.CharField(max_length=64,unique=True); barcode=models.CharField(max_length=64,null=True,blank=True,unique=True); selling_price=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); service_cost=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); minimum_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); target_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); active=models.BooleanField(default=True)
     def __str__(self): return f"{self.product} — {self.name}"
+class ProductOptionType(TimeStamped):
+    product=models.ForeignKey(Product,related_name="option_types",on_delete=models.CASCADE)
+    name=models.CharField(max_length=80)
+    class Meta: constraints=[models.UniqueConstraint(fields=["product","name"],name="unique_product_option_type")]
+class ProductOptionValue(TimeStamped):
+    option_type=models.ForeignKey(ProductOptionType,related_name="values",on_delete=models.CASCADE)
+    value=models.CharField(max_length=120)
+    class Meta: constraints=[models.UniqueConstraint(fields=["option_type","value"],name="unique_product_option_value")]
+class ProductVariantOptionValue(TimeStamped):
+    variant=models.ForeignKey(ProductVariant,related_name="option_assignments",on_delete=models.CASCADE)
+    value=models.ForeignKey(ProductOptionValue,related_name="variant_assignments",on_delete=models.PROTECT)
+    class Meta: constraints=[models.UniqueConstraint(fields=["variant","value"],name="unique_variant_option_value")]
 class PriceHistory(models.Model):
     variant=models.ForeignKey(ProductVariant,related_name="price_history",on_delete=models.CASCADE); price=models.DecimalField(max_digits=14,decimal_places=2); effective_at=models.DateTimeField(auto_now_add=True); changed_by=models.ForeignKey("auth.User",null=True,on_delete=models.SET_NULL)
 

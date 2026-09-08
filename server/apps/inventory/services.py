@@ -5,7 +5,8 @@ from django.utils import timezone
 from uuid import uuid4
 from rest_framework.exceptions import ValidationError
 from apps.core.models import AuditLog
-from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,StockBalance,StockLot,StockReceipt,StockReceiptLine,StockReceiptPlacement,VariantPreferredLocation,Zone
+from apps.catalog.models import ProductVariant
+from .models import LocationHistory,Movement,Reservation,Shelf,ShelfHistory,ShelfLevel,ShelfStack,ShelfStackCategory,StockBalance,StockLot,StockReceipt,StockReceiptLine,StockReceiptPlacement,VariantPreferredLocation,Zone
 def _d(value): return Decimal(str(value))
 def _audit(action,obj,user,before=None,after=None):
     AuditLog.objects.create(action=action,object_type=obj.__class__.__name__,object_id=str(obj.pk),user=user,before=before or {},after=after or {})
@@ -113,6 +114,8 @@ def complete_stock_receipt(*, supplier_name="", external_reference="", received_
             if pqty<=0:raise ValidationError({f"lines[{index}].placements[{pidx}].quantity":"Placement quantity must be greater than zero."})
             shelf=Shelf.objects.select_for_update().select_related("zone","level__stack").filter(pk=p.get("shelf_id"),active=True,zone__active=True,level__active=True,level__stack__active=True).first()
             if not shelf:raise ValidationError({f"lines[{index}].placements[{pidx}].shelf_id":"Choose an active exact compartment."})
+            if not ShelfStackCategory.objects.filter(stack_id=shelf.level.stack_id,stack__zone__active=True,category_id=variant.product.category_id,category__active=True).exists():
+                raise ValidationError({f"lines[{index}].placements[{pidx}].shelf_id":"This rack is not assigned to the product category."})
             shelves.append((shelf,pqty))
         update_price=bool(raw.get("update_selling_price")); new_price=raw.get("new_selling_price")
         if update_price:

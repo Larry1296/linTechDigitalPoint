@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createStack, createZone } from "./api";
+import { api } from "../../core/api/client";
 import { StackPreview } from "./StackPreview";
 export function StackBuilder({ zones, onCreated, onCancel }) {
   const [step, setStep] = useState(1);
@@ -18,6 +19,9 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
   const [count, setCount] = useState(4);
   const [compartments, setCompartments] = useState([2, 2, 3, 3]);
   const [error, setError] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [categoryIds, setCategoryIds] = useState([]);
+  useEffect(() => { void api("/api/v1/catalog/categories/").then(setCategories).catch((err) => setError(err.message)); }, []);
   const levels = useMemo(
     () =>
       Array.from({ length: count }, (_, index) => ({
@@ -44,6 +48,8 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
         y,
         rotation,
         levels,
+        category_ids: categoryIds,
+        primary_category_id: categoryIds[0],
       });
       onCreated(selectedZone?.id || zone);
     } catch (err) {
@@ -125,6 +131,20 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
               placeholder="Phone Accessories Rack"
               required
             />
+          </label>
+          <label>
+            Primary merchandise category (optional)
+            <select value={categoryIds[0] || ""} onChange={(event) => setCategoryIds(event.target.value ? [Number(event.target.value), ...categoryIds.slice(1)] : [])}>
+              <option value="">Assign later in rack settings</option>
+              {categories.filter((category) => category.active).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+            </select>
+          </label>
+          <p className="muted">Configure the physical rack first. Assign merchandise categories now or later from the rack editor before receiving stock.</p>
+          <label>
+            Additional allowed categories
+            <select multiple value={categoryIds.slice(1).map(String)} onChange={(event) => setCategoryIds([categoryIds[0], ...Array.from(event.target.selectedOptions, (option) => Number(option.value))])}>
+              {categories.filter((category) => category.active && category.id !== categoryIds[0]).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+            </select>
           </label>
         </div>
       )}

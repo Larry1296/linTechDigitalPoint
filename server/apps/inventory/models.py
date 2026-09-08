@@ -3,7 +3,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from apps.core.models import Store,TimeStamped
-from apps.catalog.models import ProductVariant
+from apps.catalog.models import Category,ProductVariant
 class Zone(TimeStamped):
     store=models.ForeignKey(Store,related_name="zones",on_delete=models.CASCADE); code=models.CharField(max_length=20); name=models.CharField(max_length=120); active=models.BooleanField(default=True); width=models.DecimalField(max_digits=10,decimal_places=2,default=100); height=models.DecimalField(max_digits=10,decimal_places=2,default=100); next_shelf_number=models.PositiveIntegerField(default=1)
     class Meta: constraints=[models.UniqueConstraint(fields=["store","code"],name="unique_zone_code")]
@@ -11,6 +11,12 @@ class ShelfStack(TimeStamped):
     zone=models.ForeignKey(Zone,related_name="stacks",on_delete=models.PROTECT);code=models.CharField(max_length=40,unique=True);display_name=models.CharField(max_length=160);x=models.DecimalField(max_digits=10,decimal_places=2);y=models.DecimalField(max_digits=10,decimal_places=2);width=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);depth=models.DecimalField(max_digits=10,decimal_places=2);rotation=models.DecimalField(max_digits=6,decimal_places=2,default=0);number_of_levels=models.PositiveIntegerField();active=models.BooleanField(default=True);notes=models.TextField(blank=True);created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_created");updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_updated")
     class Meta: constraints=[models.CheckConstraint(condition=Q(width__gt=0)&Q(height__gt=0)&Q(depth__gt=0)&Q(number_of_levels__gt=0),name="positive_stack_dimensions")]
     def __str__(self):return f"{self.code} — {self.display_name}"
+class ShelfStackCategory(TimeStamped):
+    stack=models.ForeignKey(ShelfStack,related_name="category_assignments",on_delete=models.CASCADE)
+    category=models.ForeignKey(Category,related_name="rack_assignments",on_delete=models.PROTECT)
+    is_primary=models.BooleanField(default=False)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=["stack","category"],name="unique_stack_category"),models.UniqueConstraint(fields=["stack"],condition=Q(is_primary=True),name="one_primary_stack_category")]
 class ShelfLevel(TimeStamped):
     stack=models.ForeignKey(ShelfStack,related_name="levels",on_delete=models.PROTECT);level_number=models.PositiveIntegerField();y_position=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);active=models.BooleanField(default=True)
     class Meta:ordering=["level_number"];constraints=[models.UniqueConstraint(fields=["stack","level_number"],name="unique_stack_level"),models.CheckConstraint(condition=Q(height__gt=0)&Q(level_number__gt=0),name="positive_level_geometry")]

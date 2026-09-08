@@ -9,7 +9,7 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
   const [error, setError] = useState("");
   useEffect(() => {
     void Promise.all([
-      api("/api/v1/catalog/categories/"),
+      api("/api/v1/inventory/categories/available/"),
       api("/api/v1/catalog/brands/"),
     ]).then(([c, b]) => {
       setCategories(c);
@@ -43,15 +43,16 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         <input name="name" required />
       </label>
       <label>
-        Category
+        Product category — what kind of item is this?
         <select name="category_id" required>
           {categories.map((c) => (
             <option value={c.id} key={c.id}>
-              {c.name}
+              {c.name} — available in {c.rack_names?.join(", ")}
             </option>
           ))}
         </select>
       </label>
+      <p className="muted">Categories organize products for stock management and the online shop. Physical storage is selected separately.</p>
       <label>
         Brand
         <select name="brand_id">

@@ -107,6 +107,7 @@ export function DigitalShopPage() {
                 onShelf={setShelf}
                 onEdit={setEditingStack}
               />
+              {stack.categories?.length ? <small className="muted rackCategories">{stack.categories.map((category) => category.name).join(" · ")}</small> : null}
             </div>
           ))}
           {!zone.stacks.length && (
