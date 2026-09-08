@@ -1,3 +1,4 @@
+import { FormField } from "../../components/forms/FormField";
 import { useState } from "react";
 export function CyberJobForm({ services, onSave }) {
   const [lines, setLines] = useState([
@@ -17,14 +18,8 @@ export function CyberJobForm({ services, onSave }) {
   return (
     <form className="saleCart operatorForm" onSubmit={submit}>
       <h2>New job / Quick service</h2>
-      <label>
-        Customer name (optional)
-        <input name="customer" />
-      </label>
-      <label>
-        Phone (optional)
-        <input name="phone" inputMode="tel" />
-      </label>
+      <FormField label="Customer name (optional)" name="customer" />
+      <FormField label="Phone (optional)" name="phone" inputMode="tel" />
       {lines.map((line, index) => (
         <div className="jobLine" key={index}>
           <select
@@ -95,10 +90,13 @@ export function CyberJobForm({ services, onSave }) {
       >
         Add another service
       </button>
-      <label>
-        Discount
-        <input name="discount" type="number" min="0" defaultValue="0" />
-      </label>
+      <FormField
+        label="Discount"
+        name="discount"
+        type="number"
+        min="0"
+        defaultValue="0"
+      />
       <label>
         Operational notes only
         <textarea

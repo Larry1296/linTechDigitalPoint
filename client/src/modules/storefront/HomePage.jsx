@@ -1,3 +1,4 @@
+import { ProductCard } from "./components/ProductCard";
 import {
   Headphones,
   MapPin,
@@ -77,31 +78,7 @@ export function HomePage() {
             {data.featured_products.length ? (
               <div className="productGrid">
                 {data.featured_products.map((p) => (
-                  <article className="productCard" key={p.id}>
-                    <div className="productImage">
-                      {p.images[0] ? (
-                        <img src={p.images[0].url} alt={p.images[0].alt} />
-                      ) : (
-                        p.product_name[0]
-                      )}
-                    </div>
-                    <h3>{p.product_name}</h3>
-                    <b>KSh {p.selling_price}</b>
-                    <span
-                      className={
-                        p.available && +p.available > 0 ? "stock" : "out"
-                      }
-                    >
-                      {p.available === null
-                        ? "Available"
-                        : +p.available > 0
-                          ? "In stock"
-                          : "Out of stock"}
-                    </span>
-                    <Link className="button" to={"/products/" + p.id}>
-                      View product
-                    </Link>
-                  </article>
+                  <ProductCard key={p.id} product={p} />
                 ))}
               </div>
             ) : (

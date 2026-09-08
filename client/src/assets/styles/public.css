@@ -936,3 +936,59 @@
     @apply tw:text-[18px];
   }
 }
+
+/* Keep public links centered independently of the account controls. */
+.appNavbar .navActions > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.appNavbar .navActions .authEntryLink {
+  margin-inline: 0;
+}
+@media (min-width: 761px) {
+  .appNavbar:not(.dashboardNavbar) {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    padding-inline: 20px;
+  }
+  .appNavbar:not(.dashboardNavbar) .navActions {
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+.passwordField {
+  display: grid;
+  gap: 6px;
+}
+.passwordInput {
+  position: relative;
+}
+.passwordInput input {
+  width: 100%;
+  padding-right: 52px;
+}
+.passwordInput .passwordToggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+.passwordInput .passwordToggle:hover {
+  color: var(--text);
+}
+.passwordInput .passwordToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -4px;
+}

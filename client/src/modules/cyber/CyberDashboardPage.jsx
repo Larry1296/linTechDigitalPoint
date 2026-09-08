@@ -1,3 +1,4 @@
+import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import {
@@ -73,26 +74,15 @@ export function CyberDashboardPage() {
         </div>
       )}
       <div className="metrics">
-        <article>
-          <span>Today's revenue</span>
-          <strong>KSh {dashboard.today.revenue}</strong>
-        </article>
-        <article>
-          <span>Active jobs</span>
-          <strong>{dashboard.active_jobs}</strong>
-        </article>
-        <article>
-          <span>Ready</span>
-          <strong>{dashboard.ready_jobs}</strong>
-        </article>
-        <article>
-          <span>Completed today</span>
-          <strong>{dashboard.today.jobs}</strong>
-        </article>
-        <article>
-          <span>Average job</span>
-          <strong>KSh {dashboard.today.average}</strong>
-        </article>
+        <MetricCard label="Today's revenue">
+          KSh {dashboard.today.revenue}
+        </MetricCard>
+        <MetricCard label="Active jobs">{dashboard.active_jobs}</MetricCard>
+        <MetricCard label="Ready">{dashboard.ready_jobs}</MetricCard>
+        <MetricCard label="Completed today">{dashboard.today.jobs}</MetricCard>
+        <MetricCard label="Average job">
+          KSh {dashboard.today.average}
+        </MetricCard>
       </div>
       <div className="deskGrid">
         <CyberJobForm

@@ -1,3 +1,4 @@
+import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
@@ -229,10 +230,12 @@ export function PosPage() {
               </article>
             ))
           )}
-          <label>
-            Discount
-            <input name="discount" type="number" defaultValue="0" />
-          </label>
+          <FormField
+            label="Discount"
+            name="discount"
+            type="number"
+            defaultValue="0"
+          />
           <label>
             Payment
             <select name="payment_method">
@@ -242,10 +245,7 @@ export function PosPage() {
               <option>OTHER</option>
             </select>
           </label>
-          <label>
-            Payment reference
-            <input name="payment_reference" />
-          </label>
+          <FormField label="Payment reference" name="payment_reference" />
           <button disabled={!cart.length}>Complete sale</button>
         </form>
       </div>

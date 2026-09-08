@@ -1,3 +1,4 @@
+import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { Empty, Loading } from "../../components/States";
 import { loadShelfContents, updateShelf } from "./api";
@@ -54,20 +55,16 @@ export function ShelfDetails({ shelfId, onClose, onUpdated }) {
             </p>
             {editing ? (
               <form className="formCard" onSubmit={save}>
-                <label>
-                  Physical label
-                  <input
-                    name="physical_label"
-                    defaultValue={data.shelf.physical_label}
-                  />
-                </label>
-                <label>
-                  Display name
-                  <input
-                    name="display_name"
-                    defaultValue={data.shelf.display_name}
-                  />
-                </label>
+                <FormField
+                  label="Physical label"
+                  name="physical_label"
+                  defaultValue={data.shelf.physical_label}
+                />
+                <FormField
+                  label="Display name"
+                  name="display_name"
+                  defaultValue={data.shelf.display_name}
+                />
                 <button>Save shelf</button>
               </form>
             ) : (

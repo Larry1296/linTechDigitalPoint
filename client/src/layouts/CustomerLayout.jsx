@@ -7,12 +7,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { AppFooter, AppNavbar } from "../components/AppChrome";
 import { ThemePicker } from "../components/ThemePicker";
 import { useAuth } from "../core/auth/AuthContext";
-import { useCart } from "../core/cart/CartContext";
-import { confirmAction } from "../core/ui/alerts";
+import { useSignOut } from "../core/auth/useSignOut";
+import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
 
 const sections = [
   {
@@ -45,8 +45,8 @@ export function CustomerLayout() {
     () => false,
   );
   const location = useLocation();
-  const { user, logout } = useAuth();
-  const { refreshCart } = useCart();
+  const { user } = useAuth();
+  const signOut = useSignOut();
   const sidebarRef = useRef(null);
   const [openLocation, setOpenLocation] = useState(null);
   const toggleRef = useRef(null);
@@ -114,46 +114,19 @@ export function CustomerLayout() {
           >
             <X size={24} aria-hidden="true" />
           </button>
-          <nav aria-label="Customer account navigation">
-            {sections.map(({ title, links }) => (
-              <section key={title}>
-                <small>{title.toUpperCase()}</small>
-                {links.map(({ to, label, icon: Icon, end }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={end}
-                    onClick={() => setOpenLocation(null)}
-                  >
-                    <Icon size={19} aria-hidden="true" />
-                    {label}
-                  </NavLink>
-                ))}
-              </section>
-            ))}
-          </nav>
+          <SidebarNavigation
+            sections={sections}
+            label="Customer account navigation"
+            iconSize={19}
+            onNavigate={() => setOpenLocation(null)}
+          />
           {isMobile && (
             <div className="customerMobileActions">
               <span className="navUserName">
                 {user?.first_name || user?.username} (Customer)
               </span>
               <ThemePicker />
-              <button
-                type="button"
-                onClick={async () => {
-                  if (
-                    !(await confirmAction({
-                      title: "Sign out?",
-                      text: "You will need to sign in again to access your account.",
-                      confirmButtonText: "Sign out",
-                      icon: "question",
-                    }))
-                  )
-                    return;
-                  await logout();
-                  await refreshCart();
-                }}
-              >
+              <button type="button" onClick={() => void signOut()}>
                 Logout
               </button>
             </div>

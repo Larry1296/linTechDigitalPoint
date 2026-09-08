@@ -4,7 +4,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
 import { useCart } from "../core/cart/CartContext";
 import { ThemePicker } from "./ThemePicker";
-import { confirmAction } from "../core/ui/alerts";
+import { useSignOut } from "../core/auth/useSignOut";
 import logoUrl from "../assets/images/logo.png";
 function can(permission, user) {
   return Boolean(user?.is_superuser || user?.permissions.includes(permission));
@@ -24,8 +24,8 @@ export function BrandLogo({ compact = false }) {
   );
 }
 export function AppNavbar({ accountMenu, accountMenuRef } = {}) {
-  const { user, logout } = useAuth();
-  const { count, refreshCart } = useCart();
+  const { user } = useAuth();
+  const { count } = useCart();
   const location = useLocation();
   const isStaffDashboard = location.pathname.startsWith("/admin-app");
   const isCustomerDashboard =
@@ -54,17 +54,7 @@ export function AppNavbar({ accountMenu, accountMenuRef } = {}) {
       desktop.removeEventListener("change", closeOnDesktop);
     };
   }, [mobileMenuOpen]);
-  const signOut = async () => {
-    const confirmed = await confirmAction({
-      title: "Sign out?",
-      text: "You will need to sign in again to access your account.",
-      confirmButtonText: "Sign out",
-      icon: "question",
-    });
-    if (!confirmed) return;
-    await logout();
-    await refreshCart();
-  };
+  const signOut = useSignOut();
   return (
     <header
       ref={navbarRef}
@@ -128,30 +118,15 @@ export function AppNavbar({ accountMenu, accountMenuRef } = {}) {
           <NavLink to="/shop">Shop</NavLink>
           <Link to="/#categories">Categories</Link>
           <Link to="/#services">Services</Link>
-          <NavLink to="/cart">
-            <ShoppingCart size={18} /> Cart{" "}
-            <span className="cartBadge">{count}</span>
-          </NavLink>
-          {user?.is_staff ? (
-            <NavLink className="staffPortalLink" to="/admin-app/dashboard">
-              Admin
-            </NavLink>
-          ) : user ? (
-            <>
-              <NavLink to="/account">My Account</NavLink>
-              <NavLink to="/account/orders">Orders</NavLink>
-            </>
-          ) : (
-            <NavLink className="authEntryLink" to="/login">
-              Login/Register
-            </NavLink>
-          )}
         </nav>
       )}
       {!accountMenu?.mobile && (
         <div
           id={!isDashboard ? "public-account-actions" : undefined}
           className={`navActions${mobileMenuOpen ? " mobileMenuOpen" : ""}`}
+          onClick={(event) => {
+            if (event.target.closest("a")) setOpenLocation(null);
+          }}
         >
           {isStaffDashboard && (
             <div className="dashboardNotification" title="Live notifications">
@@ -160,7 +135,31 @@ export function AppNavbar({ accountMenu, accountMenuRef } = {}) {
               <span className="sr">Live notifications</span>
             </div>
           )}
+          {!isDashboard && (
+            <NavLink to="/cart">
+              <ShoppingCart size={18} /> Cart{" "}
+              <span className="cartBadge">{count}</span>
+            </NavLink>
+          )}
           <ThemePicker />
+          {!isDashboard && (
+            <>
+              {user?.is_staff ? (
+                <NavLink className="staffPortalLink" to="/admin-app/dashboard">
+                  Admin
+                </NavLink>
+              ) : user ? (
+                <>
+                  <NavLink to="/account">My Account</NavLink>
+                  <NavLink to="/account/orders">Orders</NavLink>
+                </>
+              ) : (
+                <NavLink className="authEntryLink" to="/login">
+                  Login/Register
+                </NavLink>
+              )}
+            </>
+          )}
           {isDashboard && (
             <div className="dashboardMobileTitle">{dashboardTitle}</div>
           )}

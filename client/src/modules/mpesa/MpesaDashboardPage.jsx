@@ -1,3 +1,5 @@
+import { FormField } from "../../components/forms/FormField";
+import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import {
@@ -120,30 +122,18 @@ export function MpesaDashboardPage() {
         principal is never sales revenue.
       </p>
       <div className="metrics">
-        <article>
-          <span>Current cash</span>
-          <strong>KSh {dashboard.cash}</strong>
-        </article>
-        <article>
-          <span>Current float</span>
-          <strong>KSh {dashboard.float}</strong>
-        </article>
-        <article>
-          <span>Today's deposits</span>
-          <strong>KSh {dashboard.deposits}</strong>
-        </article>
-        <article>
-          <span>Today's withdrawals</span>
-          <strong>KSh {dashboard.withdrawals}</strong>
-        </article>
-        <article>
-          <span>Transactions</span>
-          <strong>{dashboard.transaction_count}</strong>
-        </article>
-        <article>
-          <span>Commission</span>
-          <strong>KSh {dashboard.commission}</strong>
-        </article>
+        <MetricCard label="Current cash">KSh {dashboard.cash}</MetricCard>
+        <MetricCard label="Current float">KSh {dashboard.float}</MetricCard>
+        <MetricCard label="Today's deposits">
+          KSh {dashboard.deposits}
+        </MetricCard>
+        <MetricCard label="Today's withdrawals">
+          KSh {dashboard.withdrawals}
+        </MetricCard>
+        <MetricCard label="Transactions">
+          {dashboard.transaction_count}
+        </MetricCard>
+        <MetricCard label="Commission">KSh {dashboard.commission}</MetricCard>
       </div>
       {!dashboard.session ? (
         <form
@@ -169,26 +159,22 @@ export function MpesaDashboardPage() {
                 ))}
             </select>
           </label>
-          <label>
-            Opening cash
-            <input
-              name="opening_cash"
-              type="number"
-              min="0"
-              step="0.01"
-              required
-            />
-          </label>
-          <label>
-            Opening float
-            <input
-              name="opening_float"
-              type="number"
-              min="0"
-              step="0.01"
-              required
-            />
-          </label>
+          <FormField
+            label="Opening cash"
+            name="opening_cash"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
+          <FormField
+            label="Opening float"
+            name="opening_float"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
           <button disabled={!outlets.length}>Open shift</button>
         </form>
       ) : (

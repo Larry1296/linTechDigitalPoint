@@ -181,6 +181,7 @@ async function mockShop(page) {
                 id: levelIndex * 10 + shelfIndex + 1,
                 code: `RIGHT-R01-L${String(levelIndex + 1).padStart(2, "0")}-S${String(shelfIndex + 1).padStart(2, "0")}`,
                 display_name: `Level ${levelIndex + 1} Compartment ${shelfIndex + 1}`,
+                position_in_level: shelfIndex + 1,
                 physical_label: "",
                 total_quantity: "0",
                 active: true,
@@ -281,7 +282,9 @@ test("new customer keeps the full cart through registration and checkout", async
   await page.getByLabel("Username", { exact: true }).fill("newbuyer");
   await page.getByLabel("Email").fill("new@example.test");
   await page.getByLabel("Password", { exact: true }).fill("Strong-pass-1296");
-  await page.getByLabel("Confirm password").fill("Strong-pass-1296");
+  await page
+    .getByLabel("Confirm password", { exact: true })
+    .fill("Strong-pass-1296");
   await page.getByRole("button", { name: "Register" }).click();
   await expect(page).toHaveURL(/\/checkout$/);
   await expect(page.getByText(/Samsung A05 Cover/)).toBeVisible();
@@ -299,7 +302,7 @@ test("existing customer sees the anonymous cart on their dashboard after login",
   await page.getByRole("button", { name: "Add to cart" }).first().click();
   await page.goto("/login");
   await page.getByLabel("Username or email").fill("buyer");
-  await page.getByLabel("Password").fill("password");
+  await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/account$/);
   await expect(
@@ -310,6 +313,10 @@ test("existing customer sees the anonymous cart on their dashboard after login",
     page.getByRole("link", { name: "Continue to checkout" }),
   ).toHaveAttribute("href", "/checkout");
   await page.getByRole("button", { name: "Logout" }).click();
+  await page
+    .getByRole("dialog", { name: "Sign out?" })
+    .getByRole("button", { name: "Sign out", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/login\?next=%2Faccount/);
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });
@@ -320,7 +327,7 @@ test("staff use the shared login and return to their intended page", async ({
   await page.goto("/admin-app/digital-shop");
   await expect(page).toHaveURL(/\/login\?next=%2Fadmin-app%2Fdigital-shop/);
   await page.getByLabel("Username or email").fill("owner");
-  await page.getByLabel("Password").fill("password");
+  await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/digital-shop$/);
 });
@@ -330,7 +337,7 @@ test("Django superuser name is displayed and defaults to the admin dashboard", a
   await mockShop(page);
   await page.goto("/login");
   await page.getByLabel("Username or email").fill("owner");
-  await page.getByLabel("Password").fill("password");
+  await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
   await expect(page.getByText("owner (Admin)", { exact: true })).toBeVisible();
@@ -341,7 +348,7 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await mockShop(page);
   await page.goto("/login");
   await page.getByLabel("Username or email").fill("owner");
-  await page.getByLabel("Password").fill("password");
+  await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.goto("/admin-app/digital-shop");
   await page.getByRole("button", { name: "Create First Shelf Stack" }).click();
@@ -353,7 +360,12 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText("L4-S3", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator(".rackLevelGroup")
+      .filter({ has: page.getByText("Level 4", { exact: true }) })
+      .getByText("Shelf 3", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Create Shelf Stack" }).click();
   await expect(
     page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
@@ -364,7 +376,9 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
     0,
   );
-  await page.getByRole("button", { name: /RIGHT-R01-L01-S01/ }).click();
+  await page
+    .getByRole("button", { name: "Level 1, Shelf 1, 0 units", exact: true })
+    .click();
   await expect(
     page.getByRole("dialog", { name: "Shelf details" }),
   ).toBeVisible();
@@ -380,8 +394,11 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
     page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Move / Edit Rack" }).click();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Remove empty rack" }).click();
+  await page
+    .getByRole("dialog", { name: "Remove Phone Accessories Rack?" })
+    .getByRole("button", { name: "Remove rack", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "Move / Edit Rack" }),
   ).toHaveCount(0);
@@ -510,6 +527,10 @@ for (const width of [390, 760, 1440]) {
     if (width <= 760)
       await page.getByRole("button", { name: "Open account menu" }).click();
     await page.getByRole("button", { name: "Logout" }).click();
+    await page
+      .getByRole("dialog", { name: "Sign out?" })
+      .getByRole("button", { name: "Sign out", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/login\?next=%2Faccount%2Faddresses/);
     await expect(navigation).toHaveCount(0);
   });
@@ -533,7 +554,10 @@ for (const width of [390, 760]) {
     await expect(
       page.getByRole("button", { name: "Close navigation menu" }),
     ).toHaveAttribute("aria-expanded", "true");
-    await navigation.getByRole("link", { name: "Login/Register" }).click();
+    await page
+      .locator("#public-account-actions")
+      .getByRole("link", { name: "Login/Register" })
+      .click();
     await expect(navigation).toBeHidden();
     await expect(toggle).toBeVisible();
     await toggle.click();
@@ -548,7 +572,9 @@ for (const width of [390, 760]) {
     await expect(navigation).toBeHidden();
     await toggle.click();
     await expect(
-      navigation.getByRole("link", { name: "My Account" }),
+      page
+        .locator("#public-account-actions")
+        .getByRole("link", { name: "My Account" }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     expect(

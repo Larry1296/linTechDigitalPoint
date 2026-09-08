@@ -1,3 +1,4 @@
+import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
@@ -41,30 +42,12 @@ export function AddressesPage() {
       </div>
       <form className="formCard" onSubmit={add}>
         <h2>Add address</h2>
-        <label>
-          Label
-          <input name="label" defaultValue="Home" />
-        </label>
-        <label>
-          Recipient
-          <input name="recipient_name" required />
-        </label>
-        <label>
-          Phone
-          <input name="phone" required />
-        </label>
-        <label>
-          County
-          <input name="county" required />
-        </label>
-        <label>
-          Town
-          <input name="town" required />
-        </label>
-        <label>
-          Address
-          <input name="address_line" required />
-        </label>
+        <FormField label="Label" name="label" defaultValue="Home" />
+        <FormField label="Recipient" name="recipient_name" required />
+        <FormField label="Phone" name="phone" required />
+        <FormField label="County" name="county" required />
+        <FormField label="Town" name="town" required />
+        <FormField label="Address" name="address_line" required />
         <button>Save address</button>
       </form>
     </>
@@ -84,10 +67,7 @@ export function PasswordResetPage() {
     <main className="authPage">
       <form className="formCard" onSubmit={submit}>
         <h1>Reset password</h1>
-        <label>
-          Email
-          <input name="email" type="email" required />
-        </label>
+        <FormField label="Email" name="email" type="email" required />
         <button>Send reset instructions</button>
         {message && <p>{message}</p>}
       </form>

@@ -128,7 +128,7 @@ a {
   @apply tw:[justify-self:center];
   @apply tw:flex-wrap;
 }
-.appNavbar nav .staffPortalLink {
+.appNavbar .staffPortalLink {
   @apply tw:[margin-left:10px];
   @apply tw:[padding:10px_18px];
   @apply tw:[border:1px_solid_#60a5fa];
@@ -140,14 +140,14 @@ a {
   box-shadow: 0 5px 0 #041a35;
   transform: translateY(-3px);
 }
-.appNavbar nav .staffPortalLink:hover,
-.appNavbar nav .staffPortalLink:focus-visible,
-.appNavbar nav .staffPortalLink.active {
+.appNavbar .staffPortalLink:hover,
+.appNavbar .staffPortalLink:focus-visible,
+.appNavbar .staffPortalLink.active {
   background: #2563eb;
   @apply tw:[color:#ffffff];
   @apply tw:[border-color:#93c5fd];
 }
-.appNavbar nav .authEntryLink {
+.appNavbar .authEntryLink {
   @apply tw:[margin-inline:12px];
   @apply tw:[padding:11px_18px];
   @apply tw:[border:1px_solid_#86efac];
@@ -157,9 +157,9 @@ a {
   @apply tw:font-[850];
   box-shadow: 0 5px 16px rgb(34 197 94 / 35%);
 }
-.appNavbar nav .authEntryLink:hover,
-.appNavbar nav .authEntryLink:focus-visible,
-.appNavbar nav .authEntryLink.active {
+.appNavbar .authEntryLink:hover,
+.appNavbar .authEntryLink:focus-visible,
+.appNavbar .authEntryLink.active {
   background: #4ade80;
   @apply tw:[color:#052e16];
 }
@@ -175,6 +175,8 @@ a {
   @apply tw:h-[172px];
   @apply tw:object-cover;
   @apply tw:rounded-[50%];
+  /* Crop the source image's thin grey top edge inside the brand's clip. */
+  transform: scale(1.03);
 }
 .brandLogo.compact {
   @apply tw:w-[142px];

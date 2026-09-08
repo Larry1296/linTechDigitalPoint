@@ -1,3 +1,4 @@
+import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { removeStack, updateStack } from "./api";
 import { api } from "../../core/api/client";
@@ -6,8 +7,14 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
-  const [selectedCategories, setSelectedCategories] = useState((stack.categories || []).map((category) => String(category.id)));
-  useEffect(() => { void api("/api/v1/catalog/categories/").then(setCategories).catch((reason) => setError(reason.message)); }, []);
+  const [selectedCategories, setSelectedCategories] = useState(
+    (stack.categories || []).map((category) => String(category.id)),
+  );
+  useEffect(() => {
+    void api("/api/v1/catalog/categories/")
+      .then(setCategories)
+      .catch((reason) => setError(reason.message));
+  }, []);
   const save = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -70,14 +77,12 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
         </p>
         {error && <p className="formError">{error}</p>}
         <form className="formCard" onSubmit={save}>
-          <label>
-            Rack name
-            <input
-              name="display_name"
-              defaultValue={stack.display_name}
-              required
-            />
-          </label>
+          <FormField
+            label="Rack name"
+            name="display_name"
+            defaultValue={stack.display_name}
+            required
+          />
           <label>
             Shop area
             <select name="zone" defaultValue={stack.zone}>
@@ -92,83 +97,108 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
           </label>
           <label>
             Primary merchandise category (optional)
-            <select value={selectedCategories[0] || ""} onChange={(event) => setSelectedCategories(event.target.value ? [event.target.value, ...selectedCategories.slice(1)] : [])}>
+            <select
+              value={selectedCategories[0] || ""}
+              onChange={(event) =>
+                setSelectedCategories(
+                  event.target.value
+                    ? [event.target.value, ...selectedCategories.slice(1)]
+                    : [],
+                )
+              }
+            >
               <option value="">Leave unassigned</option>
-              {categories.filter((category) => category.active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              {categories
+                .filter((category) => category.active)
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
             </select>
           </label>
           <label>
             Additional allowed categories
-            <select multiple value={selectedCategories.slice(1)} onChange={(event) => setSelectedCategories([selectedCategories[0], ...Array.from(event.target.selectedOptions, (option) => option.value)])}>
-              {categories.filter((category) => category.active && String(category.id) !== selectedCategories[0]).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            <select
+              multiple
+              value={selectedCategories.slice(1)}
+              onChange={(event) =>
+                setSelectedCategories([
+                  selectedCategories[0],
+                  ...Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                ])
+              }
+            >
+              {categories
+                .filter(
+                  (category) =>
+                    category.active &&
+                    String(category.id) !== selectedCategories[0],
+                )
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
             </select>
           </label>
           <div className="formGrid">
-            <label>
-              X position (ft)
-              <input
-                name="x"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={stack.x}
-                required
-              />
-            </label>
-            <label>
-              Y position (ft)
-              <input
-                name="y"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={stack.y}
-                required
-              />
-            </label>
-            <label>
-              Width (ft)
-              <input
-                name="width"
-                type="number"
-                min="0.01"
-                step="0.01"
-                defaultValue={stack.width}
-                required
-              />
-            </label>
-            <label>
-              Height (ft)
-              <input
-                name="height"
-                type="number"
-                min="0.01"
-                step="0.01"
-                defaultValue={stack.height}
-                required
-              />
-            </label>
-            <label>
-              Depth (ft)
-              <input
-                name="depth"
-                type="number"
-                min="0.01"
-                step="0.01"
-                defaultValue={stack.depth}
-                required
-              />
-            </label>
-            <label>
-              Orientation °
-              <input
-                name="rotation"
-                type="number"
-                step="0.01"
-                defaultValue={stack.rotation}
-                required
-              />
-            </label>
+            <FormField
+              label="X position (ft)"
+              name="x"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={stack.x}
+              required
+            />
+            <FormField
+              label="Y position (ft)"
+              name="y"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={stack.y}
+              required
+            />
+            <FormField
+              label="Width (ft)"
+              name="width"
+              type="number"
+              min="0.01"
+              step="0.01"
+              defaultValue={stack.width}
+              required
+            />
+            <FormField
+              label="Height (ft)"
+              name="height"
+              type="number"
+              min="0.01"
+              step="0.01"
+              defaultValue={stack.height}
+              required
+            />
+            <FormField
+              label="Depth (ft)"
+              name="depth"
+              type="number"
+              min="0.01"
+              step="0.01"
+              defaultValue={stack.depth}
+              required
+            />
+            <FormField
+              label="Orientation °"
+              name="rotation"
+              type="number"
+              step="0.01"
+              defaultValue={stack.rotation}
+              required
+            />
           </div>
           <label>
             Notes

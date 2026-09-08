@@ -7,6 +7,7 @@ export function ProductsPage() {
   const [zones, setZones] = useState([]);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
   const load = () =>
     Promise.all([
       api("/api/v1/catalog/products/"),
@@ -22,6 +23,20 @@ export function ProductsPage() {
   }, []);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!rows) return <Loading />;
+  const searchTerms = query
+    .trim()
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter(Boolean);
+  const visibleProducts = rows.filter((product) => {
+    const searchable = [
+      product.name,
+      ...product.variants.flatMap((variant) => [variant.name, variant.sku]),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return searchTerms.every((term) => searchable.includes(term));
+  });
   if (adding)
     return (
       <ProductForm
@@ -41,8 +56,17 @@ export function ProductsPage() {
         </div>
         <button onClick={() => setAdding(true)}>Add Product</button>
       </div>
-      {rows.length ? (
-        rows.map((product) => (
+      <label>
+        Search products, variants or SKU
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Product name, RIGHT-R01, L01-S02…"
+        />
+      </label>
+      {visibleProducts.length ? (
+        visibleProducts.map((product) => (
           <article className="panel" key={product.id}>
             <h2>{product.name}</h2>
             <span>
@@ -58,7 +82,10 @@ export function ProductsPage() {
               return (
                 <div className="productLocation" key={variant.id}>
                   <b>
-                    {variant.name} · {variant.sku} · Latest BP {variant.latest_bp ?? "—"} · SP KSh {variant.selling_price} · Physical {variant.physical ?? 0} · Reserved {variant.reserved ?? 0} · Available {variant.available ?? 0}
+                    {variant.name} · {variant.sku} · Latest BP{" "}
+                    {variant.latest_bp ?? "—"} · SP KSh {variant.selling_price}{" "}
+                    · Physical {variant.physical ?? 0} · Reserved{" "}
+                    {variant.reserved ?? 0} · Available {variant.available ?? 0}
                   </b>
                   <span>
                     {location?.preferred_shelf
@@ -81,8 +108,9 @@ export function ProductsPage() {
         ))
       ) : (
         <Empty>
-          No products yet. Create the first product and assign its real
-          location.
+          {rows.length
+            ? "No products match your search."
+            : "No products yet. Create the first product and assign its real location."}
         </Empty>
       )}
     </>

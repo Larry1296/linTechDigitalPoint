@@ -1,3 +1,4 @@
+import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
 import {
   BarChart3,
   Box,
@@ -11,7 +12,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../core/auth/AuthContext";
 import { AppFooter, AppNavbar } from "../components/AppChrome";
@@ -115,31 +116,18 @@ export function StaffLayout() {
           >
             <X size={24} aria-hidden="true" />
           </button>
-          <nav>
-            {operations.map((section) => {
-              const visible = section.links.filter(
+          <SidebarNavigation
+            sections={operations.map((section) => ({
+              ...section,
+              links: section.links.filter(
                 (item) =>
                   !item.permission ||
                   user?.is_superuser ||
                   user?.permissions.includes(item.permission),
-              );
-              return visible.length ? (
-                <section key={section.title}>
-                  <small>{section.title.toUpperCase()}</small>
-                  {visible.map(({ to, label, icon: Icon }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      <Icon />
-                      {label}
-                    </NavLink>
-                  ))}
-                </section>
-              ) : null;
-            })}
-          </nav>
+              ),
+            }))}
+            onNavigate={() => setSidebarOpen(false)}
+          />
         </aside>
         <main>
           <Outlet />

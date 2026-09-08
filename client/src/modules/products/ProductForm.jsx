@@ -1,9 +1,13 @@
+import { ProductSkuField } from "./components/ProductSkuField";
+import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
 export function ProductForm({ zones, onSaved, preferredShelf }) {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [productName, setProductName] = useState("");
+  const [variantName, setVariantName] = useState("Standard");
   const [type, setType] = useState("STOCK_ITEM");
   const [shelf, setShelf] = useState(preferredShelf);
   const [error, setError] = useState("");
@@ -38,10 +42,13 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
     <form className="formCard productForm" onSubmit={save}>
       <h2>Add Product</h2>
       {error && <p className="formError">{error}</p>}
-      <label>
-        Product name
-        <input name="name" required />
-      </label>
+      <FormField
+        label="Product name"
+        name="name"
+        required
+        value={productName}
+        onChange={(event) => setProductName(event.target.value)}
+      />
       <label>
         Product category — what kind of item is this?
         <select name="category_id" required>
@@ -52,7 +59,10 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
           ))}
         </select>
       </label>
-      <p className="muted">Categories organize products for stock management and the online shop. Physical storage is selected separately.</p>
+      <p className="muted">
+        Categories organize products for stock management and the online shop.
+        Physical storage is selected separately.
+      </p>
       <label>
         Brand
         <select name="brand_id">
@@ -81,38 +91,40 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
       </label>
       <label>
         {type === "SERVICE" ? "Service option" : "Variant"}
-        <input name="variant_name" defaultValue="Standard" required />
+        <input
+          name="variant_name"
+          value={variantName}
+          onChange={(event) => setVariantName(event.target.value)}
+          required
+        />
       </label>
-      <label>
-        {type === "SERVICE" ? "Service code" : "SKU"}
-        <input name="sku" required />
-      </label>
-      {type === "STOCK_ITEM" && (
-        <label>
-          Barcode
-          <input name="barcode" />
-        </label>
-      )}
-      <label>
-        Product image URL
-        <input name="image_url" type="url" />
-      </label>
-      <label>
-        Selling price
-        <input name="selling_price" type="number" min="0" step=".01" required />
-      </label>
+      <ProductSkuField
+        productName={productName}
+        variantName={variantName}
+        zones={zones}
+        shelfId={shelf}
+        productType={type}
+      />
+      {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
+      <FormField label="Product image URL" name="image_url" type="url" />
+      <FormField
+        label="Selling price"
+        name="selling_price"
+        type="number"
+        min="0"
+        step=".01"
+        required
+      />
       {type === "SERVICE" ? (
         <>
-          <label>
-            Service cost
-            <input
-              name="service_cost"
-              type="number"
-              min="0"
-              step=".01"
-              defaultValue="0"
-            />
-          </label>
+          <FormField
+            label="Service cost"
+            name="service_cost"
+            type="number"
+            min="0"
+            step=".01"
+            defaultValue="0"
+          />
           <p className="muted serviceHint">
             Examples: Windows installation, Microsoft Office setup, drivers,
             antivirus, printing, scanning, typing or application installation.
@@ -121,26 +133,22 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         </>
       ) : (
         <>
-          <label>
-            Minimum stock
-            <input
-              name="minimum_stock"
-              type="number"
-              min="0"
-              step=".001"
-              defaultValue="0"
-            />
-          </label>
-          <label>
-            Target stock
-            <input
-              name="target_stock"
-              type="number"
-              min="0"
-              step=".001"
-              defaultValue="0"
-            />
-          </label>
+          <FormField
+            label="Minimum stock"
+            name="minimum_stock"
+            type="number"
+            min="0"
+            step=".001"
+            defaultValue="0"
+          />
+          <FormField
+            label="Target stock"
+            name="target_stock"
+            type="number"
+            min="0"
+            step=".001"
+            defaultValue="0"
+          />
         </>
       )}
       <label>
@@ -158,26 +166,22 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
             value={shelf}
             onChange={setShelf}
           />
-          <label>
-            Opening buying price
-            <input
-              name="opening_unit_cost"
-              type="number"
-              min="0"
-              step=".01"
-              defaultValue="0"
-            />
-          </label>
-          <label>
-            Opening quantity
-            <input
-              name="opening_quantity"
-              type="number"
-              min="0"
-              step=".001"
-              defaultValue="0"
-            />
-          </label>
+          <FormField
+            label="Opening buying price"
+            name="opening_unit_cost"
+            type="number"
+            min="0"
+            step=".01"
+            defaultValue="0"
+          />
+          <FormField
+            label="Opening quantity"
+            name="opening_quantity"
+            type="number"
+            min="0"
+            step=".001"
+            defaultValue="0"
+          />
         </>
       )}
       <button>Create Product</button>

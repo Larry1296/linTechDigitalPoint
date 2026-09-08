@@ -61,7 +61,7 @@ describe("authentication experience", () => {
       name: "Main navigation",
     });
     expect(
-      within(navigation).getByRole("link", { name: "Login/Register" }),
+      screen.getByRole("link", { name: "Login/Register" }),
     ).toHaveAttribute("href", "/login");
     expect(
       within(navigation).queryByText("Owner Login"),
