@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.catalog.models import (
-    Category, Product, ProductImage, ProductOptionType, ProductOptionValue,
+    Category, Product, ProductOptionType, ProductOptionValue,
     ProductVariant, ProductVariantOptionValue,
 )
 from apps.inventory.models import Shelf, ShelfStack, ShelfStackCategory, StockReceipt
@@ -86,10 +86,8 @@ class Command(BaseCommand):
             product, _ = Product.objects.get_or_create(slug=slug, defaults={"name": name, "category": assigned})
             if product.category_id != assigned.pk or not product.active or product.product_type != Product.STOCK_ITEM:
                 raise CommandError(f"Existing product {slug} conflicts with sample data.")
-            ProductImage.objects.get_or_create(
-                product=product, image_url=f"https://placehold.co/640x480/png?text={slug}",
-                defaults={"alt_text": f"Sample {name} placeholder", "sort_order": 0},
-            )
+            from apps.catalog.image_library import assign_product_image
+            assign_product_image(product)
             for sku, values, price, cost, quantity, code in variants:
                 variant, _ = ProductVariant.objects.get_or_create(
                     sku=sku, defaults={"product": product, "name": " / ".join(values), "selling_price": Decimal(price)},

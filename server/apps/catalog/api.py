@@ -12,6 +12,12 @@ from .models import Brand, Category, PriceHistory, Product, ProductImage, Produc
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    image_pool = serializers.SerializerMethodField()
+
+    def get_image_pool(self, obj):
+        from .image_library import image_choices
+        return image_choices(obj)
+
     class Meta:
         model = Category
         fields = "__all__"
@@ -200,6 +206,8 @@ class ProductViewSet(SecuredModelViewSet):
             opening_reference=request.data.get("opening_reference", "OPENING"),
         )
         if request.data.get("image_url"):
+            from .image_library import PREFIX
+            product.images.filter(image_url__startswith=PREFIX).delete()
             ProductImage.objects.create(
                 product=product,
                 image_url=request.data["image_url"],
@@ -257,3 +265,8 @@ class VariantViewSet(SecuredModelViewSet):
 class ImageViewSet(SecuredModelViewSet):
     queryset = ProductImage.objects.all()
     serializer_class = ImageSerializer
+
+    def perform_create(self, serializer):
+        from .image_library import PREFIX
+        image = serializer.save()
+        image.product.images.filter(image_url__startswith=PREFIX).exclude(pk=image.pk).delete()

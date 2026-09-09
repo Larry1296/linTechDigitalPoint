@@ -106,7 +106,11 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         productType={type}
       />
       {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
-      <FormField label="Product image URL" name="image_url" type="url" />
+      <FormField label="Product image URL (optional)" name="image_url" type="url" />
+      <p className="muted">
+        Leave the image URL empty to randomly select an AI illustration matching
+        the product name and category. Your own image URL takes priority.
+      </p>
       <FormField
         label="Selling price"
         name="selling_price"

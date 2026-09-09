@@ -39,6 +39,9 @@ export function ProductPage() {
         <h1>{p.product_name}</h1>
         {p.name !== "Standard" && <h3>{p.name}</h3>}
         <p>{p.description || "A quality choice from LinTech Digital Point."}</p>
+        {p.images?.[0]?.url?.startsWith("/images/catalog/") && (
+          <p className="muted">AI illustration. Actual model and appearance may vary.</p>
+        )}
         <strong className="price">KSh {p.selling_price}</strong>
         <StockAvailability available={p.available} as="p" />
         <AddToCartButton

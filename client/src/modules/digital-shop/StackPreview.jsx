@@ -11,14 +11,14 @@ export function StackPreview({
 }) {
   const rows = stack
     ? [...stack.levels]
-        .sort((a, b) => b.level_number - a.level_number)
+        .sort((a, b) => a.level_number - b.level_number)
         .map((level) => ({
           number: level.level_number,
           shelves: level.shelves,
           compartments: level.shelves.length,
         }))
-    : [...levels].reverse().map((level, index) => ({
-        number: levels.length - index,
+    : [...levels].map((level, index) => ({
+        number: index + 1,
         shelves: [],
         compartments: level.compartments,
       }));

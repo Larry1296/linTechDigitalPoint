@@ -9,6 +9,15 @@ class Brand(TimeStamped):
 class Product(TimeStamped):
     STOCK_ITEM="STOCK_ITEM"; SERVICE="SERVICE"
     name=models.CharField(max_length=180); slug=models.SlugField(unique=True); category=models.ForeignKey(Category,on_delete=models.PROTECT); brand=models.ForeignKey(Brand,null=True,blank=True,on_delete=models.PROTECT); product_type=models.CharField(max_length=20,choices=[(STOCK_ITEM,"Stock item"),(SERVICE,"Service")],default=STOCK_ITEM); description=models.TextField(blank=True); active=models.BooleanField(default=True); ecommerce_visible=models.BooleanField(default=True); online_orderable=models.BooleanField(default=True)
+    def save(self, *args, **kwargs):
+        from django.db import transaction
+        from .image_library import assign_product_image
+        creating = self._state.adding
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if creating:
+                assign_product_image(self)
+
     def __str__(self): return self.name
 class ProductVariant(TimeStamped):
     product=models.ForeignKey(Product,related_name="variants",on_delete=models.CASCADE); name=models.CharField(max_length=120,default="Standard"); sku=models.CharField(max_length=64,unique=True); barcode=models.CharField(max_length=64,null=True,blank=True,unique=True); selling_price=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); service_cost=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); minimum_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); target_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); active=models.BooleanField(default=True)

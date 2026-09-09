@@ -16,3 +16,48 @@ def test_software_service_creation_has_cost_but_no_physical_stock():
     assert variant.service_cost==200 and variant.product.product_type==Product.SERVICE
     assert not StockBalance.objects.filter(lot__variant=variant).exists()
     assert not VariantPreferredLocation.objects.filter(variant=variant).exists()
+
+@pytest.mark.django_db
+def test_ai_image_matches_product_and_remains_stable():
+    category = Category.objects.create(name="Phone Accessories", slug="phones")
+    product = Product.objects.create(name="USB cable", slug="usb-cable", category=category)
+    image = product.images.get()
+    assert image.image_url in {"/images/catalog/cable-white.png", "/images/catalog/cable-black.png"}
+    product.description = "Updated"
+    product.save()
+    assert product.images.get().pk == image.pk
+    assert product.images.get().image_url == image.image_url
+
+
+@pytest.mark.django_db
+def test_ai_image_does_not_guess_unrelated_product():
+    category = Category.objects.create(name="Computer Accessories", slug="computers")
+    product = Product.objects.create(name="External hard drive", slug="drive", category=category)
+    assert not product.images.exists()
+
+
+@pytest.mark.django_db
+def test_custom_image_replaces_generated_default():
+    owner = User.objects.create_superuser("image-owner", "images@example.test", "Strong-pass-1296")
+    category = Category.objects.create(name="Padlocks", slug="locks")
+    client = APIClient()
+    client.force_authenticate(owner)
+    response = client.post("/api/v1/catalog/products/create-with-stock/", {
+        "name": "Brass padlock", "category_id": category.pk, "sku": "LOCK-IMG",
+        "selling_price": "100", "image_url": "https://example.test/actual-lock.jpg",
+    }, format="json")
+    assert response.status_code == 201
+    product = Product.objects.get(pk=response.json()["product_id"])
+    assert product.images.get().image_url == "https://example.test/actual-lock.jpg"
+
+
+@pytest.mark.django_db
+def test_image_backfill_is_idempotent_and_preserves_custom_photos():
+    from django.core.management import call_command
+    category = Category.objects.create(name="Padlocks", slug="locks")
+    product = Product.objects.create(name="Padlock", slug="lock", category=category)
+    product.images.all().delete()
+    product.images.create(image_url="https://example.test/photo.jpg")
+    call_command("assign_catalog_images")
+    call_command("assign_catalog_images")
+    assert product.images.get().image_url == "https://example.test/photo.jpg"
