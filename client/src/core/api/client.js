@@ -19,7 +19,7 @@ export async function api(path, options = {}) {
     options.headers = {
       ...options.headers,
       "X-CSRFToken": csrfToken,
-      "Content-Type": "application/json",
+      ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     };
   }
   const response = await fetch(path, { credentials: "include", ...options });

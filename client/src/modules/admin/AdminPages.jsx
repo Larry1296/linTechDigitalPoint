@@ -1,3 +1,4 @@
+import { AdjustmentReport } from "../inventory/StockAdjustmentPage";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
@@ -322,6 +323,7 @@ export function AnalyticsPage() {
       <span className="eyebrow">Reporting</span>
       <h1>Analytics</h1>
       <DashboardPage />
+      <AdjustmentReport />
     </>
   );
 }

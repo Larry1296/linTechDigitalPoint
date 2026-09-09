@@ -1,3 +1,4 @@
+import { ProductImage } from "../storefront/components/ProductImage";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -24,9 +25,10 @@ export function AccountPage() {
             {cart.items.map((item) => (
               <article key={item.id}>
                 <div>
-                  <b>{item.product_name}</b>
+                  <ProductImage product={item} />
+                  <b>{item.display_name}</b>
                   <small>
-                    {item.variant_name} · SKU {item.sku}
+                    SKU {item.sku}
                   </small>
                 </div>
                 <span>Qty {item.quantity}</span>
@@ -88,6 +90,7 @@ export function OrdersPage() {
             <Link to={"/account/orders/" + o.id} key={o.id}>
               <b>{o.number}</b>
               <span>{o.status}</span>
+              <span>{o.items.map((item) => item.display_name).join("; ")}</span>
               <strong>KSh {o.total}</strong>
             </Link>
           ))}
@@ -119,15 +122,17 @@ export function OrderDetailPage() {
       <div className="list">
         {row.items.map((i) => (
           <article key={i.id}>
-            <b>{i.product_name}</b>
+            <ProductImage product={i} />
+                  <b>{i.display_name}</b>
             <span>
-              {i.variant_name} × {i.quantity}
+              Qty {i.quantity} · SKU {i.sku}
             </span>
             <strong>KSh {i.unit_price}</strong>
           </article>
         ))}
       </div>
       <h2>Total KSh {row.total}</h2>
+      <button type="button" onClick={() => window.print()}>Print order / receipt</button>
     </>
   );
 }

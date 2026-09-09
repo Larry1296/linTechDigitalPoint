@@ -1,0 +1,43 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { DigitalShopPage } from "./DigitalShopPage";
+import { CategoryManager } from "./CategoryManager";
+import { loadCategories, loadZones, saveCategory } from "./api";
+vi.mock("./api", () => ({ loadCategories: vi.fn(), loadZones: vi.fn(), saveCategory: vi.fn() }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { is_superuser: true, permissions: [] } }) }));
+vi.mock("./StackBuilder", () => ({ StackBuilder: () => null }));
+vi.mock("./StackEditor", () => ({ StackEditor: () => null }));
+vi.mock("./ShelfDetails", () => ({ ShelfDetails: () => null }));
+beforeEach(() => { vi.clearAllMocks(); loadCategories.mockResolvedValue([]); loadZones.mockResolvedValue([]); });
+it("starts with manual category creation and never seeds on opening Digital Shop", async () => {
+  render(<DigitalShopPage />);
+  expect(await screen.findByRole("button", { name: "Create category" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Create First Shelf Stack" })).not.toBeInTheDocument();
+  expect(saveCategory).not.toHaveBeenCalled();
+  saveCategory.mockResolvedValue({ id: 1, name: "Mobile Accessories", parent: null, active: true });
+  fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "Mobile Accessories" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+  await screen.findByText("Mobile Accessories created.");
+  expect(saveCategory).toHaveBeenCalledWith(null, { name: "Mobile Accessories", parent: null, active: true });
+  expect(screen.getByRole("button", { name: "Create First Shelf Stack" })).toBeInTheDocument();
+});
+it("shows server errors without discarding the owner's input", async () => {
+  saveCategory.mockRejectedValue(new Error("A category with this name already exists."));
+  render(<CategoryManager categories={[]} onSaved={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "Mobile Accessories" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+  expect(screen.getByLabelText("Category name")).toHaveValue("Mobile Accessories");
+});
+it("edits and deactivates categories without deleting their references", async () => {
+  const root = { id: 1, name: "Mobile Accessories", parent: null, active: true };
+  const child = { id: 2, name: "Cables", parent: 1, active: true };
+  const onSaved = vi.fn();
+  saveCategory.mockResolvedValue({ ...child, active: false });
+  render(<CategoryManager categories={[root, child]} onSaved={onSaved} />);
+  fireEvent.click(screen.getByRole("button", { name: "Edit Cables" }));
+  fireEvent.click(screen.getByLabelText("Active category"));
+  fireEvent.click(screen.getByRole("button", { name: "Save category" }));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  expect(saveCategory).toHaveBeenCalledWith(2, { name: "Cables", parent: 1, active: false });
+});

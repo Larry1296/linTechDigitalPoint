@@ -63,8 +63,28 @@ class StockReceiptPlacement(TimeStamped):
     balance=models.ForeignKey(StockBalance,null=True,blank=True,related_name="receipt_placements",on_delete=models.PROTECT)
     class Meta:
         constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_receipt_placement"),models.UniqueConstraint(fields=["line","shelf"],name="unique_receipt_line_shelf")]
+class StockAdjustment(models.Model):
+    REASONS=[(x,x) for x in ["Opening stock correction", "Physical count variance", "Damaged item", "Lost item", "Data-entry correction", "Found stock"]]
+    variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT)
+    shelf=models.ForeignKey(Shelf,on_delete=models.PROTECT)
+    quantity_before=models.DecimalField(max_digits=14,decimal_places=3)
+    amount=models.DecimalField(max_digits=14,decimal_places=3)
+    quantity_after=models.DecimalField(max_digits=14,decimal_places=3)
+    reason=models.CharField(max_length=40,choices=REASONS)
+    notes=models.TextField(blank=True)
+    reference=models.CharField(max_length=100,blank=True)
+    performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.PROTECT)
+    created_at=models.DateTimeField(auto_now_add=True)
+    idempotency_key=models.CharField(max_length=120,unique=True)
+    class Meta:
+        permissions=[("adjust_stock", "Can post physical stock adjustments")]
+        constraints=[models.CheckConstraint(condition=Q(quantity_before__gte=0)&Q(quantity_after__gte=0)&Q(quantity_after=models.F("quantity_before")+models.F("amount"))&~Q(amount=0),name="valid_stock_adjustment")]
+
 class Movement(models.Model):
-    TYPES=[(x,x.replace("_"," ").title()) for x in ["OPENING_STOCK","PURCHASE_RECEIPT","SALE","ONLINE_ORDER","CYBER_CONSUMPTION","TRANSFER","CUSTOMER_RETURN","SUPPLIER_RETURN","DAMAGE","LOSS","STOCKTAKE_ADJUSTMENT","MANUAL_ADJUSTMENT","ORDER_RESERVATION","RESERVATION_RELEASE","OTHER"]]
+    adjustment=models.ForeignKey(StockAdjustment,null=True,blank=True,on_delete=models.PROTECT,related_name="movements")
+    quantity_before=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)
+    quantity_after=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)
+    TYPES=[(x,x.replace("_"," ").title()) for x in ["OPENING_STOCK","PURCHASE_RECEIPT","SALE","ONLINE_ORDER","CYBER_CONSUMPTION","TRANSFER","CUSTOMER_RETURN","SUPPLIER_RETURN","DAMAGE","LOSS","STOCKTAKE_ADJUSTMENT","STOCK_ADJUSTMENT","MANUAL_ADJUSTMENT","ORDER_RESERVATION","RESERVATION_RELEASE","OTHER"]]
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); lot=models.ForeignKey(StockLot,null=True,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); source=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_out"); destination=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_in"); movement_type=models.CharField(max_length=30,choices=TYPES); reference=models.CharField(max_length=100); performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL); notes=models.TextField(blank=True); created_at=models.DateTimeField(auto_now_add=True)
 class Reservation(TimeStamped):
     ACTIVE="ACTIVE"; CONSUMED="CONSUMED"; RELEASED="RELEASED"

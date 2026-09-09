@@ -1,9 +1,12 @@
+import { DisplayImageInput } from "./components/DisplayImageInput";
 import { ProductSkuField } from "./components/ProductSkuField";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
 export function ProductForm({ zones, onSaved, preferredShelf }) {
+  const [displayImage, setDisplayImage] = useState(null);
+  const [visible, setVisible] = useState(true);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [productName, setProductName] = useState("");
@@ -22,16 +25,16 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
   }, []);
   const save = async (e) => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget));
+    const data = new FormData(e.currentTarget);
+    if (visible && !displayImage) { setError("Add a Product display image before making this product visible to customers."); return; }
+    data.set("preferred_shelf_id", type === "STOCK_ITEM" && shelf ? shelf : "");
+    data.set("ecommerce_visible", String(visible));
+    data.set("online_orderable", String(data.get("online_orderable") === "on"));
+    if (displayImage) data.set("display_image", displayImage);
     try {
       await api("/api/v1/catalog/products/create-with-stock/", {
         method: "POST",
-        body: JSON.stringify({
-          ...data,
-          preferred_shelf_id: type === "STOCK_ITEM" ? shelf : null,
-          ecommerce_visible: data.ecommerce_visible === "on",
-          online_orderable: data.online_orderable === "on",
-        }),
+        body: data,
       });
       onSaved();
     } catch (err) {
@@ -106,11 +109,7 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         productType={type}
       />
       {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
-      <FormField label="Product image URL (optional)" name="image_url" type="url" />
-      <p className="muted">
-        Leave the image URL empty to randomly select an AI illustration matching
-        the product name and category. Your own image URL takes priority.
-      </p>
+      <DisplayImageInput file={displayImage} onChange={setDisplayImage} required={visible} />
       <FormField
         label="Selling price"
         name="selling_price"
@@ -156,7 +155,7 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         </>
       )}
       <label>
-        <input name="ecommerce_visible" type="checkbox" defaultChecked />{" "}
+        <input name="ecommerce_visible" type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} />{" "}
         Visible online
       </label>
       <label>

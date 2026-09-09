@@ -1,3 +1,4 @@
+import { ProductImage } from "./components/ProductImage";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -31,11 +32,12 @@ export function CartPage() {
             {cart.items.map((i) => (
               <article key={i.id}>
                 <div>
-                  <b>{i.product_name}</b>
-                  <small>{i.variant_name}</small>
+                  <ProductImage product={i} />
+                  <b>{i.display_name}</b>
+                  <small>SKU {i.sku}</small>
                 </div>
                 <input
-                  aria-label={"Quantity for " + i.product_name}
+                  aria-label={"Quantity for " + i.display_name}
                   type="number"
                   min="0"
                   step="1"

@@ -1,10 +1,11 @@
 from decimal import Decimal
 from uuid import uuid4
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from apps.catalog.models import ProductVariant
+from apps.catalog.display_images import variant_images
 from apps.core.models import AuditLog,Store
 from apps.inventory.models import Movement,Reservation,StockBalance,StockLot
 from apps.inventory.services import _d,reserve_stock
@@ -35,19 +36,39 @@ def adopt_cart(cart,user):
         cart.active=False;cart.save(update_fields=["active","updated_at"]);return target
     cart.customer=user;cart.session_key="";cart.save(update_fields=["customer","session_key","updated_at"]);return cart
 def cart_total(cart): return sum((item.quantity*item.variant.selling_price for item in cart.items.select_related("variant")),Decimal("0"))
+def validate_online_variant(variant, quantity):
+    if not variant.active or not variant.product.active or not variant.product.ecommerce_visible or not variant.product.online_orderable:
+        raise ValidationError("This variant is not available for online ordering.")
+    if variant.selling_price <= 0:
+        raise ValidationError("This variant's selling price has not been confirmed.")
+    if quantity <= 0 or not quantity.is_finite():
+        raise ValidationError("Quantity must be positive and finite.")
+    if variant.product.product_type == "STOCK_ITEM":
+        available = StockBalance.objects.filter(lot__variant=variant).aggregate(value=Sum(F("quantity") - F("reserved")))["value"] or Decimal("0")
+        if quantity > available:
+            raise ValidationError(f"Only {available} units of {variant.product.name} — {variant.name} are available.")
+
+
 @transaction.atomic
 def checkout_cart(*,request,fulfillment_method,address=None,payment_method="CASH_ON_PICKUP",notes=""):
     if not request.user.is_authenticated:raise ValidationError("Authentication required.")
-    cart=get_cart(request); items=list(cart.items.select_related("variant__product"))
+    cart=get_cart(request)
+    cart=Cart.objects.select_for_update().get(pk=cart.pk)
+    items=list(cart.items.select_for_update().select_related("variant__product"))
+    variants = {v.pk: v for v in ProductVariant.objects.select_for_update().select_related("product").filter(pk__in=[i.variant_id for i in items]).order_by("pk")}
+    for item in items:
+        item.variant = variants[item.variant_id]
+        validate_online_variant(item.variant, item.quantity)
     if not items:raise ValidationError("Cart is empty.")
     if any(not item.variant.product.online_orderable for item in items):raise ValidationError("This cart contains a service that is not available for online ordering.")
-    number=f"LT-WEB-{timezone.now():%y%m%d}-{uuid4().hex[:6].upper()}"; subtotal=cart_total(cart)
+    number=f"LT-WEB-{timezone.now():%y%m%d}-{uuid4().hex[:6].upper()}"; subtotal=sum((item.quantity * item.variant.selling_price for item in items), Decimal("0"))
     order=Order.objects.create(number=number,customer=request.user,subtotal=subtotal,total=subtotal,fulfillment_method=fulfillment_method,address=address,notes=notes,status="AWAITING_PAYMENT")
     timeout=Store.objects.first().reservation_timeout_minutes if Store.objects.exists() else 30
     for cart_item in items:
         v=cart_item.variant; reservation=None
         if v.product.product_type=="STOCK_ITEM":reservation=reserve_stock(variant=v,quantity=cart_item.quantity,reference=number,expires_at=timezone.now()+timezone.timedelta(minutes=timeout),user=request.user)
-        OrderItem.objects.create(order=order,variant=v,product_name=v.product.name,variant_name=v.name,sku=v.sku,quantity=cart_item.quantity,unit_price=v.selling_price,reservation=reservation)
+        photos = variant_images(v)
+        OrderItem.objects.create(order=order,variant=v,image_url=photos[0]["url"] if photos else "",product_name=v.product.name,variant_name=v.name,sku=v.sku,quantity=cart_item.quantity,unit_price=v.selling_price,reservation=reservation)
     status="PENDING" if payment_method in ["CASH_ON_PICKUP"] else "MANUAL_REVIEW"
     Payment.objects.create(order=order,method=payment_method,amount=order.total,status=status,idempotency_key=f"checkout:{order.number}")
     OrderStatusHistory.objects.create(order=order,status=order.status,note="Order placed",changed_by=request.user); cart.active=False; cart.save(update_fields=["active","updated_at"])

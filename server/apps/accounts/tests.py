@@ -219,6 +219,8 @@ def test_anonymous_cart_survives_customer_login(reserved_order):
     balance = StockBalance.objects.get(lot=lot)
     balance.reserved = 0
     balance.save()
+    # This login test requests two units; cart stock validation requires both.
+    receive_stock(variant=lot.variant, placements=[{"shelf": balance.shelf, "quantity": 1}], unit_cost=120, reference="PO-LOGIN")
     customer = User.objects.create_user("returning", "returning@lintech.test", "Strong-pass-1296")
     client = APIClient()
     client.post("/api/v1/commerce/cart/", {"variant_id": lot.variant_id, "quantity": 2}, format="json")

@@ -1,10 +1,15 @@
+import { useAuth } from "../../core/auth/AuthContext";
+import { canAdjust } from "../inventory/StockAdjustmentPage";
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { api } from "../../core/api/client";
+import { ProductPhotos } from "./ProductPhotos";
 import { ProductForm } from "./ProductForm";
 export function ProductsPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState();
   const [zones, setZones] = useState([]);
+  const [photos, setPhotos] = useState(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -37,6 +42,7 @@ export function ProductsPage() {
       .toLowerCase();
     return searchTerms.every((term) => searchable.includes(term));
   });
+  if (photos) return <ProductPhotos product={photos} onClose={() => setPhotos(null)} onSaved={() => { setPhotos(null); void load(); }} />;
   if (adding)
     return (
       <ProductForm
@@ -69,6 +75,7 @@ export function ProductsPage() {
         visibleProducts.map((product) => (
           <article className="panel" key={product.id}>
             <h2>{product.name}</h2>
+            <button type="button" className="secondary" onClick={() => setPhotos(product)}>Edit display images / variants</button>
             <span>
               Category: {product.category_name || product.category}
               {product.product_type === "SERVICE"
@@ -87,6 +94,8 @@ export function ProductsPage() {
                     · Physical {variant.physical ?? 0} · Reserved{" "}
                     {variant.reserved ?? 0} · Available {variant.available ?? 0}
                   </b>
+                  <button type="button" className="secondary" onClick={() => setPhotos({ ...product, selectedVariantId: variant.id })}>Edit variant image</button>
+                  {canAdjust(user) && product.product_type !== "SERVICE" && <a href={`/admin-app/adjust-stock?variant=${variant.id}`}>Adjust Stock / Stock history</a>}
                   <span>
                     {location?.preferred_shelf
                       ? `✓ Preferred: ${location.preferred_shelf.code} — ${location.preferred_shelf.display_name}`

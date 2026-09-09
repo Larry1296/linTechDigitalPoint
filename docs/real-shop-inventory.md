@@ -1,5 +1,9 @@
 # Real shop inventory
 
+> Historical seeder reference. The current owner-directed workflow is
+> [manual entry from an empty shop](manual-shop-start.md). Do not run the setup
+> or reception commands below during that workflow; receipt 147 is unreceived.
+
 Run commands from `server` using `../.venv/bin/python manage.py`.
 
 ```sh

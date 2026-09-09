@@ -2,6 +2,9 @@ from decimal import Decimal
 from uuid import uuid4
 from django.contrib.auth.models import User
 from django.db.models import F,Sum
+from django.db import transaction
+from apps.catalog.identity import display_name
+from apps.catalog.display_images import variant_images
 from rest_framework import permissions,serializers,status,viewsets
 from rest_framework.decorators import action,api_view,permission_classes
 from rest_framework.response import Response
@@ -10,42 +13,85 @@ from apps.catalog.models import ProductVariant
 from apps.core.permissions import HasLinTechPermission,IsInternalStaff
 from apps.inventory.models import StockBalance
 from apps.inventory.services import complete_sale
-from .models import CartItem,Order
-from .services import checkout_cart,complete_reserved_order,get_cart
+from .models import Cart,CartItem,Order
+from .services import checkout_cart,complete_reserved_order,get_cart,validate_online_variant
 class CartItemSerializer(serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+    def get_images(self, obj):
+        return variant_images(obj.variant)
+    display_name = serializers.SerializerMethodField()
+    variant_id = serializers.IntegerField(read_only=True)
+    def get_display_name(self, obj):
+        return display_name(obj.variant.product.name, obj.variant.name)
     product_name=serializers.CharField(source="variant.product.name",read_only=True); variant_name=serializers.CharField(source="variant.name",read_only=True); sku=serializers.CharField(source="variant.sku",read_only=True); unit_price=serializers.DecimalField(source="variant.selling_price",max_digits=14,decimal_places=2,read_only=True); line_total=serializers.SerializerMethodField(); available=serializers.SerializerMethodField()
-    class Meta:model=CartItem;fields=["id","variant","product_name","variant_name","sku","quantity","unit_price","line_total","available"]
+    class Meta:model=CartItem;fields=["images","id","variant","variant_id","display_name","product_name","variant_name","sku","quantity","unit_price","line_total","available"]
     def get_line_total(self,obj):return obj.quantity*obj.variant.selling_price
     def get_available(self,obj):return StockBalance.objects.filter(lot__variant=obj.variant).aggregate(v=Sum(F("quantity")-F("reserved")))["v"] or 0
 def cart_payload(cart):
     rows=CartItemSerializer(cart.items.select_related("variant__product"),many=True).data
     return {"id":cart.id,"items":rows,"total":str(sum((Decimal(str(x["line_total"])) for x in rows),Decimal("0")))}
-@api_view(["GET","POST"])
+class CartInputSerializer(serializers.Serializer):
+    variant_id = serializers.IntegerField(min_value=1)
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0.001"), default=1)
+
+
+@api_view(["GET", "POST"])
 @permission_classes([permissions.AllowAny])
 def cart(request):
-    current=get_cart(request)
-    if request.method=="POST":
-        variant=ProductVariant.objects.select_related("product").filter(pk=request.data.get("variant_id"),active=True,product__active=True,product__online_orderable=True).first()
-        if not variant:return Response({"detail":"Product variant not found."},status=404)
-        quantity=Decimal(str(request.data.get("quantity",1)))
-        if quantity<=0:return Response({"detail":"Quantity must be positive."},status=400)
-        item,created=CartItem.objects.get_or_create(cart=current,variant=variant,defaults={"quantity":quantity})
-        if not created:item.quantity=F("quantity")+quantity;item.save(update_fields=["quantity","updated_at"])
+    current = get_cart(request)
+    with transaction.atomic():
+        current = Cart.objects.select_for_update().get(pk=current.pk)
+        if request.method == "POST":
+            payload = CartInputSerializer(data=request.data)
+            payload.is_valid(raise_exception=True)
+            variant = ProductVariant.objects.select_for_update().select_related("product").filter(pk=payload.validated_data["variant_id"]).first()
+            if not variant:
+                return Response({"detail": "Product variant not found."}, status=404)
+            item = current.items.select_for_update().filter(variant=variant).first()
+            quantity = payload.validated_data["quantity"] + (item.quantity if item else 0)
+            validate_online_variant(variant, quantity)
+            if item:
+                item.quantity = quantity
+                item.save(update_fields=["quantity", "updated_at"])
+            else:
+                CartItem.objects.create(cart=current, variant=variant, quantity=quantity)
     return Response(cart_payload(current))
-@api_view(["PATCH","DELETE"])
+
+
+@api_view(["PATCH", "DELETE"])
 @permission_classes([permissions.AllowAny])
-def cart_item(request,pk):
-    current=get_cart(request); item=current.items.filter(pk=pk).first()
-    if not item:return Response(status=404)
-    if request.method=="DELETE":item.delete()
-    else:
-        quantity=Decimal(str(request.data.get("quantity",0)))
-        if quantity<=0:item.delete()
-        else:item.quantity=quantity;item.save(update_fields=["quantity","updated_at"])
+def cart_item(request, pk):
+    current = get_cart(request)
+    with transaction.atomic():
+        current = Cart.objects.select_for_update().get(pk=current.pk)
+        item = current.items.select_for_update().filter(pk=pk).first()
+        if not item:
+            return Response(status=404)
+        if request.method == "DELETE":
+            item.delete()
+        else:
+            field = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=0)
+            quantity = field.run_validation(request.data.get("quantity"))
+            if quantity == 0:
+                item.delete()
+            else:
+                variant = ProductVariant.objects.select_for_update().select_related("product").get(pk=item.variant_id)
+                validate_online_variant(variant, quantity)
+                item.quantity = quantity
+                item.save(update_fields=["quantity", "updated_at"])
     return Response(cart_payload(current))
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+    def get_images(self, obj):
+        return [{"url": obj.image_url, "alt": obj.product_name + " — " + obj.variant_name}] if obj.image_url else variant_images(obj.variant)
+    display_name = serializers.SerializerMethodField()
+    variant_id = serializers.IntegerField(read_only=True)
+    def get_display_name(self, obj):
+        return display_name(obj.product_name, obj.variant_name)
     pick_locations=serializers.SerializerMethodField()
-    class Meta:model=__import__("apps.commerce.models",fromlist=["OrderItem"]).OrderItem;fields=["id","product_name","variant_name","sku","quantity","unit_price","pick_locations"]
+    class Meta:model=__import__("apps.commerce.models",fromlist=["OrderItem"]).OrderItem;fields=["images","id","variant_id","display_name","product_name","variant_name","sku","quantity","unit_price","pick_locations"]
     def get_pick_locations(self,obj):
         request=self.context.get("request")
         if not request or not request.user.is_staff:return None

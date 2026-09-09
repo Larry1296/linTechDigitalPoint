@@ -9,6 +9,8 @@ import { Home } from "lucide-react";
 const product = {
   id: 7,
   product_name: "Phone Cover",
+  display_name: "Phone Cover — Blue",
+  variant_count: 1,
   name: "Blue",
   category: "Covers",
   selling_price: "350.00",

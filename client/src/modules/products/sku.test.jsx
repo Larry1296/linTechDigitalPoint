@@ -45,6 +45,8 @@ const zones = [
 ];
 beforeEach(() => {
   vi.clearAllMocks();
+  URL.createObjectURL = vi.fn(() => "blob:photo");
+  URL.revokeObjectURL = vi.fn();
   api.mockImplementation(async (path) =>
     path.includes("categories") ? [{ id: 1, name: "Covers" }] : [],
   );
@@ -136,15 +138,16 @@ describe("searchable SKU suggestions", () => {
     expect(screen.getByLabelText("SKU")).toHaveValue(
       "SMARTPHONE-COVER-BLACK-RIGHT-R01-L01-S02",
     );
+    fireEvent.change(screen.getByLabelText("Upload from storage"), { target: { files: [new File(["photo"], "type-b.png", { type: "image/png" })] } });
     fireEvent.click(screen.getByRole("button", { name: "Create Product" }));
     await waitFor(() => expect(saved).toHaveBeenCalledOnce());
     const request = api.mock.calls.find(([path]) =>
       path.includes("create-with-stock"),
     );
-    expect(JSON.parse(request[1].body)).toEqual(
+    expect(Object.fromEntries(request[1].body)).toEqual(
       expect.objectContaining({
         sku: "SMARTPHONE-COVER-BLACK-RIGHT-R01-L01-S02",
-        preferred_shelf_id: 4,
+        preferred_shelf_id: "4",
       }),
     );
   });
@@ -214,6 +217,11 @@ it("prefills and submits the receiving modal SKU using its exact compartment", a
     target: { value: "200" },
   });
   expect(form.getByLabelText("SKU")).toHaveValue("COVER-RIGHT-R01-L01-S02");
+  fireEvent.click(form.getByRole("button", { name: "Create and return to receipt" }));
+  expect(await form.findByRole("alert")).toHaveTextContent("Add a Product display image");
+  expect(api.mock.calls.some(([path]) => path.includes("create-inline"))).toBe(false);
+  fireEvent.change(form.getByLabelText("Upload from storage"), { target: { files: [new File(["photo"], "type-b.png", { type: "image/png" })] } });
+  expect(form.getByAltText("Product display image preview")).toHaveAttribute("src", "blob:photo");
   fireEvent.click(
     form.getByRole("button", { name: "Create and return to receipt" }),
   );
@@ -225,8 +233,11 @@ it("prefills and submits the receiving modal SKU using its exact compartment", a
   const request = api.mock.calls.find(([path]) =>
     path.includes("create-inline"),
   );
-  expect(JSON.parse(request[1].body).sku).toBe("COVER-RIGHT-R01-L01-S02");
+  expect(request[1].body.get("display_image")).toBeInstanceOf(File);
+  expect(Object.fromEntries(request[1].body).sku).toBe("COVER-RIGHT-R01-L01-S02");
   expect(screen.getByLabelText("Compartment", { exact: true })).toHaveValue(
     "4",
   );
 });
+
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { is_superuser: true } }) }));

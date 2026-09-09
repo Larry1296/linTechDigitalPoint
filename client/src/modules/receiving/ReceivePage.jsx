@@ -1,3 +1,4 @@
+import { DisplayImageInput } from "../products/components/DisplayImageInput";
 import { ProductSkuField } from "../products/components/ProductSkuField";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +31,8 @@ export function ReceivePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [displayImage, setDisplayImage] = useState(null);
+  const [imageError, setImageError] = useState("");
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [newProductName, setNewProductName] = useState("");
   const [newVariantName, setNewVariantName] = useState("Standard");
@@ -554,22 +557,20 @@ export function ReceivePage() {
             onSubmit={async (event) => {
               event.preventDefault();
               try {
-                const data = Object.fromEntries(
-                  new FormData(event.currentTarget),
-                );
+                if (!displayImage) { setImageError("Add a Product display image before making this product visible to customers."); return; }
+                const data = new FormData(event.currentTarget);
+                data.set("display_image", displayImage);
+                data.set("ecommerce_visible", "true");
+                data.set("online_orderable", "true");
                 const result = await api(
                   "/api/v1/catalog/products/create-inline/",
                   {
                     method: "POST",
-                    body: JSON.stringify({
-                      ...data,
-                      ecommerce_visible: true,
-                      online_orderable: true,
-                    }),
+                    body: data,
                   },
                 );
                 const fresh = await api(
-                  `/api/v1/inventory/variants/search/?q=${encodeURIComponent(data.sku)}`,
+                  `/api/v1/inventory/variants/search/?q=${encodeURIComponent(data.get("sku"))}`,
                 );
                 setVariants((old) => [
                   ...old,
@@ -587,12 +588,15 @@ export function ReceivePage() {
                   ),
                 });
                 setNewProductOpen(false);
+                setDisplayImage(null); setImageError("");
               } catch (err) {
                 setError(err.message);
               }
             }}
           >
             <h2>Create product</h2>
+            {imageError && <p role="alert">{imageError}</p>}
+            <DisplayImageInput file={displayImage} onChange={(file) => { setDisplayImage(file); setImageError(""); }} required />
             <FormField
               label="Product name"
               name="name"
@@ -667,7 +671,7 @@ export function ReceivePage() {
             <button
               type="button"
               className="secondary"
-              onClick={() => setNewProductOpen(false)}
+              onClick={() => { setNewProductOpen(false); setDisplayImage(null); setImageError(""); }}
             >
               Cancel
             </button>

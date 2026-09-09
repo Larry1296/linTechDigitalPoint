@@ -1,3 +1,4 @@
+import { ProductImage } from "../storefront/components/ProductImage";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -44,10 +45,11 @@ export function CheckoutPage() {
         <section className="panel">
           <h2>Order review</h2>
           {cart.items.map((i) => (
-            <p key={i.id}>
-              {i.product_name} × {i.quantity}
+            <div key={i.id}>
+              <ProductImage product={i} />
+              {i.display_name} × {i.quantity}
               <b>KSh {i.line_total}</b>
-            </p>
+            </div>
           ))}
           <h3>Total: KSh {cart.total}</h3>
         </section>

@@ -24,3 +24,9 @@ export const updateShelf = (id, payload) =>
   });
 export const loadShelfContents = (id) =>
   api(`/api/v1/locations/shelves/${id}/contents/`);
+export const loadCategories = () => api("/api/v1/catalog/categories/");
+export const saveCategory = (id, payload) =>
+  api(`/api/v1/catalog/categories/${id ? `${id}/` : ""}`, {
+    method: id ? "PATCH" : "POST",
+    body: JSON.stringify(payload),
+  });

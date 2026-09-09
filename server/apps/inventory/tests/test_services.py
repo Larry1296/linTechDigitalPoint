@@ -293,6 +293,7 @@ def test_acceptance_stack_and_product_round_trip():
             "product_type": "STOCK_ITEM",
             "variant_name": "Black",
             "sku": "A05-BLK-ACCEPTANCE",
+            "ecommerce_visible": False,
             "selling_price": "250",
             "preferred_shelf_id": shelf.id,
             "opening_unit_cost": "120",

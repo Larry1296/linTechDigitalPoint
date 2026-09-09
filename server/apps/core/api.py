@@ -1,7 +1,10 @@
 from django.db import models, transaction
 from django.db.models import F, Sum
 from django.utils.text import slugify
-from rest_framework import permissions, serializers, viewsets
+from rest_framework import filters, permissions, serializers, viewsets
+from django_filters.rest_framework import DjangoFilterBackend
+from apps.catalog.identity import display_name
+from apps.catalog.display_images import variant_images
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from apps.catalog.models import Category, ProductVariant
@@ -21,6 +24,12 @@ from .permissions import HasLinTechPermission, IsInternalStaff
 
 class PublicVariantSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name")
+    product_id = serializers.IntegerField(read_only=True)
+    variant_id = serializers.IntegerField(source="pk", read_only=True)
+    variant_name = serializers.CharField(source="name", read_only=True)
+    display_name = serializers.SerializerMethodField()
+    attributes = serializers.SerializerMethodField()
+    variant_count = serializers.SerializerMethodField()
     slug = serializers.CharField(source="product.slug")
     description = serializers.CharField(source="product.description")
     category = serializers.CharField(source="product.category.name")
@@ -32,7 +41,7 @@ class PublicVariantSerializer(serializers.ModelSerializer):
         model = ProductVariant
         fields = [
             "id",
-            "product_name",
+            "product_name", "product_id", "variant_id", "variant_name", "display_name", "sku", "attributes", "variant_count",
             "slug",
             "description",
             "category",
@@ -46,8 +55,17 @@ class PublicVariantSerializer(serializers.ModelSerializer):
 
     online_orderable = serializers.BooleanField(source="product.online_orderable", read_only=True)
 
+    def get_display_name(self, obj):
+        return display_name(obj.product.name, obj.name)
+
+    def get_attributes(self, obj):
+        return [{"name": a.value.option_type.name, "value": a.value.value} for a in obj.option_assignments.all()]
+
+    def get_variant_count(self, obj):
+        return sum(v.active for v in obj.product.variants.all())
+
     def get_images(self, obj):
-        return [{"url": x.image_url, "alt": x.alt_text} for x in obj.product.images.all()]
+        return variant_images(obj)
 
     def get_available(self, obj):
         if obj.product.product_type == "SERVICE":
@@ -60,10 +78,17 @@ class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PublicVariantSerializer
     queryset = (
         ProductVariant.objects.select_related("product", "product__category", "product__brand")
-        .prefetch_related("product__images")
+        .prefetch_related("product__images", "product__variants", "option_assignments__value__option_type")
         .filter(active=True, product__active=True, product__ecommerce_visible=True)
     )
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["product__category", "product__brand"]
+
+    def retrieve(self, request, *args, **kwargs):
+        variant = self.get_object()
+        data = self.get_serializer(variant).data
+        data["variants"] = self.get_serializer(self.get_queryset().filter(product_id=variant.product_id).order_by("id"), many=True).data
+        return Response(data)
     search_fields = ["product__name", "product__description", "name", "sku", "barcode"]
 
 

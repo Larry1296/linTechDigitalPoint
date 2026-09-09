@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
-import { loadZones } from "./api";
+import { loadZones, loadCategories } from "./api";
 import { ShelfDetails } from "./ShelfDetails";
 import { StackBuilder } from "./StackBuilder";
 import { StackEditor } from "./StackEditor";
 import { StackPreview } from "./StackPreview";
+import { CategoryManager } from "./CategoryManager";
+import { useAuth } from "../../core/auth/AuthContext";
 export function DigitalShopPage() {
+  const { user } = useAuth();
+  const [categories, setCategories] = useState();
   const [zones, setZones] = useState();
   const [selected, setSelected] = useState();
   const [builder, setBuilder] = useState(false);
@@ -13,8 +17,9 @@ export function DigitalShopPage() {
   const [editingStack, setEditingStack] = useState();
   const [error, setError] = useState("");
   const load = () =>
-    loadZones()
-      .then((rows) => {
+    Promise.all([loadZones(), loadCategories()])
+      .then(([rows, categoryRows]) => {
+        setCategories(categoryRows);
         setZones(rows);
         setSelected((value) => value || rows[0]?.id);
       })
@@ -23,7 +28,7 @@ export function DigitalShopPage() {
     void load();
   }, []);
   if (error) return <ErrorState message={error} retry={load} />;
-  if (!zones) return <Loading />;
+  if (!zones || !categories) return <Loading />;
   if (builder)
     return (
       <StackBuilder
@@ -49,11 +54,15 @@ export function DigitalShopPage() {
             in its exact level and compartment.
           </p>
         </div>
-        <button onClick={() => setBuilder(true)}>
+        {categories.some((category) => category.active) && <button onClick={() => setBuilder(true)}>
           {hasStacks ? "Add Shelf Stack" : "Create First Shelf Stack"}
-        </button>
+        </button>}
       </div>
-      {!hasStacks && (
+      <CategoryManager categories={categories}
+        canAdd={user.is_superuser || user.permissions.includes("catalog.add_category")}
+        canChange={user.is_superuser || user.permissions.includes("catalog.change_category")}
+        onSaved={(category) => setCategories((rows) => [...rows.filter((row) => row.id !== category.id), category])} />
+      {!hasStacks && categories.some((category) => category.active) && (
         <section className="onboarding">
           <h2>Configure Your Physical Shop</h2>
           <p>

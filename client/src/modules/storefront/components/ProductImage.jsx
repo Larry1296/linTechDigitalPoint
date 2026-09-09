@@ -3,7 +3,7 @@ export function ProductImage({ product, large = false }) {
   return (
     <div className={`productImage${large ? " large" : ""}`}>
       {image ? (
-        <img src={image.url} alt={image.alt || product.product_name} />
+        <img src={image.url} alt={product.display_name || image.alt || product.product_name} />
       ) : (
         product.product_name[0]
       )}

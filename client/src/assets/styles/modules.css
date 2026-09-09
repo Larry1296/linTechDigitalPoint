@@ -138,7 +138,7 @@ label {
 .productImage img {
   @apply tw:w-[100%];
   @apply tw:h-[100%];
-  @apply tw:object-cover;
+  @apply tw:object-contain;
 }
 .productImage.large {
   @apply tw:h-[430px];
