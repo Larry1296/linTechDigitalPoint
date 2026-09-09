@@ -13,24 +13,23 @@ Run commands from `server` using `../.venv/bin/python manage.py`.
 ../.venv/bin/python manage.py seed_shop_inventory
 ```
 
-## Current reconciliation blockers
+## Confirmed receipt and local reset
 
-The supplied 14 receipt lines total **18 units and KSh 5,190**, whereas the
-requested expected count is 19. The manifest retains both the supplied lines and
-the expected totals. Reception rejects this discrepancy before creating catalog
-or stock records. Resolve it against the supplier receipt before receiving.
-Tests use an explicitly reconciled 18-unit fixture to exercise reception, repeat
-runs and a later round; they do not silently change the production manifest.
+Supplier receipt 147 is physically reconciled: **14 lines, 18 units and KSh 5,190**.
+The manifest and reception tests use the same confirmed totals. A negative test
+sets the expected quantity to 19 and verifies atomic rejection.
 
-The development cleanup preview found SAMPLE-PADLOCK-60 has only 3 units
-remaining against 4 received. Cleanup deliberately refuses the entire operation.
-Do not restore a balance or delete a movement merely to make cleanup pass.
-Its business history needs review; the command has no force override.
+The owner authorized discarding all records only in this repository's verified
+local development database. Before resetting: verify DEBUG, configured and active
+database host/name, and the local PostgreSQL service; take a timestamped PostgreSQL
+backup. Django `flush --no-input` preserves schema and migration history. Follow
+with `migrate`, `seed_initial`, and interactive `createsuperuser` in a local terminal.
+Never put administrator credentials in source, command arguments or chat.
+Then run layout setup, inventory dry-run, reception and a repeat no-op verification.
+Do not run the sample seeder against the development database.
 
-RIGHT-R01 and BACKWALL-R01 have user-created history. They have not been proven
-to be disposable test structures and must remain. The optional layout cleanup
-rejects genuine references, stock, category assignments and user edit history.
-LEFTWALL and RIGHTWALL are outside its scope.
+The narrow sample cleanup remains available independently; it has no force
+bypass for changed sample balances or unproven ownership.
 
 ## Ownership and safety
 

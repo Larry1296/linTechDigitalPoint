@@ -27,15 +27,15 @@ class Command(BaseCommand):
                     if StockReceipt.objects.filter(idempotency_key=round["key"]).exists():
                         self.stdout.write(f"{round['key']}: already present")
                         continue
-                    quantity = sum(Decimal(str(line[2])) for line in round["lines"])
-                    cost = sum(Decimal(str(line[2])) * Decimal(str(line[3])) for line in round["lines"])
-                    if (len(round["lines"]), quantity, cost) != (
+                    total_quantity = sum(Decimal(str(line[2])) for line in round["lines"])
+                    total_cost = sum(Decimal(str(line[2])) * Decimal(str(line[3])) for line in round["lines"])
+                    if (len(round["lines"]), total_quantity, total_cost) != (
                         round["expected_lines"],
                         Decimal(str(round["expected_quantity"])),
                         Decimal(str(round["expected_cost"])),
                     ):
                         raise CommandError(
-                            f"Source totals disagree with expected totals: {len(round['lines'])} lines, {quantity} units, KSh {cost}; expected {round['expected_lines']} lines, {round['expected_quantity']} units, KSh {round['expected_cost']}. Reconcile source receipt before reception."
+                            f"Source totals disagree with expected totals: {len(round['lines'])} lines, {total_quantity} units, KSh {total_cost}; expected {round['expected_lines']} lines, {round['expected_quantity']} units, KSh {round['expected_cost']}. Reconcile source receipt before reception."
                         )
                     category = Category.objects.select_for_update().filter(slug=round["category"], active=True).first()
                     if not category:
@@ -102,8 +102,9 @@ class Command(BaseCommand):
                     )
                     if options["dry_run"]:
                         transaction.set_rollback(True)
+                        self.stdout.write("Dry run: no records committed.")
                     self.stdout.write(
-                        f"{round['key']}: {'would receive' if options['dry_run'] else 'received'} ({len(lines)} lines)"
+                        f"{round['key']}: {'would receive' if options['dry_run'] else 'received'} ({len(lines)} lines, {total_quantity} units, KSh {total_cost:,.0f}); {len(shelves)} locations valid: {', '.join(sorted(shelves))}"
                     )
             except (CommandError, ValidationError) as exc:
                 raise CommandError(f"{round['key']}: rejected: {exc}") from exc

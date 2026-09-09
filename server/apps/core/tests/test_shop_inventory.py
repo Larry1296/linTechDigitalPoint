@@ -38,10 +38,6 @@ def run(command, **kwargs):
 def shop(db):
     Store.objects.create(name="linTech Digital Point")
     run("setup_shop_layout")
-    # Exercise reception with a reconciled test manifest; production remains
-    # guarded until the user resolves 18 source units versus 19 expected.
-    with patch("apps.core.management.commands.seed_shop_inventory.ROUNDS", ({**ROUNDS[0], "expected_quantity": 18},)):
-        yield
 
 
 def test_layout_repeat_and_conflict(shop):
@@ -155,7 +151,7 @@ def test_cleanup_refuses_conflicts(racks, conflict):
 
 
 def test_unreconciled_manifest_rejected(shop):
-    with patch("apps.core.management.commands.seed_shop_inventory.ROUNDS", ROUNDS):
+    with patch("apps.core.management.commands.seed_shop_inventory.ROUNDS", ({**ROUNDS[0], "expected_quantity": 19},)):
         with pytest.raises(CommandError, match="Source totals disagree"):
             run("seed_shop_inventory")
     assert not StockReceipt.objects.exists()

@@ -41,7 +41,7 @@ ROUNDS = (
         "date": "2026-08-25",
         "notes": "Opening stock captured from existing supplier receipt",
         "expected_lines": 14,
-        "expected_quantity": 19,
+        "expected_quantity": 18,
         "expected_cost": "5190",
         "category": "mobile-accessories",
         "lines": ROUND_1_LINES,
