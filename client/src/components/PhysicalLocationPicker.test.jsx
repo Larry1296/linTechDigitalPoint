@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { useState } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it } from "vitest";
 import { PhysicalLocationPicker } from "./PhysicalLocationPicker";
 import { StackPreview } from "../modules/digital-shop/StackPreview";
 
@@ -11,8 +12,19 @@ it("shows physical labels in selectors and renders levels top to bottom", () => 
       code: `A-R01-L0${n}-S0${p}`, display_name: `Compartment ${p}`, total_quantity: 0 })),
   }));
   const stack = { id: 1, active: true, display_name: "Mobile Accessories Rack", levels };
-  render(<PhysicalLocationPicker zones={[{ id: 1, active: true, name: "Zone A", stacks: [stack] }]} value={11} onChange={vi.fn()} />);
+  const zones = [{ id: 1, active: true, name: "Zone A", stacks: [stack] }];
+  function PickerHarness() {
+    const [value, setValue] = useState(11);
+    return <PhysicalLocationPicker zones={zones} value={value} onChange={setValue} />;
+  }
+  render(<PickerHarness />);
   expect(screen.getByRole("option", { name: "AL1C1S1 — Compartment 1" })).toBeInTheDocument();
+  for (const level of levels) {
+    fireEvent.change(screen.getByLabelText("Level"), { target: { value: level.id } });
+    for (const shelf of level.shelves) {
+      expect(screen.getByRole("option", { name: `${shelf.physical_label} — ${shelf.display_name}` })).toBeInTheDocument();
+    }
+  }
   render(<StackPreview stack={stack} width={6} height={6} depth={1} />);
   const buttons = screen.getAllByRole("button");
   expect(buttons.map((b) => b.querySelector("b").textContent)).toEqual([

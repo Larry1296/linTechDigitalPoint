@@ -31,7 +31,9 @@ def racks(db):
 
 
 def run(command, **kwargs):
-    call_command(command, stdout=StringIO(), **kwargs)
+    output = StringIO()
+    call_command(command, stdout=output, **kwargs)
+    return output.getvalue()
 
 
 @pytest.fixture
@@ -53,7 +55,15 @@ def test_layout_repeat_and_conflict(shop):
 
 
 def test_receive_repeat_and_increment(shop):
-    run("seed_shop_inventory", dry_run=True)
+    from django.apps import apps
+
+    models = [model for model in apps.get_models() if model._meta.managed]
+    before_dry_run = [list(model.objects.order_by("pk").values()) for model in models]
+    output = run("seed_shop_inventory", dry_run=True)
+    assert "14 lines, 18 units, KSh 5,190" in output
+    assert "6 locations valid" in output
+    assert "no records committed" in output
+    assert before_dry_run == [list(model.objects.order_by("pk").values()) for model in models]
     assert not Product.objects.exists()
     run("seed_shop_inventory")
     receipt = StockReceipt.objects.get()
@@ -151,11 +161,16 @@ def test_cleanup_refuses_conflicts(racks, conflict):
 
 
 def test_unreconciled_manifest_rejected(shop):
+    from django.apps import apps
+
+    models = [model for model in apps.get_models() if model._meta.managed]
+    before = [list(model.objects.order_by("pk").values()) for model in models]
     with patch("apps.core.management.commands.seed_shop_inventory.ROUNDS", ({**ROUNDS[0], "expected_quantity": 19},)):
         with pytest.raises(CommandError, match="Source totals disagree"):
             run("seed_shop_inventory")
     assert not StockReceipt.objects.exists()
     assert not Product.objects.exists()
+    assert before == [list(model.objects.order_by("pk").values()) for model in models]
 
 
 def test_public_catalog_hides_opening_stock_and_internal_fields(shop):
