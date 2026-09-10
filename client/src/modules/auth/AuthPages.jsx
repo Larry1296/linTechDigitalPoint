@@ -1,9 +1,11 @@
 import { FormField } from "../../components/forms/FormField";
 import { PasswordField } from "../../components/forms/PasswordField";
 import { AuthFormCard } from "./AuthFormCard";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { SESSION_EXPIRED_MESSAGE } from "../../core/api/client";
 import { useAuthForm } from "./useAuthForm";
 export function LoginPage() {
+  const { search } = useLocation();
   const { error, submit, accountLink } = useAuthForm();
   return (
     <AuthFormCard
@@ -12,6 +14,11 @@ export function LoginPage() {
       error={error}
       onSubmit={submit}
     >
+      {new URLSearchParams(search).get("reason") === "session-expired" && (
+        <p role="alert" className="formError">
+          {SESSION_EXPIRED_MESSAGE}
+        </p>
+      )}
       <FormField
         label="Username or email"
         name="credential"

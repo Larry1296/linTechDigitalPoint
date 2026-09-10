@@ -106,12 +106,29 @@ label {
   @apply tw:rounded-[10px];
   @apply tw:[margin-bottom:18px];
 }
-.productGrid {
-  @apply tw:grid;
-  @apply tw:grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))];
-  @apply tw:gap-[18px];
+.productGrid,
+.categoryProductGrid {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  /* Four 260px cards plus gaps and padding fit the 1200px public wrapper. */
+  grid-template-columns: repeat(auto-fit, minmax(230px, 260px));
+  justify-content: space-evenly;
+  align-items: stretch;
+  gap: clamp(16px, 2vw, 28px);
+  padding-inline: clamp(12px, 2vw, 28px);
+  margin-inline: auto;
+}
+.productGrid > .productCard,
+.categoryProductGrid > .productCard {
+  justify-self: center;
+  box-sizing: border-box;
 }
 .productCard {
+  width: 100%;
+  max-width: 280px;
+  min-width: 0;
   @apply tw:flex;
   @apply tw:flex-col;
   @apply tw:gap-[9px];
@@ -120,15 +137,26 @@ label {
   @apply tw:rounded-[15px];
   @apply tw:[padding:16px];
 }
+.productCard .cardActions,
+.productCard > a.button {
+  margin-top: auto;
+}
 .productCard h2 {
   @apply tw:text-[18px];
   @apply tw:[margin:0];
 }
 .productImage {
-  @apply tw:h-[160px];
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  padding: 8px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
   @apply tw:grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   @apply tw:[place-items:center];
-  background: var(--primary2);
+  background: #fff;
   @apply tw:rounded-[10px];
   @apply tw:[color:var(--primary)];
   @apply tw:text-[50px];
@@ -136,11 +164,21 @@ label {
   @apply tw:overflow-hidden;
 }
 .productImage img {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   @apply tw:w-[100%];
   @apply tw:h-[100%];
   @apply tw:object-contain;
+  object-position: center;
 }
 .productImage.large {
+  aspect-ratio: auto;
+  padding: 0;
+  border: 0;
+  background: var(--primary2);
   @apply tw:h-[430px];
 }
 .stock {
@@ -155,6 +193,10 @@ label {
   @apply tw:grid-cols-[1fr_1fr];
   @apply tw:gap-[50px];
   @apply tw:items-center;
+}
+.productBackButton {
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 .productDetail .price {
   @apply tw:block;
@@ -234,7 +276,7 @@ label {
   @apply tw:grid tw:grid-cols-[repeat(3,_1fr)] tw:gap-[10px];
   @apply tw:[margin:4px_0_4px];
 }
-.workflowSteps b {
+.workflowSteps button {
   @apply tw:block tw:[padding:12px_14px];
   @apply tw:rounded-[10px];
   background: var(--surface);
@@ -242,7 +284,7 @@ label {
   @apply tw:[color:var(--muted)];
   @apply tw:text-[13px];
 }
-.workflowSteps b.active {
+.workflowSteps button.active {
   background: var(--primary2);
   @apply tw:[border-color:var(--primary)];
   @apply tw:[color:var(--primary)];
@@ -313,7 +355,7 @@ label {
   .workflowSteps {
     @apply tw:grid-cols-[1fr];
   }
-  .workflowSteps b {
+  .workflowSteps button {
     @apply tw:[padding:10px_12px];
   }
   .receiveWorkflow .callout {
@@ -951,5 +993,19 @@ label {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@media (max-width: 520px) {
+  .productGrid,
+  .categoryProductGrid {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    padding-inline: 12px;
+  }
+  .productGrid > .productCard,
+  .categoryProductGrid > .productCard {
+    width: min(100%, 340px);
+    max-width: 340px;
   }
 }

@@ -1,7 +1,8 @@
 import { DisplayImageInput } from "../products/components/DisplayImageInput";
 import { ProductSkuField } from "../products/components/ProductSkuField";
 import { FormField } from "../../components/forms/FormField";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useAuth } from "../../core/auth/AuthContext";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
@@ -15,21 +16,74 @@ const emptyLine = () => ({
   placements: [{ shelf_id: "", quantity: "" }],
 });
 export function ReceivePage() {
+  const { user } = useAuth();
+  const [draftKey] = useState(() => `receipt-draft:${user.id}`);
+  const [draft] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(draftKey));
+      return saved?.version === 1 &&
+        Array.isArray(saved.lines) &&
+        saved.lines.length &&
+        saved.details
+        ? saved
+        : {};
+    } catch {
+      return {};
+    }
+  });
+  const [idempotencyKey, setIdempotencyKey] = useState(
+    () => draft.idempotencyKey || crypto.randomUUID(),
+  );
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
   const [zones, setZones] = useState([]);
-  const [categoryId, setCategoryId] = useState("");
-  const [query, setQuery] = useState("");
-  const [lines, setLines] = useState([emptyLine()]);
-  const [details, setDetails] = useState({
-    supplier_name: "",
-    external_reference: "",
-    received_at: new Date().toISOString().slice(0, 16),
-    notes: "",
-  });
-  const [step, setStep] = useState(1);
+  const [locationsLoaded, setLocationsLoaded] = useState(false);
+  const [categoryId, setCategoryId] = useState(draft.categoryId || "");
+  const [query, setQuery] = useState(draft.query || "");
+  const [lines, setLines] = useState(draft.lines || [emptyLine()]);
+  const [details, setDetails] = useState(
+    draft.details || {
+      supplier_name: "",
+      external_reference: "",
+      received_at: new Date().toISOString().slice(0, 16),
+      notes: "",
+    },
+  );
+  const [step, setStep] = useState(draft.step || 1);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
+  const [draftError, setDraftError] = useState("");
+  useLayoutEffect(() => {
+    try {
+      if (success) sessionStorage.removeItem(draftKey);
+      else
+        sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            version: 1,
+            categoryId,
+            query,
+            lines,
+            details,
+            step,
+            idempotencyKey,
+          }),
+        );
+    } catch {
+      setDraftError(
+        "Your browser could not save the receipt draft. Keep a copy of your entries before leaving this page.",
+      );
+    }
+  }, [
+    draftKey,
+    categoryId,
+    query,
+    lines,
+    details,
+    step,
+    idempotencyKey,
+    success,
+  ]);
   const [creating, setCreating] = useState(false);
   const [displayImage, setDisplayImage] = useState(null);
   const [imageError, setImageError] = useState("");
@@ -48,7 +102,8 @@ export function ReceivePage() {
       ),
     }))
     .filter((zone) => zone.stacks.length);
-  const [newProductLine, setNewProductLine] = useState(0);
+  const [newProductLine, setNewProductLine] = useState(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   useEffect(() => {
     void Promise.all([
       api("/api/v1/inventory/variants/search/"),
@@ -58,6 +113,7 @@ export function ReceivePage() {
       .then(([items, locationData, categoryData]) => {
         setVariants(items);
         setZones(locationData);
+        setLocationsLoaded(true);
         setCategories(categoryData);
       })
       .catch((err) => setError(err.message));
@@ -159,7 +215,7 @@ export function ReceivePage() {
         method: "POST",
         body: JSON.stringify({
           ...details,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: idempotencyKey,
           lines: lines.map((line) => ({
             ...line,
             received_quantity: line.received_quantity,
@@ -176,6 +232,22 @@ export function ReceivePage() {
     } finally {
       setCreating(false);
     }
+  };
+  const goToStep = (nextStep) => {
+    if (creating || savingProduct) return;
+    if (nextStep > 1 && !categoryId) {
+      setError("Choose a merchandise category before continuing to items.");
+      return;
+    }
+    if (nextStep === 3) {
+      const validation = validate();
+      if (validation) {
+        setError(validation);
+        return;
+      }
+    }
+    setError("");
+    setStep(nextStep);
   };
   if (success)
     return (
@@ -194,6 +266,7 @@ export function ReceivePage() {
           onClick={() => {
             setSuccess(null);
             setLines([emptyLine()]);
+            setIdempotencyKey(crypto.randomUUID());
             setStep(1);
           }}
         >
@@ -208,10 +281,26 @@ export function ReceivePage() {
     <section className="receiveWorkflow">
       <span className="eyebrow">Purchasing and exact placement</span>
       <h1>Receive stock</h1>
-      <nav className="workflowSteps">
-        <b className={step === 1 ? "active" : ""}>1. Receipt details</b>
-        <b className={step === 2 ? "active" : ""}>2. Items and placement</b>
-        <b className={step === 3 ? "active" : ""}>3. Review</b>
+      {draftError && (
+        <p role="alert" className="formError">
+          {draftError}
+        </p>
+      )}
+      <nav className="workflowSteps" aria-label="Receipt steps">
+        {["Receipt details", "Items and placement", "Review"].map(
+          (label, index) => (
+            <button
+              key={label}
+              type="button"
+              className={step === index + 1 ? "active" : ""}
+              aria-current={step === index + 1 ? "step" : undefined}
+              disabled={creating || savingProduct}
+              onClick={() => goToStep(index + 1)}
+            >
+              {index + 1}. {label}
+            </button>
+          ),
+        )}
       </nav>
       {error && <p className="formError">{error}</p>}
       {step === 1 && (
@@ -287,7 +376,7 @@ export function ReceivePage() {
               }
             />
           </label>
-          <button onClick={() => setStep(2)} disabled={!categoryId}>
+          <button onClick={() => goToStep(2)} disabled={!categoryId}>
             Continue to items
           </button>
         </div>
@@ -332,7 +421,11 @@ export function ReceivePage() {
                     required
                   >
                     <option value="">Choose a variant</option>
-                    {filtered.map((item) => (
+                    {(selected &&
+                    !filtered.some((item) => item.id === selected.id)
+                      ? [selected, ...filtered]
+                      : filtered
+                    ).map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.product_name} — {item.variant_name} · {item.sku} ·
                         KSh {item.selling_price}
@@ -345,10 +438,12 @@ export function ReceivePage() {
                   className="secondary"
                   onClick={() => {
                     setNewProductLine(index);
-                    setNewProductName("");
-                    setNewVariantName("Standard");
-                    setNewProductCategory(categoryId);
-                    setNewProductShelf(line.placements[0]?.shelf_id || "");
+                    if (newProductLine === null) {
+                      setNewProductName("");
+                      setNewVariantName("Standard");
+                      setNewProductCategory(categoryId);
+                      setNewProductShelf(line.placements[0]?.shelf_id || "");
+                    }
                     setNewProductOpen(true);
                   }}
                 >
@@ -417,18 +512,22 @@ export function ReceivePage() {
                 <h3>Exact placement</h3>
                 {line.placements.map((placement, pindex) => (
                   <div className="placementRow" key={pindex}>
-                    <PhysicalLocationPicker
-                      zones={eligibleZones}
-                      value={placement.shelf_id}
-                      required
-                      onChange={(shelf_id) =>
-                        updateLine(index, {
-                          placements: line.placements.map((item, i) =>
-                            i === pindex ? { ...item, shelf_id } : item,
-                          ),
-                        })
-                      }
-                    />
+                    {locationsLoaded && (
+                      <PhysicalLocationPicker
+                        zones={eligibleZones}
+                        value={
+                          placement.shelf_id ? Number(placement.shelf_id) : ""
+                        }
+                        required
+                        onChange={(shelf_id) =>
+                          updateLine(index, {
+                            placements: line.placements.map((item, i) =>
+                              i === pindex ? { ...item, shelf_id } : item,
+                            ),
+                          })
+                        }
+                      />
+                    )}
                     <label>
                       Quantity
                       <input
@@ -490,17 +589,13 @@ export function ReceivePage() {
             Add another product line
           </button>
           <button
-            onClick={() => {
-              const validation = validate();
-              if (validation) setError(validation);
-              else {
-                setError("");
-                setStep(3);
-              }
-            }}
+            type="button"
+            className="secondary"
+            onClick={() => goToStep(1)}
           >
-            Review receipt
+            Back to receipt details
           </button>
+          <button onClick={() => goToStep(3)}>Review receipt</button>
         </div>
       )}
       {step === 3 && (
@@ -543,22 +638,33 @@ export function ReceivePage() {
           <button
             type="button"
             className="secondary"
-            onClick={() => setStep(2)}
+            disabled={creating}
+            onClick={() => goToStep(2)}
           >
             Back to edit
           </button>
         </div>
       )}
       {creating && <p className="muted">Saving receipt…</p>}
-      {newProductOpen && (
-        <div className="modalBackdrop">
+      {newProductLine !== null && (
+        <div
+          className="modalBackdrop"
+          style={newProductOpen ? undefined : { display: "none" }}
+        >
           <form
             className="formCard modalCard"
             onSubmit={async (event) => {
               event.preventDefault();
+              if (savingProduct) return;
               try {
-                if (!displayImage) { setImageError("Add a Product display image before making this product visible to customers."); return; }
+                if (!displayImage) {
+                  setImageError(
+                    "Add a Product display image before making this product visible to customers.",
+                  );
+                  return;
+                }
                 const data = new FormData(event.currentTarget);
+                setSavingProduct(true);
                 data.set("display_image", displayImage);
                 data.set("ecommerce_visible", "true");
                 data.set("online_orderable", "true");
@@ -588,15 +694,26 @@ export function ReceivePage() {
                   ),
                 });
                 setNewProductOpen(false);
-                setDisplayImage(null); setImageError("");
+                setNewProductLine(null);
+                setDisplayImage(null);
+                setImageError("");
               } catch (err) {
-                setError(err.message);
+                setImageError(err.message);
+              } finally {
+                setSavingProduct(false);
               }
             }}
           >
             <h2>Create product</h2>
             {imageError && <p role="alert">{imageError}</p>}
-            <DisplayImageInput file={displayImage} onChange={(file) => { setDisplayImage(file); setImageError(""); }} required />
+            <DisplayImageInput
+              file={displayImage}
+              onChange={(file) => {
+                setDisplayImage(file);
+                setImageError("");
+              }}
+              required
+            />
             <FormField
               label="Product name"
               name="name"
@@ -667,13 +784,21 @@ export function ReceivePage() {
               step=".001"
               defaultValue="0"
             />
-            <button>Create and return to receipt</button>
+            <button disabled={savingProduct}>
+              {savingProduct
+                ? "Creating product…"
+                : "Create and return to receipt"}
+            </button>
             <button
               type="button"
               className="secondary"
-              onClick={() => { setNewProductOpen(false); setDisplayImage(null); setImageError(""); }}
+              disabled={savingProduct}
+              onClick={() => {
+                setNewProductOpen(false);
+                setImageError("");
+              }}
             >
-              Cancel
+              Back to receipt
             </button>
           </form>
         </div>

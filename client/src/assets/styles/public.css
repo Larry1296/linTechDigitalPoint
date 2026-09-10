@@ -32,7 +32,6 @@
   --home-section-gap: clamp(24px, 4vw, 52px);
   --home-heading-gap: 28px;
   --home-card-gap: 22px;
-  --home-product-gap: 24px;
   @apply tw:grid tw:grid-cols-[minmax(0,_1fr)] tw:gap-[var(--home-section-gap)];
 }
 .homePage > .homeSection:not(.serviceSpotlight),
@@ -51,8 +50,25 @@
 .homePage > .benefits {
   @apply tw:gap-[var(--home-card-gap)];
 }
-.homePage > section > .productGrid {
-  @apply tw:gap-[var(--home-product-gap)];
+.homePage > section > .categoryProductGrid {
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+}
+.homePage .productCard {
+  min-width: 0;
+  height: 100%;
+}
+.homePage .productCard .productImage {
+  flex-shrink: 0;
+}
+.homePage .productCard h3 {
+  margin: 0;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+  flex-grow: 1;
+}
+.homePage .productCard > .button {
+  margin-top: auto;
 }
 .categoryGrid {
   @apply tw:grid;
@@ -157,7 +173,6 @@
     --home-section-gap: 28px;
     --home-heading-gap: 20px;
     --home-card-gap: 18px;
-    --home-product-gap: 18px;
   }
 
   .homePage > .serviceSpotlight {
@@ -991,4 +1006,34 @@
 .passwordInput .passwordToggle:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -4px;
+}
+
+.productSearch { position: relative; width: 100%; max-width: 42rem; min-width: 0; margin: 1.25rem 0; }
+.productSearchControls { display: flex; gap: .5rem; }
+.productSearchControls input { flex: 1; width: 0; min-width: 0; }
+.productSearchControls button { flex-shrink: 0; }
+.productSearchPanel { position: absolute; top: calc(100% + .4rem); left: 0; right: 0; z-index: 50; max-height: 26rem; overflow-y: auto; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 12px 32px #0003; }
+.productSearchPanel ul { list-style: none; padding: .25rem; margin: 0; }
+.productSearchPanel p { padding: .75rem; margin: 0; }
+.productSearchPanel li { display: flex; align-items: center; gap: .75rem; padding: .65rem; border-radius: .5rem; cursor: pointer; }
+.productSearchPanel li:hover, .productSearchPanel li.selected { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); outline: 2px solid var(--primary); outline-offset: -2px; }
+.productSearchPanel .productImage { width: 52px; height: 52px; min-height: 52px; flex: 0 0 52px; margin: 0; }
+.productSearchPanel .productImage img { width: 100%; height: 100%; object-fit: contain; }
+.productSearchDetails { display: grid; gap: .2rem; min-width: 0; overflow-wrap: anywhere; font-size: .875rem; }
+.hero > div { min-width: 0; }
+.categoryProductSection { margin-block: 2.5rem; }
+.categorySectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.categorySectionHeading a { color: var(--primary); }
+@media (max-width: 600px) {
+  .categorySectionHeading { align-items: flex-start; flex-direction: column; }
+  .productSearchControls { gap: .35rem; }
+  .productSearchControls button { padding-inline: .8rem; }
+}
+
+main.homePage,
+main.shopPage {
+  width: min(100% - 24px, 1200px);
+  min-width: 0;
+  margin-inline: auto;
+  padding-inline: 0;
 }

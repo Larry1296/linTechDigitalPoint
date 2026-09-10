@@ -1,5 +1,5 @@
 from django.db import models, transaction
-from django.db.models import F, Sum
+from django.db.models import F, OuterRef, Q, Subquery, Sum
 from django.utils.text import slugify
 from rest_framework import filters, permissions, serializers, viewsets
 from django_filters.rest_framework import DjangoFilterBackend
@@ -70,6 +70,8 @@ class PublicVariantSerializer(serializers.ModelSerializer):
     def get_available(self, obj):
         if obj.product.product_type == "SERVICE":
             return None
+        if hasattr(obj, "available_total"):
+            return obj.available_total or 0
         return StockBalance.objects.filter(lot__variant=obj).aggregate(v=Sum(F("quantity") - F("reserved")))["v"] or 0
 
 
@@ -84,12 +86,67 @@ class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["product__category", "product__brand"]
 
+    def get_queryset(self):
+        if self.action == "list" and self.request.query_params.get("in_stock") == "true":
+            return in_stock_public_variants().order_by("-created_at", "-id")
+        return super().get_queryset()
+
     def retrieve(self, request, *args, **kwargs):
         variant = self.get_object()
         data = self.get_serializer(variant).data
         data["variants"] = self.get_serializer(self.get_queryset().filter(product_id=variant.product_id).order_by("id"), many=True).data
         return Response(data)
-    search_fields = ["product__name", "product__description", "name", "sku", "barcode"]
+    search_fields = ["product__name", "product__description", "name", "product__category__name", "product__brand__name", "sku", "option_assignments__value__value"]
+
+
+def in_stock_public_variants():
+    # A correlated aggregate avoids multiplying balances when matching option details.
+    availability = (
+        StockBalance.objects.filter(lot__variant_id=OuterRef("pk"))
+        .order_by().values("lot__variant_id")
+        .annotate(total=Sum(F("quantity") - F("reserved"))).values("total")
+    )
+    return PublicProductViewSet.queryset.filter(
+        product__product_type="STOCK_ITEM",
+    ).annotate(available_total=Subquery(availability)).filter(available_total__gt=0)
+
+
+class PublicSuggestionSerializer(PublicVariantSerializer):
+    class Meta(PublicVariantSerializer.Meta):
+        fields = ["id", "display_name", "category", "selling_price", "available", "images"]
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def public_search_suggestions(request):
+    query = request.query_params.get("q", "").strip()
+    if len(query) < 2:
+        return Response([])
+    matches = Q()
+    for field in ("product__name", "name", "product__category__name",
+                  "product__brand__name", "sku", "option_assignments__value__value"):
+        matches |= Q(**{f"{field}__icontains": query})
+    products = in_stock_public_variants().filter(matches).distinct().order_by(
+        "product__name", "name", "id"
+    )[:8]
+    return Response(PublicSuggestionSerializer(products, many=True).data)
+
+
+def public_category_sections():
+    products = in_stock_public_variants().filter(product__category__active=True).order_by(
+        "product__category__name", "product__category_id", "product__name", "name", "id"
+    )
+    sections = {}
+    for product in products:
+        category = product.product.category
+        if category.id not in sections:
+            sections[category.id] = {
+                "id": category.id, "name": category.name, "slug": category.slug,
+                "total_available": 0, "products": [],
+            }
+        sections[category.id]["products"].append(PublicVariantSerializer(product).data)
+        sections[category.id]["total_available"] += 1
+    return list(sections.values())
 
 
 @api_view(["GET"])
@@ -102,7 +159,7 @@ def public_home(request):
         if store
         else {"name": "LinTech Digital Point", "phone": "", "email": "", "address": ""}
     )
-    products = PublicVariantSerializer(PublicProductViewSet.queryset[:8], many=True).data
+    category_sections = public_category_sections()
     services = PublicVariantSerializer(
         PublicProductViewSet.queryset.filter(product__product_type="SERVICE")[:6], many=True
     ).data
@@ -111,7 +168,7 @@ def public_home(request):
         for profile in CyberServiceProfile.objects.filter(active=True, publicly_advertised=True, variant__active=True, variant__product__active=True).select_related("variant__product")[:8]
     ]
     return Response(
-        {"store": store_data, "categories": categories, "featured_products": products, "services": services, "cyber_services": cyber_services}
+        {"store": store_data, "categories": categories, "category_sections": category_sections, "services": services, "cyber_services": cyber_services}
     )
 
 

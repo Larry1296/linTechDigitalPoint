@@ -1,3 +1,4 @@
+import { ProductSearch } from "./components/ProductSearch";
 import { ProductCard } from "./components/ProductCard";
 import {
   Headphones,
@@ -7,10 +8,13 @@ import {
   Truck,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigationType } from "react-router-dom";
+import { restoreListingPosition } from "./listingPosition";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
 export function HomePage() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [data, setData] = useState();
   const [error, setError] = useState("");
   useEffect(() => {
@@ -19,6 +23,36 @@ export function HomePage() {
       .then(setData)
       .catch((e) => setError(e.message));
   }, []);
+  useEffect(() => {
+    if (!data) return;
+    // Wait until the destination and the collapsed mobile navbar are laid out.
+    const frame = window.requestAnimationFrame(() => {
+      if (navigationType === "POP" && restoreListingPosition(location.key))
+        return;
+      const section = location.hash
+        ? document.getElementById(location.hash.slice(1))
+        : null;
+      if (location.hash && !section) return;
+      const navbarHeight =
+        document.querySelector(".appNavbar")?.getBoundingClientRect().height ||
+        0;
+      window.scrollTo({
+        top: section
+          ? Math.max(
+              0,
+              section.getBoundingClientRect().top +
+                window.scrollY -
+                navbarHeight -
+                16,
+            )
+          : 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [data, location.hash, location.key, navigationType]);
   return (
     <main className="homePage">
       {error ? (
@@ -35,13 +69,14 @@ export function HomePage() {
                 Shop mobile accessories, computer accessories, electrical
                 essentials and useful services from LinTech.
               </p>
+              <ProductSearch />
               <div className="heroActions">
                 <Link className="button" to="/shop">
                   Shop now
                 </Link>
-                <a className="button secondary" href="#categories">
+                <Link className="button secondary" to="/#categories">
                   Browse categories
-                </a>
+                </Link>
               </div>
             </div>
             <div className="heroCard">
@@ -72,19 +107,25 @@ export function HomePage() {
               <Empty>Product categories will appear here soon.</Empty>
             )}
           </section>
-          <section className="homeSection">
-            <span className="eyebrow">From our shop</span>
-            <h2>Featured products</h2>
-            {data.featured_products.length ? (
-              <div className="productGrid">
-                {data.featured_products.map((p) => (
-                  <ProductCard key={p.id} product={p} />
+          {(data.category_sections || []).map((category) => (
+            <section
+              className="homeSection categoryProductSection"
+              key={category.id}
+              aria-labelledby={"category-" + category.id}
+            >
+              <div className="categorySectionHeading">
+                <h2 id={"category-" + category.id}>{category.name}</h2>
+                <Link to={"/shop?category=" + category.id}>
+                  View category →
+                </Link>
+              </div>
+              <div className="categoryProductGrid">
+                {category.products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
                 ))}
               </div>
-            ) : (
-              <Empty>New products will be available here soon.</Empty>
-            )}
-          </section>
+            </section>
+          ))}
           <section className="benefits">
             <article>
               <ShieldCheck />

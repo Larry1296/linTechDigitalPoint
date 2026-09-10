@@ -1,8 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../core/auth/AuthContext";
 import { Loading } from "../components/States";
-function loginTarget(path) {
-  return "/login?next=" + encodeURIComponent(path);
+function loginTarget(path, expired) {
+  return (
+    "/login?" +
+    (expired ? "reason=session-expired&" : "") +
+    "next=" +
+    encodeURIComponent(path)
+  );
 }
 function isCustomerAccount(user) {
   return Boolean(
@@ -12,23 +17,35 @@ function isCustomerAccount(user) {
   );
 }
 export function CustomerProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
   const location = useLocation();
   if (loading) return <Loading />;
   if (!user)
     return (
-      <Navigate to={loginTarget(location.pathname + location.search)} replace />
+      <Navigate
+        to={loginTarget(
+          location.pathname + location.search + location.hash,
+          sessionExpired,
+        )}
+        replace
+      />
     );
   if (!isCustomerAccount(user)) return <Navigate to="/forbidden" replace />;
   return children;
 }
 export function StaffProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
   const location = useLocation();
   if (loading) return <Loading />;
   if (!user)
     return (
-      <Navigate to={loginTarget(location.pathname + location.search)} replace />
+      <Navigate
+        to={loginTarget(
+          location.pathname + location.search + location.hash,
+          sessionExpired,
+        )}
+        replace
+      />
     );
   if (!user.is_staff) return <Navigate to="/forbidden" replace />;
   return children;

@@ -60,7 +60,6 @@ body {
   background: var(--bg);
   @apply tw:[color:var(--text)];
   @apply tw:min-w-[0];
-  @apply tw:overflow-x-hidden;
 }
 a {
   @apply tw:[color:inherit];
