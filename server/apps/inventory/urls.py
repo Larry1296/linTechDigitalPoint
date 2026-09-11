@@ -4,3 +4,6 @@ urlpatterns=[path("receive/",receive),path("receipts/",receipts),path("receipts/
 
 from .adjustment_api import adjustments, adjustment_context
 urlpatterns += [path("adjustments/", adjustments), path("adjustments/variants/<int:pk>/", adjustment_context)]
+
+from .receipt_correction_api import receipt_line_correct
+urlpatterns += [path("receipts/<int:pk>/lines/<int:line_id>/correct/", receipt_line_correct)]

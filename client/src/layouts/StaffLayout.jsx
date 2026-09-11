@@ -85,7 +85,7 @@ const operations = [
       },
     ],
   },
-  { title: "Inventory", links: [links[3], links[4], links[5], { to: "/admin-app/adjust-stock", label: "Adjust Stock", icon: PackagePlus, permission: "inventory.adjust_stock" }] },
+  { title: "Inventory", links: [links[3], links[4], links[5], { to: "/admin-app/receipts", label: "Receipt History", icon: Receipt, permission: "inventory.view_stockreceipt" }, { to: "/admin-app/adjust-stock", label: "Adjust Stock", icon: PackagePlus, permission: "inventory.adjust_stock" }] },
   { title: "Business", links: [links[6]] },
 ];
 export function StaffLayout() {

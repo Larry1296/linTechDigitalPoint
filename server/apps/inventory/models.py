@@ -63,6 +63,19 @@ class StockReceiptPlacement(TimeStamped):
     balance=models.ForeignKey(StockBalance,null=True,blank=True,related_name="receipt_placements",on_delete=models.PROTECT)
     class Meta:
         constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_receipt_placement"),models.UniqueConstraint(fields=["line","shelf"],name="unique_receipt_line_shelf")]
+class StockReceiptLineCorrection(models.Model):
+    line = models.ForeignKey(StockReceiptLine, related_name="corrections", on_delete=models.PROTECT)
+    performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    reason = models.TextField()
+    before = models.JSONField()
+    after = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        default_permissions = ("view",)
+        constraints = [models.CheckConstraint(condition=~Q(reason=""), name="receipt_correction_reason_required")]
+
 class StockAdjustment(models.Model):
     REASONS=[(x,x) for x in ["Opening stock correction", "Physical count variance", "Damaged item", "Lost item", "Data-entry correction", "Found stock"]]
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT)
@@ -81,6 +94,7 @@ class StockAdjustment(models.Model):
         constraints=[models.CheckConstraint(condition=Q(quantity_before__gte=0)&Q(quantity_after__gte=0)&Q(quantity_after=models.F("quantity_before")+models.F("amount"))&~Q(amount=0),name="valid_stock_adjustment")]
 
 class Movement(models.Model):
+    receipt_correction = models.ForeignKey(StockReceiptLineCorrection, null=True, blank=True, on_delete=models.PROTECT, related_name="movements")
     adjustment=models.ForeignKey(StockAdjustment,null=True,blank=True,on_delete=models.PROTECT,related_name="movements")
     quantity_before=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)
     quantity_after=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)

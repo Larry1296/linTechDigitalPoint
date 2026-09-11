@@ -4,7 +4,7 @@ const sections = ["Headphones", "Charging Cables", "Memory Cards", "Wall Charger
   id: index + 1, name, slug: name.toLowerCase().replaceAll(" ", "-"),
   products: Array.from({ length: index + 1 }, (_, variant) => ({
     id: index * 10 + variant + 1,
-    display_name: name === "Memory Cards" ? "Boost Memory Card — " + (variant ? "8GB" : "16GB") : name + " — White — " + (variant + 1),
+    display_name: name === "Memory Cards" ? "Boost Memory Card — " + (variant ? "8GB" : "16GB") : name + " — White — " + (variant + 1) + (variant === 1 ? " ExtraLongProductName".repeat(5) : ""),
     online_orderable: true, category: name, selling_price: "250.00", available: 3,
     images: [{ url: name === "Memory Cards" ? "/layout-memory-" + (variant ? "8" : "16") + ".webp" : "/layout-product.svg" }],
   })),
@@ -31,19 +31,20 @@ test.beforeEach(async ({ page }) => {
     const variant = products.find((product) => path === "/api/v1/store/products/" + product.id + "/");
     const json = variant ? { ...variant, variants: [variant] } : path.endsWith("/store/home/")
       ? { store: { name: "LinTech" }, categories: [], category_sections: sections, cyber_services: [] }
-      : path.endsWith("/store/products/") ? products
+      : path.endsWith("/store/products/") ? (sections.find((section) => String(section.id) === new URL(route.request().url()).searchParams.get("product__category"))?.products || products)
       : path.endsWith("/auth/me/") ? { authenticated: false }
       : { items: [], total: "0.00" };
     return route.fulfill({ json });
   });
 });
 
-for (const width of [1440, 1024, 768, 375]) {
-  test("evenly distributed cards without clipping at " + width + "px", async ({ page }, testInfo) => {
+for (const width of [1440, 1024, 1023, 700, 699, 440, 439, 375, 320]) {
+  test("fixed left-aligned tracks without clipping at " + width + "px", async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/");
     await expect(page.locator(".categoryProductSection")).toHaveCount(5);
     let previousGrid;
+    let homeCardWidth;
     for (const section of sections) {
       const region = page.getByRole("region", { name: section.name, exact: true });
       await expect(region.locator(".productCard")).toHaveCount(section.products.length);
@@ -59,12 +60,15 @@ for (const width of [1440, 1024, 768, 375]) {
       await expect(region).toHaveCSS("margin-top", "0px");
       await expect(region).toHaveCSS("margin-bottom", "0px");
       await checkGrid(region.locator(".categoryProductGrid"), width);
+      homeCardWidth = (await region.locator(".productCard").first().boundingBox()).width;
     }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: testInfo.outputPath("homepage.png"), fullPage: true });
-    for (const path of ["/shop", "/shop?category=2"]) {
+    for (const path of ["/shop", "/shop?category=1", "/shop?category=2", "/shop?category=3"]) {
       await page.goto(path);
-      await expect(page.locator(".productCard")).toHaveCount(15);
+      await expect(page.locator(".productCard")).toHaveCount(path === "/shop" ? 15 : Number(path.at(-1)));
       await checkGrid(page.locator(".productGrid"), width);
+      expect((await page.locator(".productCard").first().boundingBox()).width).toBeCloseTo(homeCardWidth, 0);
     }
     await page.screenshot({ path: testInfo.outputPath("shop.png"), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
@@ -74,11 +78,13 @@ for (const width of [1440, 1024, 768, 375]) {
 async function checkGrid(grid, width) {
   const bounds = await grid.boundingBox();
   const boxes = [];
+  const columns = width >= 1024 ? 4 : width >= 700 ? 3 : width >= 440 ? 2 : 1;
+  await expect(grid).toHaveCSS("gap", "24px");
+  expect(await grid.evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(columns);
   for (const card of await grid.locator(".productCard").all()) {
     const box = await card.boundingBox();
     boxes.push(box);
-    expect(box.width).toBeLessThanOrEqual(width <= 520 ? 340 : 280);
-    expect(box.width).toBeGreaterThanOrEqual(230);
+    expect(box.width).toBeCloseTo((bounds.width - 24 * (columns - 1)) / columns, 0);
     expect(box.x).toBeGreaterThanOrEqual(bounds.x);
     expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -86,23 +92,12 @@ async function checkGrid(grid, width) {
     await checkImageAndActions(card);
   }
   const firstRow = boxes.filter((box) => Math.abs(box.y - boxes[0].y) < 1);
-  const left = firstRow[0].x - bounds.x;
-  const last = firstRow.at(-1);
-  const right = bounds.x + bounds.width - last.x - last.width;
-  expect(left).toBeCloseTo(right, 0);
-  for (let i = 1; i < firstRow.length; i++) {
-    expect(firstRow[i].x - firstRow[i - 1].x - firstRow[i - 1].width).toBeGreaterThanOrEqual(16);
-  }
-  if (firstRow.length > 2) {
-    const distance = firstRow[1].x - firstRow[0].x;
-    for (let i = 2; i < firstRow.length; i++)
-      expect(firstRow[i].x - firstRow[i - 1].x).toBeCloseTo(distance, 0);
-  }
-  if (width === 1440) expect(firstRow).toHaveLength(Math.min(4, boxes.length));
-  if (width === 375) {
-    expect(firstRow).toHaveLength(1);
-    for (const box of boxes)
-      expect(box.x + box.width / 2).toBeCloseTo(bounds.x + bounds.width / 2, 0);
+  expect(firstRow).toHaveLength(Math.min(columns, boxes.length));
+  for (let i = 0; i < boxes.length; i++) {
+    expect(boxes[i].x).toBeCloseTo(bounds.x + (i % columns) * (boxes[i].width + 24), 0);
+    const rowStart = boxes[Math.floor(i / columns) * columns];
+    expect(boxes[i].y).toBeCloseTo(rowStart.y, 0);
+    expect(boxes[i].height).toBeCloseTo(rowStart.height, 0);
   }
   // Rows may wrap, but no two card rectangles may intersect.
   for (let i = 0; i < boxes.length; i++)
@@ -155,7 +150,23 @@ for (const theme of ["light", "dark"]) {
       }
       await page.goto("/shop");
       await expect(page.locator(".productCard")).toHaveCount(products.length);
-      for (const card of await page.locator(".productCard").all()) await checkImageAndActions(card);
+      await checkGrid(page.locator(".productGrid"), width);
     });
   }
 }
+
+test("theme changes preserve homepage and shop card dimensions", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const path of ["/", "/shop"]) {
+    await page.goto(path);
+    await expect(page.locator(".productCard")).toHaveCount(products.length);
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    const measure = () => page.locator(".productCard").evaluateAll((cards) => cards.map((card) => {
+      const { x, y, width, height } = card.getBoundingClientRect();
+      return { x, y, width, height };
+    }));
+    const light = await measure();
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    expect(await measure()).toEqual(light);
+  }
+});

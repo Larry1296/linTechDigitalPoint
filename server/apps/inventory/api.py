@@ -35,14 +35,37 @@ def receive(request):
     return Response({"lot_id":lot.id,"quantity":lot.received_quantity,"reference":lot.reference},status=201)
 
 def _receipt_data(receipt):
-    return {"id":receipt.id,"receipt_number":receipt.receipt_number,"external_reference":receipt.external_reference,"supplier_name":receipt.supplier_name,"received_at":receipt.received_at,"notes":receipt.notes,"created_at":receipt.created_at,"lines":[{"id":line.id,"variant_id":line.variant_id,"product_name":line.variant.product.name,"variant_name":line.variant.name,"sku":line.variant.sku,"quantity":line.received_quantity,"unit_cost":line.unit_cost,"selling_price":line.variant.selling_price,"line_cost":line.received_quantity*line.unit_cost,"placements":[{"shelf_id":p.shelf_id,"code":p.shelf.code,"name":p.shelf.display_name,"zone":p.shelf.zone.name,"stack":p.shelf.level.stack.display_name if p.shelf.level_id else None,"level":p.shelf.level.level_number if p.shelf.level_id else None,"quantity":p.quantity} for p in line.placements.select_related("shelf__zone","shelf__level__stack")] } for line in receipt.lines.select_related("variant__product").prefetch_related("placements__shelf__zone","placements__shelf__level__stack") ]}
+    lines = receipt.lines.select_related("variant__product").prefetch_related(
+        "placements__shelf__zone", "placements__shelf__level__stack", "corrections__performed_by",
+    )
+    return {
+        "id": receipt.id, "receipt_number": receipt.receipt_number,
+        "external_reference": receipt.external_reference, "supplier_name": receipt.supplier_name,
+        "received_at": receipt.received_at, "notes": receipt.notes, "created_at": receipt.created_at,
+        "lines": [{
+            "id": line.id, "updated_at": line.updated_at, "variant_id": line.variant_id,
+            "product_name": line.variant.product.name, "variant_name": line.variant.name,
+            "sku": line.variant.sku, "quantity": line.received_quantity, "unit_cost": line.unit_cost,
+            "selling_price": line.variant.selling_price, "line_cost": line.received_quantity * line.unit_cost,
+            "placements": [{
+                "shelf_id": p.shelf_id, "code": p.shelf.code, "name": p.shelf.display_name,
+                "zone": p.shelf.zone.name,
+                "stack": p.shelf.level.stack.display_name if p.shelf.level_id else None,
+                "level": p.shelf.level.level_number if p.shelf.level_id else None, "quantity": p.quantity,
+            } for p in line.placements.all()],
+            "corrections": [{
+                "id": c.id, "reason": c.reason, "before": c.before, "after": c.after,
+                "created_at": c.created_at, "administrator": c.performed_by.get_username(),
+            } for c in line.corrections.all()],
+        } for line in lines],
+    }
 
 @api_view(["GET","POST"])
 @permission_classes([HasLinTechPermission])
 def receipts(request):
     if request.method=="GET":
         if not request.user.has_perm("inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
-        rows=StockReceipt.objects.order_by("-received_at")[:100]
+        rows=StockReceipt.objects.prefetch_related("lines").order_by("-received_at", "-pk")[:100]
         return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count()} for r in rows])
     if not request.user.has_perm("inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
     try:

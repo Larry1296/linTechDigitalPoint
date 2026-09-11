@@ -223,3 +223,24 @@ it("ignores an older scanner response after the query changes", async () => {
   expect(select).not.toHaveBeenCalled();
   expect(screen.queryByRole("option")).not.toBeInTheDocument();
 });
+
+for (const count of [1, 2, 3]) {
+  for (const homepage of [true, false]) {
+    it(`preserves ${count} products in DOM order in the ${homepage ? "homepage" : "shop"} grid without inline layout`, async () => {
+      const rows = Array.from({ length: count }, (_, i) => ({
+        ...product, id: 30 + i, display_name: `Product ${i + 1}`,
+      }));
+      api.mockResolvedValue(homepage ? {
+        store: { name: "Shop" }, categories: [], cyber_services: [],
+        category_sections: [{ id: 7, name: "Cables", products: rows }],
+      } : rows);
+      setup(homepage ? <HomePage /> : <ShopPage />);
+      const cards = (await screen.findAllByRole("article")).filter((card) => card.classList.contains("productCard"));
+      const grid = cards[0].parentElement;
+      expect(grid).toHaveAttribute("class", homepage ? "categoryProductGrid" : "productGrid");
+      expect(cards.map((card) => within(card).getByRole("heading").textContent))
+        .toEqual(rows.map((row) => row.display_name));
+      for (const element of [grid, ...cards]) expect(element).not.toHaveAttribute("style");
+    });
+  }
+}

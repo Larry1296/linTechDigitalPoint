@@ -1,3 +1,4 @@
+import { ReceiptHistoryPage } from "../modules/inventory/ReceiptHistoryPage";
 import { StockAdjustmentPage } from "../modules/inventory/StockAdjustmentPage";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { PublicLayout } from "../layouts/PublicLayout";
@@ -79,6 +80,8 @@ export function AppRoutes() {
         <Route path="orders" element={<StaffOrdersPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="receive" element={<ReceivePage />} />
+        <Route path="receipts" element={<ReceiptHistoryPage />} />
+        <Route path="receipts/:id" element={<ReceiptHistoryPage />} />
         <Route path="adjust-stock" element={<StockAdjustmentPage />} />
         <Route path="digital-shop" element={<DigitalShopPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
