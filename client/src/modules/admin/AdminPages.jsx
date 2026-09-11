@@ -1,3 +1,8 @@
+import { useAuth } from "../../core/auth/AuthContext";
+import { ProductActions } from "../products/ProductActions";
+import "./pos.css";
+import { ProductSearch } from "../storefront/components/ProductSearch";
+import { VariantSummary, stockLimit } from "../products/VariantSummary";
 import { AdjustmentReport } from "../inventory/StockAdjustmentPage";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
@@ -105,24 +110,34 @@ export function DashboardPage() {
   );
 }
 export function PosPage() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState([]);
   const [cart, setCart] = useState([]);
   const [result, setResult] = useState();
   const [error, setError] = useState("");
   const search = () =>
-    api("/api/v1/commerce/pos/catalog/?q=" + encodeURIComponent(query))
+    api("/api/v1/commerce/pos/catalog/?q=" + encodeURIComponent(""))
       .then(setRows)
       .catch((e) => setError(e.message));
   useEffect(() => {
     void search();
   }, []);
-  const add = (p) =>
-    setCart((old) =>
-      old.some((x) => x.p.id === p.id)
-        ? old.map((x) => (x.p.id === p.id ? { ...x, q: x.q + 1 } : x))
-        : [...old, { p, q: 1 }],
-    );
+  const add = (p) => {
+    setCart((old) => {
+      const current = old.find((x) => x.p.id === p.id);
+      if ((current?.q || 0) + 1 > stockLimit(p)) return old;
+      return current
+        ? old.map((x) => (x.p.id === p.id ? { p, q: x.q + 1 } : x))
+        : [...old, { p, q: 1 }];
+    });
+    setQuery("");
+  };
+  const groups = Object.groupBy(rows, (p) =>
+    p.product_type === "SERVICE"
+      ? "Services"
+      : p.category_name || "Uncategorised",
+  );
   const complete = async (e) => {
     e.preventDefault();
     const form = Object.fromEntries(new FormData(e.currentTarget));
@@ -146,6 +161,7 @@ export function PosPage() {
         }),
       );
       setCart([]);
+      await search();
     } catch (err) {
       setError(err.message);
     }
@@ -166,46 +182,44 @@ export function PosPage() {
       {error && <p className="formError">{error}</p>}
       <div className="posGrid">
         <section>
-          <form
-            className="search"
-            onSubmit={(e) => {
-              e.preventDefault();
-              search();
-            }}
-          >
-            <input
-              autoFocus
-              aria-label="Scan barcode or search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Scan barcode, SKU or product"
-            />
-            <button>Search</button>
-          </form>
-          <div className="productList">
-            {rows.map((p) => (
-              <button key={p.id} onClick={() => add(p)}>
-                <div>
-                  <b>{p.product_name}</b>
-                  <small>
-                    {p.variant_name} · {p.sku}
-                  </small>
-                </div>
-                <span>KSh {p.selling_price}</span>
-                <small>
-                  {p.product_type === "SERVICE"
-                    ? "Service"
-                    : p.available + " available"}
-                </small>
-                {p.locations.map((l) => (
-                  <em key={l.shelf_code}>
-                    {l.zone} → {l.stack || "Unassigned stack"} → Level{" "}
-                    {l.level || "—"} → {l.shelf_code} — {l.available}
-                  </em>
-                ))}
-              </button>
-            ))}
-          </div>
+          <ProductSearch
+            value={query}
+            onChange={setQuery}
+            endpoint="/api/v1/commerce/pos/catalog/"
+            onSelect={add}
+            exactScan
+            isDisabled={(p) => stockLimit(p) < 1}
+            renderResult={(p) => <VariantSummary row={p} />}
+            renderActions={(p) => <ProductActions row={p} user={user} />}
+            placeholder="Scan barcode, SKU or search products"
+          />
+          {!query.trim() &&
+            Object.entries(groups)
+              .sort(([a], [b]) =>
+                a === "Services"
+                  ? 1
+                  : b === "Services"
+                    ? -1
+                    : a.localeCompare(b),
+              )
+              .map(([category, products]) => (
+                <section key={category}>
+                  <h2>{category}</h2>
+                  <div className="posCatalogue">
+                    {products.map((p) => (
+                      <article key={p.id}>
+                        <button
+                          disabled={stockLimit(p) < 1}
+                          onClick={() => add(p)}
+                        >
+                          <VariantSummary row={p} />
+                        </button>
+                        <ProductActions row={p} user={user} />
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
         </section>
         <form className="saleCart" onSubmit={complete}>
           <h2>Current sale</h2>
@@ -218,11 +232,27 @@ export function PosPage() {
                 <input
                   type="number"
                   min="1"
+                  max={
+                    Number.isFinite(stockLimit(x.p))
+                      ? stockLimit(x.p)
+                      : undefined
+                  }
                   value={x.q}
                   onChange={(e) =>
                     setCart((c) =>
                       c.map((y) =>
-                        y.p.id === x.p.id ? { ...y, q: +e.target.value } : y,
+                        y.p.id === x.p.id
+                          ? {
+                              ...y,
+                              q: Math.max(
+                                1,
+                                Math.min(
+                                  stockLimit(y.p),
+                                  Number(e.target.value) || 1,
+                                ),
+                              ),
+                            }
+                          : y,
                       ),
                     )
                   }

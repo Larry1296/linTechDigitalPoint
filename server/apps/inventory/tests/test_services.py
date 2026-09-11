@@ -326,3 +326,27 @@ def test_owner_defines_any_shop_area_without_seeded_zone_choices():
     assert response.json()["width"] == "24.00"
     assert response.json()["height"] == "10.50"
     assert Store.objects.get().measurement_unit == "ft"
+
+
+def test_pos_zero_stock_receipt_sale_and_restock(data):
+    user, shelf, _, variant = data
+    user.is_staff = True
+    user.is_superuser = True
+    user.save()
+    client = APIClient()
+    client.force_authenticate(user)
+    url = "/api/v1/commerce/pos/catalog/"
+    assert Decimal(client.get(url).json()[0]["available"]) == 0
+    with pytest.raises(ValidationError):
+        complete_sale(lines=[{"variant": variant, "quantity": 1}], channel="POS", number="ZERO", user=user)
+    receive_stock(variant=variant, placements=[{"shelf": shelf, "quantity": 2}], unit_cost=100, reference="DELIVERY-1", user=user)
+    complete_sale(lines=[{"variant": variant, "quantity": 2}], channel="POS", number="SOLD", user=user)
+    assert Decimal(client.get(url).json()[0]["available"]) == 0
+    receive_stock(variant=variant, placements=[{"shelf": shelf, "quantity": 3}], unit_cost=100, reference="DELIVERY-2", user=user)
+    rows = client.get(url).json()
+    assert len(rows) == 1
+    assert rows[0]["id"] == variant.id
+    assert Decimal(rows[0]["available"]) == 3
+    response = client.patch(f"/api/v1/catalog/variants/{variant.id}/", {"name": "Updated", "physical": 999, "selling_price": 300}, format="json")
+    assert response.status_code == 200
+    assert Decimal(client.get(url).json()[0]["available"]) == 3

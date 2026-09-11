@@ -29,7 +29,7 @@
 }
 /* Keep section rhythm local to the homepage; retain inset panel padding. */
 .homePage {
-  --home-section-gap: clamp(24px, 4vw, 52px);
+  --home-section-gap: clamp(24px, 3vw, 36px);
   --home-heading-gap: 28px;
   --home-card-gap: 22px;
   @apply tw:grid tw:grid-cols-[minmax(0,_1fr)] tw:gap-[var(--home-section-gap)];
@@ -170,7 +170,6 @@
 }
 @media (max-width: 760px) {
   .homePage {
-    --home-section-gap: 28px;
     --home-heading-gap: 20px;
     --home-card-gap: 18px;
   }
@@ -614,9 +613,6 @@
     @apply tw:gap-[16px];
   }
 
-  .productImage.large {
-    @apply tw:h-[250px];
-  }
 
   .list article,
   .list > a {
@@ -1021,8 +1017,23 @@
 .productSearchPanel .productImage img { width: 100%; height: 100%; object-fit: contain; }
 .productSearchDetails { display: grid; gap: .2rem; min-width: 0; overflow-wrap: anywhere; font-size: .875rem; }
 .hero > div { min-width: 0; }
-.categoryProductSection { margin-block: 2.5rem; }
-.categorySectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.categoryProductSection {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.categorySectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+}
+.categorySectionHeading h2 { margin: 0; }
+.categoryProductGrid { margin-block: 0; }
 .categorySectionHeading a { color: var(--primary); }
 @media (max-width: 600px) {
   .categorySectionHeading { align-items: flex-start; flex-direction: column; }

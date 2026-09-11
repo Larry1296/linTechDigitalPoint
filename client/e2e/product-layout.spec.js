@@ -28,7 +28,8 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route("**/api/v1/**", (route) => {
     const path = new URL(route.request().url()).pathname;
-    const json = path.endsWith("/store/home/")
+    const variant = products.find((product) => path === "/api/v1/store/products/" + product.id + "/");
+    const json = variant ? { ...variant, variants: [variant] } : path.endsWith("/store/home/")
       ? { store: { name: "LinTech" }, categories: [], category_sections: sections, cyber_services: [] }
       : path.endsWith("/store/products/") ? products
       : path.endsWith("/auth/me/") ? { authenticated: false }
@@ -42,9 +43,21 @@ for (const width of [1440, 1024, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/");
     await expect(page.locator(".categoryProductSection")).toHaveCount(5);
+    let previousGrid;
     for (const section of sections) {
       const region = page.getByRole("region", { name: section.name, exact: true });
       await expect(region.locator(".productCard")).toHaveCount(section.products.length);
+      const heading = await region.locator(".categorySectionHeading").boundingBox();
+      const grid = await region.locator(".categoryProductGrid").boundingBox();
+      expect(grid.y - heading.y - heading.height).toBeCloseTo(14, 0);
+      if (previousGrid) {
+        const separation = heading.y - previousGrid.y - previousGrid.height;
+        expect(separation).toBeGreaterThanOrEqual(24);
+        expect(separation).toBeLessThanOrEqual(36);
+      }
+      previousGrid = grid;
+      await expect(region).toHaveCSS("margin-top", "0px");
+      await expect(region).toHaveCSS("margin-bottom", "0px");
       await checkGrid(region.locator(".categoryProductGrid"), width);
     }
     await page.screenshot({ path: testInfo.outputPath("homepage.png"), fullPage: true });
@@ -111,4 +124,38 @@ async function checkImageAndActions(card) {
   const action = await card.locator(".cardActions, :scope > a.button").boundingBox();
   const box = await card.boundingBox();
   expect(box.y + box.height - action.y - action.height).toBeCloseTo(17, 0);
+}
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [1440, 375]) {
+    test("neutral photography canvas in " + theme + " at " + width, async ({ page }, testInfo) => {
+      await page.addInitScript((theme) => localStorage.setItem("theme", theme), theme);
+      await page.setViewportSize({ width, height: 1000 });
+      // Portrait packaging and square catalogue imagery.
+      for (const product of [products[0], products.find((p) => p.category === "Memory Cards")]) {
+        await page.goto("/products/" + product.id);
+        const canvas = page.locator(".productImage.large");
+        await expect(canvas).toBeVisible();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        const box = await canvas.boundingBox();
+        expect(box.width).toBeCloseTo(box.height, 0);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+        await expect(canvas).toHaveCSS("background-color", "rgb(255, 255, 255)");
+        await expect(canvas).toHaveCSS("padding", "8px");
+        await expect(canvas).toHaveCSS("border-radius", "14px");
+        const img = canvas.locator("img");
+        await expect(img).toHaveCSS("object-fit", "contain");
+        await expect(img).toHaveCSS("object-position", "50% 50%");
+        await expect(img).toHaveCSS("filter", "none");
+        await expect(img).toHaveCSS("opacity", "1");
+        expect(await img.evaluate((node) => node.complete && node.naturalWidth > 0)).toBe(true);
+        if (theme === "dark") await expect(canvas).not.toHaveCSS("box-shadow", "none");
+        await page.screenshot({ path: testInfo.outputPath("detail-" + product.id + ".png"), fullPage: true });
+      }
+      await page.goto("/shop");
+      await expect(page.locator(".productCard")).toHaveCount(products.length);
+      for (const card of await page.locator(".productCard").all()) await checkImageAndActions(card);
+    });
+  }
 }

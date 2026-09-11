@@ -34,7 +34,9 @@ def test_public_variants_and_search_have_exact_identity(cables):
     client = APIClient()
     rows = client.get("/api/v1/store/products/").data
     assert len(rows) == 2
-    for row, variant in zip(rows, cables):
+    variants_by_id = {variant.pk: variant for variant in cables}
+    for row in rows:
+        variant = variants_by_id[row["variant_id"]]
         assert row["display_name"] == f"Amaya USB Charging Cable — {variant.name}"
         assert row["variant_id"] == variant.pk and row["product_id"] == variant.product_id
         assert row["variant_name"] == variant.name and row["sku"] == variant.sku

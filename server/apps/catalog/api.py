@@ -256,6 +256,25 @@ class ProductViewSet(SecuredModelViewSet):
     )
     serializer_class = ProductSerializer
 
+    def list(self, request, *args, **kwargs):
+        # Opt-in bounded browsing preserves existing internal clients.
+        if "page" not in request.query_params:
+            return super().list(request, *args, **kwargs)
+        from rest_framework.pagination import PageNumberPagination
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        rows = paginator.paginate_queryset(self.get_queryset().order_by("category__name", "name", "id"), request)
+        return paginator.get_paginated_response(self.get_serializer(rows, many=True).data)
+
+    @action(detail=False, methods=["get"], url_path="search-suggestions")
+    def search_suggestions(self, request):
+        from .search import search_variants, variant_summary
+        query = request.query_params.get("q", "").strip()
+        if len(query) < 2:
+            return Response([])
+        rows = search_variants(ProductVariant.objects.select_related("product__category"), query)[:30]
+        return Response([variant_summary(v) for v in rows])
+
     @action(detail=False, methods=["post"], url_path="create-with-stock")
     @transaction.atomic
     def create_with_stock(self, request):

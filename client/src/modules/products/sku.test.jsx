@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router-dom";
 import { ProductsPage } from "./ProductsPage";
 import { ReceivePage } from "../receiving/ReceivePage";
 import {
@@ -138,7 +139,11 @@ describe("searchable SKU suggestions", () => {
     expect(screen.getByLabelText("SKU")).toHaveValue(
       "SMARTPHONE-COVER-BLACK-RIGHT-R01-L01-S02",
     );
-    fireEvent.change(screen.getByLabelText("Upload from storage"), { target: { files: [new File(["photo"], "type-b.png", { type: "image/png" })] } });
+    fireEvent.change(screen.getByLabelText("Upload from storage"), {
+      target: {
+        files: [new File(["photo"], "type-b.png", { type: "image/png" })],
+      },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create Product" }));
     await waitFor(() => expect(saved).toHaveBeenCalledOnce());
     const request = api.mock.calls.find(([path]) =>
@@ -153,31 +158,44 @@ describe("searchable SKU suggestions", () => {
   });
 });
 
-it("searches the product list using a product name and rack/compartment code", async () => {
+it("searches Products on the server and selects the exact variant", async () => {
+  const product = {
+    id: 1,
+    name: "Cover",
+    variants: [{ id: 2, name: "Black", sku: "COVER-RIGHT-R01" }],
+    locations: [],
+  };
   api.mockImplementation(async (path) =>
     path.includes("locations")
       ? zones
-      : [
-          {
-            id: 1,
-            name: "Cover",
-            product_type: "STOCK_ITEM",
-            variants: [
-              { id: 2, name: "Black", sku: "COVER-BLACK-RIGHT-R01-L01-S02" },
-            ],
-            locations: [],
-          },
-        ],
+      : path.includes("search-suggestions")
+        ? [
+            {
+              id: 2,
+              product_id: 1,
+              product_name: "Cover",
+              variant_name: "Black",
+              sku: "COVER-RIGHT-R01",
+            },
+          ]
+        : path.includes("?page=")
+          ? { results: [product], next: null }
+          : product,
   );
-  render(<ProductsPage />);
+  render(
+    <MemoryRouter>
+      <ProductsPage />
+    </MemoryRouter>,
+  );
   await screen.findByRole("heading", { name: "Cover" });
-  const search = screen.getByLabelText("Search products, variants or SKU");
-  fireEvent.change(search, { target: { value: "cover right-r01 l01-s02" } });
-  expect(screen.getByRole("heading", { name: "Cover" })).toBeInTheDocument();
-  fireEvent.change(search, { target: { value: "BACKWALL-R01" } });
-  expect(
-    screen.getByText("No products match your search."),
-  ).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith("/api/v1/catalog/products/?page=1");
+  fireEvent.change(screen.getByRole("combobox"), {
+    target: { value: "RIGHT-R01" },
+  });
+  fireEvent.click(await screen.findByRole("option"));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith("/api/v1/catalog/products/1/"),
+  );
 });
 
 it("prefills and submits the receiving modal SKU using its exact compartment", async () => {
@@ -217,11 +235,24 @@ it("prefills and submits the receiving modal SKU using its exact compartment", a
     target: { value: "200" },
   });
   expect(form.getByLabelText("SKU")).toHaveValue("COVER-RIGHT-R01-L01-S02");
-  fireEvent.click(form.getByRole("button", { name: "Create and return to receipt" }));
-  expect(await form.findByRole("alert")).toHaveTextContent("Add a Product display image");
-  expect(api.mock.calls.some(([path]) => path.includes("create-inline"))).toBe(false);
-  fireEvent.change(form.getByLabelText("Upload from storage"), { target: { files: [new File(["photo"], "type-b.png", { type: "image/png" })] } });
-  expect(form.getByAltText("Product display image preview")).toHaveAttribute("src", "blob:photo");
+  fireEvent.click(
+    form.getByRole("button", { name: "Create and return to receipt" }),
+  );
+  expect(await form.findByRole("alert")).toHaveTextContent(
+    "Add a Product display image",
+  );
+  expect(api.mock.calls.some(([path]) => path.includes("create-inline"))).toBe(
+    false,
+  );
+  fireEvent.change(form.getByLabelText("Upload from storage"), {
+    target: {
+      files: [new File(["photo"], "type-b.png", { type: "image/png" })],
+    },
+  });
+  expect(form.getByAltText("Product display image preview")).toHaveAttribute(
+    "src",
+    "blob:photo",
+  );
   fireEvent.click(
     form.getByRole("button", { name: "Create and return to receipt" }),
   );
@@ -234,10 +265,14 @@ it("prefills and submits the receiving modal SKU using its exact compartment", a
     path.includes("create-inline"),
   );
   expect(request[1].body.get("display_image")).toBeInstanceOf(File);
-  expect(Object.fromEntries(request[1].body).sku).toBe("COVER-RIGHT-R01-L01-S02");
+  expect(Object.fromEntries(request[1].body).sku).toBe(
+    "COVER-RIGHT-R01-L01-S02",
+  );
   expect(screen.getByLabelText("Compartment", { exact: true })).toHaveValue(
     "4",
   );
 });
 
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { is_superuser: true } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({
+  useAuth: () => ({ user: { is_superuser: true } }),
+}));

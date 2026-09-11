@@ -7,6 +7,12 @@ export function ProductSearch({
   value,
   onChange,
   onSearch,
+  endpoint = "/api/v1/store/search-suggestions/",
+  onSelect,
+  renderResult,
+  renderActions,
+  isDisabled = () => false,
+  exactScan = false,
   placeholder = "Search all available products…",
 }) {
   const [localQuery, setLocalQuery] = useState("");
@@ -19,28 +25,35 @@ export function ProductSearch({
   const root = useRef(null);
   const listId = useId();
   const navigate = useNavigate();
+  const scanVersion = useRef(0);
+  useEffect(
+    () => () => {
+      scanVersion.current++;
+    },
+    [],
+  );
   const trimmed = query.trim();
   const expanded = open && trimmed.length >= 2;
 
   useEffect(() => {
     if (!expanded) return;
     let current = true;
+    const version = scanVersion.current;
     const controller = new AbortController();
     setRows([]);
     setActive(-1);
     setStatus("loading");
     const timer = setTimeout(() => {
-      api(
-        "/api/v1/store/search-suggestions/?q=" + encodeURIComponent(trimmed),
-        { signal: controller.signal },
-      )
+      api(endpoint + "?q=" + encodeURIComponent(trimmed), {
+        signal: controller.signal,
+      })
         .then((results) => {
-          if (!current) return;
+          if (!current || version !== scanVersion.current) return;
           setRows(results.slice(0, 8));
           setStatus("ready");
         })
         .catch(() => {
-          if (current) setStatus("error");
+          if (current && version === scanVersion.current) setStatus("error");
         });
     }, 250);
     return () => {
@@ -48,7 +61,7 @@ export function ProductSearch({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [trimmed, expanded]);
+  }, [trimmed, expanded, endpoint]);
 
   useEffect(() => {
     const outside = (event) => {
@@ -60,17 +73,45 @@ export function ProductSearch({
 
   useEffect(() => {
     if (expanded && active >= 0) {
-      document.getElementById(listId + "-" + active)?.scrollIntoView?.({ block: "nearest" });
+      document
+        .getElementById(listId + "-" + active)
+        ?.scrollIntoView?.({ block: "nearest" });
     }
   }, [active, expanded, listId]);
 
   const select = (product) => {
+    if (isDisabled(product)) return;
+    scanVersion.current++;
     setOpen(false);
-    navigate("/products/" + product.id);
+    if (onSelect) onSelect(product);
+    else navigate("/products/" + product.id);
   };
-  const search = (event) => {
+  const search = async (event) => {
     event.preventDefault();
     setOpen(false);
+    if (exactScan && !trimmed) return;
+    if (exactScan && trimmed) {
+      const version = ++scanVersion.current;
+      setStatus("loading");
+      setOpen(true);
+      try {
+        const results = await api(
+          endpoint + "?q=" + encodeURIComponent(trimmed),
+        );
+        if (version !== scanVersion.current) return;
+        setRows(results.slice(0, 8));
+        setStatus("ready");
+        const exact = results.find((row) =>
+          [row.sku, row.barcode].some(
+            (code) => code?.toLowerCase() === trimmed.toLowerCase(),
+          ),
+        );
+        if (exact) select(exact);
+      } catch {
+        if (version === scanVersion.current) setStatus("error");
+      }
+      return;
+    }
     if (onSearch) onSearch(trimmed);
     else navigate("/shop?" + new URLSearchParams({ search: trimmed }));
   };
@@ -101,6 +142,7 @@ export function ProductSearch({
           placeholder={placeholder}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
+            scanVersion.current++;
             updateQuery(event.target.value);
             setRows([]);
             setActive(-1);
@@ -109,6 +151,7 @@ export function ProductSearch({
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
+              scanVersion.current++;
               setOpen(false);
               setActive(-1);
             } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -130,7 +173,10 @@ export function ProductSearch({
             ) {
               event.preventDefault();
               select(rows[active]);
-            } else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            } else if (
+              event.key === "Enter" &&
+              !event.nativeEvent.isComposing
+            ) {
               search(event);
             }
           }}
@@ -155,22 +201,31 @@ export function ProductSearch({
                 id={listId + "-" + index}
                 role="option"
                 aria-selected={index === active}
+                aria-disabled={isDisabled(product)}
                 className={index === active ? "selected" : ""}
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(product)}
               >
-                <ProductImage product={product} />
-                <span className="productSearchDetails">
-                  <strong>{product.display_name}</strong>
-                  <span>{product.category}</span>
-                  <span>
-                    KSh {product.selling_price} · {product.available} available
-                  </span>
-                </span>
+                {renderResult ? (
+                  renderResult(product)
+                ) : (
+                  <>
+                    <ProductImage product={product} />
+                    <span className="productSearchDetails">
+                      <strong>{product.display_name}</strong>
+                      <span>{product.category}</span>
+                      <span>
+                        KSh {product.selling_price} · {product.available}{" "}
+                        available
+                      </span>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
+          {renderActions && rows[active] && renderActions(rows[active])}
         </div>
       )}
     </form>

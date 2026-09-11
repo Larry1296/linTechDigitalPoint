@@ -145,25 +145,29 @@ label {
   @apply tw:text-[18px];
   @apply tw:[margin:0];
 }
-.productImage {
+.productImage,
+.productImage.large {
   width: 100%;
   height: auto;
   aspect-ratio: 1 / 1;
   padding: 8px;
-  border: 1px solid var(--line);
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, #fff 20%, var(--line));
   flex-shrink: 0;
   @apply tw:grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   @apply tw:[place-items:center];
   background: #fff;
-  @apply tw:rounded-[10px];
+  border-radius: 14px;
   @apply tw:[color:var(--primary)];
   @apply tw:text-[50px];
   @apply tw:font-[800];
   @apply tw:overflow-hidden;
 }
-.productImage img {
+.productImage img,
+.productImage.large img {
+  border-radius: 8px;
   display: block;
   min-width: 0;
   min-height: 0;
@@ -174,12 +178,10 @@ label {
   @apply tw:object-contain;
   object-position: center;
 }
-.productImage.large {
-  aspect-ratio: auto;
-  padding: 0;
-  border: 0;
-  background: var(--primary2);
-  @apply tw:h-[430px];
+[data-theme="dark"] .productImage {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 .stock {
   @apply tw:[color:var(--primary)];
@@ -800,9 +802,6 @@ label {
   .posGrid,
   .editorGrid {
     @apply tw:grid-cols-[1fr];
-  }
-  .productImage.large {
-    @apply tw:h-[280px];
   }
   .heading {
     @apply tw:items-stretch;

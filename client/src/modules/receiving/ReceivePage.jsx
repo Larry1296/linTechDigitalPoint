@@ -40,7 +40,7 @@ export function ReceivePage() {
   const [locationsLoaded, setLocationsLoaded] = useState(false);
   const [categoryId, setCategoryId] = useState(draft.categoryId || "");
   const [query, setQuery] = useState(draft.query || "");
-  const [lines, setLines] = useState(draft.lines || [emptyLine()]);
+  const [lines, setLines] = useState(draft.lines || [{...emptyLine(), variant_id: new URLSearchParams(window.location.search).get("variant") || ""}]);
   const [details, setDetails] = useState(
     draft.details || {
       supplier_name: "",

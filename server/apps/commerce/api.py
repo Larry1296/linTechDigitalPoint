@@ -124,12 +124,18 @@ def checkout(request):
 @api_view(["GET"])
 @permission_classes([IsInternalStaff])
 def pos_catalog(request):
-    search=request.query_params.get("q",""); rows=ProductVariant.objects.select_related("product","product__category").filter(active=True,product__active=True)
-    if search:rows=rows.filter(product__name__icontains=search)|rows.filter(sku__iexact=search)|rows.filter(barcode__iexact=search)
-    result=[]
-    for v in rows[:50]:
-        balances=StockBalance.objects.filter(lot__variant=v,quantity__gt=0).select_related("shelf__zone","shelf__level__stack")
-        result.append({"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"product_type":v.product.product_type,"selling_price":v.selling_price,"available":sum((x.quantity-x.reserved for x in balances),Decimal("0")),"locations":[{"zone":x.shelf.zone.name,"stack":x.shelf.level.stack.display_name if x.shelf.level_id else None,"level":x.shelf.level.level_number if x.shelf.level_id else None,"shelf_code":x.shelf.code,"shelf_name":x.shelf.display_name,"available":x.quantity-x.reserved} for x in balances]})
+    from collections import defaultdict
+    from apps.catalog.search import search_variants, variant_summary
+    search = request.query_params.get("q", "").strip()
+    rows = search_variants(ProductVariant.objects.select_related("product__category").filter(active=True, product__active=True), search)
+    rows = list(rows[:50] if search else rows)
+    stock = defaultdict(list)
+    for balance in StockBalance.objects.filter(lot__variant_id__in=[v.id for v in rows]).select_related("lot", "shelf__zone", "shelf__level__stack").order_by("shelf__code", "id"):
+        stock[balance.lot.variant_id].append(balance)
+    result = []
+    for v in rows:
+        balances = stock[v.id]
+        result.append({**variant_summary(v), "available": sum((x.quantity-x.reserved for x in balances), Decimal("0")), "locations": [{"zone": x.shelf.zone.name, "stack": x.shelf.level.stack.display_name if x.shelf.level_id else None, "level": x.shelf.level.level_number if x.shelf.level_id else None, "shelf_code": x.shelf.code, "shelf_name": x.shelf.display_name, "available": x.quantity-x.reserved} for x in balances if x.quantity > 0]})
     return Response(result)
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
@@ -137,7 +143,7 @@ def pos_complete(request):
     if not request.user.has_perm("commerce.add_sale"):return Response({"detail":"You do not have permission to complete sales."},status=403)
     lines=[]
     for raw in request.data.get("items",[]):
-        variant=ProductVariant.objects.select_related("product").filter(pk=raw.get("variant_id"),active=True).first()
+        variant=ProductVariant.objects.select_related("product").filter(pk=raw.get("variant_id"),active=True,product__active=True).first()
         if not variant:return Response({"detail":"Invalid product variant."},status=400)
         lines.append({"variant":variant,"quantity":raw.get("quantity")})
     discount=Decimal(str(request.data.get("discount",0)))

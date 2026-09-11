@@ -127,7 +127,13 @@ it("renders every returned homepage product with category links", async () => {
       {
         id: 7,
         name: "Charging Cables",
-        products: [product, { ...product, id: 13 }, { ...product, id: 14 }, { ...product, id: 15 }, { ...product, id: 16 }],
+        products: [
+          product,
+          { ...product, id: 13 },
+          { ...product, id: 14 },
+          { ...product, id: 15 },
+          { ...product, id: 16 },
+        ],
       },
     ],
   });
@@ -165,4 +171,55 @@ it("initializes and reloads Shop from the URL, preserves category and handles Ba
   expect(screen.getByRole("status")).toHaveTextContent(
     "/shop?category=7&search=cable",
   );
+});
+
+it.each(["SKU-12", "123456"])(
+  "immediately selects exact scanner code %s",
+  async (code) => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    const exact = { ...product, sku: "SKU-12", barcode: "123456" };
+    api.mockResolvedValue([{ ...product, id: 99 }, exact]);
+    setup(
+      <ProductSearch endpoint="/internal/" exactScan onSelect={onSelect} />,
+    );
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: code } });
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" }),
+    );
+    expect(onSelect).toHaveBeenCalledWith(exact);
+  },
+);
+
+it("supports Up and prevents selecting disabled stock", async () => {
+  vi.useFakeTimers();
+  const select = vi.fn();
+  api.mockResolvedValue([product]);
+  setup(<ProductSearch onSelect={select} isDisabled={() => true} />);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "am" } });
+  await tick();
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowUp" });
+  expect(screen.getByRole("option")).toHaveAttribute("aria-selected", "true");
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+  expect(select).not.toHaveBeenCalled();
+});
+
+it("ignores an older scanner response after the query changes", async () => {
+  vi.useFakeTimers();
+  let resolve;
+  api.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const select = vi.fn();
+  setup(<ProductSearch exactScan onSelect={select} />);
+  const input = screen.getByRole("combobox");
+  fireEvent.change(input, { target: { value: "SKU-12" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.change(input, { target: { value: "different" } });
+  await act(async () => resolve([{ ...product, sku: "SKU-12" }]));
+  expect(select).not.toHaveBeenCalled();
+  expect(screen.queryByRole("option")).not.toBeInTheDocument();
 });
