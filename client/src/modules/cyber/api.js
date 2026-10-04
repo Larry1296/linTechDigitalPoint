@@ -8,6 +8,7 @@ export const updateCyberService = (id, body) =>
 export const getCyberJobs = () => api("/api/v1/cyber/jobs/");
 export const createCyberJob = (body) =>
   api("/api/v1/cyber/jobs/", { method: "POST", body: JSON.stringify(body) });
+export const deleteCyberJob = (id) => api(`/api/v1/cyber/jobs/${id}/`, { method: "DELETE" });
 export const transitionCyberJob = (id, status) =>
   api(`/api/v1/cyber/jobs/${id}/transition/`, {
     method: "POST",

@@ -120,6 +120,13 @@ class CyberJobViewSet(viewsets.ReadOnlyModelViewSet):
         job = create_job(user=request.user, lines=request.data.get("lines", []), customer=customer, walk_in_customer_name=request.data.get("walk_in_customer_name", ""), phone=request.data.get("phone", ""), notes=request.data.get("notes", ""), due_at=request.data.get("due_at") or None, discount=request.data.get("discount", 0))
         return Response(self.get_serializer(job).data, status=status.HTTP_201_CREATED)
 
+    def destroy(self, request, pk=None):
+        if not has_business_permission(request.user, "cyber.delete_cyberjob"):
+            return Response({"detail": "Permission to delete Cyber jobs is required."}, status=403)
+        from .services import delete_job
+        delete_job(job=self.get_object(), user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["post"])
     def transition(self, request, pk=None):
         if not has_business_permission(request.user, "cyber.change_cyberjob"):

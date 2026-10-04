@@ -193,9 +193,10 @@ export function StackBuilder({ zones, initialZone, onCreated, onCancel }) {
               onChange={(e) => setCount(e.target.value)}
             />
           </label>
-          {levels.map((level, index) => (
+          <p className="muted">Level 1 is the lowest, just above the floor; the numbers go up from there. The top level is listed first, as you see the rack.</p>
+          {levels.map((level, index) => index).reverse().map((index) => (
             <label key={index}>
-              Level {index + 1} compartments
+              Level {index + 1}{index === 0 ? " (lowest, just above the floor)" : index === levels.length - 1 && index > 0 ? " (top)" : ""} compartments
               <input
                 type="number"
                 min="1"

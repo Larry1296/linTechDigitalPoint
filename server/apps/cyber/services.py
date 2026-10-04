@@ -88,6 +88,20 @@ def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone=""
 
 
 @transaction.atomic
+def delete_job(*, job, user):
+    """A job created by mistake, removed completely while it is still waiting: nothing was started, sold or paid for it,
+    so no stock, sale or books depend on it. The audit log keeps what was deleted."""
+    job = CyberJob.objects.select_for_update().get(pk=job.pk)
+    if job.status != "QUEUED" or job.started_at or job.sale_id:
+        raise ValidationError("Only a job that has not started yet can be deleted.")
+    snapshot = {"number": job.number, "customer": job.walk_in_customer_name, "total": str(job.total),
+                "lines": [{"service": line.service_name, "quantity": str(line.quantity), "total": str(line.line_total)} for line in job.lines.all()]}
+    audit("CYBER_JOB_DELETED", job, user, before=snapshot)
+    job.lines.all().delete()
+    job.delete()
+
+
+@transaction.atomic
 def set_job_status(*, job, status, user):
     job = CyberJob.objects.select_for_update().get(pk=job.pk)
     if job.status in ["COMPLETED", "CANCELLED"]:

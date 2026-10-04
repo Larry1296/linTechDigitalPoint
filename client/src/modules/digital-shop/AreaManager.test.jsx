@@ -55,3 +55,29 @@ it("adds a new area", async () => {
   expect(createZone).toHaveBeenCalledWith({ name: "Store room", width: "20", height: "10" });
   expect(onChanged).toHaveBeenCalledWith(9);
 });
+
+it("after adding an area, scrolls back up to it and points to adding its first rack", async () => {
+  const { useState } = await import("react");
+  const scroll = vi.fn();
+  window.HTMLElement.prototype.scrollIntoView = scroll;
+  createZone.mockResolvedValue({ id: 3 });
+  function Page() {
+    const [rows, setRows] = useState(zones);
+    const [selected, setSelected] = useState(1);
+    return <AreaManager zones={rows} selected={selected} onSelect={setSelected} canAdd canChange canAddRack onAddRack={vi.fn()}
+      onChanged={async (id) => { setRows([...zones, { id: 3, name: "Counter", width: "8", height: "4", stacks: [] }]); setSelected(id); }} />;
+  }
+  render(<Page />);
+  fireEvent.click(screen.getByRole("button", { name: "Add another area" }));
+  fireEvent.change(screen.getByLabelText("Area name"), { target: { value: "Counter" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add area" })); });
+  const toolbar = screen.getByLabelText("Actions for Counter");
+  expect(toolbar).toHaveClass("justAdded");
+  expect(toolbar).toContainElement(screen.getByRole("status"));
+  expect(screen.getByRole("status")).toHaveTextContent("Counter added. Next, click “Add rack to Counter” to place its racks.");
+  expect(screen.getByRole("button", { name: "Add rack to Counter" })).toHaveFocus();
+  expect(scroll).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+  fireEvent.click(screen.getByRole("tab", { name: "Left Wall" }));  // moving on clears the pointer
+  expect(screen.getByLabelText("Actions for Left Wall")).not.toHaveClass("justAdded");
+  expect(screen.queryByRole("status")).toBeNull();
+});

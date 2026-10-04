@@ -9,9 +9,10 @@ export function StackPreview({
   stack,
   onEdit,
 }) {
+  // Levels count up from the floor: Level 1 is the lowest, just above the floor, so it is drawn at the bottom.
   const rows = stack
     ? [...stack.levels]
-        .sort((a, b) => a.level_number - b.level_number)
+        .sort((a, b) => b.level_number - a.level_number)
         .map((level) => ({
           number: level.level_number,
           shelves: level.shelves,
@@ -21,7 +22,7 @@ export function StackPreview({
         number: index + 1,
         shelves: [],
         compartments: level.compartments,
-      }));
+      })).reverse();
   return (
     <article className="stackPreview">
       <header>
@@ -68,6 +69,7 @@ export function StackPreview({
           </section>
         ))}
       </div>
+      <div className="rackFloor" aria-hidden="true">Floor</div>
     </article>
   );
 }

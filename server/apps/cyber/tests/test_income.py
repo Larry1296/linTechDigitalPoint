@@ -200,3 +200,13 @@ def test_one_customer_several_services_is_one_receipt_and_one_payment(cyber):
     bad = till.post("/api/v1/cyber/income/record/", {**visit, "idempotency_key": "v2", "lines": [{"option_id": lamination.pk, "quantity": "3", "amount": "100"}]}, format="json")
     assert bad.status_code == 400 and "Lamination: The price for this is fixed at 150.00" in str(bad.json())
     assert till.post("/api/v1/cyber/income/record/", {**visit, "idempotency_key": "v3", "lines": []}, format="json").status_code == 400
+
+
+def test_deleting_a_waiting_job_needs_the_delete_permission(cyber):
+    owner, till, org, printing, typing = cyber
+    created = till.post("/api/v1/cyber/jobs/", {"lines": [{"variant_id": printing.variant_id, "quantity": 2}]}, format="json")
+    assert created.status_code == 201, created.data
+    job = created.data["id"]
+    assert till.delete(f"/api/v1/cyber/jobs/{job}/").status_code == 403  # a till operator cannot delete jobs
+    assert owner.delete(f"/api/v1/cyber/jobs/{job}/").status_code == 204
+    assert owner.get(f"/api/v1/cyber/jobs/{job}/").status_code == 404

@@ -11,6 +11,7 @@ import {
   createCyberService,
   updateCyberService,
   createCyberJob,
+  deleteCyberJob,
   getCyberDashboard,
   getCyberJobs,
   getCyberServices,
@@ -26,6 +27,7 @@ export function CyberDashboardPage() {
   const { user } = useAuth();
   const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
   const canChangeServices = Boolean(user?.permissions?.includes("cyber.change_cyberserviceprofile"));
+  const canDeleteJobs = Boolean(user?.permissions?.includes("cyber.delete_cyberjob"));
   const [serviceError, setServiceError] = useState(null);
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
@@ -145,8 +147,9 @@ export function CyberDashboardPage() {
         <CyberJobForm
           services={services.filter((service) => service.active)}
           onSave={async (data) => {
-            await createCyberJob(data);
+            const job = await createCyberJob(data);
             await load();
+            return job;
           }}
         />
         <section>
@@ -187,6 +190,26 @@ export function CyberDashboardPage() {
                         }}
                       >
                         Start
+                      </button>
+                    )}
+                    {canDeleteJobs && job.status === "QUEUED" && !job.started_at && !job.sale && (
+                      <button
+                        type="button"
+                        className="danger"
+                        aria-label={`Delete job ${job.number}`}
+                        onClick={async () => {
+                          if (
+                            !(await confirmAction({
+                              title: `Delete job ${job.number}?`,
+                              text: "The job is removed completely. Nothing was started or paid for it, so no money or stock is affected.",
+                              confirmButtonText: "Delete job",
+                            }))
+                          )
+                            return;
+                          await act(`Could not delete job ${job.number}.`, () => deleteCyberJob(job.id));
+                        }}
+                      >
+                        Delete
                       </button>
                     )}
                     {job.status !== "READY" &&

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createZone, removeZone, updateZone } from "./api";
 import { confirmAction } from "../../core/ui/alerts";
 import { FormField } from "../../components/forms/FormField";
@@ -9,15 +9,26 @@ export function AreaManager({ zones, selected, onSelect, onChanged, canAdd, canC
   const [mode, setMode] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  // The area just added: the page jumps back up to it so its next step, adding a rack, is right in view.
+  const [added, setAdded] = useState(null);
+  const toolbar = useRef(null);
+  const addRack = useRef(null);
   const zone = zones.find((item) => item.id === selected);
-  const open = (next) => { setMode(next); setNotice(null); };
-  const run = async (work, failure, done) => {
-    setBusy(true); setNotice(null);
+  const justAdded = Boolean(zone && added === zone.id);
+  useEffect(() => {
+    if (!justAdded) return;
+    toolbar.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    addRack.current?.focus({ preventScroll: true });
+  }, [justAdded]);
+  const open = (next) => { setMode(next); setNotice(null); setAdded(null); };
+  const run = async (work, failure, done, isNew = false) => {
+    setBusy(true); setNotice(null); setAdded(null);
     try {
       const result = await work();
       setMode(null);
       setNotice({ kind: "success", text: done });
       await onChanged(result?.id);
+      if (isNew && result?.id) setAdded(result.id);
     } catch (e) {
       setNotice({ kind: "error", title: failure, text: e.message });
     } finally {
@@ -34,7 +45,9 @@ export function AreaManager({ zones, selected, onSelect, onChanged, canAdd, canC
   };
   const add = (event) => {
     const data = values(event);
-    return run(() => createZone(data), "Could not add the area.", `${data.name} added. Use “Add rack to ${data.name}” to place its racks.`);
+    const next = canAddRack ? `Next, click “Add rack to ${data.name}” to place its racks.`
+      : "Next, create a product category on the Categories page; then you can add racks here.";
+    return run(() => createZone(data), "Could not add the area.", `${data.name} added. ${next}`, true);
   };
   const remove = async () => {
     if (!(await confirmAction({
@@ -58,12 +71,13 @@ export function AreaManager({ zones, selected, onSelect, onChanged, canAdd, canC
     <p className="muted">An area is a wall or part of the shop floor where racks stand.</p>
     {zones.length > 0 && <div className="tabs" role="tablist" aria-label="Shop areas">
       {zones.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === selected}
-        className={item.id === selected ? "active" : ""} onClick={() => { onSelect(item.id); open(null); }}>{item.name}</button>)}
+        className={item.id === selected ? "active" : ""} onClick={() => { onSelect(item.id); open(null); setNotice(null); }}>{item.name}</button>)}
     </div>}
-    {zone && <div className="areaToolbar" aria-label={`Actions for ${zone.name}`}>
+    {zone && <div ref={toolbar} className={`areaToolbar${justAdded ? " justAdded" : ""}`} aria-label={`Actions for ${zone.name}`}>
+      {justAdded && notice?.kind === "success" && <FormSuccess message={notice.text} />}
       <p><strong>{zone.name}</strong> · {+zone.width} × {+zone.height} ft · {zone.stacks.length} rack{zone.stacks.length === 1 ? "" : "s"}</p>
       <div className="areaActions">
-        {canAddRack && <button type="button" disabled={busy} onClick={onAddRack}>Add rack to {zone.name}</button>}
+        {canAddRack && <button ref={addRack} type="button" disabled={busy} onClick={onAddRack}>Add rack to {zone.name}</button>}
         {canChange && <button type="button" className="secondary" disabled={busy} onClick={() => open("edit")}>Edit area</button>}
         {canChange && <button type="button" className="secondary" disabled={busy} onClick={() => void remove()}>Remove area</button>}
       </div>
@@ -74,7 +88,7 @@ export function AreaManager({ zones, selected, onSelect, onChanged, canAdd, canC
     </div>}
     {mode === "edit" && zone && form(`Edit ${zone.name}`, save, "Save area", zone)}
     {mode === "add" && form("Add an area", add, "Add area")}
-    {!mode && notice && (notice.kind === "error"
+    {!mode && notice && !justAdded && (notice.kind === "error"
       ? <FormError title={notice.title} message={notice.text} />
       : <FormSuccess message={notice.text} />)}
   </section>;

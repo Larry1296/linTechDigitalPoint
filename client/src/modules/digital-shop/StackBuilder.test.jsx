@@ -28,13 +28,19 @@ it("lets every box be emptied and retyped, and says what is missing instead of r
   type("Number of levels", "");
   expect(screen.getByLabelText("Number of levels")).toHaveValue(null);
   type("Number of levels", "2");
-  type("Level 1 compartments", "");
-  expect(screen.getByLabelText("Level 1 compartments")).toHaveValue(null);   // no longer jumps back to 1
+  const lowest = "Level 1 (lowest, just above the floor) compartments";
+  expect(screen.getAllByLabelText(/^Level \d/).map((input) => input.closest("label").textContent))
+    .toEqual(["Level 2 (top) compartments", lowest]);  // listed as the rack is seen: top first, Level 1 by the floor
+  type(lowest, "");
+  expect(screen.getByLabelText(lowest)).toHaveValue(null);   // no longer jumps back to 1
   next();
   expect(screen.getByRole("alert")).toHaveTextContent("Enter how many compartments level 1 has (1 or more).");
-  type("Level 1 compartments", "5");
+  type(lowest, "5");
   next();
 
+  const drawn = [...document.querySelectorAll(".rackLevelLabel")].map((label) => label.textContent);
+  expect(drawn).toEqual(["Level 2", "Level 1"]);  // Level 1 drawn at the bottom, on the floor
+  expect(document.querySelector(".rackFrame + .rackFloor")).toHaveTextContent("Floor");
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create rack" })); });
   const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/locations/stacks/")[1].body);
   expect(body).toMatchObject({ zone: 3, display_name: "Phone accessories", width: 4, height: 7, x: 2, y: 0, levels: [{ compartments: 5 }, { compartments: 2 }] });

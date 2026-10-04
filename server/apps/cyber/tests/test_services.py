@@ -58,3 +58,26 @@ def test_cyber_material_consumes_fifo_inventory_without_double_counting_service_
     assert StockBalance.objects.get(lot__variant=paper).quantity == 480
     assert sale.cogs == Decimal("10.00")
     assert Movement.objects.get(movement_type="CYBER_CONSUMPTION").quantity == 20
+
+
+@pytest.mark.django_db
+def test_a_job_not_yet_started_can_be_deleted_completely_but_not_once_work_began(cyber_data):
+    from rest_framework.exceptions import ValidationError
+    from apps.core.models import AuditLog
+    from apps.cyber.models import CyberJob, CyberJobLine
+    from apps.cyber.services import delete_job, set_job_status
+    owner, variants = cyber_data
+    Store.objects.create(name="Cyber branch")
+    job = create_job(user=owner, lines=[{"variant_id": variants["B&W Print"].id, "quantity": 3}], walk_in_customer_name="Mary")
+    delete_job(job=job, user=owner)
+    assert not CyberJob.objects.filter(pk=job.pk).exists() and not CyberJobLine.objects.filter(job_id=job.pk).exists()
+    assert AuditLog.objects.get(action="CYBER_JOB_DELETED").before["number"] == job.number
+    started = create_job(user=owner, lines=[{"variant_id": variants["Scanning"].id, "quantity": 1}])
+    set_job_status(job=started, status="IN_PROGRESS", user=owner)
+    with pytest.raises(ValidationError):
+        delete_job(job=started, user=owner)
+    paid = create_job(user=owner, lines=[{"variant_id": variants["Binding"].id, "quantity": 1}])
+    complete_job(job=paid, user=owner, payment_method="CASH")
+    with pytest.raises(ValidationError):
+        delete_job(job=paid, user=owner)
+    assert CyberJob.objects.count() == 2

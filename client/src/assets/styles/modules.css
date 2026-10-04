@@ -606,6 +606,18 @@ label {
   @apply tw:tracking-[0.08em];
   @apply tw:uppercase;
 }
+/* The floor the rack stands on, under Level 1. */
+.rackFloor {
+  @apply tw:[margin:0_-10px];
+  @apply tw:[padding-top:3px];
+  @apply tw:[border-top:3px_dashed_var(--muted)];
+  @apply tw:[color:var(--muted)];
+  @apply tw:text-[10px];
+  @apply tw:font-[800];
+  @apply tw:tracking-[0.08em];
+  @apply tw:uppercase;
+  @apply tw:text-center;
+}
 .rackLevel {
   @apply tw:flex;
   @apply tw:min-h-[70px];
@@ -1291,6 +1303,15 @@ form a:not(.button, .pageBackLink),
   border-radius: 12px;
 }
 .areaToolbar > p {
+  margin: 0;
+}
+/* The area just added: drawn attention to so its next step (adding a rack) is obvious. */
+.areaToolbar.justAdded {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+.areaToolbar.justAdded > [role="status"] {
+  flex-basis: 100%;
   margin: 0;
 }
 .areaActions {
