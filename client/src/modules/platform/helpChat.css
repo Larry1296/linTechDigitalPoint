@@ -1,0 +1,78 @@
+/* Website help assistant: a floating launcher and a chat panel above it. Uses the theme tokens, so it follows light and dark mode. */
+.helpChat { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: grid; justify-items: end; gap: 12px; }
+.helpChat .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.helpChatLauncher {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 20px;
+  border: 0; border-radius: 999px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+  background: linear-gradient(125deg, #2587ff, #1558e6 60%, #15803d);
+  box-shadow: 0 14px 34px rgb(21 88 230 / 35%);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.helpChatLauncher:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgb(21 88 230 / 42%); }
+.helpChatLauncher:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+
+.helpChatPanel {
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
+  width: min(400px, calc(100vw - 32px)); height: min(620px, calc(100vh - 120px));
+  overflow: hidden; border: 1px solid var(--line); border-radius: 20px;
+  color: var(--text); background: var(--surface); box-shadow: 0 24px 60px rgb(2 18 45 / 28%);
+  animation: helpChatIn 0.25s ease both; transform-origin: bottom right;
+}
+.helpChatPanel header { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; color: #fff; background: linear-gradient(135deg, #0b2a55, #1558e6); }
+.helpChatPanel header > div { display: grid; flex: 1; min-width: 0; }
+.helpChatPanel header strong { font-size: 15px; }
+.helpChatPanel header small { color: #cfe0ff; font-size: 12px; }
+.helpChatAvatar { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 12px; background: rgb(255 255 255 / 16%); }
+.helpChatIcon { display: grid; place-items: center; width: 34px; height: 34px; min-height: 0; padding: 0; border: 0; border-radius: 10px; color: #fff; background: transparent; box-shadow: none; cursor: pointer; }
+.helpChatIcon:hover { background: rgb(255 255 255 / 14%); }
+
+.helpChatMessages { display: grid; align-content: start; gap: 10px; overflow-y: auto; padding: 16px; background: var(--bg); overscroll-behavior: contain; }
+.helpChatMessage { max-width: 88%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.helpChatMessage p, .helpChatMessage ol, .helpChatMessage ul { margin: 0; }
+.helpChatMessage > * + * { margin-top: 8px; }
+.helpChatMessage ol, .helpChatMessage ul { padding-left: 20px; }
+.helpChatMessage li + li { margin-top: 4px; }
+.helpChat .helpChatMessage a { color: var(--primary); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.helpChatMessage.assistant { justify-self: start; border: 1px solid var(--line); border-bottom-left-radius: 6px; background: var(--surface); }
+.helpChatMessage.user { justify-self: end; color: #fff; border-bottom-right-radius: 6px; background: #1d4ed8; }
+.helpChatMessage.error { border-color: #f5c2c0; color: #8a1c14; background: #fff4f2; }
+.helpChatSources { display: block; color: var(--muted); font-size: 11px; }
+.helpChatSuggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.helpChatSuggestions button {
+  min-height: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--primary); background: var(--surface); font-size: 13px; font-weight: 600; box-shadow: none; cursor: pointer;
+}
+.helpChatSuggestions button:hover { border-color: var(--primary); }
+.helpChatTyping { display: flex; gap: 4px; padding: 4px 0; }
+.helpChatTyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: helpChatDot 1s infinite ease-in-out; }
+.helpChatTyping i:nth-child(2) { animation-delay: 0.15s; }
+.helpChatTyping i:nth-child(3) { animation-delay: 0.3s; }
+
+.helpChatForm { display: flex; align-items: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--surface); }
+.helpChatForm textarea {
+  flex: 1; min-height: 44px; max-height: 120px; resize: none; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: 14px; color: var(--text); background: var(--bg); font: inherit; font-size: 14px;
+}
+.helpChatForm textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+.helpChatForm button {
+  display: grid; place-items: center; width: 44px; height: 44px; min-height: 0; padding: 0; border: 0;
+  border-radius: 14px; color: #fff; background: #1d4ed8; cursor: pointer;
+}
+.helpChatForm button:disabled { opacity: 0.45; cursor: not-allowed; }
+.helpChatNote { margin: 0; padding: 0 12px 10px; color: var(--muted); font-size: 11px; background: var(--surface); }
+
+[data-theme="dark"] .helpChatMessage.error { border-color: #7f1d1d; color: #fecaca; background: #3b0d0d; }
+[data-theme="dark"] .helpChatMessage.user, [data-theme="dark"] .helpChatForm button { background: #2563eb; }
+
+@keyframes helpChatIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes helpChatDot { 0%, 80%, 100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (max-width: 520px) {
+  .helpChat { right: 12px; bottom: 12px; }
+  .helpChatLauncher span { display: none; }
+  .helpChatLauncher { width: 56px; height: 56px; padding: 0; justify-content: center; }
+  .helpChatPanel { width: calc(100vw - 24px); height: calc(100vh - 100px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .helpChatPanel, .helpChatTyping i { animation: none; }
+  .helpChatLauncher { transition: none; }
+}

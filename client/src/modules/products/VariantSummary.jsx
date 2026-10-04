@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../core/organization/presentation";
 export const hasPermission = (user, permission) =>
   Boolean(user?.is_superuser || user?.permissions?.includes(permission));
 export const stockLimit = (p) =>
@@ -12,7 +13,7 @@ export function VariantSummary({ row }) {
         {row.category_name} · {row.sku}
       </span>
       <span>
-        KSh {row.selling_price}
+        BP {businessCurrency()} {row.buying_price ?? "—"} · SP {businessCurrency()} {row.selling_price}
         {row.available !== undefined &&
           ` · ${stockLimit(row) === 0 ? "Out of stock" : row.product_type === "SERVICE" ? "Service" : `${row.available} available`}`}
       </span>

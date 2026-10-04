@@ -10,9 +10,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppFooter, AppNavbar } from "../components/AppChrome";
 import { ThemePicker } from "../components/ThemePicker";
-import { useAuth } from "../core/auth/AuthContext";
-import { useSignOut } from "../core/auth/useSignOut";
 import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
+import { SidebarAccount } from "../components/navigation/SidebarAccount";
 
 const sections = [
   {
@@ -45,8 +44,6 @@ export function CustomerLayout() {
     () => false,
   );
   const location = useLocation();
-  const { user } = useAuth();
-  const signOut = useSignOut();
   const sidebarRef = useRef(null);
   const [openLocation, setOpenLocation] = useState(null);
   const toggleRef = useRef(null);
@@ -120,17 +117,7 @@ export function CustomerLayout() {
             iconSize={19}
             onNavigate={() => setOpenLocation(null)}
           />
-          {isMobile && (
-            <div className="customerMobileActions">
-              <span className="navUserName">
-                {user?.first_name || user?.username} (Customer)
-              </span>
-              <ThemePicker />
-              <button type="button" onClick={() => void signOut()}>
-                Logout
-              </button>
-            </div>
-          )}
+          <SidebarAccount>{isMobile && <ThemePicker />}</SidebarAccount>
         </aside>
         <main inert={sidebarOpen}>
           <Outlet />

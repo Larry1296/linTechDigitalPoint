@@ -1,0 +1,149 @@
+html { scroll-behavior: smooth; }
+.saasSite { --saas-ink:var(--text); --saas-blue:var(--primary); color:var(--saas-ink); background:var(--bg); min-height:100vh; }
+.saasSite > main { width:100%; max-width:none; margin:0; padding:0; }
+.saasSite a { color:inherit; }.saasSite .button { background:var(--saas-blue); color:var(--on-primary); border-radius:8px; display:inline-flex; align-items:center; gap:10px; text-decoration:none; padding:14px 21px; }.saasSite .secondary { background:transparent; color:var(--saas-ink); border:1px solid var(--line); }
+ .saasNav { position:fixed; inset:0 0 auto; z-index:50; display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:24px; min-height:88px; padding:16px 24px; color:var(--chrome-text); background:var(--chrome); border-bottom:1px solid var(--chrome-line); box-shadow:0 8px 24px rgb(2 18 45 / 24%); }
+.saasBrand { max-width:310px; font-size:18px; font-weight:750; text-decoration:none; line-height:1.25; overflow-wrap:anywhere; }
+.saasBrand .platformLogo { display:flex; align-items:center; gap:14px; }
+.saasBrand .platformMark { width:60px; height:60px; }
+/* In the navbar the name stacks: the lead words large, the last word as a spaced-out tagline. */
+.saasBrand .platformLogoName { align-self:center; display:grid; gap:4px; max-width:230px; white-space:normal; line-height:1.05; }
+.saasBrand .platformLogoLead { font-size:20px; font-weight:800; letter-spacing:-.02em; }
+.saasBrand .platformLogoAccent { font-size:12px; font-weight:750; letter-spacing:.32em; text-transform:uppercase; }
+/* A joined-up name such as "DukaFlow" stays one word, with only its colour split. */
+.saasBrand .platformLogoName.joined { display:block; font-size:26px; font-weight:800; letter-spacing:-.03em; }
+.saasBrand .platformLogoName.joined > span { font-size:inherit; font-weight:inherit; letter-spacing:inherit; text-transform:none; }
+.saasBrand .platformMark { filter:drop-shadow(0 6px 16px rgb(37 99 235 / 45%)); transition:transform .25s ease; }
+.saasBrand:hover .platformMark { transform:rotate(-4deg) scale(1.04); }
+@media (prefers-reduced-motion: reduce) { .saasBrand .platformMark { transition:none; } .saasBrand:hover .platformMark { transform:none; } }
+.saasNav nav { display:flex; align-items:center; justify-self:center; gap:28px; }
+.saasNav nav a { padding:12px 0; text-decoration:none; font-size:17px; font-weight:600; white-space:nowrap; color:var(--chrome-muted); transition:color .15s ease; }
+.saasNav nav a:hover, .saasNav nav a:focus-visible { color:var(--chrome-text); }
+.saasNavActions { justify-self:end; display:flex; align-items:center; gap:12px; }
+.saasNavActions .theme { flex-shrink:0; }
+.saasNav .saasLogin, .saasNav .saasGetStarted { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:11px 18px; border-radius:10px; font-size:15px; font-weight:650; line-height:1.3; white-space:nowrap; text-decoration:none; transition:background .15s ease, border-color .15s ease; }
+.saasNav { --login-bg:#15803d; --login-hover:#166534; --login-text:#ffffff; --login-ring:#15803d40; }
+[data-theme="dark"] .saasNav { --login-bg:#22c55e; --login-hover:#4ade80; --login-text:#052e16; --login-ring:#22c55e40; }
+.saasNav .saasLogin { color:var(--login-text); background:var(--login-bg); border:1px solid var(--login-bg); font-weight:700; box-shadow:0 4px 14px var(--login-ring), inset 0 1px 0 #ffffff33; }
+.saasNav .saasLogin:hover { background:var(--login-hover); border-color:var(--login-hover); }
+.saasNav .saasLogin:focus-visible { outline:3px solid var(--login-ring); outline-offset:2px; }
+.saasNav .saasGetStarted { color:var(--on-primary); background:var(--primary); border:1px solid var(--primary); box-shadow:0 4px 12px rgb(0 0 0 / 18%); }
+.saasNav .saasGetStarted:hover { filter:brightness(1.1); }
+.saasNav :focus-visible { outline:2px solid var(--chrome-muted); outline-offset:4px; }
+.saasMenu { display:none; align-items:center; justify-content:center; width:44px; height:44px; padding:8px; color:var(--chrome-text); background:transparent; border:1px solid var(--chrome-line); border-radius:10px; }
+.saasSite > main { padding-top:88px; }
+.saasHero { display:grid; grid-template-columns:minmax(0, 1.4fr) minmax(0, 1fr); gap:7vw; align-items:center; padding:90px max(6vw,24px); max-width:1450px; margin:auto; }.saasHero h1 { font-size:clamp(40px,5vw,72px); line-height:1.05; letter-spacing:-2.4px; margin:24px 0; }.saasHero h1 em { font-style:normal; color:var(--saas-blue); }.saasHero p { font-size:19px; line-height:1.7; max-width:560px; }.saasActions { display:flex; flex-wrap:wrap; gap:14px; margin:30px 0; }.saasHero .saasNote { font-size:14px; color:var(--muted); }.saasOverview { background:var(--primary2); border:1px solid var(--line); border-radius:20px; padding:36px; box-shadow:14px 18px 0 var(--line); }.saasOverview h2 { font-size:29px; line-height:1.2; margin:20px 0 30px; }.saasModule { display:flex; align-items:center; gap:14px; background:var(--surface); border-radius:9px; padding:19px; margin:12px 0; }.saasModule span { flex:1; }.saasOverview p { font-size:13px; }
+.saasSection { padding:65px max(6vw,24px); border-top:1px solid var(--line); scroll-margin-top:24px; }.saasSection h2 { font-size:clamp(28px,3vw,42px); letter-spacing:-1px; line-height:1.2; max-width:680px; margin:18px 0 30px; }.saasFeatureGrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; }.saasFeatureGrid article { padding:28px; border:1px solid var(--line); border-radius:12px; background:var(--surface); scroll-margin-top:24px; }.saasFeatureGrid h3 { font-size:21px; line-height:1.3; margin:22px 0 12px; }.saasSection p { line-height:1.75; color:var(--muted); }.saasSplit { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:8vw; }.saasFooter { display:grid; grid-template-columns:minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap:35px; padding:55px max(6vw,24px); background:var(--chrome); color:var(--chrome-text); }.saasFooter a { display:block; margin-top:12px; font-size:14px; text-decoration:none; }.saasFooter p { max-width:290px; line-height:1.6; }.saasFooter small { color:var(--chrome-muted); }
+.businessHeader { display:flex; align-items:center; flex-wrap:wrap; gap:16px; padding:16px 20px; border-bottom:1px solid var(--border,#d8dfdc); }.businessHeader img { width:44px; height:44px; object-fit:contain; }.businessHeader h1 { font-size:19px; margin:0; }.businessHeader label { margin-left:auto; }.businessHeader select { max-width:240px; }.businessHeader small { display:block; }.businessHeader a { margin-left:10px; }.tenantForm { max-width:620px; margin:45px auto; padding:28px; }.tenantForm form { display:grid; gap:16px; }.tenantForm fieldset { display:flex; flex-wrap:wrap; gap:14px; }.tenantForm label { display:grid; gap:6px; }.tenantForm fieldset label { display:flex; align-items:center; gap:7px; }.tenantForm input[type="checkbox"] { width:auto; }.tenantForm .error { color:#a22222; }.tenantForm select,.tenantForm input { max-width:100%; }
+.admin main { min-width:0; }.saasSite * { box-sizing:border-box; }.saasSite :focus-visible { outline:3px solid var(--primary); outline-offset:4px; }
+@media(max-width:1000px) { .saasHero { gap:35px; }.saasFeatureGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:760px) { .saasHero { grid-template-columns:minmax(0, 1fr); padding-top:45px; padding-bottom:60px; }.saasOverview { padding:25px; box-shadow:7px 9px 0 var(--line); }.saasFeatureGrid,.saasSplit { grid-template-columns:minmax(0, 1fr); }.saasFooter { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }.businessHeader { padding-top:60px; }.businessHeader label { margin-left:0; } }
+@media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+
+.saasNav > .theme { margin-left:auto; flex-shrink:0; }
+.saasNav .theme { color:var(--chrome-muted); }
+.saasNav .theme select { color:var(--chrome-text); background:var(--chrome); border-color:var(--chrome-line); }
+.authStandalone { width:100%; max-width:none; min-height:100vh; margin:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); padding:0; overflow:hidden; background:var(--surface); }
+.authStandaloneIntro { display:flex; flex-direction:column; justify-content:center; gap:20px; padding:clamp(34px,5vw,72px); color:var(--chrome-text); background:linear-gradient(145deg,var(--chrome),#123d70); }
+.authStandaloneIntro h2 { margin:0; font-size:clamp(32px,4vw,52px); line-height:1.05; letter-spacing:-.04em; }
+.authStandaloneIntro p { max-width:420px; color:var(--chrome-muted); line-height:1.75; }
+.authStandaloneForm { display:grid; align-content:center; gap:12px; padding:clamp(28px,5vw,64px); }
+.authStandaloneForm form { display:grid; gap:16px; }
+.registerForm { width:min(100%, 560px); }
+.registerForm fieldset { display:grid; gap:10px 14px; min-width:0; margin:0; padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.registerForm legend { padding:0 6px; font-weight:700; color:var(--text); }
+.registerForm label { display:grid; gap:6px; min-width:0; }
+.registerForm fieldset > small { color:var(--muted); font-size:12.5px; font-weight:400; }
+.registerRow { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
+@media (max-width:520px) { .registerRow { grid-template-columns:minmax(0, 1fr); } .registerForm fieldset { padding:14px; } }
+@media(max-width:760px) { .authStandalone { display:block; min-height:100vh; }.authStandaloneIntro { padding:28px 24px; }.authStandaloneIntro h2 { font-size:32px; }.authStandaloneForm { padding:28px 24px; } }
+.saasFooter { border-top:4px solid var(--chrome-line); box-shadow:0 -10px 28px rgb(2 18 45 / 18%), inset 0 1px 0 rgb(255 255 255 / 7%); }
+@media(max-width:1250px) {
+  .saasNav { grid-template-columns:minmax(0,1fr) auto; gap:12px; }
+  .saasNavActions { grid-column:2; grid-row:1; }
+  .saasMenu { display:flex; }
+  .saasNav nav { display:none; grid-column:1 / -1; grid-row:2; width:100%; }
+  .saasNav nav.isOpen { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding-top:12px; border-top:1px solid var(--chrome-line); }
+  .saasNav nav a { padding:12px; border-radius:8px; }
+  .saasNav nav a:hover { background:rgb(255 255 255 / 5%); }
+}
+@media(max-width:600px) {
+  .saasNav { padding:12px 16px; }
+  .saasBrand { max-width:none; font-size:16px; padding-right:52px; }
+  .saasBrand .platformMark { width:48px; height:48px; }
+  .saasBrand .platformLogoLead { font-size:17px; }
+  .saasBrand .platformLogoAccent { font-size:11px; }
+  .saasBrand .platformLogoName.joined { font-size:22px; }
+  .saasNavActions { grid-column:1 / -1; grid-row:2; justify-self:stretch; justify-content:flex-end; gap:8px; }
+  .saasNavActions .saasMenu { position:absolute; top:12px; right:16px; }
+  .saasNav .saasLogin, .saasNav .saasGetStarted { padding:10px 12px; font-size:14px; }
+  .saasNav nav { grid-row:3; }
+  .saasSite > main { padding-top:136px; }
+}
+
+/* Guided business set-up. */
+.businessSetup { width:min(100% - 32px, 920px); margin:32px auto 64px; display:grid; gap:18px; }
+.businessSetup h1 { margin:0; }
+.setupSteps { display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0; list-style:none; counter-reset:none; }
+.setupSteps li { display:inline-flex; align-items:center; gap:8px; padding:6px 12px 6px 6px; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--muted); font-size:13px; font-weight:700; }
+.setupSteps li > span { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:var(--primary2); color:var(--primary); font-size:12px; }
+.setupSteps li.current { border-color:var(--primary); color:var(--text); }
+.setupSteps li.current > span, .setupSteps li.done > span { background:var(--primary); color:var(--on-primary); }
+.setupPanel { display:grid; gap:16px; padding:22px; background:var(--surface); border:1px solid var(--line); border-radius:16px; }
+.setupPanel > p { margin:0; }
+.choiceGroup { display:block; width:100%; margin:0; padding:0; border:0; min-width:0; }
+.choiceGroup legend { margin-bottom:10px; padding:0; font-weight:700; color:var(--text); }
+.choiceGroup legend small { color:var(--muted); font-weight:400; margin-left:6px; }
+.choiceGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap:10px; width:100%; flex:1 1 100%; }
+.choiceCard { width:100%; }
+.choiceCard { position:relative; display:grid; gap:4px; align-content:start; min-height:84px; margin:0 !important; padding:14px 14px 14px 44px; text-align:left;
+  background:var(--surface); color:var(--text); border:1.5px solid var(--line); border-radius:12px; box-shadow:none; font-weight:400; }
+.choiceCard::before { content:""; position:absolute; left:14px; top:15px; width:18px; height:18px; border:2px solid var(--line); border-radius:6px; background:var(--surface); }
+.choiceCard strong { font-size:15px; }
+.choiceCard span { color:var(--muted); font-size:13px; line-height:1.35; }
+.choiceCard small { color:var(--primary); font-size:12px; font-weight:700; }
+.choiceCard:hover:not(:disabled) { border-color:var(--primary); filter:none; }
+.choiceCard.selected { border-color:var(--primary); background:var(--primary2); }
+.choiceCard.selected::before { border-color:var(--primary); background:var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 13px no-repeat; }
+.wideChoices { grid-template-columns:repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.choiceCard.compact { min-height:64px; }
+.sectorSearch { position:relative; display:block; }
+.sectorSearch > svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+.sectorSearch input { width:100%; padding-left:36px; }
+.starterList { display:grid; gap:10px; }
+.starterService { display:grid; grid-template-columns:minmax(0, 2fr) minmax(0, 1fr) auto; gap:8px; align-items:center; }
+.starterService > label { margin:0; }
+.starterService input { width:100%; }
+.starterService > button { margin:0 !important; min-height:40px; }
+.iconButton { display:inline-grid; place-items:center; width:40px; padding:0; background:transparent; color:var(--muted); border:1px solid var(--line); box-shadow:none; }
+.iconButton:hover { color:var(--text); border-color:var(--primary); filter:none; }
+.addRow { justify-self:start; display:inline-flex; align-items:center; gap:6px; margin:0 !important; }
+.chipList { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { margin:0 !important; padding:6px 14px; border-radius:999px; border:1.5px solid var(--line); background:var(--surface); color:var(--muted); font-weight:600; box-shadow:none; }
+.chip.selected { border-color:var(--primary); background:var(--primary2); color:var(--text); }
+.chip:hover { filter:none; border-color:var(--primary); }
+.setupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.setupGrid .wide { grid-column:1 / -1; }
+.setupReview { display:grid; gap:0; margin:0; }
+.setupReview div { display:grid; grid-template-columns:minmax(120px, 180px) minmax(0, 1fr) auto; gap:12px; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--line); }
+.setupReview dt { color:var(--muted); font-weight:700; }
+.setupReview dd { margin:0; overflow-wrap:anywhere; }
+.setupActions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; }
+.setupActions > * { margin:0 !important; min-height:44px; }
+.setupActions label.button { display:inline-flex; align-items:center; padding:0 16px; border-radius:9px; font-weight:700; cursor:pointer; background:var(--primary); color:var(--on-primary); }
+.setupActions label.button.disabled { opacity:.6; pointer-events:none; }
+.setupLogo { min-height:160px; }
+.setupLogo img { max-width:min(100%, 360px); max-height:140px; object-fit:contain; }
+@media (max-width: 600px) {
+  .businessSetup { width:min(100% - 24px, 920px); margin-top:16px; }
+  .setupPanel { padding:16px; }
+  .setupGrid { grid-template-columns:minmax(0, 1fr); }
+  .starterService { grid-template-columns:minmax(0, 1fr) minmax(0, 7rem) auto; }
+  .setupReview div { grid-template-columns:minmax(0, 1fr) auto; }
+  .setupReview dd { grid-column:1 / -1; grid-row:2; }
+  .setupActions > * { flex:1 1 140px; justify-content:center; }
+  .setupSteps li { font-size:0; padding:4px; }
+  .setupSteps li.current { font-size:13px; padding-right:12px; }
+}
+.businessSetup > a { justify-self:start; color:var(--primary); font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+.choiceCard small.proTag { justify-self:start; padding:1px 8px; border-radius:999px; background:color-mix(in srgb, #b45309 16%, var(--surface)); color:color-mix(in srgb, #b45309 70%, var(--text)); }

@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../../core/organization/presentation";
 import { Link, useLocation } from "react-router-dom";
 import { rememberListingPosition } from "../listingPosition";
 import { ProductImage } from "./ProductImage";
@@ -17,7 +18,7 @@ export function ProductCard({ product, onAdd }) {
       onClick={() => rememberListingPosition(location.key)}
     >
       {product.variant_count > 1
-        ? "Choose variant"
+        ? "Choose an option"
         : onAdd
           ? "View"
           : "View product"}
@@ -28,7 +29,7 @@ export function ProductCard({ product, onAdd }) {
       <ProductImage product={product} />
       {onAdd && <small>{product.category}</small>}
       <Heading>{product.display_name}</Heading>
-      <b>KSh {product.selling_price}</b>
+      <b>{businessCurrency()} {product.selling_price}</b>
       <StockAvailability
         available={product.available}
         showLowStock={Boolean(onAdd)}

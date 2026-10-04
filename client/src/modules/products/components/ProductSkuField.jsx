@@ -1,20 +1,18 @@
 import { useState } from "react";
 import { FormField } from "../../../components/forms/FormField";
-import { findSkuCompartment, suggestProductSku } from "../sku";
+import { suggestProductSku } from "../sku";
 
 export function ProductSkuField({
   productName,
+  brandName = "",
   variantName,
-  zones,
-  shelfId,
   productType = "STOCK_ITEM",
 }) {
   const [customSku, setCustomSku] = useState(null);
-  const compartment = findSkuCompartment(zones, shelfId);
   const suggestion = suggestProductSku({
     productName,
+    brandName,
     variantName,
-    compartmentCode: compartment?.code,
     productType,
   });
   return (
@@ -35,12 +33,6 @@ export function ProductSkuField({
         >
           Use suggested SKU
         </button>
-      )}
-      {productType === "STOCK_ITEM" && !compartment && (
-        <small className="muted">
-          Select an exact compartment to include its rack, level and shelf in
-          the SKU.
-        </small>
       )}
     </div>
   );

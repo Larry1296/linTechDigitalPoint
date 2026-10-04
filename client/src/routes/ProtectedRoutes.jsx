@@ -9,34 +9,10 @@ function loginTarget(path, expired) {
     encodeURIComponent(path)
   );
 }
-function isCustomerAccount(user) {
-  return Boolean(
-    user?.customer_profile ||
-    user?.roles?.includes("Ecommerce Customer") ||
-    !user?.is_staff,
-  );
-}
-export function CustomerProtectedRoute({ children }) {
-  const { user, loading, sessionExpired } = useAuth();
-  const location = useLocation();
-  if (loading) return <Loading />;
-  if (!user)
-    return (
-      <Navigate
-        to={loginTarget(
-          location.pathname + location.search + location.hash,
-          sessionExpired,
-        )}
-        replace
-      />
-    );
-  if (!isCustomerAccount(user)) return <Navigate to="/forbidden" replace />;
-  return children;
-}
 export function StaffProtectedRoute({ children }) {
-  const { user, loading, sessionExpired } = useAuth();
+  const { user, loading, sessionExpired, locked } = useAuth();
   const location = useLocation();
-  if (loading) return <Loading />;
+  if (loading || (locked && !user?.organization)) return <Loading />;
   if (!user)
     return (
       <Navigate
@@ -47,12 +23,15 @@ export function StaffProtectedRoute({ children }) {
         replace
       />
     );
-  if (!user.is_staff) return <Navigate to="/forbidden" replace />;
+  if (!user.organization) return <Navigate to={user.memberships?.length ? "/select-business" : "/onboarding"} replace />;
+  const area = location.pathname.split("/")[2];
+  const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", reports:"reports", analytics:"reports"};
+  if (modules[area] && !user.organization.enabled_modules.includes(modules[area])) return <p role="alert">This module is not enabled for your business.</p>;
   return children;
 }
 export function PermissionProtectedRoute({ permission, children }) {
   const { user } = useAuth();
-  return user?.is_superuser || user?.permissions.includes(permission) ? (
+  return user?.permissions.includes(permission) ? (
     children
   ) : (
     <Navigate to="/forbidden" replace />

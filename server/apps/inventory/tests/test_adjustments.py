@@ -186,7 +186,7 @@ def test_new_adjustment_lot_requires_explicit_cost(stock):
         post(stock, lot_id=None)
     a = post(stock, lot_id=None, new_lot_unit_cost=160, reason="Found stock")
     lot = a.movements.get().lot
-    assert (lot.received_quantity, lot.remaining_quantity) == (0, 2)
+    assert (lot.received_quantity, lot.remaining_quantity) == (2, 2)  # the found units are the layer's whole receipt
     assert StockReceipt.objects.count() == 1
 
 
@@ -229,7 +229,7 @@ def test_database_rejects_adjustment_or_movement_mutation(stock):
         post(stock, counted_quantity=5)
 
 
-def test_api_post_and_public_stock_without_audit_leak(stock):
+def test_api_post_and_private_stock_without_audit_leak(stock):
     client = APIClient()
     client.force_authenticate(stock[0])
     payload = {
@@ -246,11 +246,12 @@ def test_api_post_and_public_stock_without_audit_leak(stock):
     assert response.status_code == 200
     assert Decimal(str(response.data["amount"])) == 2
     assert client.post("/api/v1/inventory/adjustments/", payload, format="json").data["id"] == response.data["id"]
-    client.force_authenticate(None)
     response = client.get(f"/api/v1/store/products/{stock[1].pk}/")
     assert response.status_code == 200
     assert Decimal(str(response.data["available"])) == 4
     assert not set(response.data) & {"unit_cost", "lots", "locations", "shelf", "adjustments", "history"}
+    client.force_authenticate(None)
+    assert client.get(f"/api/v1/store/products/{stock[1].pk}/").status_code == 403
     assert client.get(f"/api/v1/inventory/adjustments/variants/{stock[1].pk}/").status_code == 403
 
 
@@ -286,3 +287,33 @@ def test_inactive_hierarchy_rejected(stock, target):
     with pytest.raises(ValidationError, match="active"):
         post(stock)
     assert not StockAdjustment.objects.exists()
+
+
+def test_only_real_losses_reduce_profit_and_reasons_match_their_direction(stock):
+    from apps.accounting.models import JournalEntry
+    with pytest.raises(ValidationError, match="only take stock away"):
+        post(stock, reason="Lost item")  # counting 2 more cannot be a loss
+    corrected = post(stock, reason="Opening stock correction")  # typed too few when entering opening stock
+    lines = {l.account.code: (l.debit, l.credit) for l in JournalEntry.objects.get(source_key=f"adjustment:{corrected.pk}").lines.all()}
+    assert set(lines) == {"1200", "3000"}  # stock and opening equity only; profit untouched
+
+
+def test_context_lists_every_stocked_place_including_unplaced(stock):
+    user, variant, shelf, lot = stock
+    from apps.inventory.unplaced import unplaced_shelf
+    loose = unplaced_shelf()
+    complete_stock_receipt(
+        user=user,
+        external_reference="LOOSE",
+        lines=[{"variant_id": variant.pk, "received_quantity": 3, "unit_cost": 160,
+                "placements": [{"shelf_id": loose.pk, "quantity": 3}]}],
+    )
+    client = APIClient()
+    client.force_authenticate(user)
+    places = client.get(f"/api/v1/inventory/adjustments/variants/{variant.pk}/").data["locations"]
+    assert [(p["shelf_id"], Decimal(str(p["quantity"])), p["virtual"]) for p in places] == [
+        (loose.pk, 3, True), (shelf.pk, 2, False)]
+    assert places[0]["name"] == "Not assigned to a shelf"
+    a = post(stock, shelf_id=loose.pk, expected_quantity=3, counted_quantity=0, reason="Data-entry correction")
+    assert a.amount == -3
+    assert StockBalance.objects.get(lot=lot, shelf=shelf).quantity == 2

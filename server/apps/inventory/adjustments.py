@@ -1,3 +1,5 @@
+from apps.tenancy.transactions import lock_business
+from apps.tenancy.permissions import has_business_permission, is_business_manager
 """Physical-count corrections; receipts and sales are never rewritten."""
 
 from decimal import Decimal, InvalidOperation
@@ -11,8 +13,12 @@ from apps.catalog.models import Product, ProductVariant
 from .models import Movement, Shelf, StockAdjustment, StockBalance, StockLot
 
 
+# Reasons that mean stock really left the business without being sold: a loss that reduces profit.
+LOSS_REASONS = {"Damaged item", "Lost item", "Physical count variance"}
+
+
 def authorize(user):
-    if not (user and user.is_active and user.is_staff and user.has_perm("inventory.adjust_stock")):
+    if not (user and user.is_active and has_business_permission(user, "inventory.adjust_stock")):
         raise PermissionDenied("Stock adjustment permission is required.")
 
 
@@ -47,6 +53,7 @@ def adjust_stock(
     lot_id=None,
     new_lot_unit_cost=None,
 ):
+    lock_business()
     authorize(user)
     if confirmed is not True:
         raise ValidationError("Confirm the adjustment before posting.")
@@ -100,6 +107,10 @@ def adjust_stock(
     delta = counted - before
     if not delta:
         raise ValidationError("The physical count matches system stock; no adjustment is needed.")
+    if delta > 0 and reason in LOSS_REASONS:
+        raise ValidationError(f"\"{reason}\" can only take stock away. Choose \"Found stock\" or a correction to add stock.")
+    if delta < 0 and reason == "Found stock":
+        raise ValidationError("\"Found stock\" can only add stock. Choose why the stock is missing instead.")
     allocations = []
     if delta > 0:
         if lot_id:
@@ -115,7 +126,7 @@ def adjust_stock(
             lot = StockLot.objects.create(
                 variant=variant,
                 reference=f"ADJ-{idempotency_key}"[:80],
-                received_quantity=0,
+                received_quantity=delta,  # the found units are this layer's whole receipt
                 remaining_quantity=0,
                 unit_cost=cost,
                 received_at=timezone.now(),
@@ -165,4 +176,13 @@ def adjust_stock(
             quantity_before=old,
             quantity_after=row.quantity,
         )
+    from apps.accounting.ledger import post_journal, paired
+    value = sum((amount * row.lot.unit_cost for row, amount in allocations), Decimal(0))
+    if value:
+        # Profit comes only from selling. Stock found, and corrections of typing mistakes, only change what the
+        # business owns (opening equity, 3000). Only a real loss of stock that was paid for (damaged, lost, or
+        # short in a count) reduces profit, through "stock losses and corrections" (6100).
+        loss = value < 0 and reason in LOSS_REASONS
+        post_journal(key=f'adjustment:{adjustment.pk}', description=reason, branch=shelf.zone.store_id,
+            user=user, lines=paired('1200', '6100' if loss else '3000', value))
     return adjustment

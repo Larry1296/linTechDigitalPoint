@@ -7,3 +7,4 @@
 @import "./assets/styles/base.css" layer(components);
 @import "./assets/styles/modules.css" layer(components);
 @import "./assets/styles/public.css" layer(components);
+@import "./assets/styles/sidebar.css" layer(components);

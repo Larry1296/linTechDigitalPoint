@@ -1,11 +1,16 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { DisplayImageInput } from "../products/components/DisplayImageInput";
 import { ProductSkuField } from "../products/components/ProductSkuField";
+import { CategoryOptions, UnrackedHint, categoryFamily, categoryUsable, rackHolds } from "../products/categories";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useAuth } from "../../core/auth/AuthContext";
+import { loadZonesIfUsed } from "../digital-shop/api";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
+import { NEW_RECEIPT_COSTS, ReceiptCostFields, ReceiptDocumentFields, paymentSummary, receiptCostsPayload, receiptCostsProblem } from "./ReceiptCosts";
+import { FormError } from "../../components/forms/FormNotice";
 
 const emptyLine = () => ({
   variant_id: "",
@@ -17,7 +22,7 @@ const emptyLine = () => ({
 });
 export function ReceivePage() {
   const { user } = useAuth();
-  const [draftKey] = useState(() => `receipt-draft:${user.id}`);
+  const [draftKey] = useState(() => `receipt-draft:${user.organization?.id}:${user.id}`);
   const [draft] = useState(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(draftKey));
@@ -42,7 +47,8 @@ export function ReceivePage() {
   const [query, setQuery] = useState(draft.query || "");
   const [lines, setLines] = useState(draft.lines || [{...emptyLine(), variant_id: new URLSearchParams(window.location.search).get("variant") || ""}]);
   const [details, setDetails] = useState(
-    draft.details || {
+    draft.details ? { ...NEW_RECEIPT_COSTS, ...draft.details } : {
+      ...NEW_RECEIPT_COSTS,
       supplier_name: "",
       external_reference: "",
       received_at: new Date().toISOString().slice(0, 16),
@@ -96,9 +102,7 @@ export function ReceivePage() {
     .map((zone) => ({
       ...zone,
       stacks: (zone.stacks || []).filter((stack) =>
-        (stack.categories || []).some(
-          (category) => String(category.id) === newProductCategory,
-        ),
+        rackHolds(stack, categories, newProductCategory),
       ),
     }))
     .filter((zone) => zone.stacks.length);
@@ -107,7 +111,7 @@ export function ReceivePage() {
   useEffect(() => {
     void Promise.all([
       api("/api/v1/inventory/variants/search/"),
-      api("/api/v1/locations/zones/"),
+      loadZonesIfUsed(user),
       api("/api/v1/inventory/categories/available/"),
     ])
       .then(([items, locationData, categoryData]) => {
@@ -123,7 +127,7 @@ export function ReceivePage() {
     return variants
       .filter(
         (item) =>
-          (!categoryId || item.category_id === Number(categoryId)) &&
+          (!categoryId || categoryFamily(categories, categoryId).includes(item.category_id)) &&
           (!q ||
             [
               item.product_name,
@@ -137,24 +141,19 @@ export function ReceivePage() {
                 .toLowerCase()
                 .includes(q),
             )),
-      )
-      .slice(0, 20);
-  }, [variants, query, categoryId]);
+      );
+  }, [variants, query, categoryId, categories]);
   const eligibleZones = useMemo(
     () =>
       zones
         .map((zone) => ({
           ...zone,
           stacks: (zone.stacks || []).filter(
-            (stack) =>
-              !categoryId ||
-              (stack.categories || []).some(
-                (category) => category.id === Number(categoryId),
-              ),
+            (stack) => !categoryId || rackHolds(stack, categories, categoryId),
           ),
         }))
         .filter((zone) => zone.stacks.length),
-    [zones, categoryId],
+    [zones, categoryId, categories],
   );
   const totalUnits = lines.reduce(
     (sum, line) => sum + Number(line.received_quantity || 0),
@@ -170,6 +169,8 @@ export function ReceivePage() {
       old.map((line, i) => (i === index ? { ...line, ...patch } : line)),
     );
   const validate = () => {
+    const documents = receiptCostsProblem(details);
+    if (documents) return documents;
     for (const [index, line] of lines.entries()) {
       const placements = line.placements.reduce(
         (sum, item) => sum + Number(item.quantity || 0),
@@ -178,9 +179,9 @@ export function ReceivePage() {
       if (
         !line.variant_id ||
         Number(line.received_quantity) <= 0 ||
-        Number(line.unit_cost) < 0
+        !(Number(line.unit_cost) > 0)
       )
-        return `Line ${index + 1}: choose a variant and enter a positive quantity and buying price.`;
+        return `Line ${index + 1}: choose the item and enter the quantity and the buying price for one unit.`;
       if (placements !== Number(line.received_quantity))
         return `Line ${index + 1}: placement quantities must equal the received quantity.`;
       if (
@@ -203,7 +204,7 @@ export function ReceivePage() {
     if (
       !(await confirmAction({
         title: "Complete this receipt?",
-        text: "This creates real inventory lots, balances, and purchase movements.",
+        text: "This adds these items to your stock.",
         confirmButtonText: "Complete receipt",
       }))
     )
@@ -214,7 +215,7 @@ export function ReceivePage() {
       const result = await api("/api/v1/inventory/receipts/", {
         method: "POST",
         body: JSON.stringify({
-          ...details,
+          ...receiptCostsPayload(details),
           idempotency_key: idempotencyKey,
           lines: lines.map((line) => ({
             ...line,
@@ -257,7 +258,7 @@ export function ReceivePage() {
         <p>
           {success.lines.length} product lines received ·{" "}
           {success.lines.reduce((s, l) => s + Number(l.quantity), 0)} units ·
-          KSh{" "}
+          {businessCurrency()}{" "}
           {success.lines
             .reduce((s, l) => s + Number(l.line_cost), 0)
             .toFixed(2)}
@@ -281,11 +282,7 @@ export function ReceivePage() {
     <section className="receiveWorkflow">
       <span className="eyebrow">Purchasing and exact placement</span>
       <h1>Receive stock</h1>
-      {draftError && (
-        <p role="alert" className="formError">
-          {draftError}
-        </p>
-      )}
+      {draftError && <FormError title="Draft not saved." message={draftError} />}
       <nav className="workflowSteps" aria-label="Receipt steps">
         {["Receipt details", "Items and placement", "Review"].map(
           (label, index) => (
@@ -302,19 +299,18 @@ export function ReceivePage() {
           ),
         )}
       </nav>
-      {error && <p className="formError">{error}</p>}
       {step === 1 && (
         <div className="formCard wide">
-          {!categories.length && (
+          {!categories.some(categoryUsable) && (
             <div className="callout">
               <div>
                 <b>No rack merchandise categories are configured yet.</b>
                 <p>
-                  Open Digital Shop, edit each rack, and assign its primary or
+                  Open Shelf Management, edit each rack, and assign its primary or
                   additional merchandise categories before receiving stock.
                 </p>
               </div>
-              <a className="button" href="/admin-app/digital-shop">
+              <a className="button" href="/admin/shelf-management">
                 Configure rack categories
               </a>
             </div>
@@ -329,14 +325,10 @@ export function ReceivePage() {
               <option value="">
                 Choose a category assigned to an active rack
               </option>
-              {categories.map((category) => (
-                <option value={category.id} key={category.id}>
-                  {category.name} — available in{" "}
-                  {category.rack_names.join(", ")}
-                </option>
-              ))}
+              <CategoryOptions categories={categories} />
             </select>
           </label>
+          <UnrackedHint categories={categories} />
           <label>
             Supplier name
             <input
@@ -347,15 +339,7 @@ export function ReceivePage() {
               required
             />
           </label>
-          <label>
-            Supplier invoice / delivery note (optional)
-            <input
-              value={details.external_reference}
-              onChange={(e) =>
-                setDetails({ ...details, external_reference: e.target.value })
-              }
-            />
-          </label>
+          <ReceiptDocumentFields details={details} onChange={setDetails} />
           <label>
             Date received
             <input
@@ -376,9 +360,11 @@ export function ReceivePage() {
               }
             />
           </label>
+          <ReceiptCostFields details={details} onChange={setDetails} goodsTotal={totalCost} />
           <button onClick={() => goToStep(2)} disabled={!categoryId}>
             Continue to items
           </button>
+          <FormError title="Check the receipt details." message={error} />
         </div>
       )}
       {step === 2 && (
@@ -412,15 +398,17 @@ export function ReceivePage() {
                   />
                 </label>
                 <label>
-                  Product variant
+                  Item
                   <select
                     value={line.variant_id}
                     onChange={(e) =>
                       updateLine(index, { variant_id: e.target.value })
                     }
+                    // While typing, open into a list so every match shows at once.
+                    size={query.trim() ? Math.min(filtered.length + 1, 10) : undefined}
                     required
                   >
-                    <option value="">Choose a variant</option>
+                    <option value="">Choose the item</option>
                     {(selected &&
                     !filtered.some((item) => item.id === selected.id)
                       ? [selected, ...filtered]
@@ -428,7 +416,7 @@ export function ReceivePage() {
                     ).map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.product_name} — {item.variant_name} · {item.sku} ·
-                        KSh {item.selling_price}
+                        {businessCurrency()} {item.selling_price} · {Number(item.available || 0)} in stock
                       </option>
                     ))}
                   </select>
@@ -451,7 +439,7 @@ export function ReceivePage() {
                 </button>
                 {selected && (
                   <p className="muted">
-                    Current selling price: KSh {selected.selling_price}
+                    Current selling price: {businessCurrency()} {selected.selling_price}
                   </p>
                 )}
                 <div className="formGrid">
@@ -596,6 +584,7 @@ export function ReceivePage() {
             Back to receipt details
           </button>
           <button onClick={() => goToStep(3)}>Review receipt</button>
+          <FormError title="Check the items." message={error} />
         </div>
       )}
       {step === 3 && (
@@ -603,7 +592,9 @@ export function ReceivePage() {
           <h2>Review and confirm</h2>
           <p>
             <b>Supplier:</b> {details.supplier_name} · <b>Reference:</b>{" "}
-            {details.external_reference || "System generated"}
+            {details.external_reference || (details.document_status === "NO_DOCUMENT" ? "No supplier document" : "System generated")}
+            {details.landed_costs?.length > 0 && <> · <b>Delivery costs:</b> {details.landed_costs.map((c) => `${c.description} ${c.amount}`).join(", ")}</>}
+            {" · "}<b>Payment:</b> {paymentSummary(details)}
           </p>
           {lines.map((line, index) => {
             const product = variants.find(
@@ -615,8 +606,8 @@ export function ReceivePage() {
                   {product?.product_name} — {product?.variant_name}
                 </b>
                 <span>
-                  {line.received_quantity} units · KSh {line.unit_cost} each ·
-                  line cost KSh{" "}
+                  {line.received_quantity} units · {businessCurrency()} {line.unit_cost} each ·
+                  line cost {businessCurrency()}{" "}
                   {(
                     Number(line.received_quantity) * Number(line.unit_cost)
                   ).toFixed(2)}
@@ -630,7 +621,7 @@ export function ReceivePage() {
             );
           })}
           <strong>
-            Total: {totalUnits} units · KSh {totalCost.toFixed(2)}
+            Total: {totalUnits} units · {businessCurrency()} {totalCost.toFixed(2)}
           </strong>
           <button onClick={submit} disabled={creating}>
             {creating ? "Saving…" : "Complete receipt"}
@@ -643,6 +634,7 @@ export function ReceivePage() {
           >
             Back to edit
           </button>
+          <FormError title="Could not complete the receipt." message={error} />
         </div>
       )}
       {creating && <p className="muted">Saving receipt…</p>}
@@ -657,15 +649,10 @@ export function ReceivePage() {
               event.preventDefault();
               if (savingProduct) return;
               try {
-                if (!displayImage) {
-                  setImageError(
-                    "Add a Product display image before making this product visible to customers.",
-                  );
-                  return;
-                }
                 const data = new FormData(event.currentTarget);
                 setSavingProduct(true);
-                data.set("display_image", displayImage);
+                if (displayImage) data.set("display_image", displayImage);
+                else data.delete("display_image");
                 data.set("ecommerce_visible", "true");
                 data.set("online_orderable", "true");
                 const result = await api(
@@ -712,7 +699,6 @@ export function ReceivePage() {
                 setDisplayImage(file);
                 setImageError("");
               }}
-              required
             />
             <FormField
               label="Product name"
@@ -733,15 +719,11 @@ export function ReceivePage() {
                 }}
               >
                 <option value="">Choose category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
+                <CategoryOptions categories={categories} />
               </select>
             </label>
             <FormField
-              label="Variant name"
+              label="Type (e.g. size or colour)"
               name="variant_name"
               value={newVariantName}
               onChange={(event) => setNewVariantName(event.target.value)}
@@ -756,8 +738,6 @@ export function ReceivePage() {
             <ProductSkuField
               productName={newProductName}
               variantName={newVariantName}
-              zones={newProductZones}
-              shelfId={newProductShelf}
             />
             <FormField label="Barcode" name="barcode" />
             <FormField
@@ -768,6 +748,15 @@ export function ReceivePage() {
               step=".01"
               required
             />
+            <FormField
+              label="Lowest price (bargaining guide, optional)"
+              name="minimum_price"
+              type="number"
+              min="0"
+              step=".01"
+              placeholder="e.g. 500 — leave empty for no bargaining"
+            />
+            <small className="muted">Cashiers can agree any price from the lowest price up to the selling price. Lower needs a manager and a reason.</small>
             <FormField
               label="Minimum stock"
               name="minimum_stock"

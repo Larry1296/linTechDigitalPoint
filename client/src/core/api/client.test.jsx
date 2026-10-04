@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { api, resetCsrfToken, SESSION_EXPIRED_MESSAGE } from "./client";
+import { api, clearAccessToken, resetCsrfToken, setActiveOrganization, setWorkspaceLocked, SESSION_EXPIRED_MESSAGE } from "./client";
 const response = (status, data) => ({
   status,
   ok: status < 400,
@@ -10,6 +10,7 @@ it.each([401, 403])(
   async (status) => {
     const listener = vi.fn();
     window.addEventListener("session-expired", listener);
+    try {
     const fetch = vi.fn(async (path) =>
       path.endsWith("/me/")
         ? response(200, { authenticated: false })
@@ -31,7 +32,9 @@ it.each([401, 403])(
     expect(
       fetch.mock.calls.filter(([path]) => path.endsWith("/me/")),
     ).toHaveLength(1);
-    window.removeEventListener("session-expired", listener);
+    } finally {
+      window.removeEventListener("session-expired", listener);
+    }
   },
 );
 it.each([true, "offline"])(
@@ -68,9 +71,58 @@ it("does not interpret invalid login credentials as session expiry", async () =>
   );
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+it("does not silently renew access after a business request fails", async () => {
+  const fetch = vi.fn(async path => path.endsWith("/me/")
+    ? response(200, { authenticated: true }) : response(403, { detail: "Permission denied" }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(api("/api/v1/inventory/dashboard/")).rejects.toThrow("Permission denied");
+  expect(fetch.mock.calls.map(([path]) => path)).toEqual(["/api/v1/inventory/dashboard/", "/api/v1/auth/me/"]);
+});
+it("pauses locked reads until unlock without automatically renewing the token", async () => {
+  const listener = vi.fn();
+  window.addEventListener("session-locked", listener);
+  const fetch = vi.fn().mockResolvedValueOnce(response(423, { code: "session_locked", session: { locked: true } }))
+    .mockResolvedValueOnce(response(200, { value: "fresh" }));
+  vi.stubGlobal("fetch", fetch);
+  const request = api("/api/v1/inventory/dashboard/");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  setWorkspaceLocked(false);
+  await expect(request).resolves.toEqual({ value: "fresh" });
+  window.removeEventListener("session-locked", listener);
+});
+it("never queues or replays a locked mutation", async () => {
+  setWorkspaceLocked(true);
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  await expect(api("/api/v1/inventory/receive/", { method: "POST", body: "{}" })).rejects.toMatchObject({ status: 423 });
+  expect(fetch).not.toHaveBeenCalled();
+  setWorkspaceLocked(false);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it("a fresh login clears a stale workspaceLocked flag left over from a previous session", async () => {
+  // Regression: leaving a locked workspace without explicitly unlocking or
+  // logging out (e.g. navigating straight to /login) must not leave every
+  // subsequent call, including the post-login refresh, rejecting as if still locked.
+  setWorkspaceLocked(true);
+  const session = { locked: false, expires_at: Date.now() / 1000 + 900, server_time: Date.now() / 1000 };
+  const fetch = vi.fn(async (path) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: "test-token" });
+    if (path.endsWith("/login/")) return response(200, { authenticated: true, access_token: "fresh-token", access_expires_in: 180, session });
+    if (path.endsWith("/refresh/")) return response(200, { authenticated: true, access_token: "rotated-token", access_expires_in: 180, session });
+    return response(200, {});
+  });
+  vi.stubGlobal("fetch", fetch);
+  await api("/api/v1/auth/login/", { method: "POST", body: "{}" });
+  await expect(api("/api/v1/auth/refresh/", { method: "POST" })).resolves.toMatchObject({ authenticated: true });
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   resetCsrfToken();
+  setActiveOrganization(null);
+  setWorkspaceLocked(false);
+  clearAccessToken();
 });
 it("sends multipart uploads with CSRF and lets the browser set the boundary", async () => {
   resetCsrfToken();
@@ -91,4 +143,30 @@ it("sends multipart uploads with CSRF and lets the browser set the boundary", as
   expect(fetch.mock.calls[1][1].body).toBe(data);
   expect(fetch.mock.calls[1][1].headers["X-CSRFToken"]).toBe("test-token");
   expect(fetch.mock.calls[1][1].headers["Content-Type"]).toBeUndefined();
+});
+
+
+it("binds business requests to the rendered organization, excluding account selection", async () => {
+  const fetch = vi.fn(async () => response(200, []));
+  vi.stubGlobal("fetch", fetch);
+  setActiveOrganization(42);
+  await api("/api/v1/catalog/products/");
+  expect(fetch.mock.calls[0][1].headers["X-Organization-ID"]).toBe("42");
+  await api("/api/v1/tenancy/organizations/");
+  expect(fetch.mock.calls[1][1].headers).toBeUndefined();
+});
+it("sends a write once more with a fresh token when the short-lived token expired (the server did not run it)", async () => {
+  resetCsrfToken();
+  const session = { locked: false, idle_deadline: new Date(Date.now() + 600000).toISOString(), server_time: new Date().toISOString() };
+  let created = 0;
+  const fetch = vi.fn(async (path, options = {}) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: "csrf" });
+    if (path.endsWith("/refresh/")) return response(200, { authenticated: true, access_token: "fresh-token", access_expires_in: 180, session });
+    if (options.headers?.Authorization === "Bearer fresh-token") { created += 1; return response(201, { id: 9 }); }
+    return response(401, { code: "token_expired", detail: "Sign in again or refresh your session." });
+  });
+  vi.stubGlobal("fetch", fetch);
+  await expect(api("/api/v1/tenancy/create/", { method: "POST", body: "{}" })).resolves.toEqual({ id: 9 });
+  expect(created).toBe(1);
+  expect(fetch.mock.calls.filter(([path]) => path === "/api/v1/tenancy/create/")).toHaveLength(2);
 });

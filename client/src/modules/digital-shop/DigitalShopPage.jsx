@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { loadZones, loadCategories } from "./api";
 import { ShelfDetails } from "./ShelfDetails";
 import { StackBuilder } from "./StackBuilder";
 import { StackEditor } from "./StackEditor";
 import { StackPreview } from "./StackPreview";
-import { CategoryManager } from "./CategoryManager";
+import { AreaManager } from "./AreaManager";
 import { useAuth } from "../../core/auth/AuthContext";
 export function DigitalShopPage() {
   const { user } = useAuth();
@@ -29,10 +30,12 @@ export function DigitalShopPage() {
   }, []);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!zones || !categories) return <Loading />;
+  const hasCategories = categories.some((category) => category.active);
   if (builder)
     return (
       <StackBuilder
         zones={zones}
+        initialZone={selected}
         onCancel={() => setBuilder(false)}
         onCreated={(zoneId) => {
           setBuilder(false);
@@ -42,55 +45,30 @@ export function DigitalShopPage() {
       />
     );
   const zone = zones.find((item) => item.id === selected);
-  const hasStacks = zones.some((item) => item.stacks.length);
   return (
     <>
-      <span className="eyebrow">Digital twin of LinTech Digital Point</span>
-      <div className="heading">
-        <div>
-          <h1>Digital Shop</h1>
-          <p className="muted">
-            Reproduce where each real shelving stack stands, then locate stock
-            in its exact level and compartment.
-          </p>
-        </div>
-        {categories.some((category) => category.active) && <button onClick={() => setBuilder(true)}>
-          {hasStacks ? "Add Shelf Stack" : "Create First Shelf Stack"}
-        </button>}
-      </div>
-      <CategoryManager categories={categories}
-        canAdd={user.is_superuser || user.permissions.includes("catalog.add_category")}
-        canChange={user.is_superuser || user.permissions.includes("catalog.change_category")}
-        onSaved={(category) => setCategories((rows) => [...rows.filter((row) => row.id !== category.id), category])} />
-      {!hasStacks && categories.some((category) => category.active) && (
-        <section className="onboarding">
-          <h2>Configure Your Physical Shop</h2>
-          <p>
-            Recreate the shelving structures that already exist in LinTech
-            Digital Point.
-          </p>
-          <ol>
-            <li>
-              Define any area that exists in your shop and enter its real size
-            </li>
-            <li>Add the shelving unit that physically stands there</li>
-            <li>Enter its dimensions and levels</li>
-            <li>Create and label each compartment</li>
-            <li>Assign products to exact physical locations</li>
-          </ol>
-        </section>
-      )}
-      <div className="tabs">
-        {zones.map((item) => (
-          <button
-            className={item.id === selected ? "active" : ""}
-            onClick={() => setSelected(item.id)}
-            key={item.id}
-          >
-            {item.name}
-          </button>
-        ))}
-      </div>
+      <span className="eyebrow">Physical locations · {user.organization?.name}</span>
+      <h1>Shelf Management</h1>
+      <p className="muted">Map your real shop so anyone can find the exact shelf where an item is kept.</p>
+      <ol className="shopGuide" aria-label="How your shop is organised">
+        <li><strong>Area</strong><span>A wall or section of the shop, such as Left Wall or Counter.</span></li>
+        <li><strong>Rack</strong><span>A shelving unit standing in an area. It holds one or more product categories.</span></li>
+        <li><strong>Shelf</strong><span>A compartment on a rack level, where stock is actually placed.</span></li>
+      </ol>
+      {!hasCategories && <p className="callout">
+        Racks hold product categories. Create at least one on the <Link to="/admin/categories">Categories</Link> page before adding a rack.
+      </p>}
+      <AreaManager zones={zones} selected={selected} onSelect={setSelected}
+        canAdd={user.is_superuser || user.permissions.includes("inventory.add_zone")}
+        canChange={user.is_superuser || user.permissions.includes("inventory.change_zone")}
+        canAddRack={hasCategories && (user.is_superuser || user.permissions.includes("inventory.add_shelfstack"))}
+        onAddRack={() => setBuilder(true)}
+        onChanged={async (zoneId) => {
+          const rows = await loadZones();
+          setZones(rows);
+          setSelected((value) => (zoneId && rows.some((row) => row.id === zoneId)) ? zoneId
+            : rows.some((row) => row.id === value) ? value : rows[0]?.id);
+        }} />
       {zone && (
         <section
           className="shopLayout"
@@ -101,7 +79,7 @@ export function DigitalShopPage() {
               className="placedStack"
               key={stack.id}
               style={{
-                left: (+stack.x / +zone.width) * 100 + "%",
+                left: Math.max(0, Math.min(+stack.x / +zone.width, 1 - +stack.width / +zone.width)) * 100 + "%",
                 top: (+stack.y / +zone.height) * 100 + "%",
                 width: Math.min(100, (+stack.width / +zone.width) * 100) + "%",
               }}
@@ -120,7 +98,7 @@ export function DigitalShopPage() {
             </div>
           ))}
           {!zone.stacks.length && (
-            <Empty>No shelf stacks configured in {zone.name}.</Empty>
+            <Empty>No racks in {zone.name} yet. Use “Add rack to {zone.name}” above.</Empty>
           )}
         </section>
       )}
@@ -129,7 +107,7 @@ export function DigitalShopPage() {
           <h2>Unassigned physical shelves</h2>
           <p className="muted">
             Legacy shelves remain safe with their inventory. Move them into a
-            real stack when its structure is configured.
+            real rack when its structure is configured.
           </p>
         </section>
       ) : null}

@@ -124,7 +124,7 @@ async function checkImageAndActions(card) {
 for (const theme of ["light", "dark"]) {
   for (const width of [1440, 375]) {
     test("neutral photography canvas in " + theme + " at " + width, async ({ page }, testInfo) => {
-      await page.addInitScript((theme) => localStorage.setItem("theme", theme), theme);
+      await page.emulateMedia({ colorScheme: theme });
       await page.setViewportSize({ width, height: 1000 });
       // Portrait packaging and square catalogue imagery.
       for (const product of [products[0], products.find((p) => p.category === "Memory Cards")]) {

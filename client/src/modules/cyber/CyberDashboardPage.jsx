@@ -1,8 +1,15 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Empty, ErrorState, Loading } from "../../components/States";
+import { useAuth } from "../../core/auth/AuthContext";
+import { FormField } from "../../components/forms/FormField";
+import { FormError } from "../../components/forms/FormNotice";
 import {
   completeCyberJob,
+  createCyberService,
+  updateCyberService,
   createCyberJob,
   getCyberDashboard,
   getCyberJobs,
@@ -10,13 +17,23 @@ import {
   transitionCyberJob,
 } from "./api";
 import { CyberJobForm } from "./CyberJobForm";
-import { confirmAction } from "../../core/ui/alerts";
+import { askForm, confirmAction, showError } from "../../core/ui/alerts";
+import { label, PAYMENT_METHODS } from "../../core/ui/labels";
+import { ReceiptPanel } from "../receipts/ReceiptPanel";
+import { useLiveRefresh } from "../../core/data/liveRefresh";
+const billingUnits = ["PER_PAGE", "PER_COPY", "PER_SHEET", "PER_DOCUMENT", "PER_HOUR", "PER_ITEM", "FIXED"];
 export function CyberDashboardPage() {
+  const { user } = useAuth();
+  const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
+  const canChangeServices = Boolean(user?.permissions?.includes("cyber.change_cyberserviceprofile"));
+  const [serviceError, setServiceError] = useState(null);
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState("");
+  const [receiptSale, setReceiptSale] = useState(null);
+  const [showReceipt, setShowReceipt] = useState(false);
   const load = async () => {
     try {
       const [summary, jobRows, serviceRows] = await Promise.all([
@@ -34,35 +51,74 @@ export function CyberDashboardPage() {
   useEffect(() => {
     void load();
   }, []);
+  useLiveRefresh(load);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
+  const addService = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    setServiceError(null);
+    try {
+      await createCyberService({
+        name: values.get("name"),
+        selling_price: values.get("selling_price"),
+        billing_unit: values.get("billing_unit"),
+        requires_job: values.get("requires_job") === "on",
+        notes: values.get("notes") || "",
+      });
+      form.reset();
+      await load();
+    } catch (err) {
+      setServiceError({ place: "add", title: "Could not add the service.", message: err.message });
+    }
+  };
+  const toggleService = async (service) => {
+    setServiceError(null);
+    try {
+      await updateCyberService(service.id, { active: !service.active });
+      await load();
+    } catch (err) {
+      setServiceError({ place: "list", title: `Could not update ${service.name}.`, message: err.message });
+    }
+  };
+  // A job action that fails says so instead of silently doing nothing.
+  const act = async (failure, work) => {
+    try {
+      await work();
+      await load();
+    } catch (err) {
+      await showError(failure, err.message);
+    }
+  };
   const complete = async (job) => {
-    if (
-      !(await confirmAction({
-        title: `Complete job ${job.number}?`,
-        text: "This records payment and marks the job as completed.",
-        confirmButtonText: "Pay & complete",
-      }))
-    )
-      return;
-    const method =
-      window.prompt("Payment method: CASH, MPESA, BANK or OTHER", "CASH") ||
-      "CASH";
-    const reference = window.prompt("Payment reference (optional)", "") || "";
-    const result = await completeCyberJob(job.id, {
-      payment_method: method.toUpperCase(),
-      payment_reference: reference,
-      idempotency_key: `cyber:${job.number}`,
+    const paid = await askForm({
+      title: `Complete job ${job.number}?`,
+      text: "This records the payment and marks the job as completed.",
+      confirmButtonText: "Pay & complete",
+      fields: [
+        { name: "method", label: "Paid by", type: "select", options: PAYMENT_METHODS, value: "CASH", required: true },
+        { name: "reference", label: "Payment reference, e.g. the M-Pesa code", placeholder: "e.g. SJK4H7T2QX" },
+      ],
     });
-    setReceipt(
-      `${result.receipt_number} · KSh ${result.total} · ${method.toUpperCase()}`,
-    );
-    await load();
+    if (!paid) return;
+    try {
+      const result = await completeCyberJob(job.id, {
+        payment_method: paid.method,
+        payment_reference: paid.reference,
+        idempotency_key: `cyber:${job.number}`,
+      });
+      setReceipt(`${result.receipt_number} · ${businessCurrency()} ${result.total} · ${label(paid.method)}`);
+      setReceiptSale(result.sale_id);
+      await load();
+    } catch (err) {
+      await showError(`Could not complete job ${job.number}.`, err.message);
+    }
   };
   return (
     <>
-      <span className="eyebrow">Cyber operations</span>
-      <h1>Cyber Desk</h1>
+      <span className="eyebrow">{user?.organization?.business_type || "Services"}</span>
+      <h1>Service Desk</h1>
       <p className="privacyNotice">
         Store operational metadata only. Never record customer passwords, PINs,
         OTPs, or document contents.
@@ -70,23 +126,24 @@ export function CyberDashboardPage() {
       {receipt && (
         <div className="success">
           <b>Cyber receipt: {receipt}</b>
-          <button onClick={() => window.print()}>Print receipt</button>
+          {receiptSale && <button onClick={() => setShowReceipt(true)}>View &amp; send receipt</button>}
         </div>
       )}
+      {showReceipt && receiptSale && <ReceiptPanel saleId={receiptSale} onClose={() => setShowReceipt(false)} />}
       <div className="metrics">
         <MetricCard label="Today's revenue">
-          KSh {dashboard.today.revenue}
+          {businessCurrency()} {dashboard.today.revenue}
         </MetricCard>
         <MetricCard label="Active jobs">{dashboard.active_jobs}</MetricCard>
         <MetricCard label="Ready">{dashboard.ready_jobs}</MetricCard>
         <MetricCard label="Completed today">{dashboard.today.jobs}</MetricCard>
         <MetricCard label="Average job">
-          KSh {dashboard.today.average}
+          {businessCurrency()} {dashboard.today.average}
         </MetricCard>
       </div>
       <div className="deskGrid">
         <CyberJobForm
-          services={services}
+          services={services.filter((service) => service.active)}
           onSave={async (data) => {
             await createCyberJob(data);
             await load();
@@ -105,7 +162,7 @@ export function CyberDashboardPage() {
                       {job.number} · {job.walk_in_customer_name || "Walk-in"}
                     </b>
                     <small>
-                      {job.status} · KSh {job.total}
+                      {label(job.status)} · {businessCurrency()} {job.total}
                     </small>
                     {job.lines.map((line) => (
                       <span key={line.id}>
@@ -126,8 +183,7 @@ export function CyberDashboardPage() {
                             }))
                           )
                             return;
-                          await transitionCyberJob(job.id, "IN_PROGRESS");
-                          await load();
+                          await act(`Could not start job ${job.number}.`, () => transitionCyberJob(job.id, "IN_PROGRESS"));
                         }}
                       >
                         Start
@@ -140,13 +196,12 @@ export function CyberDashboardPage() {
                             if (
                               !(await confirmAction({
                                 title: `Mark ${job.number} ready?`,
-                                text: "The customer will be able to collect this job.",
+                                text: "The walk-in customer can collect this completed job.",
                                 confirmButtonText: "Mark ready",
                               }))
                             )
                               return;
-                            await transitionCyberJob(job.id, "READY");
-                            await load();
+                            await act(`Could not mark ${job.number} ready.`, () => transitionCyberJob(job.id, "READY"));
                           }}
                         >
                           Ready
@@ -167,18 +222,46 @@ export function CyberDashboardPage() {
       </div>
       <section>
         <h2>Service price list</h2>
+        {!services.length && <Empty>No services yet.{canManageServices ? " Add your first service below." : " Ask the business owner to add services."}</Empty>}
         <div className="serviceGrid">
           {services.map((service) => (
             <article key={service.id}>
               <b>{service.name}</b>
-              <strong>KSh {service.selling_price}</strong>
+              <strong>{businessCurrency()} {service.selling_price}</strong>
               <small>
                 {service.billing_unit.replaceAll("_", " ")}
                 {service.requires_job ? " · Job workflow" : " · Quick service"}
+                {!service.active && " · Inactive"}
               </small>
+              {canChangeServices && service.product && (
+                <Link className="button secondary" to={`/admin/cyber/income/${service.product}`} aria-label={`Edit ${service.name}`}>Edit</Link>
+              )}
+              {canChangeServices && (
+                <button type="button" className="secondary" onClick={() => void toggleService(service)}>
+                  {service.active ? "Deactivate" : "Activate"}
+                </button>
+              )}
             </article>
           ))}
         </div>
+        {serviceError?.place === "list" && <FormError title={serviceError.title} message={serviceError.message} />}
+        {canManageServices && (
+          <form className="formCard" onSubmit={(event) => void addService(event)}>
+            <h3>Add a service</h3>
+            <FormField label="Service name" name="name" required maxLength={180} placeholder="e.g. Black & white printing" />
+            <FormField label={`Price (${businessCurrency()})`} name="selling_price" type="number" min="0" step="0.01" required />
+            <label>
+              Charged
+              <select name="billing_unit" defaultValue="PER_PAGE">
+                {billingUnits.map((unit) => <option key={unit} value={unit}>{unit.replaceAll("_", " ").toLowerCase()}</option>)}
+              </select>
+            </label>
+            <label className="checkRow"><input type="checkbox" name="requires_job" /> Track as a job (for work that takes time, like typing or repairs)</label>
+            <FormField label="Notes (optional)" name="notes" />
+            <button>Add service</button>
+            {serviceError?.place === "add" && <FormError title={serviceError.title} message={serviceError.message} />}
+          </form>
+        )}
       </section>
     </>
   );

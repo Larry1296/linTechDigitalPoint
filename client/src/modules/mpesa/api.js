@@ -1,7 +1,10 @@
-import { api } from "../../core/api/client";
+import { api, apiBlob } from "../../core/api/client";
 export const getMpesaDashboard = () => api("/api/v1/mpesa/dashboard/");
 export const getMpesaOutlets = () => api("/api/v1/mpesa/outlets/");
-export const getMpesaTransactions = () => api("/api/v1/mpesa/transactions/");
+export const createMpesaOutlet = (body) =>
+  api("/api/v1/mpesa/outlets/", { method: "POST", body: JSON.stringify(body) });
+// Only transactions in open shifts: the desk starts afresh when a shift closes.
+export const getMpesaTransactions = () => api("/api/v1/mpesa/transactions/?shift=open");
 export const openMpesaSession = (body) =>
   api("/api/v1/mpesa/sessions/", {
     method: "POST",
@@ -22,3 +25,20 @@ export const reconcileMpesaSession = (id, body) =>
     method: "POST",
     body: JSON.stringify(body),
   });
+export const updateMpesaOutlet = (id, body) =>
+  api(`/api/v1/mpesa/outlets/${id}/`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteMpesaOutlet = (id) =>
+  api(`/api/v1/mpesa/outlets/${id}/`, { method: "DELETE" });
+export const addMpesaReference = (id, providerReference) =>
+  api(`/api/v1/mpesa/transactions/${id}/reference/`, {
+    method: "POST",
+    body: JSON.stringify({ provider_reference: providerReference }),
+  });
+export const getMpesaReportMonths = () => api("/api/v1/mpesa/reports/months/");
+export const downloadMpesaReport = (month) => apiBlob(`/api/v1/mpesa/reports/monthly/?month=${encodeURIComponent(month)}`);
+export const correctMpesaTransaction = (id, body) =>
+  api(`/api/v1/mpesa/transactions/${id}/correct/`, {
+    method: "POST",
+    body: JSON.stringify({ ...body, idempotency_key: crypto.randomUUID() }),
+  });
+export const lookupMpesaCustomer = (phone) => api(`/api/v1/mpesa/customers/lookup/?phone=${encodeURIComponent(phone)}`);

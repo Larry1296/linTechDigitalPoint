@@ -1,0 +1,61 @@
+/* Crossfading photo slideshow. The container sets the size; photos fill it. */
+.photoCarousel { position: relative; overflow: hidden; isolation: isolate; }
+.photoCarouselSlides, .photoCarouselSlides figure { position: absolute; inset: 0; margin: 0; }
+/* A long, even crossfade: the outgoing photo fades out while the next one fades in. */
+.photoCarouselSlides figure { opacity: 0; transition: opacity 1.4s ease-in-out; }
+.photoCarouselSlides figure.isActive { opacity: 1; }
+.photoCarouselSlides img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.06);
+  transition: transform 5.5s linear;
+}
+/* A slow, steady zoom-out while each photo is in view, lasting past the 4-second interval so it never stops abruptly. */
+.photoCarouselSlides figure.isActive img { transform: scale(1); }
+.photoCarouselContent { position: relative; z-index: 1; }
+.photoCarouselControls {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgb(3 13 28 / 45%);
+  backdrop-filter: blur(6px);
+}
+.photoCarouselDot {
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 55%);
+  box-shadow: none;
+  cursor: pointer;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.photoCarouselDot[aria-current="true"] { width: 22px; background: #fff; }
+.photoCarouselDot:focus-visible, .photoCarouselPause:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.photoCarouselPause {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .photoCarouselSlides figure, .photoCarouselSlides img, .photoCarouselDot { transition: none; }
+  .photoCarouselSlides img { transform: none; }
+}

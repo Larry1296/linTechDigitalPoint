@@ -1,3 +1,4 @@
+import { PrivateImage } from "../../../components/PrivateImage";
 import { useEffect, useState } from "react";
 
 export function DisplayImageInput({ file, onChange, required = false, existingUrl = "" }) {
@@ -20,12 +21,12 @@ export function DisplayImageInput({ file, onChange, required = false, existingUr
     setError(""); onChange(image);
   };
   return <fieldset>
-    <legend>Product display image{required ? " (required)" : ""}</legend>
-    <p>Photograph this exact item alone. This is the customer display photo, separate from the supplier receipt and shelf placement.</p>
+    <legend>Product photo{required ? " (required)" : " (optional)"}</legend>
+    <p>A photo helps staff recognise this item. You can skip it and add one later.</p>
     <label>Upload from storage<input type="file" accept="image/jpeg,image/png,image/webp" onChange={choose} /></label>
     <label>Take photo<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={choose} /></label>
     {error && <p role="alert">{error}</p>}
-    {(preview || existingUrl) && <img src={preview || existingUrl} alt="Product display image preview" style={{ maxWidth: "100%", maxHeight: 240, objectFit: "contain" }} />}
+    {(preview || existingUrl) && <PrivateImage src={preview || existingUrl} alt="Product display image preview" style={{ maxWidth: "100%", maxHeight: 240, objectFit: "contain" }} />}
     {file && <button type="button" className="secondary" onClick={() => onChange(null)}>Remove selected photo</button>}
   </fieldset>;
 }

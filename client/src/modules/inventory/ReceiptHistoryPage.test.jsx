@@ -78,13 +78,13 @@ beforeEach(() => {
     return receipt;
   });
 });
-function setup(path = "/admin-app/receipts/145") {
+function setup(path = "/admin/receipts/145") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/admin-app/receipts" element={<ReceiptHistoryPage />} />
+        <Route path="/admin/receipts" element={<ReceiptHistoryPage />} />
         <Route
-          path="/admin-app/receipts/:id"
+          path="/admin/receipts/:id"
           element={<ReceiptHistoryPage />}
         />
       </Routes>
@@ -104,7 +104,7 @@ async function form() {
   });
 }
 it("opens receipt history and its selected receipt", async () => {
-  setup("/admin-app/receipts");
+  setup("/admin/receipts");
   fireEvent.click(
     await screen.findByRole("link", { name: "Receipt 145 · REC-145" }),
   );

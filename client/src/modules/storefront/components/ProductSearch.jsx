@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../../core/organization/presentation";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../core/api/client";
@@ -14,6 +15,10 @@ export function ProductSearch({
   isDisabled = () => false,
   exactScan = false,
   placeholder = "Search all available products…",
+  minLength = 2,
+  limit = 8,
+  embedded = false,
+  label = "Search products",
 }) {
   const [localQuery, setLocalQuery] = useState("");
   const query = value ?? localQuery;
@@ -33,7 +38,7 @@ export function ProductSearch({
     [],
   );
   const trimmed = query.trim();
-  const expanded = open && trimmed.length >= 2;
+  const expanded = open && trimmed.length >= minLength;
 
   useEffect(() => {
     if (!expanded) return;
@@ -49,7 +54,7 @@ export function ProductSearch({
       })
         .then((results) => {
           if (!current || version !== scanVersion.current) return;
-          setRows(results.slice(0, 8));
+          setRows(results.slice(0, limit));
           setStatus("ready");
         })
         .catch(() => {
@@ -61,7 +66,7 @@ export function ProductSearch({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [trimmed, expanded, endpoint]);
+  }, [trimmed, expanded, endpoint, limit]);
 
   useEffect(() => {
     const outside = (event) => {
@@ -99,7 +104,7 @@ export function ProductSearch({
           endpoint + "?q=" + encodeURIComponent(trimmed),
         );
         if (version !== scanVersion.current) return;
-        setRows(results.slice(0, 8));
+        setRows(results.slice(0, limit));
         setStatus("ready");
         const exact = results.find((row) =>
           [row.sku, row.barcode].some(
@@ -116,11 +121,13 @@ export function ProductSearch({
     else navigate("/shop?" + new URLSearchParams({ search: trimmed }));
   };
 
+  // Inside another form (e.g. Stock Adjustment) a nested <form> would submit the outer one, so render a div.
+  const Root = embedded ? "div" : "form";
   return (
-    <form
+    <Root
       className="productSearch"
       ref={root}
-      onSubmit={search}
+      onSubmit={embedded ? undefined : search}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
@@ -128,7 +135,7 @@ export function ProductSearch({
       <div className="productSearchControls">
         <input
           role="combobox"
-          aria-label="Search products"
+          aria-label={label}
           autoComplete="off"
           aria-autocomplete="list"
           aria-expanded={expanded}
@@ -181,7 +188,7 @@ export function ProductSearch({
             }
           }}
         />
-        <button type="submit">Search</button>
+        <button type={embedded ? "button" : "submit"} onClick={embedded ? search : undefined}>Search</button>
       </div>
       {expanded && (
         <div className="productSearchPanel">
@@ -216,7 +223,7 @@ export function ProductSearch({
                       <strong>{product.display_name}</strong>
                       <span>{product.category}</span>
                       <span>
-                        KSh {product.selling_price} · {product.available}{" "}
+                        {businessCurrency()} {product.selling_price} · {product.available}{" "}
                         available
                       </span>
                     </span>
@@ -228,6 +235,6 @@ export function ProductSearch({
           {renderActions && rows[active] && renderActions(rows[active])}
         </div>
       )}
-    </form>
+    </Root>
   );
 }

@@ -37,10 +37,12 @@ def test_full_business_day_keeps_retail_cyber_and_mpesa_principal_distinct():
     cyber_job = create_job(user=owner, lines=cyber_lines)
     cyber_sale = complete_job(job=cyber_job, user=owner, payment_method="MPESA", payment_reference="CYBER-BILL-PAID")
 
+    from apps.commerce.settlements import confirm_payment
+    confirm_payment(payment=cyber_sale.payments.get(), reference='CYBER-BILL-PAID')
     outlet = MpesaOutlet.objects.create(store=store, display_name="Main Agent")
     shift = open_session(outlet=outlet, operator=owner, opening_cash=30000, opening_float=40000)
-    post_transaction(session=shift, transaction_type="CUSTOMER_DEPOSIT", transaction_amount=10000, user=owner, idempotency_key="day-deposit")
-    post_transaction(session=shift, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount=5000, user=owner, idempotency_key="day-withdrawal")
+    post_transaction(session=shift, transaction_type="CUSTOMER_DEPOSIT", customer_name="Jane Wanjiru", customer_phone="0712345678", customer_id_number="12345678",transaction_amount=10000, user=owner, idempotency_key="day-deposit")
+    post_transaction(session=shift, transaction_type="CUSTOMER_WITHDRAWAL", customer_name="Jane Wanjiru", customer_phone="0712345678", customer_id_number="12345678",transaction_amount=5000, user=owner, idempotency_key="day-withdrawal")
 
     assert retail_sale.total == Decimal("1000.00")
     assert cyber_sale.total == Decimal("450.00") and cyber_sale.channel == Sale.CYBER

@@ -1,7 +1,7 @@
 import { hasPermission } from "./VariantSummary";
 export function ProductActions({ row, user }) {
   if (!hasPermission(user, "catalog.view_product")) return null;
-  const productUrl = `/admin-app/products?product=${row.product_id}&variant=${row.id}`;
+  const productUrl = `/admin/products?product=${row.product_id}&variant=${row.id}`;
   return (
     <details className="posActions">
       <summary>Product actions</summary>
@@ -13,12 +13,12 @@ export function ProductActions({ row, user }) {
         {row.product_type !== "SERVICE" && (
           <>
             {hasPermission(user, "inventory.add_stockreceipt") && (
-              <a href={`/admin-app/receive?variant=${row.id}`}>
+              <a href={`/admin/receive?variant=${row.id}`}>
                 Receive more stock
               </a>
             )}
             {hasPermission(user, "inventory.adjust_stock") && (
-              <a href={`/admin-app/adjust-stock?variant=${row.id}`}>
+              <a href={`/admin/adjust-stock?variant=${row.id}`}>
                 Adjust stock
               </a>
             )}

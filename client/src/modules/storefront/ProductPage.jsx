@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { ProductImage } from "./components/ProductImage";
 import { StockAvailability } from "./components/StockAvailability";
 import { AddToCartButton } from "./components/AddToCartButton";
@@ -6,6 +7,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useCart } from "../../core/cart/CartContext";
 import { ErrorState, Loading } from "../../components/States";
+import { FormError } from "../../components/forms/FormNotice";
 export function ProductPage() {
   const location = useLocation();
   const { id } = useParams();
@@ -93,7 +95,7 @@ export function ProductPage() {
               <option value="">Select connector, model and colour</option>
               {p.variants.map((variant) => (
                 <option key={variant.id} value={variant.id}>
-                  {variant.display_name} — KSh {variant.selling_price}
+                  {variant.display_name} — {businessCurrency()} {variant.selling_price}
                   {variant.available !== null && Number(variant.available) <= 0
                     ? " — Out of stock"
                     : ""}
@@ -121,9 +123,8 @@ export function ProductPage() {
             AI illustration. Actual model and appearance may vary.
           </p>
         )}
-        <strong className="price">KSh {shown.selling_price}</strong>
+        <strong className="price">{businessCurrency()} {shown.selling_price}</strong>
         <StockAvailability available={shown.available} as="p" />
-        {error && <p role="alert">{error}</p>}
         {selected && !adding ? (
           <AddToCartButton
             product={selected}
@@ -132,9 +133,10 @@ export function ProductPage() {
           />
         ) : (
           <button disabled>
-            {adding ? "Adding…" : "Choose a variant to add to cart"}
+            {adding ? "Adding…" : "Choose an option to add to cart"}
           </button>
         )}
+        <FormError title="Could not add to cart." message={error} />
       </section>
     </main>
   );

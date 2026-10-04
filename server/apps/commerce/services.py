@@ -1,3 +1,4 @@
+from apps.tenancy.transactions import lock_business
 from decimal import Decimal
 from uuid import uuid4
 from django.db import transaction
@@ -75,15 +76,26 @@ def checkout_cart(*,request,fulfillment_method,address=None,payment_method="CASH
     AuditLog.objects.create(action="ORDER_CREATED",object_type="Order",object_id=str(order.pk),user=request.user,after={"number":number,"total":str(order.total)}); return order
 @transaction.atomic
 def complete_reserved_order(*,order,payment_method,provider_transaction_id,idempotency_key,user=None):
+    lock_business()
     order=Order.objects.select_for_update().select_related("customer").get(pk=order.pk)
     existing=Payment.objects.filter(idempotency_key=idempotency_key,status="COMPLETED",sale__isnull=False).select_related("sale").first()
     if existing:return existing.sale
     if hasattr(order,"sale"):return order.sale
     sale=Sale.objects.create(number=order.number.replace("WEB","SALE"),channel="ONLINE",order=order,customer=order.customer,created_by=user,subtotal=order.subtotal,discount=order.discount,total=order.total)
     cogs=Decimal("0")
-    for order_item in order.items.select_related("variant__product","reservation"):
-        item=SaleItem.objects.create(sale=sale,variant=order_item.variant,quantity=order_item.quantity,unit_price=order_item.unit_price)
-        if order_item.variant.product.product_type=="SERVICE":item.cost=order_item.quantity*order_item.variant.service_cost; item.save(update_fields=["cost"]); cogs+=item.cost; continue
+    from apps.commerce.pricing import cents, price_line, spread_discount, tax_config
+    from apps.tenancy.models import Organization
+    from apps.tenancy.context import organization_id
+    tax=tax_config(Organization.objects.get(pk=organization_id()))
+    order_items=list(order.items.select_related("variant__product","reservation"))
+    shares=spread_discount([cents(i.quantity*i.unit_price) for i in order_items],order.discount)
+    totals={"gross":Decimal("0"),"discount":Decimal("0"),"tax":Decimal("0"),"net":Decimal("0"),"payable":Decimal("0")}
+    for order_item,share in zip(order_items,shares):
+        amounts=price_line(order_item.quantity,order_item.unit_price,share,tax)
+        for key in totals: totals[key]+=amounts[key]
+        item=SaleItem.objects.create(sale=sale,variant=order_item.variant,quantity=order_item.quantity,list_price=order_item.unit_price,unit_price=order_item.unit_price,
+            discount=amounts["discount"],discount_reason="Order discount" if share else "",tax_amount=amounts["tax"],net_amount=amounts["net"])
+        if order_item.variant.product.product_type=="SERVICE":item.cost=cents(order_item.quantity*order_item.variant.service_cost); item.save(update_fields=["cost"]); cogs+=item.cost; continue
         reservation=Reservation.objects.select_for_update().get(pk=order_item.reservation_id)
         if not reservation.active or reservation.status!=Reservation.ACTIVE:raise ValidationError("Order reservation is no longer active.")
         allocated=Decimal("0")
@@ -92,8 +104,12 @@ def complete_reserved_order(*,order,payment_method,provider_transaction_id,idemp
             if balance.reserved<qty or balance.quantity<qty:raise ValidationError("Reserved stock allocation is inconsistent.")
             balance.reserved-=qty; balance.quantity-=qty; balance.save(update_fields=["reserved","quantity","updated_at"]); StockLot.objects.filter(pk=balance.lot_id).update(remaining_quantity=F("remaining_quantity")-qty); SaleAllocation.objects.create(item=item,lot=balance.lot,shelf=balance.shelf,quantity=qty,unit_cost=balance.lot.unit_cost); Movement.objects.create(variant=order_item.variant,lot=balance.lot,quantity=qty,source=balance.shelf,movement_type="ONLINE_ORDER",reference=order.number,performed_by=user); allocated+=qty; cogs+=qty*balance.lot.unit_cost
         if allocated!=order_item.quantity:raise ValidationError("Reservation quantity does not match order item.")
-        item.cost=sum((a.quantity*a.unit_cost for a in item.allocations.all()),Decimal("0")); item.save(update_fields=["cost"]); reservation.active=False; reservation.status=Reservation.CONSUMED; reservation.save(update_fields=["active","status","updated_at"])
-    sale.cogs=cogs; sale.gross_profit=sale.total-cogs; sale.save(update_fields=["cogs","gross_profit","updated_at"])
+        item.cost=cents(sum((a.quantity*a.unit_cost for a in item.allocations.all()),Decimal("0"))); item.cost_pending=item.allocations.filter(lot__cost_status="UNCOSTED").exists(); item.save(update_fields=["cost","cost_pending"]); reservation.active=False; reservation.status=Reservation.CONSUMED; reservation.save(update_fields=["active","status","updated_at"])
+    sale.subtotal,sale.discount,sale.tax_total,sale.net_total,sale.total=totals["gross"],totals["discount"],totals["tax"],totals["net"],totals["payable"]
+    sale.cogs=cents(cogs); sale.gross_profit=sale.net_total-sale.cogs; sale.cost_pending=sale.items.filter(cost_pending=True).exists()
+    sale.save(update_fields=["subtotal","discount","tax_total","net_total","total","cogs","gross_profit","cost_pending","updated_at"])
+    from apps.accounting.ledger import post_sale
+    post_sale(sale)
     payment=Payment.objects.filter(order=order).order_by("-created_at").first()
     if payment:
         payment.sale=sale; payment.method=payment_method; payment.status="COMPLETED"; payment.provider_transaction_id=provider_transaction_id; payment.idempotency_key=idempotency_key; payment.save()

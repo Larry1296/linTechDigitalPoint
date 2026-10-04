@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { ProductImage } from "./components/ProductImage";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -49,7 +50,7 @@ export function CartPage() {
                     })
                   }
                 />
-                <span>KSh {i.line_total}</span>
+                <span>{businessCurrency()} {i.line_total}</span>
                 <button
                   className="danger"
                   onClick={() =>
@@ -64,7 +65,7 @@ export function CartPage() {
             ))}
           </div>
           <div className="cartTotal">
-            <b>Total: KSh {cart.total}</b>
+            <b>Total: {businessCurrency()} {cart.total}</b>
             <Link className="button" to="/checkout">
               Proceed to checkout
             </Link>

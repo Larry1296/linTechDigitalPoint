@@ -35,14 +35,11 @@ def create(client, category, **extra):
     return client.post("/api/v1/catalog/products/create-inline/", {"name": "Amaya cable", "category_id": category.pk, "sku": "TYPE-B", "variant_name": "Type-B", "selling_price": "250", **extra}, format="multipart")
 
 
-def test_customer_visible_requires_photo_without_partial_catalog(catalog):
+def test_photo_is_optional_when_creating_products(catalog):
     client, category, _, _ = catalog
     response = create(client, category)
-    assert response.status_code == 400 and "Product display image" in str(response.data)
-    assert not Product.objects.exists() and not ProductVariant.objects.exists()
-    response = create(client, category, ecommerce_visible="false")
-    assert response.status_code == 201
-    assert not Product.objects.get().ecommerce_visible and not ProductImage.objects.exists()
+    assert response.status_code == 201, response.data
+    assert Product.objects.get().ecommerce_visible and not ProductImage.objects.exists()
 
 
 def test_upload_optimised_and_returned_without_stock_writes(catalog):
@@ -54,7 +51,7 @@ def test_upload_optimised_and_returned_without_stock_writes(catalog):
     with Image.open(image.file.path) as saved:
         assert saved.size == (1600, 800)
     assert not StockReceipt.objects.exists() and not StockLot.objects.exists() and not Movement.objects.exists()
-    public = APIClient().get(f'/api/v1/store/products/{response.data["variant_id"]}/').data
+    public = client.get(f'/api/v1/store/products/{response.data["variant_id"]}/').data
     assert public["images"][0]["url"] == image.file.url
 
 
@@ -148,15 +145,16 @@ def test_upload_with_opening_stock_preserves_price_quantity_and_shelf(catalog):
     assert variant_images(variant)[0]["url"].startswith("/media/")
 
 
-def test_generic_creation_also_requires_customer_image(catalog):
+def test_generic_creation_does_not_require_image(catalog):
     client, category, _, _ = catalog
     response = client.post("/api/v1/catalog/products/", {"name": "No image", "slug": "no-image", "category": category.pk}, format="json")
-    assert response.status_code == 400
-    assert not Product.objects.exists()
+    assert response.status_code == 201, response.data
+    assert not ProductImage.objects.exists()
 
 
-def test_new_variant_cannot_reuse_missing_primary(catalog):
+def test_new_variant_without_any_photo_is_allowed(catalog):
     client, category, _, _ = catalog
     product = Product.objects.create(name="Cable", slug="cable", category=category)
     response = client.post(f"/api/v1/catalog/products/{product.pk}/variants/", {"variant_name": "Type-C", "sku": "TYPE-C", "use_product_image": "true"}, format="multipart")
-    assert response.status_code == 400 and not ProductVariant.objects.exists()
+    assert response.status_code == 201, response.data
+    assert ProductVariant.objects.filter(sku="TYPE-C").exists()

@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { ProductImage } from "../storefront/components/ProductImage";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -5,6 +6,7 @@ import { api } from "../../core/api/client";
 import { useCart } from "../../core/cart/CartContext";
 import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
+import { FormError } from "../../components/forms/FormNotice";
 export function CheckoutPage() {
   const { cart, refreshCart } = useCart();
   const { user } = useAuth();
@@ -48,10 +50,10 @@ export function CheckoutPage() {
             <div key={i.id}>
               <ProductImage product={i} />
               {i.display_name} × {i.quantity}
-              <b>KSh {i.line_total}</b>
+              <b>{businessCurrency()} {i.line_total}</b>
             </div>
           ))}
-          <h3>Total: KSh {cart.total}</h3>
+          <h3>Total: {businessCurrency()} {cart.total}</h3>
         </section>
         <form className="formCard" onSubmit={submit}>
           <label>
@@ -79,10 +81,10 @@ export function CheckoutPage() {
               this order. Your cart will stay saved while you do so.
             </p>
           )}
-          {error && <p className="formError">{error}</p>}
           <button disabled={!cart.items.length}>
             {user ? "Place order" : "Sign in to place order"}
           </button>
+          <FormError title="Could not place your order." message={error} />
         </form>
       </div>
     </main>

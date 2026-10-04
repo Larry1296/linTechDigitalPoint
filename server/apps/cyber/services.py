@@ -1,3 +1,5 @@
+from apps.tenancy.transactions import lock_business
+from apps.tenancy.permissions import has_business_permission, is_business_manager
 from decimal import Decimal
 from uuid import uuid4
 
@@ -29,7 +31,9 @@ def audit(action, obj, user, before=None, after=None):
 
 
 @transaction.atomic
-def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone="", notes="", due_at=None, discount=0):
+def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone="", notes="", due_at=None, discount=0, allow_price_change=False):
+    """``allow_price_change``: the caller has already checked an amount different from the list price against the
+    service's own rules (income by service); the change is still audited."""
     if not lines:
         raise ValidationError("Add at least one cyber service.")
     job = CyberJob.objects.create(
@@ -58,7 +62,7 @@ def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone=""
         if quantity <= 0:
             raise ValidationError("Service quantity must be positive.")
         unit_price = money(raw.get("unit_price", variant.selling_price))
-        if unit_price != variant.selling_price and not user.has_perm("cyber.change_cyberjobline"):
+        if unit_price != variant.selling_price and not allow_price_change and not has_business_permission(user, "cyber.change_cyberjobline"):
             raise ValidationError("Cyber price override permission required.")
         total = money(quantity * unit_price)
         CyberJobLine.objects.create(
@@ -103,6 +107,7 @@ def set_job_status(*, job, status, user):
 
 @transaction.atomic
 def complete_job(*, job, user, payment_method, payment_reference="", idempotency_key=None):
+    lock_business()
     job = CyberJob.objects.select_for_update().prefetch_related(
         "lines__variant__product", "lines__variant__material_requirements__material_variant"
     ).get(pk=job.pk)
@@ -123,11 +128,19 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
         discount=job.discount,
         total=job.total,
     )
+    from apps.commerce.pricing import cents, price_line, spread_discount, tax_config
+    from apps.tenancy.models import Organization
+    from apps.tenancy.context import organization_id
+    tax = tax_config(Organization.objects.get(pk=organization_id()))
+    job_lines = list(job.lines.all())
+    shares = spread_discount([cents(line.quantity * line.unit_price) for line in job_lines], job.discount)
+    totals = {"gross": Decimal("0"), "discount": Decimal("0"), "tax": Decimal("0"), "net": Decimal("0"), "payable": Decimal("0")}
     cogs = Decimal("0")
-    for line in job.lines.all():
+    for line, share in zip(job_lines, shares):
         requirements = list(line.variant.material_requirements.filter(active=True).select_related("material_variant"))
         line_cost = Decimal("0")
         if requirements:
+            # Measured materials are the job's direct cost; the configured service cost is then not added.
             for requirement in requirements:
                 line_cost += consume_stock_fifo(
                     variant=requirement.material_variant,
@@ -138,23 +151,35 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
                 )
         else:
             line_cost = line.quantity * line.variant.service_cost
+        amounts = price_line(line.quantity, line.unit_price, share, tax)
         SaleItem.objects.create(
             sale=sale,
             variant=line.variant,
             quantity=line.quantity,
+            list_price=line.variant.selling_price,
             unit_price=line.unit_price,
-            cost=line_cost,
+            discount=amounts["discount"],
+            discount_reason="Job discount" if share else "",
+            tax_amount=amounts["tax"],
+            net_amount=amounts["net"],
+            cost=cents(line_cost),
         )
-        cogs += line_cost
+        cogs += cents(line_cost)
+        for part in totals:
+            totals[part] += amounts[part]
+    sale.subtotal, sale.discount, sale.tax_total = totals["gross"], totals["discount"], totals["tax"]
+    sale.net_total, sale.total = totals["net"], totals["payable"]
     sale.cogs = money(cogs)
-    sale.gross_profit = sale.total - sale.cogs
-    sale.save(update_fields=["cogs", "gross_profit", "updated_at"])
+    sale.gross_profit = sale.net_total - sale.cogs
+    sale.save(update_fields=["subtotal", "discount", "tax_total", "net_total", "total", "cogs", "gross_profit", "updated_at"])
+    from apps.accounting.ledger import post_sale
+    post_sale(sale)
     Payment.objects.create(
         sale=sale,
         method=payment_method,
         amount=sale.total,
         reference=payment_reference,
-        status="COMPLETED",
+        status="MANUAL_REVIEW" if payment_method == "MPESA" else "COMPLETED",
         idempotency_key=key,
     )
     job.sale = sale
@@ -163,3 +188,48 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
     job.save(update_fields=["sale", "status", "completed_at", "updated_at"])
     audit("CYBER_JOB_COMPLETED", job, user, after={"sale": sale.number, "total": str(sale.total)})
     return sale
+
+
+@transaction.atomic
+def services_category():
+    """The "Services" category; service groups (Printing & Copying, Online Applications…) are its sub-categories."""
+    from apps.catalog.models import Category
+    category, _ = Category.objects.get_or_create(slug="services", defaults={"name": "Services"})
+    return category
+
+
+def create_service(user, name, selling_price, billing_unit="FIXED", requires_job=False, default_turnaround=None, notes="", category=None):
+    """Create a billable service with its own catalogue entry, ready to sell at the POS or on a job card. ``category``
+    is its group (a sub-category of Services); without one it goes straight under Services."""
+    from django.utils.text import slugify
+    from apps.inventory.services import create_product_with_opening_stock
+    category = category or services_category()
+    base = slugify(name)[:40] or "service"
+    slug, number = base, 1
+    while Product.objects.filter(slug=slug).exists():
+        number += 1
+        slug = f"{base}-{number}"
+    sku = f"SVC-{slug.upper()}"[:64]
+    while ProductVariant.objects.filter(sku=sku).exists():
+        number += 1
+        sku = f"SVC-{base.upper()}-{number}"[:64]
+    _, variant = create_product_with_opening_stock(
+        user=user,
+        product_data={"name": name, "slug": slug, "category_id": category.pk, "product_type": Product.SERVICE,
+                      "ecommerce_visible": False, "online_orderable": False},
+        variant_data={"name": "Standard", "sku": sku, "selling_price": selling_price},
+    )
+    return CyberServiceProfile.objects.create(variant=variant, billing_unit=billing_unit, requires_job=requires_job,
+                                              default_turnaround=default_turnaround, notes=notes)
+
+
+def add_price_option(product, *, name, price=0, billing_unit="FIXED", notes=""):
+    """Another price option (variant with its own Cyber profile) for a service, e.g. "Both sides" next to "Single side"."""
+    first = product.variants.order_by("pk").first()
+    base, number = ((first.sku if first else "") or f"SVC-{product.pk}")[:56], product.variants.count() + 1
+    sku = f"{base}-{number}"
+    while ProductVariant.objects.filter(sku=sku).exists():
+        number += 1
+        sku = f"{base}-{number}"
+    variant = ProductVariant.objects.create(product=product, name=name[:120], sku=sku, selling_price=price)
+    return CyberServiceProfile.objects.create(variant=variant, billing_unit=billing_unit, notes=notes)

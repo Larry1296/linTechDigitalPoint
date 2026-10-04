@@ -1,3 +1,4 @@
+from apps.tenancy.permissions import has_business_permission, is_business_manager
 from django.db import models, transaction
 from django.db.models import F, OuterRef, Q, Subquery, Sum
 from django.utils.text import slugify
@@ -50,10 +51,8 @@ class PublicVariantSerializer(serializers.ModelSerializer):
             "name",
             "selling_price",
             "available",
-            "online_orderable",
         ]
 
-    online_orderable = serializers.BooleanField(source="product.online_orderable", read_only=True)
 
     def get_display_name(self, obj):
         return display_name(obj.product.name, obj.name)
@@ -76,12 +75,12 @@ class PublicVariantSerializer(serializers.ModelSerializer):
 
 
 class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsInternalStaff]
     serializer_class = PublicVariantSerializer
     queryset = (
         ProductVariant.objects.select_related("product", "product__category", "product__brand")
         .prefetch_related("product__images", "product__variants", "option_assignments__value__option_type")
-        .filter(active=True, product__active=True, product__ecommerce_visible=True)
+        .filter(active=True, product__active=True)
     )
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["product__category", "product__brand"]
@@ -117,7 +116,7 @@ class PublicSuggestionSerializer(PublicVariantSerializer):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsInternalStaff])
 def public_search_suggestions(request):
     query = request.query_params.get("q", "").strip()
     if len(query) < 2:
@@ -150,14 +149,14 @@ def public_category_sections():
 
 
 @api_view(["GET"])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsInternalStaff])
 def public_home(request):
     categories = list(Category.objects.filter(active=True).values("id", "name", "slug", "parent_id").order_by("name"))
     store = Store.objects.first()
     store_data = (
         {"name": store.name, "phone": store.phone, "email": store.email, "address": store.address}
         if store
-        else {"name": "LinTech Digital Point", "phone": "", "email": "", "address": ""}
+        else {"name": request.organization.name, "phone": "", "email": "", "address": ""}
     )
     category_sections = public_category_sections()
     services = PublicVariantSerializer(
@@ -220,7 +219,11 @@ class ShelfSerializer(serializers.ModelSerializer):
         return list(rows)
 
     def create(self, data):
-        return create_shelf(user=self.context["request"].user, **data)
+        # "zone" is read-only for updates, so read it from the request when creating.
+        zone = Zone.objects.filter(pk=self.initial_data.get("zone"), active=True).first()
+        if not zone:
+            raise serializers.ValidationError({"zone": "Choose a zone in this business."})
+        return create_shelf(zone=zone, user=self.context["request"].user, **data)
 
     def update(self, instance, data):
         return update_shelf(shelf=instance, user=self.context["request"].user, **data)
@@ -236,6 +239,17 @@ class ZoneSerializer(serializers.ModelSerializer):
         fields = ["id", "code", "name", "width", "height", "active", "stacks", "unassigned_shelves", "shelves"]
         read_only_fields = ["code"]
 
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Enter the area name.")
+        return value.strip()
+
+    def validate(self, attrs):
+        for field in ("width", "height"):
+            if field in attrs and attrs[field] is not None and attrs[field] <= 0:
+                raise serializers.ValidationError({field: "Enter a size greater than zero."})
+        return attrs
+
     def get_stacks(self, obj):
         return ShelfStackSerializer(
             obj.stacks.filter(active=True).prefetch_related("levels__shelves__balances__lot__variant__product"), many=True
@@ -245,7 +259,7 @@ class ZoneSerializer(serializers.ModelSerializer):
         return ShelfSerializer(obj.shelves.filter(level__isnull=True), many=True).data
 
     def create(self, validated_data):
-        store = Store.objects.first() or Store.objects.create(name="LinTech Digital Point", measurement_unit="ft")
+        store = Store.objects.first() or Store.objects.create(name=self.context["request"].organization.name, currency=self.context["request"].organization.currency, timezone=self.context["request"].organization.timezone, measurement_unit="ft")
         base = (slugify(validated_data["name"]).replace("-", "")[:16] or "AREA").upper()
         code = base
         suffix = 2
@@ -310,9 +324,11 @@ class ShelfStackViewSet(viewsets.ModelViewSet):
     )
 
     def create(self, request):
-        if not request.user.has_perm("inventory.add_shelfstack"):
-            return Response({"detail": "Shelf-stack configuration permission required."}, status=403)
-        zone = Zone.objects.get(pk=request.data.get("zone"))
+        if not has_business_permission(request.user, "inventory.add_shelfstack"):
+            return Response({"detail": "Rack setup permission required."}, status=403)
+        zone = Zone.objects.filter(pk=request.data.get("zone"), active=True).first()
+        if not zone:
+            return Response({"zone": "Choose a zone in this business."}, status=400)
         with transaction.atomic():
             stack = create_shelf_stack(
                 zone=zone,
@@ -379,6 +395,32 @@ class ZoneViewSet(viewsets.ModelViewSet):
             return [HasLinTechPermission()]
         return [IsInternalStaff()]
 
+    def get_queryset(self):
+        # Removed areas leave the shop map; their history stays in the database.
+        rows = super().get_queryset()
+        return rows.filter(active=True) if self.action == "list" else rows
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        from apps.core.models import AuditLog
+        zone = Zone.objects.select_for_update().get(pk=self.get_object().pk)
+        racks = list(zone.stacks.filter(active=True).order_by("display_name").values_list("display_name", flat=True))
+        if racks:
+            return Response({"detail": f"{zone.name} still has {len(racks)} rack{'s' if len(racks) != 1 else ''}: "
+                             f"{', '.join(racks)}. Remove them or move them to another area first."}, status=400)
+        if StockBalance.objects.filter(shelf__zone=zone, quantity__gt=0).exists():
+            return Response({"detail": f"{zone.name} still holds stock. Transfer it to another shelf first."}, status=400)
+        before = {"name": zone.name, "code": zone.code}
+        if not zone.stacks.exists() and not zone.shelves.exists():
+            zone.delete()
+        else:
+            # Removed racks keep their layout history, so the area is hidden rather than erased.
+            zone.active = False
+            zone.save(update_fields=["active", "updated_at"])
+        AuditLog.objects.create(action="AREA_REMOVED", object_type="Zone", object_id=str(before["code"]),
+                                user=request.user, before=before)
+        return Response(status=204)
+
 
 class ShelfViewSet(viewsets.ModelViewSet):
     permission_classes = [IsInternalStaff]
@@ -399,37 +441,52 @@ class ShelfViewSet(viewsets.ModelViewSet):
 
     @__import__("rest_framework.decorators", fromlist=["action"]).action(detail=True, methods=["get"])
     def contents(self, request, pk=None):
+        """Everything on one physical shelf, one row per item, with its place in the shop."""
         shelf = self.get_object()
-        balances = shelf.balances.filter(quantity__gt=0).select_related("lot__variant__product")
-        movements = (
-            Movement.objects.filter(models.Q(source=shelf) | models.Q(destination=shelf))
-            .select_related("variant__product")
-            .order_by("-created_at")[:20]
-        )
-        return Response(
-            {
-                "shelf": ShelfSerializer(shelf).data,
-                "items": [
-                    {
-                        "variant_id": b.lot.variant_id,
-                        "product": b.lot.variant.product.name,
-                        "variant": b.lot.variant.name,
-                        "quantity": b.quantity,
-                        "reserved": b.reserved,
-                        "available": b.quantity - b.reserved,
-                        "cost_value": b.quantity * b.lot.unit_cost,
-                        "retail_value": b.quantity * b.lot.variant.selling_price,
-                    }
-                    for b in balances
-                ],
-                "recent_movements": [
-                    {
-                        "type": m.movement_type,
-                        "quantity": m.quantity,
-                        "reference": m.reference,
-                        "created_at": m.created_at,
-                    }
-                    for m in movements
-                ],
-            }
-        )
+        show_cost = has_business_permission(request.user, "accounting.view_profit")
+        balances = (shelf.balances.filter(quantity__gt=0)
+                    .select_related("lot__variant__product__category").order_by("lot__received_at"))
+        items = {}
+        for b in balances:
+            variant = b.lot.variant
+            row = items.setdefault(variant.pk, {
+                "variant_id": variant.pk, "product_id": variant.product_id, "product": variant.product.name,
+                "variant": variant.name, "sku": variant.sku, "category": variant.product.category.name,
+                "image": (variant_images(variant) or [{}])[0].get("url"), "selling_price": variant.selling_price,
+                "quantity": 0, "reserved": 0, "retail_value": 0, "cost_value": 0, "batches": 0, "last_received": None})
+            row["quantity"] += b.quantity
+            row["reserved"] += b.reserved
+            row["retail_value"] += b.quantity * variant.selling_price
+            row["cost_value"] += b.quantity * b.lot.unit_cost
+            row["batches"] += 1
+            row["last_received"] = b.lot.received_at
+        rows = sorted(items.values(), key=lambda row: (row["product"].lower(), row["variant"].lower()))
+        for row in rows:
+            row["available"] = row["quantity"] - row["reserved"]
+            if not show_cost:
+                row.pop("cost_value")
+        level = shelf.level
+        stack = level.stack if level else None
+        movements = (Movement.objects.filter(models.Q(source=shelf) | models.Q(destination=shelf))
+                     .select_related("variant__product").order_by("-created_at")[:10])
+        totals = {"items": len(rows), "units": sum((r["quantity"] for r in rows), 0),
+                  "available": sum((r["available"] for r in rows), 0),
+                  "retail_value": sum((r["retail_value"] for r in rows), 0)}
+        if show_cost:
+            totals["cost_value"] = sum((r["cost_value"] for r in rows), 0)
+        return Response({
+            "shelf": ShelfSerializer(shelf).data,
+            "location": {"area": shelf.zone.name, "rack": stack.display_name if stack else None,
+                         "rack_code": stack.code if stack else None, "level": level.level_number if level else None,
+                         "position": shelf.position_in_level,
+                         "categories": [a.category.name for a in stack.category_assignments.select_related("category")]
+                         if stack else []},
+            "totals": totals,
+            "show_cost": show_cost,
+            "items": rows,
+            "recent_movements": [{
+                "type": m.movement_type, "product": f"{m.variant.product.name} — {m.variant.name}",
+                "quantity": m.quantity, "direction": "in" if m.destination_id == shelf.pk else "out",
+                "reference": m.reference, "created_at": m.created_at,
+            } for m in movements],
+        })

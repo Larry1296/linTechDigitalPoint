@@ -1,7 +1,7 @@
 from django.contrib.auth.models import Group, Permission
 from apps.core.models import Store
 
-ROLES = ["Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator", "Ecommerce Customer"]
+ROLES = ["Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator"]
 ROLE_RULES = {
     "Manager": {"catalog", "inventory", "commerce", "accounts", "cyber", "mpesa"},
     "Cashier": {
@@ -46,7 +46,6 @@ ROLE_RULES = {
         "mpesa.view_mpesareconciliation",
         "mpesa.add_mpesareconciliation",
     },
-    "Ecommerce Customer": set(),
 }
 
 

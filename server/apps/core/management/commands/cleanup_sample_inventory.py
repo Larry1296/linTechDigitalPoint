@@ -1,3 +1,4 @@
+from apps.tenancy.commands import LintechCommand
 """Deliberate development-only exception; normal receipt APIs stay immutable."""
 
 from django.core.management.base import BaseCommand, CommandError
@@ -32,7 +33,7 @@ def assert_references(objects, allowed):
                     )
 
 
-class Command(BaseCommand):
+class Command(LintechCommand):
     help = "Preview or explicitly remove only unchanged seed_sample_inventory records."
 
     def add_arguments(self, parser):

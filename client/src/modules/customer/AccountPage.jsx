@@ -1,3 +1,5 @@
+import { businessCurrency } from "../../core/organization/presentation";
+import { label } from "../../core/ui/labels";
 import { ProductImage } from "../storefront/components/ProductImage";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -19,7 +21,7 @@ export function AccountPage() {
               <span className="eyebrow">Continue where you left off</span>
               <h2>Your shopping cart</h2>
             </div>
-            <strong>KSh {cart.total}</strong>
+            <strong>{businessCurrency()} {cart.total}</strong>
           </div>
           <div className="list">
             {cart.items.map((item) => (
@@ -32,7 +34,7 @@ export function AccountPage() {
                   </small>
                 </div>
                 <span>Qty {item.quantity}</span>
-                <strong>KSh {item.line_total}</strong>
+                <strong>{businessCurrency()} {item.line_total}</strong>
               </article>
             ))}
           </div>
@@ -89,9 +91,9 @@ export function OrdersPage() {
           {rows.map((o) => (
             <Link to={"/account/orders/" + o.id} key={o.id}>
               <b>{o.number}</b>
-              <span>{o.status}</span>
+              <span>{label(o.status)}</span>
               <span>{o.items.map((item) => item.display_name).join("; ")}</span>
-              <strong>KSh {o.total}</strong>
+              <strong>{businessCurrency()} {o.total}</strong>
             </Link>
           ))}
         </div>
@@ -115,7 +117,7 @@ export function OrderDetailPage() {
       <span className="eyebrow">Order</span>
       <h1>{row.number}</h1>
       <div className="statusRow">
-        <b>{row.status}</b>
+        <b>{label(row.status)}</b>
         <span>Payment: {row.payment_status}</span>
         <span>Fulfillment: {row.fulfillment_status}</span>
       </div>
@@ -127,11 +129,11 @@ export function OrderDetailPage() {
             <span>
               Qty {i.quantity} · SKU {i.sku}
             </span>
-            <strong>KSh {i.unit_price}</strong>
+            <strong>{businessCurrency()} {i.unit_price}</strong>
           </article>
         ))}
       </div>
-      <h2>Total KSh {row.total}</h2>
+      <h2>Total {businessCurrency()} {row.total}</h2>
       <button type="button" onClick={() => window.print()}>Print order / receipt</button>
     </>
   );

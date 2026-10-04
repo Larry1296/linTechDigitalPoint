@@ -1,3 +1,4 @@
+import { PrivateImage } from "../../../components/PrivateImage";
 import amayaMicroUsbImage from "../../../assets/images/stock/Amaya Normal Charging USB Cable.png";
 
 const amayaMicroUsbSku = "AMAYA-AM-M01-MICRO-B-WHT-1M2";
@@ -14,7 +15,7 @@ export function ProductImage({ product, large = false }) {
   return (
     <div className={`productImage${large ? " large" : ""}`}>
       {image ? (
-        <img
+        <PrivateImage
           src={image.url}
           alt={
             isAmayaMicroUsb

@@ -8,6 +8,8 @@
   --primary: #1d4ed8;
   --on-primary: #ffffff;
   --primary2: #dbeafe;
+  --accent: #93c5fd;
+  --accent-strong: #1d4ed8;
   --chrome: #081d3a;
   --chrome-text: #f8fbff;
   --chrome-muted: #b9d4fa;
@@ -24,12 +26,32 @@
   --primary: #7db5ff;
   --on-primary: #06101f;
   --primary2: #17365f;
+  --accent: #93c5fd;
+  --accent-strong: #93c5fd;
   --chrome: #030d1c;
   --chrome-text: #f4f8ff;
   --chrome-muted: #a8c7f2;
   --chrome-line: #17345b;
   --shadow: 0 16px 40px #0005;
   @apply tw:[color-scheme:dark];
+}
+[data-theme="dark"] .formNoticeError {
+  color: #fecaca;
+  background: #3b1515;
+  border-color: #7f2d2d;
+  border-left-color: #f87171;
+}
+[data-theme="dark"] .formNoticeInfo {
+  color: #bfdbfe;
+  background: #142540;
+  border-color: #2d4f86;
+  border-left-color: #60a5fa;
+}
+[data-theme="dark"] .formNoticeSuccess {
+  color: #bbf7d0;
+  background: #12301d;
+  border-color: #2d6b43;
+  border-left-color: #4ade80;
 }
 [data-theme="dark"] .error,
 [data-theme="dark"] .formError,
@@ -55,11 +77,39 @@
 *::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
+/* The window never moves sideways:
+   - overflow-x: clip: whatever a page contains, it never scrolls sideways ("clip", unlike "hidden",
+     keeps sticky headers and the sidebar working);
+   - overscroll-behavior-x: none: a sideways swipe on a touchpad or a sideways mouse scroll no longer slides
+     the whole page with the browser's back/forward arrow (and can no longer leave the page by accident). */
+html,
+body {
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
 body {
   @apply tw:[margin:0];
   background: var(--bg);
   @apply tw:[color:var(--text)];
   @apply tw:min-w-[0];
+  /* Show the arrow over plain text instead of the browser's text I-beam,
+     and hide the blinking caret a click leaves in static text. */
+  cursor: default;
+  caret-color: transparent;
+}
+a[href],
+button:not(:disabled),
+select:not(:disabled),
+summary,
+label:has(input[type="checkbox"], input[type="radio"]),
+[role="button"] {
+  cursor: pointer;
+}
+input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="range"], [type="color"], [type="file"]),
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+  caret-color: auto;
 }
 a {
   @apply tw:[color:inherit];
@@ -108,7 +158,7 @@ a {
   @apply tw:[margin-left:1px];
   @apply tw:overflow-hidden;
   @apply tw:leading-[0];
-  @apply tw:rounded-[50%];
+  @apply tw:rounded-[14px];
 }
 .brand span {
   @apply tw:block;
@@ -172,14 +222,12 @@ a {
 .appNavbar .brandLogo {
   @apply tw:w-[172px];
   @apply tw:h-[172px];
-  @apply tw:object-cover;
-  @apply tw:rounded-[50%];
-  /* Crop the source image's thin grey top edge inside the brand's clip. */
-  transform: scale(1.03);
+  @apply tw:object-contain;
+  @apply tw:rounded-[14px];
 }
 .brandLogo.compact {
-  @apply tw:w-[142px];
-  @apply tw:h-[88px];
+  @apply tw:w-[112px];
+  @apply tw:h-[112px];
 }
 .navActions {
   @apply tw:flex;
@@ -261,7 +309,7 @@ main {
 .hero {
   @apply tw:min-h-[480px];
   @apply tw:grid;
-  @apply tw:grid-cols-[1.4fr_1fr];
+  @apply tw:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)];
   @apply tw:items-center;
   @apply tw:gap-[60px];
 }
@@ -327,13 +375,15 @@ main {
 .muted {
   @apply tw:[color:var(--muted)];
 }
+/* minmax(0, 1fr): the content column always fits the window; long names or wide controls wrap inside it
+   instead of pushing the whole page (sidebar and footer too) sideways. */
 .admin {
   @apply tw:grid;
-  @apply tw:grid-cols-[240px_1fr];
+  @apply tw:grid-cols-[240px_minmax(0,1fr)];
   @apply tw:min-h-[calc(100vh_-_184px)];
   @apply tw:max-w-[none];
 }
-.admin aside {
+.admin > aside {
   @apply tw:[padding:28px_18px];
   @apply tw:[border-right:1px_solid_var(--chrome-line)];
   background: var(--chrome);
@@ -350,33 +400,34 @@ main {
 .sidebarToggle {
   @apply tw:hidden;
 }
-.admin aside::-webkit-scrollbar {
+.admin > aside::-webkit-scrollbar {
   @apply tw:hidden;
   @apply tw:w-[0];
   @apply tw:h-[0];
 }
-.admin aside nav {
+.admin > aside nav {
   @apply tw:grid;
   @apply tw:gap-[7px];
   @apply tw:[margin:35px_0_0];
   @apply tw:[padding-bottom:28px];
 }
-.admin aside nav a {
+.admin > aside nav a {
   @apply tw:flex;
   @apply tw:gap-[12px];
   @apply tw:[padding:12px];
   @apply tw:rounded-[9px];
   @apply tw:items-center;
 }
-.admin aside nav svg {
+.admin > aside nav svg {
   @apply tw:w-[19px];
 }
-.admin aside nav a.active {
+.admin > aside nav a.active {
   background: #1d4ed8;
   @apply tw:[color:#ffffff];
 }
 .admin main {
   @apply tw:w-[100%];
+  @apply tw:min-w-[0];
   @apply tw:[margin:0];
 }
 .metrics article {
@@ -390,10 +441,11 @@ main {
 .panel {
   @apply tw:[margin-top:18px];
 }
+/* Tabs wrap onto more lines on narrow screens instead of scrolling sideways. */
 .tabs {
   @apply tw:flex;
+  @apply tw:flex-wrap;
   @apply tw:gap-[8px];
-  @apply tw:overflow-auto;
   @apply tw:[margin:20px_0];
 }
 .tabs button {
@@ -459,11 +511,19 @@ main {
 .wallEmpty svg {
   @apply tw:[margin:auto];
 }
+/* Visually hidden but still read by screen readers and usable by labels (e.g. file inputs). */
 .sr {
-  @apply tw:absolute;
-  @apply tw:w-[1px];
-  @apply tw:h-[1px];
-  @apply tw:overflow-hidden;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
 }
 @media (max-width: 1100px) and (min-width: 761px) {
   .appNavbar {
@@ -491,7 +551,7 @@ main {
 }
 @media (max-width: 760px) {
   .dashboardNavbar {
-    @apply tw:grid-cols-[1fr_auto];
+    @apply tw:grid-cols-[minmax(0,1fr)_auto];
   }
   .dashboardNavbar .dashboardTitle {
     @apply tw:[grid-column:1_/_-1];
@@ -506,7 +566,7 @@ main {
     @apply tw:hidden;
   }
   .hero {
-    @apply tw:grid-cols-[1fr];
+    @apply tw:grid-cols-[minmax(0,1fr)];
     @apply tw:[padding-top:45px];
   }
   .heroCard {
@@ -514,12 +574,12 @@ main {
   }
   .cards,
   .metrics {
-    @apply tw:grid-cols-[1fr_1fr];
+    @apply tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)];
   }
   .admin {
     @apply tw:block;
   }
-  .admin aside {
+  .admin > aside {
     @apply tw:[border-right:0];
     @apply tw:[border-bottom:1px_solid_var(--line)];
     @apply tw:h-[auto];
@@ -529,25 +589,25 @@ main {
     @apply tw:static;
     @apply tw:top-[auto];
   }
-  .admin aside > .brand {
+  .admin > aside > .brand {
     @apply tw:hidden;
   }
-  .admin aside nav {
+  .admin > aside nav {
     @apply tw:flex;
     @apply tw:[margin:0];
     @apply tw:[padding:0];
   }
-  .admin aside nav section {
+  .admin > aside nav section {
     @apply tw:flex;
     @apply tw:[margin:0];
   }
-  .admin aside nav section > small {
+  .admin > aside nav section > small {
     @apply tw:hidden;
   }
-  .admin aside nav a {
+  .admin > aside nav a {
     @apply tw:whitespace-nowrap;
   }
-  .admin aside nav svg {
+  .admin > aside nav svg {
     @apply tw:hidden;
   }
   .admin main {
@@ -560,7 +620,7 @@ main {
 @media (max-width: 440px) {
   .cards,
   .metrics {
-    @apply tw:grid-cols-[1fr];
+    @apply tw:grid-cols-[minmax(0,1fr)];
   }
   .theme span {
     @apply tw:hidden;

@@ -1,3 +1,4 @@
+from apps.tenancy.commands import LintechCommand
 """Confirmed Zone A structure; geometry is schematic until measured."""
 
 from django.core.management.base import BaseCommand, CommandError
@@ -8,7 +9,7 @@ from apps.inventory.models import Zone, ShelfStackCategory
 from apps.inventory.services import create_shelf_stack
 
 
-class Command(BaseCommand):
+class Command(LintechCommand):
     help = "Create the confirmed Zone A mobile accessories layout idempotently."
 
     @transaction.atomic

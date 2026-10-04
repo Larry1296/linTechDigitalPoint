@@ -1,19 +1,50 @@
 import { DisplayImageInput } from "./components/DisplayImageInput";
 import { ProductSkuField } from "./components/ProductSkuField";
+import { CategoryOptions, UnrackedHint } from "./categories";
+import { NewCategoryForm } from "./NewCategoryForm";
 import { FormField } from "../../components/forms/FormField";
 import { useEffect, useState } from "react";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { api } from "../../core/api/client";
-export function ProductForm({ zones, onSaved, preferredShelf }) {
+import { FormError } from "../../components/forms/FormNotice";
+import { useAuth } from "../../core/auth/AuthContext";
+// `defaults` come from where the form was opened (e.g. the category being browsed); every field stays editable.
+export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults = {} }) {
+  const { user } = useAuth();
+  // Shops that do not map shelves keep stock without a location, so the placement picker is not shown.
+  const usesShelves = Boolean(user?.organization?.enabled_modules?.includes("locations"));
   const [displayImage, setDisplayImage] = useState(null);
-  const [visible, setVisible] = useState(true);
   const [categories, setCategories] = useState([]);
+  const [categoryId, setCategoryId] = useState(defaults.category || "");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const [brands, setBrands] = useState([]);
   const [productName, setProductName] = useState("");
   const [variantName, setVariantName] = useState("Standard");
-  const [type, setType] = useState("STOCK_ITEM");
-  const [shelf, setShelf] = useState(preferredShelf);
+  const [type, setType] = useState(defaults.product_type || "STOCK_ITEM");
+  const [shelf, setShelf] = useState(preferredShelf ?? (defaults.shelf ? Number(defaults.shelf) : undefined));
   const [error, setError] = useState("");
+  const [brandId, setBrandId] = useState(defaults.brand || "");
+  const [newBrand, setNewBrand] = useState(null);
+  const [brandError, setBrandError] = useState("");
+  // A brand can be added without leaving the form, so nothing typed so far is lost.
+  const addBrand = async () => {
+    setBrandError("");
+    try {
+      const brand = await api("/api/v1/catalog/brands/", { method: "POST", body: JSON.stringify({ name: newBrand }) });
+      setBrands((rows) => [...rows, brand].sort((a, b) => a.name.localeCompare(b.name)));
+      setBrandId(String(brand.id));
+      setNewBrand(null);
+    } catch (e) {
+      setBrandError(e.message);
+    }
+  };
+  // A new category is added from the form itself and chosen straight away, so nothing typed so far is lost.
+  const categoryCreated = async (created) => {
+    setCategories(await api("/api/v1/inventory/categories/available/"));
+    setCategoryId(String(created.id));
+    setAddingCategory(false);
+  };
   useEffect(() => {
     void Promise.all([
       api("/api/v1/inventory/categories/available/"),
@@ -26,10 +57,9 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
   const save = async (e) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    if (visible && !displayImage) { setError("Add a Product display image before making this product visible to customers."); return; }
     data.set("preferred_shelf_id", type === "STOCK_ITEM" && shelf ? shelf : "");
-    data.set("ecommerce_visible", String(visible));
-    data.set("online_orderable", String(data.get("online_orderable") === "on"));
+    data.set("ecommerce_visible", "true");
+    data.set("online_orderable", "true");
     if (displayImage) data.set("display_image", displayImage);
     try {
       await api("/api/v1/catalog/products/create-with-stock/", {
@@ -43,8 +73,9 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
   };
   return (
     <form className="formCard productForm" onSubmit={save}>
+      {onClose && <button type="button" className="pageBackLink" onClick={onClose}>← Back</button>}
       <h2>Add Product</h2>
-      {error && <p className="formError">{error}</p>}
+      {defaults.categoryName && <p className="muted">Filled in for {defaults.categoryName}, from the products already there. Change anything that doesn't fit.</p>}
       <FormField
         label="Product name"
         name="name"
@@ -52,31 +83,45 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         value={productName}
         onChange={(event) => setProductName(event.target.value)}
       />
-      <label>
-        Product category — what kind of item is this?
-        <select name="category_id" required>
-          {categories.map((c) => (
-            <option value={c.id} key={c.id}>
-              {c.name} — available in {c.rack_names?.join(", ")}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="categoryField">
+        <label>
+          Product category — what kind of item is this?
+          <select name="category_id" required value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Choose a category</option>
+            <CategoryOptions categories={categories} />
+          </select>
+        </label>
+        {can("catalog.add_category") && !addingCategory &&
+          <button type="button" className="secondary" onClick={() => setAddingCategory(true)}>New category</button>}
+        {addingCategory && <NewCategoryForm categories={categories} zones={zones} usesShelves={usesShelves}
+          canAssignRack={can("inventory.change_shelfstack")} onCreated={categoryCreated} onCancel={() => setAddingCategory(false)} />}
+      </div>
+      <UnrackedHint categories={categories} />
       <p className="muted">
-        Categories organize products for stock management and the online shop.
+        Categories organize products for stock management and internal lookup.
         Physical storage is selected separately.
       </p>
-      <label>
-        Brand
-        <select name="brand_id">
-          <option value="">No brand</option>
-          {brands.map((b) => (
-            <option value={b.id} key={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="brandField">
+        <label>
+          Brand
+          <select name="brand_id" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+            <option value="">No brand</option>
+            {brands.filter((b) => b.active !== false).map((b) => (
+              <option value={b.id} key={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {newBrand === null
+          ? <button type="button" className="secondary" onClick={() => setNewBrand("")}>New brand</button>
+          : <div className="inlineForm">
+              <label>New brand name<input value={newBrand} onChange={(e) => setNewBrand(e.target.value)} maxLength={120} placeholder="e.g. Oraimo" /></label>
+              <button type="button" disabled={!newBrand.trim()} onClick={() => void addBrand()}>Add brand</button>
+              <button type="button" className="secondary" onClick={() => { setNewBrand(null); setBrandError(""); }}>Cancel</button>
+              <FormError title="Could not add the brand." message={brandError} />
+            </div>}
+      </div>
       <label>
         Description
         <textarea name="description" />
@@ -103,13 +148,12 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
       </label>
       <ProductSkuField
         productName={productName}
+        brandName={brands.find((b) => String(b.id) === String(brandId))?.name || ""}
         variantName={variantName}
-        zones={zones}
-        shelfId={shelf}
         productType={type}
       />
       {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
-      <DisplayImageInput file={displayImage} onChange={setDisplayImage} required={visible} />
+      <DisplayImageInput file={displayImage} onChange={setDisplayImage} />
       <FormField
         label="Selling price"
         name="selling_price"
@@ -118,6 +162,15 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
         step=".01"
         required
       />
+      <FormField
+        label="Lowest price (bargaining guide, optional)"
+        name="minimum_price"
+        type="number"
+        min="0"
+        step=".01"
+        placeholder="e.g. 500 — leave empty for no bargaining"
+      />
+      <small className="muted">A guide for bargaining. Staff can agree any price up to the selling price, even below this one, but never below what the item cost to buy; sales below it are noted for you to review.</small>
       {type === "SERVICE" ? (
         <>
           <FormField
@@ -142,7 +195,7 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
             type="number"
             min="0"
             step=".001"
-            defaultValue="0"
+            defaultValue={defaults.minimum_stock || "0"}
           />
           <FormField
             label="Target stock"
@@ -150,44 +203,42 @@ export function ProductForm({ zones, onSaved, preferredShelf }) {
             type="number"
             min="0"
             step=".001"
-            defaultValue="0"
+            defaultValue={defaults.target_stock || "0"}
           />
         </>
       )}
-      <label>
-        <input name="ecommerce_visible" type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} />{" "}
-        Visible online
-      </label>
-      <label>
-        <input name="online_orderable" type="checkbox" defaultChecked /> Can be
-        purchased through online checkout
-      </label>
       {type === "STOCK_ITEM" && (
         <>
-          <PhysicalLocationPicker
+          {usesShelves && <PhysicalLocationPicker
             zones={zones}
             value={shelf}
             onChange={setShelf}
-          />
-          <FormField
-            label="Opening buying price"
-            name="opening_unit_cost"
-            type="number"
-            min="0"
-            step=".01"
-            defaultValue="0"
-          />
-          <FormField
-            label="Opening quantity"
-            name="opening_quantity"
-            type="number"
-            min="0"
-            step=".001"
-            defaultValue="0"
-          />
+          />}
+          <fieldset className="openingStock">
+            <legend>Stock you have now (optional)</legend>
+            <p className="muted">Items already in your shop. They are added as stock you own, not as a new purchase, so nothing is recorded as money spent or owed to a supplier.</p>
+            <FormField
+              label="Quantity you have now"
+              name="opening_quantity"
+              type="number"
+              min="0"
+              step=".001"
+              defaultValue="0"
+            />
+            <FormField
+              label="Buying price per item"
+              name="opening_unit_cost"
+              type="number"
+              min="0"
+              step=".01"
+              defaultValue="0"
+            />
+            <small className="muted">What you paid for one. If you do not know it, leave 0: the stock is marked cost pending and you can add the price later.</small>
+          </fieldset>
         </>
       )}
       <button>Create Product</button>
+      <FormError title="Could not create the product." message={error} />
     </form>
   );
 }

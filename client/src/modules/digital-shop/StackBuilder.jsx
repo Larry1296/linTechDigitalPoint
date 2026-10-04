@@ -1,63 +1,79 @@
 import { useEffect, useMemo, useState } from "react";
-import { createStack, createZone } from "./api";
+import { createStack } from "./api";
 import { api } from "../../core/api/client";
 import { StackPreview } from "./StackPreview";
-export function StackBuilder({ zones, onCreated, onCancel }) {
+import { FormError } from "../../components/forms/FormNotice";
+// Adds a rack to an existing area. Areas themselves are created only from Shop areas.
+export function StackBuilder({ zones, initialZone, onCreated, onCancel }) {
   const [step, setStep] = useState(1);
-  const [zone, setZone] = useState(zones[0]?.id || 0);
-  const [newArea, setNewArea] = useState(zones.length === 0);
-  const [areaName, setAreaName] = useState("");
-  const [areaWidth, setAreaWidth] = useState(20);
-  const [areaHeight, setAreaHeight] = useState(10);
+  const [zone, setZone] = useState(initialZone || zones[0]?.id || 0);
   const [name, setName] = useState("");
-  const [width, setWidth] = useState(6);
-  const [height, setHeight] = useState(7);
-  const [depth, setDepth] = useState(1.5);
-  const [x, setX] = useState(0);
-  const [y, setY] = useState(0);
-  const [rotation, setRotation] = useState(0);
-  const [count, setCount] = useState(4);
-  const [compartments, setCompartments] = useState([2, 2, 3, 3]);
+  // Boxes hold exactly what was typed (an empty box stays empty); numbers are read only when checking and saving.
+  const [width, setWidth] = useState("6");
+  const [height, setHeight] = useState("7");
+  const [depth, setDepth] = useState("1.5");
+  const [x, setX] = useState("0");
+  const [y, setY] = useState("0");
+  const [rotation, setRotation] = useState("0");
+  const [count, setCount] = useState("4");
+  const [compartments, setCompartments] = useState(["2", "2", "3", "3"]);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState([]);
   const [categoryIds, setCategoryIds] = useState([]);
   useEffect(() => { void api("/api/v1/catalog/categories/").then(setCategories).catch((err) => setError(err.message)); }, []);
+  const levelCount = /^\d+$/.test(count.trim()) ? Math.min(Number(count), 20) : 0;
   const levels = useMemo(
     () =>
-      Array.from({ length: count }, (_, index) => ({
-        compartments: compartments[index] || 1,
+      Array.from({ length: levelCount }, (_, index) => ({
+        compartments: Number(compartments[index] ?? 1),
       })),
-    [count, compartments],
+    [levelCount, compartments],
   );
+  const number = (value) => (String(value).trim() === "" ? NaN : Number(value));
+  const problem = () => {
+    if (step === 2) {
+      for (const [label, value] of [["Width", width], ["Height", height], ["Depth", depth]])
+        if (!(number(value) > 0)) return `Enter the ${label.toLowerCase()} in feet (more than 0).`;
+      for (const [label, value] of [["X position", x], ["Y position", y]])
+        if (!(number(value) >= 0)) return `Enter the ${label} (0 or more).`;
+      if (!Number.isFinite(number(rotation))) return "Enter the orientation in degrees (0 if the rack faces straight).";
+    }
+    if (step === 3) {
+      if (!/^\d+$/.test(count.trim()) || Number(count) < 1 || Number(count) > 20) return "Enter how many levels the rack has (1 to 20).";
+      const missing = levels.findIndex((_, index) => !/^\d+$/.test(String(compartments[index] ?? "1").trim()) || Number(compartments[index] ?? 1) < 1);
+      if (missing >= 0) return `Enter how many compartments level ${missing + 1} has (1 or more).`;
+    }
+    return "";
+  };
+  const next = () => {
+    const reason = problem();
+    if (reason) { setError(reason); return; }
+    setError("");
+    setStep(step + 1);
+  };
   const save = async () => {
     try {
-      const selectedZone = newArea
-        ? await createZone({
-            name: areaName,
-            width: areaWidth,
-            height: areaHeight,
-          })
-        : undefined;
       await createStack({
-        zone: selectedZone?.id || zone,
+        zone,
         display_name: name,
-        width,
-        height,
-        depth,
-        x,
-        y,
-        rotation,
+        width: Number(width),
+        height: Number(height),
+        depth: Number(depth),
+        x: Number(x),
+        y: Number(y),
+        rotation: Number(rotation),
         levels,
         category_ids: categoryIds,
         primary_category_id: categoryIds[0],
       });
-      onCreated(selectedZone?.id || zone);
+      onCreated(zone);
     } catch (err) {
       setError(err.message);
     }
   };
   return (
     <section className="wizard">
+      <h1>Add a rack</h1>
       <div className="wizardSteps">
         {["Location", "Dimensions", "Levels", "Preview"].map((label, index) => (
           <span className={step === index + 1 ? "active" : ""} key={label}>
@@ -65,66 +81,22 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
           </span>
         ))}
       </div>
-      {error && <p className="formError">{error}</p>}
       {step === 1 && (
         <div className="formCard">
-          <h2>Where does this stack stand?</h2>
+          <h2>Where does this rack stand?</h2>
           <label>
             Shop area
-            <select
-              value={newArea ? "new" : zone}
-              onChange={(e) => {
-                setNewArea(e.target.value === "new");
-                if (e.target.value !== "new") setZone(+e.target.value);
-              }}
-            >
+            <select value={zone} onChange={(e) => setZone(+e.target.value)}>
               {zones.map((z) => (
                 <option value={z.id} key={z.id}>
                   {z.name}
                 </option>
               ))}
-              <option value="new">+ Define another area</option>
             </select>
           </label>
-          {newArea && (
-            <>
-              <label>
-                Area name
-                <input
-                  value={areaName}
-                  onChange={(e) => setAreaName(e.target.value)}
-                  placeholder="Front window, Centre aisle, Upstairs…"
-                  required
-                />
-              </label>
-              <div className="formGrid">
-                <label>
-                  Area width (ft)
-                  <input
-                    type="number"
-                    min="1"
-                    value={areaWidth}
-                    onChange={(e) => setAreaWidth(+e.target.value)}
-                  />
-                </label>
-                <label>
-                  Area height (ft)
-                  <input
-                    type="number"
-                    min="1"
-                    value={areaHeight}
-                    onChange={(e) => setAreaHeight(+e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="muted">
-                Use any name and real dimensions that match this shop. Areas are
-                never limited to walls or counters.
-              </p>
-            </>
-          )}
+          <p className="muted">Area not listed? Click Cancel, then use “Add another area” under Shop areas. Once it is added, select its tab and click “Add rack to” that area.</p>
           <label>
-            Stack name
+            Rack name
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -158,7 +130,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
                 type="number"
                 min="1"
                 value={width}
-                onChange={(e) => setWidth(+e.target.value)}
+                onChange={(e) => setWidth(e.target.value)}
               />
             </label>
             <label>
@@ -167,7 +139,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
                 type="number"
                 min="1"
                 value={height}
-                onChange={(e) => setHeight(+e.target.value)}
+                onChange={(e) => setHeight(e.target.value)}
               />
             </label>
             <label>
@@ -176,7 +148,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
                 type="number"
                 min="1"
                 value={depth}
-                onChange={(e) => setDepth(+e.target.value)}
+                onChange={(e) => setDepth(e.target.value)}
               />
             </label>
             <label>
@@ -185,7 +157,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
                 type="number"
                 min="0"
                 value={x}
-                onChange={(e) => setX(+e.target.value)}
+                onChange={(e) => setX(e.target.value)}
               />
             </label>
             <label>
@@ -194,7 +166,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
                 type="number"
                 min="0"
                 value={y}
-                onChange={(e) => setY(+e.target.value)}
+                onChange={(e) => setY(e.target.value)}
               />
             </label>
             <label>
@@ -202,7 +174,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
               <input
                 type="number"
                 value={rotation}
-                onChange={(e) => setRotation(+e.target.value)}
+                onChange={(e) => setRotation(e.target.value)}
               />
             </label>
           </div>
@@ -218,7 +190,7 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
               min="1"
               max="20"
               value={count}
-              onChange={(e) => setCount(+e.target.value)}
+              onChange={(e) => setCount(e.target.value)}
             />
           </label>
           {levels.map((level, index) => (
@@ -227,12 +199,13 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
               <input
                 type="number"
                 min="1"
-                value={level.compartments}
+                value={compartments[index] ?? "1"}
                 onChange={(e) =>
                   setCompartments((old) => {
-                    const next = [...old];
-                    next[index] = +e.target.value;
-                    return next;
+                    const updated = [...old];
+                    while (updated.length < index) updated.push("1");
+                    updated[index] = e.target.value;
+                    return updated;
                   })
                 }
               />
@@ -245,9 +218,9 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
           <h2>Confirm the physical structure</h2>
           <StackPreview
             name={name}
-            width={width}
-            height={height}
-            depth={depth}
+            width={Number(width)}
+            height={Number(height)}
+            depth={Number(depth)}
             levels={levels}
           />
         </>
@@ -256,21 +229,22 @@ export function StackBuilder({ zones, onCreated, onCancel }) {
         <button
           type="button"
           className="secondary"
-          onClick={step === 1 ? onCancel : () => setStep(step - 1)}
+          onClick={step === 1 ? onCancel : () => { setError(""); setStep(step - 1); }}
         >
           {step === 1 ? "Cancel" : "Back"}
         </button>
         {step < 4 ? (
           <button
-            disabled={step === 1 && (!name || (newArea ? !areaName : !zone))}
-            onClick={() => setStep(step + 1)}
+            disabled={step === 1 && (!name || !zone)}
+            onClick={next}
           >
             Continue
           </button>
         ) : (
-          <button onClick={() => void save()}>Create Shelf Stack</button>
+          <button onClick={() => void save()}>Create rack</button>
         )}
       </div>
+      <FormError title={step < 4 ? "Before you continue" : "Could not create the rack."} message={error} />
     </section>
   );
 }

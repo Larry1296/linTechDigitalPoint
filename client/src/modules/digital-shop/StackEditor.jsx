@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { removeStack, updateStack } from "./api";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
+import { FormError } from "../../components/forms/FormNotice";
 export function StackEditor({ stack, zones, onClose, onChanged }) {
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState(
@@ -13,12 +14,12 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
   useEffect(() => {
     void api("/api/v1/catalog/categories/")
       .then(setCategories)
-      .catch((reason) => setError(reason.message));
+      .catch((reason) => setError({ place: "save", title: "Could not load product categories.", message: reason.message }));
   }, []);
   const save = async (event) => {
     event.preventDefault();
     setSaving(true);
-    setError("");
+    setError(null);
     const values = Object.fromEntries(new FormData(event.currentTarget));
     values.category_ids = selectedCategories;
     values.primary_category_id = selectedCategories[0] || "";
@@ -26,7 +27,7 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
       await updateStack(stack.id, values);
       onChanged(Number(values.zone));
     } catch (reason) {
-      setError(reason.message);
+      setError({ place: "save", title: "Could not save the rack.", message: reason.message });
       setSaving(false);
     }
   };
@@ -40,42 +41,42 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
     )
       return;
     setSaving(true);
-    setError("");
+    setError(null);
     try {
       await removeStack(stack.id);
       onChanged();
     } catch (reason) {
-      setError(reason.message);
+      setError({ place: "remove", title: "Could not remove the rack.", message: reason.message });
       setSaving(false);
     }
   };
   return (
     <div className="shelfOverlay" role="presentation" onMouseDown={onClose}>
-      <aside
+      <div
         className="shelfPanel"
         role="dialog"
         aria-modal="true"
-        aria-label="Move or edit shelf rack"
+        aria-label={`Edit rack ${stack.display_name}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="shelfPanelHeader">
           <div>
-            <span className="eyebrow">Shelf rack</span>
-            <strong>{stack.code}</strong>
+            <span className="eyebrow">Edit rack · {stack.code}</span>
+            <h2>{stack.display_name}</h2>
           </div>
           <button
+            type="button"
             className="shelfClose"
             onClick={onClose}
             aria-label="Close rack editor"
           >
-            × <span>Close</span>
+            ×
           </button>
         </div>
         <p className="muted">
           The permanent rack and shelf codes stay unchanged when this rack
           moves.
         </p>
-        {error && <p className="formError">{error}</p>}
         <form className="formCard" onSubmit={save}>
           <FormField
             label="Rack name"
@@ -207,6 +208,7 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
           <button disabled={saving}>
             {saving ? "Saving…" : "Save rack position"}
           </button>
+          {error?.place === "save" && <FormError title={error.title} message={error.message} />}
         </form>
         <section className="dangerZone">
           <h3>Remove rack</h3>
@@ -221,8 +223,9 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
           >
             Remove empty rack
           </button>
+          {error?.place === "remove" && <FormError title={error.title} message={error.message} />}
         </section>
-      </aside>
+      </div>
     </div>
   );
 }

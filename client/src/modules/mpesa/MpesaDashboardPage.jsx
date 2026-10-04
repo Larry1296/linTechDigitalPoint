@@ -1,8 +1,14 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { FormField } from "../../components/forms/FormField";
+import { FormError } from "../../components/forms/FormNotice";
 import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
+import { useAuth } from "../../core/auth/AuthContext";
 import {
+  createMpesaOutlet,
+  deleteMpesaOutlet,
+  updateMpesaOutlet,
   getMpesaDashboard,
   getMpesaOutlets,
   getMpesaTransactions,
@@ -12,13 +18,177 @@ import {
   reverseMpesaTransaction,
 } from "./api";
 import { MpesaDepositForm } from "./MpesaDepositForm";
+import { CustomerTransactionList } from "./CustomerTransactionList";
+import { CorrectTransaction } from "./CorrectTransaction";
+import { MonthlyReport } from "./MonthlyReport";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
-import { confirmAction } from "../../core/ui/alerts";
+import { askForm, confirmAction, showError } from "../../core/ui/alerts";
+import { businessDate, useNewBusinessDay } from "./businessDay";
+import { CashCounter, countPayload, countTotal, emptyCount } from "./CashCounter";
+import { useLiveRefresh } from "../../core/data/liveRefresh";
+
+const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Money in shows as +, money out as −, no change as —.
+const signedFigure = (value) => (Number(value) > 0 ? `+${figure(value)}` : Number(value) < 0 ? `−${figure(-Number(value))}` : "—");
+const amount = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
+
+// The outlet's name and the numbers M-Pesa gave it; used both to add and to edit.
+function OutletForm({ outlet, onSave, onCancel }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      await onSave({ display_name: values.get("display_name"), agent_reference: values.get("agent_reference"), store_number: values.get("store_number") });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="formCard shiftForm" onSubmit={(event) => void submit(event)}>
+      <h3>{outlet ? `Edit ${outlet.display_name}` : "Add an M-Pesa outlet"}</h3>
+      {!outlet && <p>An outlet is the M-Pesa agent till you serve customers from.</p>}
+      <fieldset disabled={busy}>
+        <FormField label="Outlet name" name="display_name" required maxLength={160} defaultValue={outlet?.display_name} />
+        <FormField label="Agent number" name="agent_reference" maxLength={80} defaultValue={outlet?.agent_reference} />
+        <FormField label="Store number" name="store_number" maxLength={80} defaultValue={outlet?.store_number} />
+        <div className="actionRow">
+          <button>Save outlet</button>
+          <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+        </div>
+      </fieldset>
+      <FormError title="Could not save the outlet." message={error} />
+    </form>
+  );
+}
+
+// Every outlet with its numbers and the money in operation last recorded. Each day except Sunday needs a
+// fresh figure (a shift opened or closed that day); until then the figures show in red as due.
+function OutletCards({ outlets, canChange, canDelete, onChanged }) {
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState("");
+  const run = async (action) => {
+    setError("");
+    try {
+      await action();
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  const toggle = (outlet) => run(async () => {
+    if (!(await confirmAction({ title: `${outlet.active ? "Deactivate" : "Reactivate"} ${outlet.display_name}?`,
+      text: outlet.active ? "No new shifts can be opened on it. Its history is kept." : "Shifts can be opened on it again.",
+      confirmButtonText: outlet.active ? "Deactivate" : "Reactivate" }))) return;
+    await updateMpesaOutlet(outlet.id, { active: !outlet.active });
+  });
+  const remove = (outlet) => run(async () => {
+    if (!(await confirmAction({ title: `Delete ${outlet.display_name}?`, text: "Only an outlet that has never had a shift can be deleted.",
+      confirmButtonText: "Delete outlet" }))) return;
+    await deleteMpesaOutlet(outlet.id);
+  });
+  if (!outlets.length) return null;
+  return (
+    <>
+      <FormError title="Could not change the outlet." message={error} />
+      <ul className="outletCards">
+        {outlets.map((outlet) => {
+          const money = outlet.money_in_operation;
+          if (editing === outlet.id) return <li key={outlet.id}>
+            <OutletForm outlet={outlet} onCancel={() => setEditing(null)}
+              onSave={async (body) => { await updateMpesaOutlet(outlet.id, body); setEditing(null); await onChanged(); }} />
+          </li>;
+          return (
+            <li key={outlet.id} className={money.due && outlet.active ? "outletCard due" : "outletCard"}>
+              <h3>{outlet.display_name}{!outlet.active && <small className="muted"> · inactive</small>}</h3>
+              <dl>
+                <div><dt>Agent number</dt><dd>{outlet.agent_reference || "—"}</dd></div>
+                <div><dt>Store number</dt><dd>{outlet.store_number || "—"}</dd></div>
+                <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
+                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
+                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
+              </dl>
+              {money.due && outlet.active
+                ? <p className="outletDue" role="status">Update due: today's cash and float are not recorded yet{money.updated_on ? ` (last recorded ${money.updated_on})` : ""}. Open or close a shift to record them.</p>
+                : money.updated_on && <p className="muted">Recorded {money.updated_on}</p>}
+              {(canChange || canDelete) && <div className="actionRow">
+                {canChange && <button type="button" className="secondary" onClick={() => setEditing(outlet.id)}>Edit</button>}
+                {canChange && <button type="button" className="secondary" onClick={() => void toggle(outlet)}>{outlet.active ? "Deactivate" : "Reactivate"}</button>}
+                {canDelete && <button type="button" className="danger" onClick={() => void remove(outlet)}>Delete</button>}
+              </div>}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+// Closing: count the drawer, enter the float from the M-Pesa line, and compare the full amount with the opening.
+function CloseShift({ dashboard, onClose, onCancel }) {
+  const [count, setCount] = useState(emptyCount);
+  const [float, setFloat] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const cash = countTotal(count);
+  const cashVariance = cash - Number(dashboard.cash);
+  const floatVariance = (Number(float) || 0) - Number(dashboard.float);
+  const total = cash + (Number(float) || 0);
+  const opening = Number(dashboard.in_operation.opening);
+  const variance = Math.abs(cashVariance) >= 0.005 || (float !== "" && Math.abs(floatVariance) >= 0.005);
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onClose({ actual_cash: cash.toFixed(2), actual_float: float, cash_count: countPayload(count), reason });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="formCard shiftForm" onSubmit={(event) => void submit(event)}>
+      <h2>Close & reconcile shift</h2>
+      <fieldset disabled={busy}>
+        <CashCounter count={count} onChange={setCount} legend="Count the cash in the drawer" />
+        <FormField label="Float on the M-Pesa line" name="actual_float" type="number" min="0" step="0.01" required
+          value={float} onChange={(event) => setFloat(event.target.value)} />
+        <dl className="reportPosition">
+          <div><dt>Cash: counted vs expected</dt><dd>{amount(cash)} vs {amount(dashboard.cash)}{Math.abs(cashVariance) >= 0.005 && ` (${cashVariance > 0 ? "+" : ""}${cashVariance.toLocaleString()})`}</dd></div>
+          <div><dt>Float: entered vs expected</dt><dd>{amount(float)} vs {amount(dashboard.float)}{float !== "" && Math.abs(floatVariance) >= 0.005 && ` (${floatVariance > 0 ? "+" : ""}${floatVariance.toLocaleString()})`}</dd></div>
+          <div><dt>Money in operation now vs at opening</dt><dd><strong>{amount(total)}</strong> vs {amount(opening)} ({total - opening >= 0 ? "+" : ""}{(total - opening).toLocaleString()})</dd></div>
+        </dl>
+        {variance && <FormField label="Why is there a difference? (required)" name="reason" required value={reason}
+          onChange={(event) => setReason(event.target.value)} />}
+        <div className="actionRow">
+          <button>Close shift</button>
+          <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+        </div>
+      </fieldset>
+      <FormError title="Could not close the shift." message={error} />
+    </form>
+  );
+}
 export function MpesaDashboardPage() {
+  const { user } = useAuth();
+  // A new business day starts at 00:00: reload everything so today's lists, balances and warnings start fresh.
+  useNewBusinessDay(() => window.location.reload());
+  const canAddOutlet = Boolean(user?.permissions?.includes("mpesa.add_mpesaoutlet"));
+  const canChangeOutlet = Boolean(user?.permissions?.includes("mpesa.change_mpesaoutlet"));
+  const canDeleteOutlet = Boolean(user?.permissions?.includes("mpesa.delete_mpesaoutlet"));
+  const [addingOutlet, setAddingOutlet] = useState(false);
   const [dashboard, setDashboard] = useState();
   const [outlets, setOutlets] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState("");
+  const [openingCount, setOpeningCount] = useState(emptyCount);
+  const [closing, setClosing] = useState(false);
   const load = async () => {
     try {
       const [summary, outletRows, entries] = await Promise.all([
@@ -37,8 +207,20 @@ export function MpesaDashboardPage() {
   useEffect(() => {
     void load();
   }, []);
+  // Other staff record on the same desk: refresh after changes, on return to the tab, and every 20 seconds.
+  useLiveRefresh(load, { pollMs: 20000 });
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
+  // Only the open shift's transactions are shown; closing it starts the desk afresh. Closed shifts stay on record.
+  // A reversed transaction and its reversal cancel out, so neither is listed (both stay on record and in the monthly report).
+  const reversedIds = new Set(transactions.filter((entry) => entry.reversal_of).map((entry) => entry.reversal_of));
+  const shiftTransactions = dashboard.session ? transactions.filter((entry) => entry.session === dashboard.session.id
+    && entry.transaction_type !== "REVERSAL" && !reversedIds.has(entry.id)) : [];
+  const addOutlet = async (body) => {
+    await createMpesaOutlet(body);
+    setAddingOutlet(false);
+    await load();
+  };
   const open = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -50,92 +232,92 @@ export function MpesaDashboardPage() {
       }))
     )
       return;
-    await openMpesaSession({
-      outlet: form.get("outlet"),
-      opening_cash: form.get("opening_cash"),
-      opening_float: form.get("opening_float"),
-    });
+    try {
+      await openMpesaSession({
+        outlet: form.get("outlet"),
+        opening_cash: countTotal(openingCount).toFixed(2),
+        opening_float: form.get("opening_float"),
+        cash_count: countPayload(openingCount),
+      });
+    } catch (err) {
+      await showError("Could not open the shift.", err.message);
+      return;
+    }
+    setOpeningCount(emptyCount());
     await load();
   };
   const rebalance = async (type) => {
     if (!dashboard.session) return;
-    if (
-      !(await confirmAction({
-        title:
-          type === "FLOAT_TOPUP"
-            ? "Record float top-up?"
-            : "Record cash rebalance?",
-        text: "This will immediately change the agency ledger balances.",
-        confirmButtonText: "Record transaction",
-      }))
-    )
-      return;
-    const value = window.prompt(
-      type === "FLOAT_TOPUP"
-        ? "Float top-up amount"
-        : "Cash received during rebalance",
-    );
-    if (!value) return;
-    await postMpesaTransaction({
-      session: dashboard.session.id,
-      transaction_type: type,
-      amount: value,
-      provider_reference: window.prompt("Reference") || undefined,
-      notes: window.prompt("Source / notes") || "",
-      idempotency_key: crypto.randomUUID(),
+    const topUp = type === "FLOAT_TOPUP";
+    const values = await askForm({
+      title: topUp ? "Record float top-up" : "Record cash rebalance",
+      text: topUp
+        ? "Cash from the agency drawer used to buy electronic float. Cash goes down and float goes up by the same amount."
+        : "Cash brought into the agency drawer from outside (for example from the bank or the owner).",
+      confirmButtonText: "Record transaction",
+      fields: [
+        { name: "amount", label: topUp ? "Float bought" : "Cash received", type: "number", required: true },
+        { name: "reference", label: "Reference, e.g. the M-Pesa code" },
+        { name: "notes", label: "Source or notes", placeholder: topUp ? "e.g. bought from the bank agent" : "e.g. from the owner" },
+      ],
     });
+    if (!values) return;
+    try {
+      await postMpesaTransaction({
+        session: dashboard.session.id,
+        transaction_type: type,
+        amount: values.amount,
+        provider_reference: values.reference || undefined,
+        notes: values.notes,
+        idempotency_key: crypto.randomUUID(),
+      });
+    } catch (err) {
+      await showError(topUp ? "Could not record the float top-up." : "Could not record the cash rebalance.", err.message);
+      return;
+    }
     await load();
   };
-  const close = async () => {
-    if (!dashboard.session) return;
-    if (
-      !(await confirmAction({
-        title: "Close and reconcile this shift?",
-        text: "The counted cash and float will be recorded as closing balances.",
-        confirmButtonText: "Close shift",
-      }))
-    )
-      return;
-    const actualCash = window.prompt("Actual cash counted", dashboard.cash);
-    const actualFloat = window.prompt(
-      "Actual electronic float",
-      dashboard.float,
-    );
-    if (actualCash === null || actualFloat === null) return;
-    const reason =
-      +actualCash !== +dashboard.cash || +actualFloat !== +dashboard.float
-        ? window.prompt("Variance reason (required)", "")
-        : "";
-    await reconcileMpesaSession(dashboard.session.id, {
-      actual_cash: actualCash,
-      actual_float: actualFloat,
-      reason,
-    });
+  const close = async (body) => {
+    await reconcileMpesaSession(dashboard.session.id, body);
+    setClosing(false);
     await load();
   };
   return (
     <>
-      <span className="eyebrow">Separate agency ledger</span>
+      <span className="eyebrow">Agent money (kept separate from the shop)</span>
       <h1>M-Pesa Agent</h1>
       <p className="privacyNotice">
         Agency deposits and withdrawals move cash and electronic float. Their
         principal is never sales revenue.
       </p>
       <div className="metrics">
-        <MetricCard label="Current cash">KSh {dashboard.cash}</MetricCard>
-        <MetricCard label="Current float">KSh {dashboard.float}</MetricCard>
+        <MetricCard label="Money in operation">
+          {amount(dashboard.in_operation.total)}
+          {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
+        </MetricCard>
+        <MetricCard label="Current cash">{businessCurrency()} {dashboard.cash}</MetricCard>
+        <MetricCard label="Current float">{businessCurrency()} {dashboard.float}</MetricCard>
         <MetricCard label="Today's deposits">
-          KSh {dashboard.deposits}
+          {businessCurrency()} {dashboard.deposits}
         </MetricCard>
         <MetricCard label="Today's withdrawals">
-          KSh {dashboard.withdrawals}
+          {businessCurrency()} {dashboard.withdrawals}
         </MetricCard>
         <MetricCard label="Transactions">
           {dashboard.transaction_count}
         </MetricCard>
-        <MetricCard label="Commission">KSh {dashboard.commission}</MetricCard>
       </div>
+      <MonthlyReport />
+      <section className="outletSection" aria-labelledby="outlets-heading">
+        <div className="sectionHeading">
+          <h2 id="outlets-heading">Outlets</h2>
+          {canAddOutlet && !addingOutlet && <button type="button" className="secondary" onClick={() => setAddingOutlet(true)}>Add outlet</button>}
+        </div>
+        <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} onChanged={load} />
+        {canAddOutlet && addingOutlet && <OutletForm onSave={addOutlet} onCancel={() => setAddingOutlet(false)} />}
+      </section>
       {!dashboard.session ? (
+        <>
         <form
           className="formCard shiftForm"
           onSubmit={(event) => void open(event)}
@@ -143,8 +325,9 @@ export function MpesaDashboardPage() {
           <h2>Open M-Pesa shift</h2>
           {!outlets.length && (
             <p>
-              No active outlet exists. Ask the Owner to configure one in Django
-              Admin.
+              {canAddOutlet
+                ? "Add your M-Pesa agent outlet (Add outlet, above) before opening a shift."
+                : "No active outlet exists. Ask the business owner to add one on this page."}
             </p>
           )}
           <label>
@@ -159,14 +342,7 @@ export function MpesaDashboardPage() {
                 ))}
             </select>
           </label>
-          <FormField
-            label="Opening cash"
-            name="opening_cash"
-            type="number"
-            min="0"
-            step="0.01"
-            required
-          />
+          <CashCounter count={openingCount} onChange={setOpeningCount} legend="Opening cash: count the drawer" />
           <FormField
             label="Opening float"
             name="opening_float"
@@ -177,8 +353,16 @@ export function MpesaDashboardPage() {
           />
           <button disabled={!outlets.length}>Open shift</button>
         </form>
+        </>
       ) : (
         <>
+          {businessDate(dashboard.session.opened_at) !== businessDate() && !closing && (
+            <div className="subscriptionBanner warn staleShift" role="alert">
+              <span>This shift was opened on {businessDate(dashboard.session.opened_at)} and is still open. Count the cash and
+                float and close it; today's shift can be opened straight after.</span>
+              <button type="button" onClick={() => setClosing(true)}>Close previous shift</button>
+            </div>
+          )}
           <div className="deskActions">
             <button onClick={() => void rebalance("FLOAT_TOPUP")}>
               Float top-up
@@ -186,29 +370,35 @@ export function MpesaDashboardPage() {
             <button onClick={() => void rebalance("CASH_REBALANCE")}>
               Cash rebalance
             </button>
-            <button className="secondary" onClick={() => void close()}>
+            <button className="secondary" onClick={() => setClosing(true)}>
               Close & reconcile shift
             </button>
           </div>
-          <div className="deskGrid">
+          {closing && <CloseShift dashboard={dashboard} onClose={close} onCancel={() => setClosing(false)} />}
+          <div className="deskGrid mpesaDesk">
             <MpesaDepositForm
               sessionId={dashboard.session.id}
+              availableCash={dashboard.cash}
+              availableFloat={dashboard.float}
               onPosted={load}
             />
             <MpesaWithdrawalForm
               sessionId={dashboard.session.id}
               availableCash={dashboard.cash}
+              availableFloat={dashboard.float}
               onPosted={load}
             />
           </div>
         </>
       )}
+      <CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" transactions={shiftTransactions} onChanged={load} />
+      <CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" transactions={shiftTransactions} onChanged={load} />
       <section>
-        <h2>Agency transactions</h2>
-        {!transactions.length ? (
-          <Empty>No M-Pesa agency transactions.</Empty>
+        <h2>Agency transactions this shift</h2>
+        {!shiftTransactions.length ? (
+          <Empty>{dashboard.session ? "No transactions in this shift yet." : "No shift open. Open a shift to start recording."}</Empty>
         ) : (
-          <div className="table ledgerTable">
+          <div className="table ledgerTable agencyLedger">
             <div>
               <b>Reference</b>
               <b>Type</b>
@@ -217,32 +407,36 @@ export function MpesaDashboardPage() {
               <b>Float effect</b>
               <b>Action</b>
             </div>
-            {transactions.slice(0, 30).map((entry) => (
+            {shiftTransactions.map((entry) => (
               <div key={entry.id}>
                 <span>
                   {entry.provider_reference || entry.internal_reference}
                 </span>
                 <span>{entry.transaction_type.replaceAll("_", " ")}</span>
-                <span>KSh {entry.amount}</span>
-                <span>{entry.cash_delta}</span>
-                <span>{entry.float_delta}</span>
-                <span>
-                  {entry.transaction_type !== "REVERSAL" &&
+                <span>{businessCurrency()} {figure(entry.amount)}</span>
+                <span>{signedFigure(entry.cash_delta)}</span>
+                <span>{signedFigure(entry.float_delta)}</span>
+                <span className="agencyActions">
+                  {user?.permissions?.includes("mpesa.reverse_mpesa_transaction") && <CorrectTransaction entry={entry} onDone={load} />}
+                  {/* Money moved to or from an investment is undone on the Investments page, which fixes both sides. */}
+                  {!["REVERSAL", "INVESTMENT"].includes(entry.transaction_type) &&
                     !entry.reversal_of && (
                       <button
                         className="danger"
                         onClick={async () => {
-                          const reason = window.prompt("Reversal reason");
-                          if (!reason) return;
-                          if (
-                            !(await confirmAction({
-                              title: "Reverse this M-Pesa transaction?",
-                              text: "This creates a reversal entry in the agency ledger.",
-                              confirmButtonText: "Reverse transaction",
-                            }))
-                          )
+                          const values = await askForm({
+                            title: "Cancel this M-Pesa transaction?",
+                            text: "This cancels it and puts the cash and float back. The original stays in the history.",
+                            confirmButtonText: "Cancel transaction",
+                            fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. entered twice" }],
+                          });
+                          if (!values) return;
+                          try {
+                            await reverseMpesaTransaction(entry.id, values.reason);
+                          } catch (err) {
+                            await showError("Could not reverse the transaction.", err.message);
                             return;
-                          await reverseMpesaTransaction(entry.id, reason);
+                          }
                           await load();
                         }}
                       >

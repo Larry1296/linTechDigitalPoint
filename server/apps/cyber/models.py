@@ -1,3 +1,4 @@
+from apps.tenancy.base import TenantModel
 from decimal import Decimal
 
 from django.conf import settings
@@ -21,9 +22,14 @@ class CyberServiceProfile(TimeStamped):
     publicly_advertised = models.BooleanField(default=True)
     online_orderable = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
+    # A price option whose amount differs every time (e.g. "Other online service"): staff type the amount received.
+    price_varies = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.variant} ({self.get_billing_unit_display()})"
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 
 
 class ServiceMaterialRequirement(TimeStamped):
@@ -45,14 +51,17 @@ class ServiceMaterialRequirement(TimeStamped):
                 condition=Q(quantity_per_service_unit__gt=0), name="positive_cyber_material_quantity"
             ),
         ]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 
 
 class CyberJob(TimeStamped):
+    branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT, editable=False)
     STATUSES = [
         (value, value.replace("_", " ").title())
         for value in ["DRAFT", "QUEUED", "IN_PROGRESS", "WAITING_CUSTOMER", "READY", "COMPLETED", "CANCELLED"]
     ]
-    number = models.CharField(max_length=40, unique=True)
+    number = models.CharField(max_length=40)
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, related_name="cyber_jobs", on_delete=models.SET_NULL
     )
@@ -76,9 +85,12 @@ class CyberJob(TimeStamped):
     class Meta:
         ordering = ["-created_at"]
         permissions = [("complete_cyber_job", "Can complete and take payment for Cyber jobs")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [models.UniqueConstraint(fields=["organization", "number"], name="cybe_cyberjob_number_org")]
 
 
-class CyberJobLine(models.Model):
+class CyberJobLine(TenantModel):
     job = models.ForeignKey(CyberJob, related_name="lines", on_delete=models.PROTECT)
     variant = models.ForeignKey(ProductVariant, on_delete=models.PROTECT)
     service_name = models.CharField(max_length=220)
@@ -90,3 +102,5 @@ class CyberJobLine(models.Model):
 
     class Meta:
         constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name="positive_cyber_line_quantity")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"

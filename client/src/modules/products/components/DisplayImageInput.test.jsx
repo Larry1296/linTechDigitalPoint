@@ -90,7 +90,7 @@ it("allows another variant to explicitly reuse the main photo", async () => {
     />,
   );
   fireEvent.click(
-    screen.getByRole("button", { name: "Create another variant" }),
+    screen.getByRole("button", { name: "Add another type" }),
   );
   fireEvent.change(screen.getByLabelText("Variant name"), {
     target: { value: "Type-C" },
@@ -102,7 +102,7 @@ it("allows another variant to explicitly reuse the main photo", async () => {
     target: { value: "300" },
   });
   fireEvent.click(screen.getByLabelText(/Reuse the product's main image/));
-  fireEvent.click(screen.getByRole("button", { name: "Create variant" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add type" }));
   await waitFor(() => expect(api).toHaveBeenCalled());
   expect(api.mock.calls[0][0]).toBe("/api/v1/catalog/products/1/variants/");
   expect(api.mock.calls[0][1].body.get("use_product_image")).toBe("true");

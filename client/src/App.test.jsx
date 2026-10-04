@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ThemePicker } from "./components/ThemePicker";
 import { AppNavbar } from "./components/AppChrome";
 import { AuthProvider } from "./core/auth/AuthContext";
-import { CartProvider } from "./core/cart/CartContext";
 import { LoginPage } from "./modules/auth/AuthPages";
 beforeAll(() =>
   vi.stubGlobal(
@@ -30,30 +29,24 @@ describe("authentication experience", () => {
     render(<ThemePicker />);
     expect(screen.getByRole("combobox")).toHaveValue("system");
   });
-  it("preserves checkout intent in registration link", () => {
+  it("does not offer customer registration", () => {
     render(
-      <MemoryRouter initialEntries={["/login?next=/checkout"]}>
+      <MemoryRouter initialEntries={["/login"]}>
         <AuthProvider>
-          <CartProvider>
-            <LoginPage />
-          </CartProvider>
+          <LoginPage />
         </AuthProvider>
       </MemoryRouter>,
     );
     expect(
       screen.getByRole("heading", { name: "Welcome back" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Create account" }),
-    ).toHaveAttribute("href", "/register?next=%2Fcheckout");
+    expect(screen.queryByRole("link", { name: "Create account" })).not.toBeInTheDocument();
   });
-  it("shows only customer-facing navigation before login", () => {
+  it("shows no business navigation before login", () => {
     render(
       <MemoryRouter>
         <AuthProvider>
-          <CartProvider>
-            <AppNavbar />
-          </CartProvider>
+          <AppNavbar />
         </AuthProvider>
       </MemoryRouter>,
     );
@@ -61,7 +54,7 @@ describe("authentication experience", () => {
       name: "Main navigation",
     });
     expect(
-      screen.getByRole("link", { name: "Login/Register" }),
+      screen.getByRole("link", { name: "Login" }),
     ).toHaveAttribute("href", "/login");
     expect(
       within(navigation).queryByText("Owner Login"),
@@ -70,6 +63,7 @@ describe("authentication experience", () => {
       within(navigation).queryByText("Storefront"),
     ).not.toBeInTheDocument();
     expect(within(navigation).queryByText("Dashboard")).not.toBeInTheDocument();
-    expect(within(navigation).queryByText("POS")).not.toBeInTheDocument();
+    expect(within(navigation).queryByText("Point of Sale")).not.toBeInTheDocument();
+    expect(within(navigation).getByText("Features")).toHaveAttribute("href", "/#features");
   });
 });

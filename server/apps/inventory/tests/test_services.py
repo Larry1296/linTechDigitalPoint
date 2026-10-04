@@ -107,6 +107,7 @@ def test_batches_fifo_sale_and_profit(data):
 @pytest.mark.django_db
 def test_transfer_conserves_total(data):
     user, a, b, v = data
+    user.is_staff=True; user.save(update_fields=["is_staff"])
     receive_stock(variant=v, placements=[{"shelf": a, "quantity": 10}], unit_cost=120, reference="PO", user=user)
     transfer_stock(variant=v, source=a, destination=b, quantity=4, reference="TX", user=user)
     assert sum(x.quantity for x in StockBalance.objects.all()) == 10

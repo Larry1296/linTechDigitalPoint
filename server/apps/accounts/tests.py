@@ -33,7 +33,7 @@ def test_django_superuser_is_owner_in_both_admin_interfaces():
 
     django_admin = Client()
     django_admin.force_login(owner)
-    assert django_admin.get("/admin/").status_code == 200
+    assert django_admin.get("/platform-admin/").status_code == 200
 
 
 @pytest.mark.django_db
@@ -70,7 +70,7 @@ def test_cashier_is_staff_but_not_owner_and_remains_permission_limited():
     assert api.post("/api/v1/locations/stacks/", {}, format="json").status_code == 403
     django_admin = Client()
     django_admin.force_login(cashier)
-    assert django_admin.get("/admin/auth/user/").status_code == 403
+    assert django_admin.get("/platform-admin/auth/user/").status_code == 403
 
 
 @pytest.mark.django_db
@@ -85,7 +85,7 @@ def test_customer_cannot_access_internal_locations():
     assert client.get("/api/v1/locations/stacks/").status_code == 403
     django_admin = Client()
     django_admin.force_login(user)
-    assert django_admin.get("/admin/").status_code == 302
+    assert django_admin.get("/platform-admin/").status_code == 302
 
 
 @pytest.fixture
@@ -275,3 +275,16 @@ def test_failed_authentication_never_discards_cart(reserved_order):
     )
     cart = client.get("/api/v1/commerce/cart/").json()
     assert len(cart["items"]) == 1 and cart["items"][0]["quantity"] == "1.000"
+
+
+@pytest.mark.django_db
+def test_refresh_renews_active_session_and_requires_authentication(settings):
+    user = User.objects.create_user("refresh-user", password="Strong-pass-1296")
+    client = APIClient()
+    assert client.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
+    client.force_authenticate(user)
+    response = client.post("/api/v1/auth/refresh/", {}, format="json")
+    assert response.status_code == 200
+    assert response.data["authenticated"] is True
+    assert response.data["access_expires_in"] == settings.JWT_ACCESS_SECONDS
+    assert response.data["session"]["idle_timeout"] == settings.DEVICE_IDLE_SECONDS

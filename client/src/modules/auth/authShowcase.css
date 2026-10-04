@@ -1,0 +1,21 @@
+/* Sign-in and sign-up side panel: a full-bleed photo slideshow advertising the platform (wide screens). */
+.authIntro, .authStandaloneIntro { position: relative; overflow: hidden; }
+.authIntro > :not(.authShowcase), .authStandaloneIntro > :not(.authShowcase) { position: relative; z-index: 2; }
+.authStandaloneIntro > div:not(.authShowcase) { display: flex; flex-direction: column; gap: 20px; }
+.photoCarousel.authShowcase { position: absolute; inset: 0; z-index: 1; }
+/* Dark at the top for the logo and at the bottom for the words; the photo shows in between. */
+.authShowcase .photoCarouselSlides::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(3 13 28 / 72%) 0%, rgb(3 13 28 / 18%) 32%, rgb(3 13 28 / 55%) 58%, rgb(3 13 28 / 94%) 100%);
+}
+/* Above the panel's bottom line of small print: its padding plus room for the slide dots. */
+.authShowcase .photoCarouselContent { position: absolute; left: clamp(34px, 5vw, 72px); right: clamp(34px, 5vw, 72px); bottom: calc(clamp(34px, 5vw, 72px) + 84px); }
+.authShowcaseText { color: #fff; animation: authShowcaseIn 0.8s ease both; }
+.authShowcase .authShowcaseText .eyebrow { color: #86efac; }
+.authShowcase .authShowcaseText h2 { max-width: 480px; margin: 14px 0 12px; font-size: clamp(30px, 3.4vw, 46px); line-height: 1.08; letter-spacing: -0.035em; text-shadow: 0 2px 18px rgb(0 0 0 / 35%); }
+.authShowcase .authShowcaseText p { max-width: 440px; margin: 0; color: #dbe8ff; line-height: 1.7; }
+.authShowcase .photoCarouselControls { left: clamp(34px, 5vw, 72px); bottom: calc(clamp(34px, 5vw, 72px) + 36px); }
+@keyframes authShowcaseIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .authShowcaseText { animation: none; } }

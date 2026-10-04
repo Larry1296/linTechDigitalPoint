@@ -342,7 +342,7 @@ test("Django superuser name is displayed and defaults to the admin dashboard", a
   await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
   await expect(page.getByText("owner (Admin)", { exact: true })).toBeVisible();
 });
-test("Owner previews and creates a complete unequal shelf stack", async ({
+test("Owner adds an area, then previews and creates a complete unequal rack", async ({
   page,
 }) => {
   await mockShop(page);
@@ -350,13 +350,14 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
   await page.getByLabel("Username or email").fill("owner");
   await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.goto("/admin-app/digital-shop");
-  await page.getByRole("button", { name: "Create First Shelf Stack" }).click();
-  await page.getByLabel("Shop area").selectOption("new");
+  await page.goto("/admin/shelf-management");
+  await page.getByRole("button", { name: /^Add (another )?area$/ }).click();
   await page.getByLabel("Area name").fill("Upstairs Window Display");
-  await page.getByLabel("Area width (ft)").fill("24");
-  await page.getByLabel("Area height (ft)").fill("10.5");
-  await page.getByLabel("Stack name").fill("Phone Accessories Rack");
+  await page.getByLabel("Width (ft)").fill("24");
+  await page.getByLabel("Height (ft)").fill("10.5");
+  await page.getByRole("button", { name: "Add area", exact: true }).click();
+  await page.getByRole("button", { name: "Add rack to Upstairs Window Display" }).click();
+  await page.getByLabel("Rack name").fill("Phone Accessories Rack");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -366,41 +367,41 @@ test("Owner previews and creates a complete unequal shelf stack", async ({
       .filter({ has: page.getByText("Level 4", { exact: true }) })
       .getByText("Shelf 3", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Create Shelf Stack" }).click();
+  await page.getByRole("button", { name: "Create rack" }).click();
   await expect(
     page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
   ).toBeVisible();
   await expect(
     page.getByText("Phone Accessories Rack", { exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
+  await expect(page.getByRole("dialog", { name: /^Shelf/ })).toHaveCount(
     0,
   );
   await page
     .getByRole("button", { name: "Level 1, Shelf 1, 0 units", exact: true })
     .click();
   await expect(
-    page.getByRole("dialog", { name: "Shelf details" }),
+    page.getByRole("dialog", { name: /^Shelf/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close shelf details" }).click();
-  await expect(page.getByRole("dialog", { name: "Shelf details" })).toHaveCount(
+  await expect(page.getByRole("dialog", { name: /^Shelf/ })).toHaveCount(
     0,
   );
-  await page.getByRole("button", { name: "Move / Edit Rack" }).click();
+  await page.getByRole("button", { name: "Edit rack" }).click();
   await page.getByLabel("Shop area").selectOption("3");
   await page.getByLabel("X position (ft)").fill("5");
   await page.getByRole("button", { name: "Save rack position" }).click();
   await expect(
     page.getByText("UPSTAIRSWINDOWDI-R01", { exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Move / Edit Rack" }).click();
+  await page.getByRole("button", { name: "Edit rack" }).click();
   await page.getByRole("button", { name: "Remove empty rack" }).click();
   await page
     .getByRole("dialog", { name: "Remove Phone Accessories Rack?" })
     .getByRole("button", { name: "Remove rack", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Move / Edit Rack" }),
+    page.getByRole("button", { name: "Edit rack" }),
   ).toHaveCount(0);
 });
 

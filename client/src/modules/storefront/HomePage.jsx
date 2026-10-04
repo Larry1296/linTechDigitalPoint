@@ -1,8 +1,9 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { ProductSearch } from "./components/ProductSearch";
 import { ProductCard } from "./components/ProductCard";
 import {
+  ArrowUpRight,
   Headphones,
-  MapPin,
   ShieldCheck,
   ShoppingBag,
   Truck,
@@ -12,17 +13,28 @@ import { Link, useLocation, useNavigationType } from "react-router-dom";
 import { restoreListingPosition } from "./listingPosition";
 import { api } from "../../core/api/client";
 import { Empty, ErrorState, Loading } from "../../components/States";
+import { ProductImage } from "./components/ProductImage";
+import { ChevronLeft, ChevronRight, Cpu, MapPinned, Smartphone } from "lucide-react";
 export function HomePage() {
   const location = useLocation();
   const navigationType = useNavigationType();
   const [data, setData] = useState();
   const [error, setError] = useState("");
+  const [slide, setSlide] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
   useEffect(() => {
     document.title = "LinTech Digital Point";
     api("/api/v1/store/home/")
       .then(setData)
       .catch((e) => setError(e.message));
   }, []);
+  const featured = (data?.category_sections || []).flatMap((section) => section.products).slice(0, 6);
+  useEffect(() => {
+    if (featured.length < 2 || carouselPaused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const timer = window.setInterval(() => setSlide((current) => (current + 1) % featured.length), 5000);
+    return () => window.clearInterval(timer);
+  }, [featured.length, carouselPaused]);
+  useEffect(() => { if (slide >= featured.length) setSlide(0); }, [slide, featured.length]);
   useEffect(() => {
     if (!data) return;
     // Wait until the destination and the collapsed mobile navbar are laid out.
@@ -63,11 +75,11 @@ export function HomePage() {
         <>
           <section className="hero">
             <div>
-              <span className="eyebrow">{data.store.name}</span>
-              <h1>Technology and everyday essentials, all in one place.</h1>
+              <span className="eyebrow"><span className="liveDot" /> {data.store.name}</span>
+              <h1>Smart essentials. <em>Useful services.</em> One local place.</h1>
               <p>
-                Shop mobile accessories, computer accessories, electrical
-                essentials and useful services from LinTech.
+                Shop the everyday technology you need and get dependable cyber
+                services from a team close to you.
               </p>
               <ProductSearch />
               <div className="heroActions">
@@ -79,16 +91,15 @@ export function HomePage() {
                 </Link>
               </div>
             </div>
-            <div className="heroCard">
-              <ShoppingBag size={50} />
-              <b>
-                Easy shopping.
-                <br />
-                Clear prices.
-                <br />
-                Reliable service.
-              </b>
-              <span>Order online for pickup or delivery</span>
+            <div className="heroCarousel" onMouseEnter={() => setCarouselPaused(true)} onMouseLeave={() => setCarouselPaused(false)} onFocus={() => setCarouselPaused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setCarouselPaused(false); }}>
+              {featured.length ? <>
+                <div className="carouselMedia" aria-live="polite">
+                  <ProductImage product={featured[slide]} large />
+                  <span className="carouselBadge">Featured pick</span>
+                </div>
+                <div className="carouselInfo"><span className="eyebrow">{featured[slide].category}</span><h2>{featured[slide].display_name}</h2><p>From {businessCurrency()} {featured[slide].selling_price}</p><Link className="button" to={`/products/${featured[slide].id}`}>View product <ArrowUpRight size={16} /></Link></div>
+                <div className="carouselControls"><button type="button" aria-label="Previous featured product" onClick={() => setSlide((slide - 1 + featured.length) % featured.length)}><ChevronLeft size={18} /></button><div aria-label="Featured product slides" className="carouselDots">{featured.map((product, index) => <button type="button" key={product.id} aria-label={`Show ${product.display_name}`} aria-current={index === slide} onClick={() => setSlide(index)} />)}</div><button type="button" aria-label="Next featured product" onClick={() => setSlide((slide + 1) % featured.length)}><ChevronRight size={18} /></button></div>
+              </> : <div className="heroCard"><ShoppingBag size={50} /><b>Easy shopping.<br />Clear prices.<br />Reliable service.</b><span>Order online for pickup or delivery</span></div>}
             </div>
           </section>
           <section id="categories" className="homeSection">
@@ -106,6 +117,10 @@ export function HomePage() {
             ) : (
               <Empty>Product categories will appear here soon.</Empty>
             )}
+          </section>
+          <section className="homeSection featuredSection" aria-labelledby="featured-title">
+            <div className="sectionHeading"><div><span className="eyebrow">Popular right now</span><h2 id="featured-title">Featured products</h2></div><Link to="/shop">View all products →</Link></div>
+            {featured.length ? <div className="featuredGrid">{featured.slice(0, 4).map((product) => <Link className="featuredTile" key={product.id} to={`/products/${product.id}`}><ProductImage product={product} /><span>{product.category}</span><h3>{product.display_name}</h3><b>{businessCurrency()} {product.selling_price}</b></Link>)}</div> : <Empty>Featured products will appear here soon.</Empty>}
           </section>
           {(data.category_sections || []).map((category) => (
             <section
@@ -126,14 +141,14 @@ export function HomePage() {
               </div>
             </section>
           ))}
-          <section className="benefits">
+          <section className="benefits" aria-label="Why choose LinTech">
             <article>
               <ShieldCheck />
               <b>Quality essentials</b>
               <span>Carefully selected products for everyday use.</span>
             </article>
             <article>
-              <MapPin />
+              <MapPinned />
               <b>Convenient local shopping</b>
               <span>Order online and collect from LinTech.</span>
             </article>
@@ -153,7 +168,7 @@ export function HomePage() {
                     <Headphones />
                     <b>{service.name}</b>
                     <span>
-                      KSh {service.price} ·{" "}
+                      {businessCurrency()} {service.price} ·{" "}
                       {service.billing_unit.replaceAll("_", " ").toLowerCase()}
                     </span>
                   </article>
@@ -166,17 +181,8 @@ export function HomePage() {
               </p>
             )}
           </section>
-          <section className="homeSection serviceSpotlight">
-            <span className="eyebrow">Available at our counter</span>
-            <h2>M-Pesa services</h2>
-            <p>
-              Convenient M-Pesa agent cash deposit and cash withdrawal services
-              are available at LinTech Digital Point.
-            </p>
-            <small>
-              Visit us for service. Charges and applicable limits are confirmed
-              at the counter.
-            </small>
+          <section className="homeSection serviceCards" aria-labelledby="mpesa-title">
+            <span className="eyebrow">More ways we help</span><h2 id="mpesa-title">M-Pesa services</h2><div className="serviceCardGrid"><article><Smartphone /><div><b>Agent services at the counter</b><p>Convenient cash deposit and cash withdrawal services at LinTech Digital Point.</p></div></article><article><Cpu /><div><b>Cyber help when you need it</b><p>Printing, scanning, photocopying, typing and practical computer support.</p></div></article></div>
           </section>
           <section id="contact" className="contactSection">
             <div>

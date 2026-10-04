@@ -3,14 +3,14 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
+admin.site.has_permission = lambda request: request.user.is_active and request.user.is_superuser
+
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("platform-admin/", admin.site.urls),
     path("api/v1/", include("api.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]
 
-from django.conf import settings
-from django.conf.urls.static import static
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+from apps.tenancy.media import private_media
+urlpatterns += [path("media/<path:path>", private_media)]

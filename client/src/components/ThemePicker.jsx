@@ -1,24 +1,14 @@
-import { SunMoon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "../core/ui/theme";
+
 export function ThemePicker() {
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("theme") || "system",
-  );
-  useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () =>
-      (document.documentElement.dataset.theme =
-        theme === "system" ? (media.matches ? "dark" : "light") : theme);
-    apply();
-    media.addEventListener("change", apply);
-    localStorage.setItem("theme", theme);
-    return () => media.removeEventListener("change", apply);
-  }, [theme]);
+  const [theme, setTheme] = useTheme();
+  const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
   return (
-    <label className="theme">
-      <SunMoon size={17} />
+    <label className="theme" title="Choose your appearance">
+      <Icon size={18} aria-hidden="true" />
       <span className="sr">Theme</span>
-      <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+      <select aria-label="Theme" value={theme} onChange={(event) => setTheme(event.target.value)}>
         <option value="system">System</option>
         <option value="light">Light</option>
         <option value="dark">Dark</option>

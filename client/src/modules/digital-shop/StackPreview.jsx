@@ -34,7 +34,7 @@ export function StackPreview({
         </small>
         {stack && onEdit && (
           <button className="secondary rackEdit" onClick={() => onEdit(stack)}>
-            Move / Edit Rack
+            Edit rack
           </button>
         )}
       </header>

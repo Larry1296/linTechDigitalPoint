@@ -1,0 +1,13 @@
+/* The business assistant reuses the help chat's panel (helpChat.css); analyses need a little more width. */
+.businessAssistant .helpChatPanel { width: min(460px, calc(100vw - 32px)); height: min(680px, calc(100vh - 120px)); }
+.businessAssistant .helpChatMessage.assistant { max-width: 94%; }
+.businessAssistantStatus { display: block; color: var(--muted); font-size: 12px; font-style: italic; }
+.businessAssistantProvider select {
+  min-height: 0; max-width: 150px; padding: 5px 8px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 10px;
+  color: #fff; background: rgb(255 255 255 / 12%); font-size: 12px;
+}
+.businessAssistantProvider option { color: #0b2a55; }
+@media (max-width: 520px) {
+  .businessAssistant .helpChatPanel { width: calc(100vw - 24px); height: calc(100vh - 100px); }
+  .businessAssistantProvider select { max-width: 104px; }
+}

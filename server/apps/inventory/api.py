@@ -1,4 +1,7 @@
+from decimal import Decimal
+from apps.tenancy.permissions import has_business_permission, is_business_manager
 from django.db.models import DecimalField,ExpressionWrapper,F,Sum,Q
+from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view,permission_classes
@@ -14,18 +17,23 @@ from .services import complete_stock_receipt,receive_stock,transfer_stock
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def receive(request):
-    if not request.user.has_perm("inventory.add_stocklot"):return Response({"detail":"Receiving permission required."},status=403)
+    if not has_business_permission(request.user, "inventory.add_stocklot"):return Response({"detail":"Receiving permission required."},status=403)
     variant=ProductVariant.objects.select_related("product").filter(pk=request.data.get("variant_id"),active=True,product__active=True,product__product_type="STOCK_ITEM").first()
     if not variant:return Response({"detail":"Choose an active stock-item product variant."},status=400)
-    placements=[]
-    for raw in request.data.get("placements",[]):
-        shelf=Shelf.objects.filter(pk=raw.get("shelf_id"),active=True).first()
-        if not shelf:return Response({"detail":"Invalid shelf placement."},status=400)
-        placements.append({"shelf":shelf,"quantity":raw.get("quantity")})
+    placements=[{"shelf_id":raw.get("shelf_id"),"quantity":raw.get("quantity")} for raw in request.data.get("placements",[])]
     requested_price=request.data.get("selling_price")
-    if requested_price is not None and str(variant.selling_price)!=str(requested_price) and not request.user.has_perm("catalog.change_productvariant"):
+    if requested_price is not None and str(variant.selling_price)!=str(requested_price) and not has_business_permission(request.user, "catalog.change_productvariant"):
         return Response({"detail":"Price-change permission required."},status=403)
-    lot=receive_stock(variant=variant,placements=placements,unit_cost=request.data.get("unit_cost"),reference=request.data.get("reference"),supplier_name=request.data.get("supplier_name",""),user=request.user)
+    # A single-item receipt goes through the full receipt rules (supplier, document, buying price) so its
+    # supplier debt has a purchase record that can be paid and reconciled.
+    try:
+        receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("reference") or "",
+            document_status=request.data.get("document_status") or "SUPPLIER_DOCUMENT",user=request.user,require_documents=True,
+            idempotency_key=request.data.get("idempotency_key"),
+            lines=[{"variant_id":variant.pk,"received_quantity":sum((Decimal(str(p["quantity"] or 0)) for p in placements),Decimal("0")),
+                    "unit_cost":request.data.get("unit_cost"),"placements":placements}])
+    except ValidationError as exc:return Response(exc.detail,status=400)
+    lot=receipt.lines.get().lot
     if requested_price is not None and str(variant.selling_price)!=str(requested_price):
         from apps.catalog.models import PriceHistory
         old=variant.selling_price;variant.selling_price=requested_price;variant.save(update_fields=["selling_price","updated_at"])
@@ -64,19 +72,20 @@ def _receipt_data(receipt):
 @permission_classes([HasLinTechPermission])
 def receipts(request):
     if request.method=="GET":
-        if not request.user.has_perm("inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
+        if not has_business_permission(request.user, "inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
         rows=StockReceipt.objects.prefetch_related("lines").order_by("-received_at", "-pk")[:100]
         return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count()} for r in rows])
-    if not request.user.has_perm("inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
+    if not has_business_permission(request.user, "inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
     try:
-        receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("external_reference",request.data.get("reference","")),received_at=request.data.get("received_at") or timezone.now(),notes=request.data.get("notes",""),lines=request.data.get("lines",[]),user=request.user,idempotency_key=request.data.get("idempotency_key"))
+        receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("external_reference",request.data.get("reference","")),received_at=request.data.get("received_at") or timezone.now(),notes=request.data.get("notes",""),lines=request.data.get("lines",[]),user=request.user,idempotency_key=request.data.get("idempotency_key"),
+            document_status=request.data.get("document_status") or "SUPPLIER_DOCUMENT",landed_costs=request.data.get("landed_costs") or [],payment=request.data.get("payment") or None,require_documents=True)
     except ValidationError as exc:return Response(exc.detail,status=400)
     return Response(_receipt_data(receipt),status=200 if request.data.get("idempotency_key") and receipt.created_by_id==request.user.id else 201)
 
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])
 def receipt_detail(request,pk):
-    if not request.user.has_perm("inventory.view_stockreceipt"):return Response({"detail":"Receipt detail permission required."},status=403)
+    if not has_business_permission(request.user, "inventory.view_stockreceipt"):return Response({"detail":"Receipt detail permission required."},status=403)
     receipt=StockReceipt.objects.filter(pk=pk).first()
     if not receipt:return Response({"detail":"Receipt not found."},status=404)
     return Response(_receipt_data(receipt))
@@ -87,26 +96,91 @@ def variant_search(request):
     q=(request.query_params.get("q") or "").strip()
     qs=ProductVariant.objects.select_related("product","product__category","product__brand").filter(active=True,product__active=True,product__product_type="STOCK_ITEM")
     if q:qs=qs.filter(Q(name__icontains=q)|Q(product__name__icontains=q)|Q(sku__icontains=q)|Q(barcode__icontains=q)|Q(product__brand__name__icontains=q)|Q(product__category__name__icontains=q))
-    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price} for v in qs[:50]])
+    # Live stock, limited to the balances this user's branch can see.
+    qs=qs.annotate(on_hand=Sum(F("lots__balances__quantity")-F("lots__balances__reserved"),filter=Q(lots__balances__in=StockBalance.objects.all()))).order_by("product__name","name","id")
+    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"available":v.on_hand or Decimal("0")} for v in qs[:50]])
 
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])
 def available_categories(request):
-    if not request.user.has_perm("catalog.view_category"):return Response({"detail":"Category permission required."},status=403)
-    rows=Category.objects.filter(active=True,rack_assignments__stack__active=True).distinct().order_by("name")
-    return Response([{"id":c.id,"name":c.name,"rack_names":[a.stack.display_name for a in c.rack_assignments.filter(stack__active=True).select_related("stack")]} for c in rows])
+    if not has_business_permission(request.user, "catalog.view_category"):return Response({"detail":"Category permission required."},status=403)
+    from apps.catalog.models import category_tree
+    return Response(category_tree())
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def transfer(request):
-    if not request.user.has_perm("inventory.change_stockbalance"):return Response({"detail":"Transfer permission required."},status=403)
-    variant=ProductVariant.objects.get(pk=request.data["variant_id"]);source=Shelf.objects.get(pk=request.data["source_id"]);destination=Shelf.objects.get(pk=request.data["destination_id"]);transfer_stock(variant=variant,source=source,destination=destination,quantity=request.data["quantity"],reference=request.data.get("reference","TRANSFER"),user=request.user);return Response({"detail":"Transfer completed."})
+    if not has_business_permission(request.user, "inventory.change_stockbalance"):return Response({"detail":"Transfer permission required."},status=403)
+    from apps.tenancy.context import branch_context
+    from apps.tenancy.branches import authorized_stores
+    variant=ProductVariant.objects.filter(pk=request.data.get("variant_id")).first()
+    source=Shelf.objects.filter(pk=request.data.get("source_id")).select_related("zone__store").first()
+    with branch_context(None):
+        destination=Shelf.objects.filter(pk=request.data.get("destination_id"), zone__store__in=authorized_stores(request.user,request.membership)).select_related("zone__store").first()
+    if not variant or not source or not destination:return Response({"detail":"Choose valid stock and branch shelves."},status=400)
+    try: transfer_stock(variant=variant,source=source,destination=destination,quantity=request.data.get("quantity"),reference=request.data.get("reference","TRANSFER"),user=request.user)
+    except ValidationError as exc:return Response({"detail":str(exc.detail)},status=400)
+    return Response({"detail":"Transfer completed.","source_branch_id":source.zone.store_id,"destination_branch_id":destination.zone.store_id})
 @api_view(["GET"])
 @permission_classes([IsInternalStaff])
 def dashboard(request):
-    today=__import__("django.utils.timezone",fromlist=["localdate"]).localdate();sales=Sale.objects.filter(created_at__date=today)
-    metrics=sales.aggregate(revenue=Sum("total"),cogs=Sum("cogs"),profit=Sum("gross_profit"));items=SaleItem.objects.filter(sale__in=sales).aggregate(v=Sum("quantity"))["v"] or 0
-    balances=StockBalance.objects.select_related("lot","lot__variant");physical=Sum("quantity");cost=Sum(ExpressionWrapper(F("quantity")*F("lot__unit_cost"),output_field=DecimalField()));retail=Sum(ExpressionWrapper(F("quantity")*F("lot__variant__selling_price"),output_field=DecimalField()))
-    values=balances.aggregate(physical=physical,cost=cost,retail=retail);low=sum(1 for v in ProductVariant.objects.filter(active=True) if (StockBalance.objects.filter(lot__variant=v).aggregate(q=Sum(F("quantity")-F("reserved")))["q"] or 0)<=v.minimum_stock)
-    retail_sales=sales.exclude(channel=Sale.CYBER);cyber_sales=sales.filter(channel=Sale.CYBER);top=CyberJobLine.objects.filter(job__completed_at__date=today).values("service_name").annotate(value=Sum("line_total")).order_by("-value").first()
-    can_view_mpesa=request.user.has_perm("mpesa.view_mpesasession");open_shift=MpesaSession.objects.filter(status="OPEN").prefetch_related("transactions").first() if can_view_mpesa else None;mpesa_cash,mpesa_float=session_balances(open_shift) if open_shift else (0,0);entries=MpesaTransaction.objects.filter(occurred_at__date=today) if can_view_mpesa else MpesaTransaction.objects.none();deposits=entries.filter(transaction_type="CUSTOMER_DEPOSIT").aggregate(v=Sum("amount"))["v"] or 0;withdrawals=entries.filter(transaction_type="CUSTOMER_WITHDRAWAL").aggregate(v=Sum("amount"))["v"] or 0;commission=MpesaCommissionEntry.objects.filter(recognized_at__date=today).aggregate(v=Sum("amount"))["v"] or 0;sales_revenue=metrics["revenue"] or 0
-    return Response({"today":{**{k:(v or 0) for k,v in metrics.items()},"revenue":sales_revenue+commission,"sales_revenue":sales_revenue,"sales":sales.count(),"items_sold":items,"pos_revenue":retail_sales.filter(channel="POS").aggregate(v=Sum("total"))["v"] or 0,"online_revenue":retail_sales.filter(channel="ONLINE").aggregate(v=Sum("total"))["v"] or 0},"retail":{"revenue":retail_sales.aggregate(v=Sum("total"))["v"] or 0,"cogs":retail_sales.aggregate(v=Sum("cogs"))["v"] or 0,"profit":retail_sales.aggregate(v=Sum("gross_profit"))["v"] or 0,"sales":retail_sales.count()},"cyber":{"revenue":cyber_sales.aggregate(v=Sum("total"))["v"] or 0,"profit":cyber_sales.aggregate(v=Sum("gross_profit"))["v"] or 0,"jobs_today":CyberJob.objects.filter(created_at__date=today).count(),"active_jobs":CyberJob.objects.exclude(status__in=["COMPLETED","CANCELLED"]).count(),"ready_jobs":CyberJob.objects.filter(status="READY").count(),"top_service":top["service_name"] if top else None},"mpesa":{"cash":mpesa_cash,"float":mpesa_float,"deposits":deposits,"withdrawals":withdrawals,"transaction_count":entries.exclude(transaction_type="REVERSAL").count(),"commission":commission if can_view_mpesa else 0,"principal_revenue":0,"reconciliation_status":"OPEN" if open_shift else "NO OPEN SHIFT","restricted":not can_view_mpesa},"inventory":{**{k:(v or 0) for k,v in values.items()},"potential_margin":(values["retail"] or 0)-(values["cost"] or 0),"low_stock":low,"total_skus":ProductVariant.objects.filter(active=True).count()},"orders":{"awaiting_payment":Order.objects.filter(payment_status="PENDING").count(),"awaiting_fulfillment":Order.objects.filter(payment_status="PAID").exclude(fulfillment_status="COMPLETED").count()}})
+    from .dashboard import dashboard_snapshot
+    return Response(dashboard_snapshot(request))
+
+
+@api_view(["POST"])
+@permission_classes([HasLinTechPermission])
+def receipt_return(request, pk):
+    """Send goods from a receipt back to the supplier."""
+    from .purchase_returns import return_to_supplier
+    if not has_business_permission(request.user, "inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
+    receipt=StockReceipt.objects.filter(pk=pk).first()
+    if not receipt:return Response({"detail":"Receipt not found."},status=404)
+    try:
+        result=return_to_supplier(receipt=receipt,lines=request.data.get("lines") or [],reason=str(request.data.get("reason") or ""),user=request.user,idempotency_key=request.data.get("idempotency_key"))
+    except ValidationError as exc:return Response(exc.detail,status=400)
+    return Response({"id":result.pk,"number":result.number,"value":result.total_cost},status=201)
+
+
+@api_view(["POST"])
+@permission_classes([HasLinTechPermission])
+def lot_cost(request, pk):
+    """Supply a missing buying price, or correct one entered by mistake, for one delivery (cost layer)."""
+    from .purchase_returns import correct_lot_cost
+    lot=StockLot.objects.select_related("receipt_line__receipt").filter(pk=pk).first()
+    if not lot:return Response({"detail":"Delivery not found."},status=404)
+    if not has_business_permission(request.user, _cost_permission(lot)):
+        return Response({"detail":"Receipt correction permission required." if _cost_permission(lot)=="inventory.change_stockreceipt" else "Stock-adjustment permission required."},status=403)
+    try:
+        correct_lot_cost(lot=lot,unit_cost=request.data.get("unit_cost"),reason=str(request.data.get("reason") or ""),user=request.user)
+    except ValidationError as exc:return Response(exc.detail,status=400)
+    lot.refresh_from_db()
+    return Response(_lot_cost_row(lot, request.user),status=201)
+
+
+def _cost_permission(lot):
+    """Supplier deliveries are corrected like their receipt; opening stock like a stock adjustment."""
+    line=getattr(lot,"receipt_line",None)
+    supplier=lot.cost_status==StockLot.COSTED and line and line.receipt.document_status!=StockReceipt.OPENING_BALANCE
+    return "inventory.change_stockreceipt" if supplier else "inventory.adjust_stock"
+
+
+def _lot_cost_row(lot, user):
+    line=getattr(lot,"receipt_line",None)
+    opening=not line or line.receipt.document_status==StockReceipt.OPENING_BALANCE
+    return {"id":lot.pk,"reference":lot.reference,"received_at":lot.received_at,"supplier_name":lot.supplier_name,
+            "source":"opening" if opening else "supplier","receipt_id":line.receipt_id if line else None,
+            "received_quantity":lot.received_quantity,"remaining_quantity":lot.remaining_quantity,
+            "uncosted":lot.cost_status==StockLot.UNCOSTED,
+            "buying_price":None if lot.cost_status==StockLot.UNCOSTED else lot.unit_cost-lot.landed_unit_cost,
+            "landed_cost_per_unit":lot.landed_unit_cost,
+            "can_correct":has_business_permission(user,_cost_permission(lot))}
+
+
+@api_view(["GET"])
+@permission_classes([IsInternalStaff])
+def variant_buying_prices(request, pk):
+    """Every delivery of a variant with its buying price, newest first, for checking and correcting BP."""
+    if not has_business_permission(request.user, "accounting.view_profit"):
+        return Response({"detail":"Permission to see buying prices is required."},status=403)
+    lots=StockLot.objects.filter(variant_id=pk).select_related("receipt_line__receipt").order_by("-received_at","-id")[:50]
+    return Response([_lot_cost_row(lot, request.user) for lot in lots])

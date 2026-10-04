@@ -1,0 +1,87 @@
+/* Status colours mix with the theme's surface and text, so they read in light and dark themes. */
+.billingPage, .platformPage { --good: #15803d; --warn: #b45309; --bad: #b91c1c; }
+.subscriptionBanner, .subscriptionStatus, .paymentStatus, .statusPill { --good: #15803d; --warn: #b45309; --bad: #b91c1c; }
+
+.billingPage { display:grid; gap:18px; }
+.billingPage h1, .billingPage h2 { margin:0; }
+
+.subscriptionStatus { display:flex; align-items:center; gap:14px; padding:16px 18px; border-radius:14px; border:1.5px solid var(--line); background:var(--surface); }
+.subscriptionStatus > div { display:grid; gap:2px; flex:1; min-width:0; }
+.subscriptionStatus span { color:var(--muted); }
+.subscriptionStatus.good { border-color:color-mix(in srgb, var(--good) 45%, var(--line)); }
+.subscriptionStatus.good > svg { color:var(--good); }
+.subscriptionStatus.warn { border-color:var(--warn); background:color-mix(in srgb, var(--warn) 8%, var(--surface)); }
+.subscriptionStatus.warn > svg { color:var(--warn); }
+.subscriptionStatus.ended { border-color:var(--bad); background:color-mix(in srgb, var(--bad) 8%, var(--surface)); }
+.subscriptionStatus.ended > svg { color:var(--bad); }
+.subscriptionCount { display:grid; justify-items:center; min-width:64px; font-size:28px; font-weight:800; line-height:1; color:var(--text); }
+.subscriptionCount small { font-size:12px; font-weight:600; color:var(--muted); margin-top:4px; }
+
+.billingPhone { display:grid; gap:8px; max-width:420px; }
+.billingPhone label { display:grid; gap:6px; font-weight:700; }
+.billingPhoneInput { position:relative; display:block; }
+.billingPhoneInput svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+.billingPhoneInput input { width:100%; padding-left:38px; }
+.billingNote { margin:0; padding:10px 12px; border-radius:10px; background:var(--primary2); color:var(--text); font-size:14px; }
+
+.planGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:16px; }
+.planCard { display:grid; gap:10px; align-content:start; padding:20px; border:1.5px solid var(--line); border-radius:16px; background:var(--surface); }
+.planCard.pro { border-color:color-mix(in srgb, var(--primary) 55%, var(--line)); }
+.planCard.current { box-shadow:0 0 0 3px var(--primary2); }
+.planCard header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.planCard h2 { display:flex; align-items:center; gap:8px; font-size:20px; }
+.planCard h2 svg { color:var(--warn); }
+.planBadge { padding:3px 10px; border-radius:999px; background:var(--primary2); color:var(--text); font-size:12px; font-weight:700; }
+.planPrice { margin:0; color:var(--muted); }
+.planPrice strong { font-size:26px; color:var(--text); }
+.planCard p { margin:0; }
+.planCard ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.planCard li { display:flex; gap:8px; align-items:flex-start; }
+.planCard li svg { flex:none; margin-top:3px; color:var(--good); }
+.planCard button { margin:6px 0 0 !important; min-height:44px; }
+
+.billingPayments, .platformTable { width:100%; border-collapse:collapse; }
+.billingPayments th, .billingPayments td, .platformTable th, .platformTable td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.billingPayments th, .platformTable th { color:var(--muted); font-size:13px; white-space:nowrap; }
+.paymentStatus, .statusPill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12.5px; font-weight:700; text-transform:capitalize; background:var(--primary2); color:var(--text); }
+.paymentStatus.paid, .statusPill.active { background:color-mix(in srgb, var(--good) 16%, var(--surface)); color:color-mix(in srgb, var(--good) 70%, var(--text)); }
+.paymentStatus.failed, .paymentStatus.cancelled, .statusPill.ended { background:color-mix(in srgb, var(--bad) 14%, var(--surface)); color:color-mix(in srgb, var(--bad) 70%, var(--text)); }
+.paymentStatus.pending, .statusPill.warn { background:color-mix(in srgb, var(--warn) 16%, var(--surface)); color:color-mix(in srgb, var(--warn) 70%, var(--text)); }
+.billingPayments small { color:var(--muted); }
+
+.subscriptionBanner { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:0 0 16px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); font-size:14px; }
+.subscriptionBanner span { flex:1 1 240px; }
+.subscriptionBanner a { font-weight:700; color:var(--primary); white-space:nowrap; }
+.subscriptionBanner.info { background:var(--primary2); border-color:transparent; }
+.subscriptionBanner.warn { border-color:var(--warn); background:color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.subscriptionBanner.warn svg { color:var(--warn); }
+.subscriptionBanner.ended { border-color:var(--bad); background:color-mix(in srgb, var(--bad) 10%, var(--surface)); }
+.subscriptionBanner.ended svg { color:var(--bad); }
+
+.platformPage { display:grid; gap:20px; }
+.platformPage h1, .platformPage h2 { margin:0; }
+.platformStats { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap:12px; }
+.platformStats div { display:grid; gap:2px; padding:14px 16px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.platformStats strong { font-size:24px; }
+.platformStats span { color:var(--muted); font-size:13px; }
+.platformFilters { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+.platformFilters label { display:grid; gap:4px; font-size:13px; font-weight:700; }
+.platformTableWrap { overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.platformTable tr.selected { background:var(--primary2); }
+.platformTable button.linkButton { padding:0; margin:0; }
+.platformTable small { display:block; color:var(--muted); }
+.platformDetail { display:grid; gap:14px; padding:18px; border:1.5px solid var(--primary); border-radius:16px; background:var(--surface); }
+.platformDetail header { display:flex; justify-content:space-between; gap:12px; align-items:start; flex-wrap:wrap; }
+.platformDetail form { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap:10px; align-items:end; }
+.platformDetail form label { display:grid; gap:4px; font-size:13px; font-weight:700; }
+.platformDetail form button { margin:0 !important; min-height:42px; }
+.platformDetail dl { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap:10px; margin:0; }
+.platformDetail dt { color:var(--muted); font-size:13px; }
+.platformDetail dd { margin:0; font-weight:600; overflow-wrap:anywhere; }
+.platformPlans { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:14px; }
+.platformPlans form { display:grid; gap:10px; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.platformPlans label { display:grid; gap:4px; font-size:13px; font-weight:700; }
+.platformPlans .checkList { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:4px; }
+.platformPlans .checkList label { display:flex; gap:6px; font-weight:400; }
+.platformPlans label.inline { display:flex; flex-direction:row; align-items:center; gap:8px; font-weight:600; }
+.platformPlans label.inline input { width:auto; }

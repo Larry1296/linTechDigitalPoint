@@ -1,3 +1,4 @@
+from apps.tenancy.base import TenantModel
 from decimal import Decimal
 from django.conf import settings
 from django.db import models
@@ -6,10 +7,17 @@ from apps.core.models import Store,TimeStamped
 from apps.catalog.models import Category,ProductVariant
 class Zone(TimeStamped):
     store=models.ForeignKey(Store,related_name="zones",on_delete=models.CASCADE); code=models.CharField(max_length=20); name=models.CharField(max_length=120); active=models.BooleanField(default=True); width=models.DecimalField(max_digits=10,decimal_places=2,default=100); height=models.DecimalField(max_digits=10,decimal_places=2,default=100); next_shelf_number=models.PositiveIntegerField(default=1)
-    class Meta: constraints=[models.UniqueConstraint(fields=["store","code"],name="unique_zone_code")]
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=["store","code"],name="unique_zone_code")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class ShelfStack(TimeStamped):
-    zone=models.ForeignKey(Zone,related_name="stacks",on_delete=models.PROTECT);code=models.CharField(max_length=40,unique=True);display_name=models.CharField(max_length=160);x=models.DecimalField(max_digits=10,decimal_places=2);y=models.DecimalField(max_digits=10,decimal_places=2);width=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);depth=models.DecimalField(max_digits=10,decimal_places=2);rotation=models.DecimalField(max_digits=6,decimal_places=2,default=0);number_of_levels=models.PositiveIntegerField();active=models.BooleanField(default=True);notes=models.TextField(blank=True);created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_created");updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_updated")
-    class Meta: constraints=[models.CheckConstraint(condition=Q(width__gt=0)&Q(height__gt=0)&Q(depth__gt=0)&Q(number_of_levels__gt=0),name="positive_stack_dimensions")]
+    zone=models.ForeignKey(Zone,related_name="stacks",on_delete=models.PROTECT);code=models.CharField(max_length=40);display_name=models.CharField(max_length=160);x=models.DecimalField(max_digits=10,decimal_places=2);y=models.DecimalField(max_digits=10,decimal_places=2);width=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);depth=models.DecimalField(max_digits=10,decimal_places=2);rotation=models.DecimalField(max_digits=6,decimal_places=2,default=0);number_of_levels=models.PositiveIntegerField();active=models.BooleanField(default=True);notes=models.TextField(blank=True);created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_created");updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stacks_updated")
+    class Meta:
+        constraints=[models.CheckConstraint(condition=Q(width__gt=0)&Q(height__gt=0)&Q(depth__gt=0)&Q(number_of_levels__gt=0),name="positive_stack_dimensions")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [*constraints, models.UniqueConstraint(fields=["organization", "code"], name="inve_shelfstack_code_org")]
     def __str__(self):return f"{self.code} — {self.display_name}"
 class ShelfStackCategory(TimeStamped):
     stack=models.ForeignKey(ShelfStack,related_name="category_assignments",on_delete=models.CASCADE)
@@ -17,35 +25,74 @@ class ShelfStackCategory(TimeStamped):
     is_primary=models.BooleanField(default=False)
     class Meta:
         constraints=[models.UniqueConstraint(fields=["stack","category"],name="unique_stack_category"),models.UniqueConstraint(fields=["stack"],condition=Q(is_primary=True),name="one_primary_stack_category")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class ShelfLevel(TimeStamped):
     stack=models.ForeignKey(ShelfStack,related_name="levels",on_delete=models.PROTECT);level_number=models.PositiveIntegerField();y_position=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);active=models.BooleanField(default=True)
-    class Meta:ordering=["level_number"];constraints=[models.UniqueConstraint(fields=["stack","level_number"],name="unique_stack_level"),models.CheckConstraint(condition=Q(height__gt=0)&Q(level_number__gt=0),name="positive_level_geometry")]
+    class Meta:
+        ordering=["level_number"];constraints=[models.UniqueConstraint(fields=["stack","level_number"],name="unique_stack_level"),models.CheckConstraint(condition=Q(height__gt=0)&Q(level_number__gt=0),name="positive_level_geometry")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
     def __str__(self):return f"{self.stack.code} Level {self.level_number}"
 class Shelf(TimeStamped):
+    is_virtual = models.BooleanField(default=False, editable=False)
     zone=models.ForeignKey(Zone,related_name="shelves",on_delete=models.PROTECT);level=models.ForeignKey(ShelfLevel,related_name="shelves",null=True,blank=True,on_delete=models.PROTECT);code=models.CharField(max_length=60);physical_label=models.CharField(max_length=80,blank=True);display_name=models.CharField(max_length=160);position_in_level=models.PositiveIntegerField(null=True,blank=True);parent=models.ForeignKey("self",null=True,blank=True,on_delete=models.PROTECT);x=models.DecimalField(max_digits=10,decimal_places=2);y=models.DecimalField(max_digits=10,decimal_places=2);width=models.DecimalField(max_digits=10,decimal_places=2);height=models.DecimalField(max_digits=10,decimal_places=2);depth=models.DecimalField(max_digits=10,decimal_places=2,null=True,blank=True);rotation=models.DecimalField(max_digits=6,decimal_places=2,default=0);sort_order=models.IntegerField(default=0);capacity=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True);active=models.BooleanField(default=True);notes=models.TextField(blank=True);created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="shelves_created");updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="shelves_updated")
-    class Meta: constraints=[models.UniqueConstraint(fields=["zone","code"],name="unique_shelf_code_zone"),models.CheckConstraint(condition=Q(width__gt=0)&Q(height__gt=0),name="positive_shelf_dimensions")]
-class ShelfHistory(models.Model):
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=["zone","code"],name="unique_shelf_code_zone"),models.CheckConstraint(condition=Q(width__gt=0)&Q(height__gt=0),name="positive_shelf_dimensions")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+class ShelfHistory(TenantModel):
     shelf=models.ForeignKey(Shelf,related_name="history",on_delete=models.PROTECT); event=models.CharField(max_length=40); snapshot=models.JSONField(); changed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL); created_at=models.DateTimeField(auto_now_add=True)
-class LocationHistory(models.Model):
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+class LocationHistory(TenantModel):
     object_type=models.CharField(max_length=20);object_id=models.PositiveBigIntegerField();event=models.CharField(max_length=40);snapshot=models.JSONField();changed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL);created_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class StockLot(TimeStamped):
-    variant=models.ForeignKey(ProductVariant,related_name="lots",on_delete=models.PROTECT); reference=models.CharField(max_length=80); received_quantity=models.DecimalField(max_digits=14,decimal_places=3); remaining_quantity=models.DecimalField(max_digits=14,decimal_places=3); unit_cost=models.DecimalField(max_digits=14,decimal_places=2); supplier_name=models.CharField(max_length=180,blank=True); received_at=models.DateTimeField()
-    class Meta: constraints=[models.CheckConstraint(condition=Q(received_quantity__gte=0)&Q(remaining_quantity__gte=0),name="nonnegative_lot")]
+    variant=models.ForeignKey(ProductVariant,related_name="lots",on_delete=models.PROTECT); reference=models.CharField(max_length=80); received_quantity=models.DecimalField(max_digits=14,decimal_places=3); remaining_quantity=models.DecimalField(max_digits=14,decimal_places=3); unit_cost=models.DecimalField(max_digits=18,decimal_places=4); supplier_name=models.CharField(max_length=180,blank=True); received_at=models.DateTimeField()
+    # Cost layer: invoice buying price plus the share of delivery/landed costs, per unit.
+    landed_unit_cost=models.DecimalField(max_digits=18,decimal_places=4,default=Decimal("0"))
+    COSTED="COSTED"; UNCOSTED="UNCOSTED"
+    cost_status=models.CharField(max_length=10,default=COSTED,choices=[(COSTED,"Costed"),(UNCOSTED,"Uncosted: buying price still to be recorded")])
+    class Meta:
+        constraints=[models.CheckConstraint(condition=Q(received_quantity__gte=0)&Q(remaining_quantity__gte=0),name="nonnegative_lot")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class StockBalance(TimeStamped):
     lot=models.ForeignKey(StockLot,related_name="balances",on_delete=models.PROTECT); shelf=models.ForeignKey(Shelf,related_name="balances",on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); reserved=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0"))
-    class Meta: constraints=[models.UniqueConstraint(fields=["lot","shelf"],name="unique_lot_shelf"),models.CheckConstraint(condition=Q(quantity__gte=0)&Q(reserved__gte=0)&Q(reserved__lte=models.F("quantity")),name="valid_stock_balance")]
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=["lot","shelf"],name="unique_lot_shelf"),models.CheckConstraint(condition=Q(quantity__gte=0)&Q(reserved__gte=0)&Q(reserved__lte=models.F("quantity")),name="valid_stock_balance")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class VariantPreferredLocation(TimeStamped):
     variant=models.OneToOneField(ProductVariant,related_name="preferred_location",on_delete=models.CASCADE);shelf=models.ForeignKey(Shelf,related_name="preferred_variants",on_delete=models.PROTECT);updated_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class StockReceipt(TimeStamped):
+    branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT, editable=False)
     COMPLETED="COMPLETED"
     status=models.CharField(max_length=20,default=COMPLETED,choices=[(COMPLETED,"Completed")])
-    receipt_number=models.CharField(max_length=80,unique=True)
+    receipt_number=models.CharField(max_length=80)
     external_reference=models.CharField(max_length=120,blank=True)
     supplier_name=models.CharField(max_length=180,blank=True)
     received_at=models.DateTimeField()
     notes=models.TextField(blank=True)
     created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="stock_receipts")
-    idempotency_key=models.CharField(max_length=120,unique=True,null=True,blank=True)
+    idempotency_key=models.CharField(max_length=120,null=True,blank=True)
+    SUPPLIER_DOCUMENT="SUPPLIER_DOCUMENT"; NO_DOCUMENT="NO_DOCUMENT"; OPENING_BALANCE="OPENING_BALANCE"
+    document_status=models.CharField(max_length=20,default=SUPPLIER_DOCUMENT,choices=[(SUPPLIER_DOCUMENT,"Supplier invoice or delivery note"),(NO_DOCUMENT,"No supplier document"),(OPENING_BALANCE,"Opening stock balance")])
+    # Delivery/freight and other directly attributable costs: [{"description", "amount", "paid_by"}].
+    landed_costs=models.JSONField(default=list,blank=True)
+    landed_cost_total=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"))
+    landed_allocation_note=models.TextField(blank=True)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [models.UniqueConstraint(fields=["organization", "receipt_number"], name="inve_stockreceipt_receipt_number_org"), models.UniqueConstraint(fields=["organization", "idempotency_key"], name="inve_stockreceipt_idempotency_key_org")]
 class StockReceiptLine(TimeStamped):
     receipt=models.ForeignKey(StockReceipt,related_name="lines",on_delete=models.PROTECT)
     variant=models.ForeignKey(ProductVariant,related_name="receipt_lines",on_delete=models.PROTECT)
@@ -54,8 +101,12 @@ class StockReceiptLine(TimeStamped):
     lot=models.OneToOneField(StockLot,null=True,blank=True,related_name="receipt_line",on_delete=models.PROTECT)
     previous_selling_price=models.DecimalField(max_digits=14,decimal_places=2,null=True,blank=True)
     new_selling_price=models.DecimalField(max_digits=14,decimal_places=2,null=True,blank=True)
+    landed_cost=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"))
+    uncosted=models.BooleanField(default=False)
     class Meta:
         constraints=[models.CheckConstraint(condition=Q(received_quantity__gt=0)&Q(unit_cost__gte=0),name="positive_receipt_line")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class StockReceiptPlacement(TimeStamped):
     line=models.ForeignKey(StockReceiptLine,related_name="placements",on_delete=models.PROTECT)
     shelf=models.ForeignKey(Shelf,related_name="receipt_placements",on_delete=models.PROTECT)
@@ -63,7 +114,9 @@ class StockReceiptPlacement(TimeStamped):
     balance=models.ForeignKey(StockBalance,null=True,blank=True,related_name="receipt_placements",on_delete=models.PROTECT)
     class Meta:
         constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_receipt_placement"),models.UniqueConstraint(fields=["line","shelf"],name="unique_receipt_line_shelf")]
-class StockReceiptLineCorrection(models.Model):
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+class StockReceiptLineCorrection(TenantModel):
     line = models.ForeignKey(StockReceiptLine, related_name="corrections", on_delete=models.PROTECT)
     performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     reason = models.TextField()
@@ -75,8 +128,10 @@ class StockReceiptLineCorrection(models.Model):
         ordering = ["created_at", "pk"]
         default_permissions = ("view",)
         constraints = [models.CheckConstraint(condition=~Q(reason=""), name="receipt_correction_reason_required")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 
-class StockAdjustment(models.Model):
+class StockAdjustment(TenantModel):
     REASONS=[(x,x) for x in ["Opening stock correction", "Physical count variance", "Damaged item", "Lost item", "Data-entry correction", "Found stock"]]
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT)
     shelf=models.ForeignKey(Shelf,on_delete=models.PROTECT)
@@ -88,18 +143,71 @@ class StockAdjustment(models.Model):
     reference=models.CharField(max_length=100,blank=True)
     performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.PROTECT)
     created_at=models.DateTimeField(auto_now_add=True)
-    idempotency_key=models.CharField(max_length=120,unique=True)
+    idempotency_key=models.CharField(max_length=120)
     class Meta:
         permissions=[("adjust_stock", "Can post physical stock adjustments")]
         constraints=[models.CheckConstraint(condition=Q(quantity_before__gte=0)&Q(quantity_after__gte=0)&Q(quantity_after=models.F("quantity_before")+models.F("amount"))&~Q(amount=0),name="valid_stock_adjustment")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [*constraints, models.UniqueConstraint(fields=["organization", "idempotency_key"], name="inve_stockadjustment_idempotency_key_org")]
 
-class Movement(models.Model):
+class Movement(TenantModel):
     receipt_correction = models.ForeignKey(StockReceiptLineCorrection, null=True, blank=True, on_delete=models.PROTECT, related_name="movements")
     adjustment=models.ForeignKey(StockAdjustment,null=True,blank=True,on_delete=models.PROTECT,related_name="movements")
     quantity_before=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)
     quantity_after=models.DecimalField(max_digits=14,decimal_places=3,null=True,blank=True)
     TYPES=[(x,x.replace("_"," ").title()) for x in ["OPENING_STOCK","PURCHASE_RECEIPT","SALE","ONLINE_ORDER","CYBER_CONSUMPTION","TRANSFER","CUSTOMER_RETURN","SUPPLIER_RETURN","DAMAGE","LOSS","STOCKTAKE_ADJUSTMENT","STOCK_ADJUSTMENT","MANUAL_ADJUSTMENT","ORDER_RESERVATION","RESERVATION_RELEASE","OTHER"]]
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); lot=models.ForeignKey(StockLot,null=True,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); source=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_out"); destination=models.ForeignKey(Shelf,null=True,on_delete=models.PROTECT,related_name="movements_in"); movement_type=models.CharField(max_length=30,choices=TYPES); reference=models.CharField(max_length=100); performed_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL); notes=models.TextField(blank=True); created_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
 class Reservation(TimeStamped):
+    branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT, editable=False)
     ACTIVE="ACTIVE"; CONSUMED="CONSUMED"; RELEASED="RELEASED"
     variant=models.ForeignKey(ProductVariant,on_delete=models.PROTECT); quantity=models.DecimalField(max_digits=14,decimal_places=3); active=models.BooleanField(default=True); status=models.CharField(max_length=12,choices=[(ACTIVE,"Active"),(CONSUMED,"Consumed"),(RELEASED,"Released")],default=ACTIVE); reference=models.CharField(max_length=100); expires_at=models.DateTimeField(); allocations=models.JSONField(default=list)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+
+
+class PurchaseReturn(TimeStamped):
+    """Goods sent back to the supplier: reduces the original cost layer and what is owed to the supplier."""
+    branch=models.ForeignKey("core.Store",null=True,blank=True,on_delete=models.PROTECT,editable=False)
+    receipt=models.ForeignKey(StockReceipt,related_name="returns",on_delete=models.PROTECT)
+    number=models.CharField(max_length=80)
+    reason=models.TextField()
+    total_cost=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"))
+    created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="+")
+    idempotency_key=models.CharField(max_length=120,null=True,blank=True)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints=[models.UniqueConstraint(fields=["organization","number"],name="inve_purchasereturn_number_org"),
+                     models.UniqueConstraint(fields=["organization","idempotency_key"],name="inve_purchasereturn_key_org")]
+
+
+class PurchaseReturnLine(TimeStamped):
+    purchase_return=models.ForeignKey(PurchaseReturn,related_name="lines",on_delete=models.PROTECT)
+    lot=models.ForeignKey(StockLot,related_name="purchase_returns",on_delete=models.PROTECT)
+    shelf=models.ForeignKey(Shelf,related_name="+",on_delete=models.PROTECT)
+    quantity=models.DecimalField(max_digits=14,decimal_places=3)
+    unit_cost=models.DecimalField(max_digits=18,decimal_places=4)
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_purchase_return_line")]
+
+
+class LotCostCorrection(TimeStamped):
+    """Records the buying price later supplied for an uncosted cost layer, and the journal it produced."""
+    lot=models.ForeignKey(StockLot,related_name="cost_corrections",on_delete=models.PROTECT)
+    unit_cost=models.DecimalField(max_digits=18,decimal_places=4)
+    remaining_quantity=models.DecimalField(max_digits=14,decimal_places=3)
+    sold_quantity=models.DecimalField(max_digits=14,decimal_places=3)
+    inventory_amount=models.DecimalField(max_digits=14,decimal_places=2)
+    cogs_amount=models.DecimalField(max_digits=14,decimal_places=2)
+    reason=models.TextField()
+    created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="+")
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"

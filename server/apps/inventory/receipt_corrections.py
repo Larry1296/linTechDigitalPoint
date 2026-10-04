@@ -1,11 +1,14 @@
+from apps.tenancy.transactions import lock_business
+from apps.tenancy.permissions import has_business_permission, is_business_manager
 """Append-only corrections; physical changes are limited to unused receipt lots."""
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import F
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
-from apps.catalog.models import ProductVariant
+from apps.catalog.models import ProductVariant, category_lineage
 from apps.commerce.models import SaleAllocation
 from .models import (
     Movement, ShelfStackCategory, StockBalance, StockLot, StockReceiptLine,
@@ -47,7 +50,8 @@ def line_snapshot(line):
 
 @transaction.atomic
 def correct_receipt_line(*, receipt_id, line_id, user, data):
-    if not (user and user.is_active and user.is_staff and user.has_perm("inventory.change_stockreceipt")):
+    lock_business()
+    if not (user and user.is_active and has_business_permission(user, "inventory.change_stockreceipt")):
         raise PermissionDenied("Receipt correction permission required.")
     serializer = ReceiptCorrectionInput(data=data)
     serializer.is_valid(raise_exception=True)
@@ -65,12 +69,20 @@ def correct_receipt_line(*, receipt_id, line_id, user, data):
     balances = list(StockBalance.objects.select_for_update().select_related("lot")
                     .filter(lot_id=line.lot_id).order_by("lot__received_at", "lot_id", "shelf_id"))
     lot = StockLot.objects.select_for_update().get(pk=line.lot_id)
-    if (lot.variant_id, lot.received_quantity, lot.unit_cost) != (line.variant_id, line.received_quantity, line.unit_cost):
+    # The lot's cost is the invoice BP plus its share of delivery costs; only the BP is corrected here.
+    if (lot.variant_id, lot.received_quantity, lot.unit_cost - lot.landed_unit_cost) != (line.variant_id, line.received_quantity, line.unit_cost):
         raise ValidationError("Receipt and lot values differ; reconciliation is required before correction.")
+    old_stock_value = lot.remaining_quantity * lot.unit_cost
+    old_receipt_value = line.received_quantity * line.unit_cost
     before = line_snapshot(line)
     variant_changed = values["variant_id"] != line.variant_id
     quantity_changed = values["received_quantity"] != line.received_quantity
     cost_changed = values["unit_cost"] != line.unit_cost
+    if cost_changed:
+        from apps.tenancy.context import branch_context
+        with branch_context(None):
+            if StockBalance.objects.filter(lot=lot, quantity__gt=0).exclude(shelf__zone__store_id=line.receipt.branch_id).exists():
+                raise ValidationError("This lot has stock in another branch. Reverse the transfer before correcting its buying price.")
     if "placements" in values and not quantity_changed:
         raise ValidationError("Only submit placement quantities when correcting received quantity.")
     if not (variant_changed or quantity_changed or cost_changed):
@@ -108,7 +120,7 @@ def correct_receipt_line(*, receipt_id, line_id, user, data):
         if variant_changed:
             for p in placements:
                 if not p.shelf.level_id or not ShelfStackCategory.objects.filter(
-                    stack_id=p.shelf.level.stack_id, category_id=variant.product.category_id,
+                    stack_id=p.shelf.level.stack_id, category_id__in=category_lineage(variant.product.category_id),
                 ).exists():
                     raise ValidationError("The selected variant's category is not assigned to this receipt's rack. Transfer or reverse the stock first.")
 
@@ -125,7 +137,7 @@ def correct_receipt_line(*, receipt_id, line_id, user, data):
     line.save(update_fields=line_fields)
     lot_fields = ["updated_at"]
     if cost_changed:
-        lot.unit_cost = line.unit_cost
+        lot.unit_cost = line.unit_cost + lot.landed_unit_cost
         lot_fields.append("unit_cost")
     if variant_changed:
         lot.variant = variant
@@ -160,4 +172,16 @@ def correct_receipt_line(*, receipt_id, line_id, user, data):
                     movement_type="MANUAL_ADJUSTMENT", reference=f"RECEIPT-CORRECTION-{correction.pk}",
                     performed_by=user, notes=values["reason"], receipt_correction=correction,
                 )
+    from apps.accounting.ledger import post_journal, paired, money
+    from apps.accounting.models import JournalEntry
+    if JournalEntry.objects.filter(source_key=f'purchase:{line.receipt.purchase.pk}').exists():
+        stock_change = money(lot.remaining_quantity * lot.unit_cost - old_stock_value)
+        purchase_change = money(line.received_quantity * line.unit_cost - old_receipt_value)
+        if purchase_change:
+            # What is owed to the supplier follows the corrected invoice.
+            type(line.receipt.purchase).objects.filter(pk=line.receipt.purchase.pk).update(amount=F("amount") + purchase_change)
+        if stock_change or purchase_change:
+            post_journal(key=f'receipt-correction:{correction.pk}', description=values['reason'],
+                branch=line.receipt.branch_id, user=user,
+                lines=paired('1200','2000',stock_change)+paired('6100','2000',purchase_change-stock_change))
     return line

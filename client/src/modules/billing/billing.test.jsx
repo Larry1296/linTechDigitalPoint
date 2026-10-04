@@ -1,0 +1,114 @@
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { beforeEach, expect, it, vi } from "vitest";
+import { POLL_INTERVAL, SubscriptionPage } from "./SubscriptionPage";
+import { SubscriptionBanner } from "./SubscriptionBanner";
+import { PlatformAdminPage } from "./PlatformAdminPage";
+import { api } from "../../core/api/client";
+import { confirmAction, showError, showSuccess } from "../../core/ui/alerts";
+import { useAuth } from "../../core/auth/AuthContext";
+
+vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: vi.fn() }));
+vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), showError: vi.fn(async () => {}), showSuccess: vi.fn(async () => {}) }));
+vi.mock("sweetalert2", () => ({ default: { fire: vi.fn(async () => ({})), close: vi.fn(), showLoading: vi.fn() } }));
+
+const refresh = vi.fn(async () => {});
+const PLANS = [
+  { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", period_days: 30, description: "Basics", features: ["Point of sale & receipts"], enabled_modules: ["pos"] },
+  { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", period_days: 30, description: "Everything", features: ["Profit & loss, balance sheet and reports"], enabled_modules: ["pos", "reports"] },
+];
+const trial = { status: "TRIAL", plan: "BASIC", plan_name: "Basic", ended: false, days_left: 23, ends_at: "2026-10-25T09:00:00Z", complimentary: false, expiring_soon: false };
+beforeEach(() => {
+  vi.clearAllMocks();
+  POLL_INTERVAL.ms = 0;
+  useAuth.mockReturnValue({ user: { roles: ["OWNER"], platform_admin: false, organization: { subscription: trial } }, refresh });
+});
+
+it("upgrades to Pro: confirms, sends the M-Pesa prompt, waits for the phone and reports success", async () => {
+  let polls = 0;
+  api.mockImplementation(async (path, options = {}) => {
+    if (path === "/api/v1/tenancy/billing/") return { subscription: trial, plans: PLANS, payments: [], payment_methods: ["MPESA"], phone: "0712345678" };
+    if (path === "/api/v1/tenancy/billing/pay/") return { id: 5, status: "PENDING", ...JSON.parse(options.body) };
+    if (path === "/api/v1/tenancy/billing/payments/5/") return (polls += 1) < 2 ? { id: 5, status: "PENDING" }
+      : { id: 5, status: "PAID", amount: "1000.00", currency: "KES", receipt_number: "QKJ1ABC23D", period_ends_at: "2026-11-24T09:00:00Z" };
+    return {};
+  });
+  render(<MemoryRouter><SubscriptionPage /></MemoryRouter>);
+  expect(await screen.findByText("Basic · Free month")).toBeInTheDocument();
+  expect(screen.getByText(/^23 days left · until/)).toBeInTheDocument();
+  expect(screen.getByLabelText(/M-Pesa number/)).toHaveValue("0712345678");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Upgrade · KES 1,000/ })); });
+  await waitFor(() => expect(showSuccess).toHaveBeenCalled());
+  expect(confirmAction.mock.calls[0][0]).toMatchObject({ title: "Switch to Pro for KES 1,000?", confirmButtonText: "Send M-Pesa prompt" });
+  expect(confirmAction.mock.calls[0][0].text).toContain("0712345678");
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/billing/pay/")[1].body)).toEqual({ plan: "PRO", phone: "0712345678", method: "MPESA" });
+  expect(showSuccess.mock.calls[0][1]).toContain("QKJ1ABC23D");
+  expect(refresh).toHaveBeenCalled();
+});
+
+it("does nothing when the owner cancels, and explains when M-Pesa is not set up", async () => {
+  api.mockResolvedValue({ subscription: trial, plans: PLANS, payments: [], payment_methods: [], phone: "" });
+  render(<MemoryRouter><SubscriptionPage /></MemoryRouter>);
+  expect(await screen.findByText(/M-Pesa payments are not set up/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Upgrade/ })); });
+  expect(showError).toHaveBeenCalledWith("Payments are not available yet", expect.any(String));
+  expect(api.mock.calls.some(([path]) => path === "/api/v1/tenancy/billing/pay/")).toBe(false);
+});
+
+it("counts down on every page and tells staff what an ended subscription means", () => {
+  const { rerender } = render(<MemoryRouter><SubscriptionBanner organization={{ subscription: trial }} canManage /></MemoryRouter>);
+  expect(screen.getByRole("status")).toHaveTextContent("Free month: 23 days left on Basic. Upgrade to Pro");
+  expect(screen.getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
+  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE", days_left: 3, expiring_soon: true } }} canManage /></MemoryRouter>);
+  expect(screen.getByRole("status")).toHaveTextContent("Pro: 3 days left. Renew before it ends");
+  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, status: "EXPIRED", ended: true, days_left: 0 } }} canManage={false} /></MemoryRouter>);
+  expect(screen.getByRole("alert")).toHaveTextContent("accounting, stock receiving and other tools are paused");
+  expect(screen.getByRole("alert")).toHaveTextContent("Ask the business owner to renew.");
+  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, complimentary: true } }} canManage /></MemoryRouter>);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+const overview = {
+  summary: { businesses: 2, trial: 1, paying: 1, ended: 0, expiring_soon: 0, complimentary: 0, by_plan: { BASIC: 1, PRO: 1 },
+    revenue_this_month: "1000.00", revenue_total: "1000.00", currency: "KES", mpesa_mode: "off", mpesa_ready: false },
+  businesses: [
+    { id: 1, name: "Fresh Cuts", business_type: "Barbershop", owner: { name: "Otieno", username: "otieno", email: "o@example.test", phone: "0711000000" },
+      subscription: trial, total_paid: "0", created_at: "2026-09-25T09:00:00Z" },
+    { id: 2, name: "Mama Wanjiru", business_type: "Mama mboga / kibanda", owner: { name: "Wanjiru", username: "wanjiru", email: "", phone: "0722000000" },
+      subscription: { ...trial, status: "ACTIVE", plan: "PRO", plan_name: "Pro" }, total_paid: "1000.00", created_at: "2026-09-20T09:00:00Z" },
+  ],
+  recent_payments: [], plans: PLANS.map((plan, index) => ({ ...plan, id: index + 1, active: true })),
+};
+
+it("shows the platform owner every business and records a payment received outside the app", async () => {
+  useAuth.mockReturnValue({ user: { platform_admin: true } });
+  api.mockImplementation(async (path, options = {}) => {
+    if (path === "/api/v1/tenancy/platform-admin/overview/") return overview;
+    if (path === "/api/v1/tenancy/platform-admin/businesses/1/") return options.method ? {} : { ...overview.businesses[0], members: 1, payments: [] };
+    return {};
+  });
+  render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
+  expect(await screen.findByText("Fresh Cuts")).toBeInTheDocument();
+  expect(screen.getByText(/M-Pesa payments are switched off/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Plan"), { target: { value: "PRO" } });
+  expect(screen.queryByText("Fresh Cuts")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Plan"), { target: { value: "all" } });
+  fireEvent.change(screen.getByLabelText("Search"), { target: { value: "0711" } });
+  expect(screen.queryByText("Mama Wanjiru")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Fresh Cuts" }));
+  const detail = await screen.findByRole("article", { name: "Fresh Cuts subscription" });
+  const record = within(detail).getByRole("button", { name: "Record payment" }).closest("form");
+  fireEvent.change(within(record).getByLabelText("Amount"), { target: { value: "500" } });
+  fireEvent.change(within(record).getByLabelText("Receipt / reference"), { target: { value: "QKX99" } });
+  await act(async () => { fireEvent.submit(record); });
+  await waitFor(() => expect(showSuccess).toHaveBeenCalled());
+  const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/1/" && o?.method === "POST");
+  expect(JSON.parse(options.body)).toEqual({ plan: "BASIC", amount: "500", receipt_number: "QKX99" });
+});
+
+it("keeps the platform page away from everyone else", () => {
+  useAuth.mockReturnValue({ user: { platform_admin: false } });
+  render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
+  expect(api).not.toHaveBeenCalled();
+});

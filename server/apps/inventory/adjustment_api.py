@@ -1,3 +1,4 @@
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
@@ -96,7 +97,23 @@ def adjustment_context(request, pk):
             "balances": list(
                 StockBalance.objects.filter(lot__variant=variant).values("shelf_id", "quantity", "reserved", "lot_id")
             ),
-            "lots": list(StockLot.objects.filter(variant=variant).values("id", "reference", "remaining_quantity")),
+            # Every place this item is stocked (including "Not assigned to a shelf"), so the page can prefill the count.
+            "locations": [
+                {"shelf_id": row["shelf_id"], "code": row["shelf__code"], "label": row["shelf__physical_label"] or row["shelf__code"],
+                 "name": row["shelf__display_name"], "virtual": row["shelf__is_virtual"],
+                 "quantity": row["quantity"], "reserved": row["reserved"]}
+                for row in StockBalance.objects.filter(lot__variant=variant)
+                .values("shelf_id", "shelf__code", "shelf__physical_label", "shelf__display_name", "shelf__is_virtual")
+                .annotate(quantity=Sum("quantity"), reserved=Sum("reserved"))
+                .filter(quantity__gt=0)
+                .order_by("-quantity", "shelf_id")
+            ],
+            "lots": [{'id':row['lot_id'],'reference':row['lot__reference'],'remaining_quantity':row['remaining_quantity']}
+                for row in StockBalance.objects.filter(lot__variant=variant).values('lot_id','lot__reference').annotate(remaining_quantity=__import__('django.db.models',fromlist=['Sum']).Sum('quantity'))],
+            # Where stock goes when there is none yet (its usual shelf, or "Not assigned to a shelf"), and the delivery
+            # whose buying price extra units take, so a quantity can be raised straight from the product's details.
+            "default_shelf_id": default_shelf_id(variant),
+            "latest_lot_id": StockLot.objects.filter(variant=variant, cost_status=StockLot.COSTED).order_by("-received_at", "-id").values_list("id", flat=True).first(),
             "history": [
                 movement_data(m)
                 for m in Movement.objects.filter(variant=variant)
@@ -105,3 +122,10 @@ def adjustment_context(request, pk):
             ],
         }
     )
+
+
+def default_shelf_id(variant):
+    from .models import VariantPreferredLocation
+    from .unplaced import unplaced_shelf
+    preferred = VariantPreferredLocation.objects.filter(variant=variant, shelf__active=True).values_list("shelf_id", flat=True).first()
+    return preferred or unplaced_shelf().pk

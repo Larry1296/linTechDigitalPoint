@@ -20,19 +20,15 @@ when extracting markup.
 
 ## Domain components and operations
 
-- `modules/storefront/components/`: `ProductCard`, `ProductImage`,
-  `StockAvailability`, and `AddToCartButton` share product presentation and
-  ordering eligibility across home, shop, and detail pages. Pass `onAdd` to a
-  product card for the shop variant; featured cards only link to details.
-- `core/cart/CartContext.jsx`: `addToCart(variantId, quantity)` posts an addition
-  and refreshes the shared cart before resolving.
+- `modules/storefront/components/`: product lookup presentation components are
+  reused by internal product and POS screens. They do not expose public prices
+  or shopping actions.
 - `modules/auth/AuthFormCard.jsx`: shared authentication form shell.
-- `modules/auth/useAuthForm.js`: login/registration submission, password
-  confirmation, session refresh, and safe post-authentication navigation.
-- `core/auth/useSignOut.js`: shared confirmation, logout, and cart refresh.
-- `modules/mpesa/MpesaCustomerTransactionForm.jsx`: shared customer transaction
-  form. `MpesaDepositForm` and `MpesaWithdrawalForm` select their transaction
-  type while keeping deposit notes and withdrawal cash limits explicit.
+- `modules/auth/useAuthForm.js`: internal staff login, session refresh, and safe
+  post-authentication navigation.
+- `core/auth/useSignOut.js`: shared confirmation and logout.
+- `modules/mpesa/MpesaCustomerTransactionForm.jsx`: retained for optional
+  walk-in transaction references; it does not create customer accounts.
 
 Extend a shared component when the behavior is the same. Keep domain-specific
 validation and workflows in their module rather than adding unrelated modes to

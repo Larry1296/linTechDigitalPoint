@@ -1,3 +1,4 @@
+from apps.tenancy.commands import LintechCommand
 """Seed sample catalog data and receive stock into existing exact compartments."""
 from decimal import Decimal
 
@@ -26,7 +27,7 @@ PADLOCKS = (
 )
 
 
-class Command(BaseCommand):
+class Command(LintechCommand):
     help = "Create sample covers and padlocks and receive stock once into existing racks."
 
     @transaction.atomic

@@ -1,0 +1,1889 @@
+{
+ "models": [
+  {
+   "id": "GOODS",
+   "label": "I sell goods",
+   "phrase": "only sell goods",
+   "hint": "You buy, grow or make products and sell them: a duka, kibanda, hardware or farm produce.",
+   "modules": [
+    "inventory",
+    "locations",
+    "pos",
+    "customers",
+    "expenses",
+    "mpesa",
+    "reports",
+    "branches",
+    "staff"
+   ],
+   "requires": [
+    "inventory"
+   ]
+  },
+  {
+   "id": "SERVICES",
+   "label": "I provide services",
+   "phrase": "only provide services",
+   "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
+   "modules": [
+    "services",
+    "pos",
+    "customers",
+    "expenses",
+    "mpesa",
+    "reports",
+    "branches",
+    "staff"
+   ],
+   "requires": [
+    "services",
+    "mpesa"
+   ]
+  },
+  {
+   "id": "MIXED",
+   "label": "Both goods and services",
+   "phrase": "sell goods and provide services",
+   "hint": "You sell products and also offer services, such as a cyber that sells phone accessories.",
+   "modules": [
+    "inventory",
+    "locations",
+    "services",
+    "pos",
+    "customers",
+    "expenses",
+    "mpesa",
+    "reports",
+    "branches",
+    "staff"
+   ],
+   "requires": [
+    "inventory",
+    "services"
+   ]
+  }
+ ],
+ "sizes": [
+  {
+   "id": "SOLO",
+   "label": "Just me",
+   "hint": "I run it myself"
+  },
+  {
+   "id": "SMALL",
+   "label": "2 – 10 people",
+   "hint": "A few workers or helpers"
+  },
+  {
+   "id": "MEDIUM",
+   "label": "11 – 50 people",
+   "hint": "Several staff, maybe more than one location"
+  }
+ ],
+ "modules": [
+  {
+   "id": "inventory",
+   "label": "Products & stock",
+   "description": "Products, prices, receiving stock and stock counts.",
+   "needs": []
+  },
+  {
+   "id": "locations",
+   "label": "Shelves & locations",
+   "description": "Map your racks and shelves so anyone finds an item fast.",
+   "needs": [
+    "inventory"
+   ]
+  },
+  {
+   "id": "services",
+   "label": "Services & jobs",
+   "description": "Your service price list, plus job cards for work handed in, such as repairs.",
+   "needs": []
+  },
+  {
+   "id": "pos",
+   "label": "Point of sale",
+   "description": "Record each sale at the counter and send receipts by WhatsApp or email.",
+   "needs": [
+    "inventory",
+    "services"
+   ]
+  },
+  {
+   "id": "customers",
+   "label": "Customers",
+   "description": "Customer records, credit sales and balances owed.",
+   "needs": []
+  },
+  {
+   "id": "expenses",
+   "label": "Expenses",
+   "description": "Record money spent, such as rent, transport and electricity.",
+   "needs": []
+  },
+  {
+   "id": "mpesa",
+   "label": "M-Pesa agency",
+   "description": "Agent float, deposits, withdrawals and commission.",
+   "needs": []
+  },
+  {
+   "id": "reports",
+   "label": "Reports",
+   "description": "Profit and loss, balance sheet and trends.",
+   "needs": []
+  },
+  {
+   "id": "branches",
+   "label": "Branches",
+   "description": "Run more than one shop or location.",
+   "needs": []
+  },
+  {
+   "id": "staff",
+   "label": "Staff",
+   "description": "Give each person their own sign-in and role.",
+   "needs": []
+  }
+ ],
+ "sectors": {
+  "GOODS": [
+   {
+    "id": "mama_mboga",
+    "label": "Mama mboga / kibanda",
+    "hint": "Fresh vegetables, fruits and cereals",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Vegetables",
+     "Fruits",
+     "Cereals & grains",
+     "Eggs",
+     "Cooking essentials"
+    ],
+    "services": [],
+    "keywords": "grocery greengrocer market stall sokoni"
+   },
+   {
+    "id": "duka",
+    "label": "Duka / general shop",
+    "hint": "Everyday household goods over the counter",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Foodstuffs",
+     "Drinks",
+     "Toiletries",
+     "Household",
+     "Snacks"
+    ],
+    "services": [],
+    "keywords": "kiosk retail provision shop minimart"
+   },
+   {
+    "id": "electronics",
+    "label": "Electronics & phone accessories",
+    "hint": "Phones, chargers, covers, computers",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Phones",
+     "Chargers & cables",
+     "Covers & protectors",
+     "Audio",
+     "Computer accessories"
+    ],
+    "services": [],
+    "keywords": "phone accessories gadgets"
+   },
+   {
+    "id": "hardware",
+    "label": "Hardware & building supplies",
+    "hint": "Tools, cement, electrical, plumbing",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Building materials",
+     "Tools",
+     "Electrical",
+     "Plumbing",
+     "Paint"
+    ],
+    "services": [],
+    "keywords": "construction mjengo"
+   },
+   {
+    "id": "agrovet",
+    "label": "Agrovet & farm inputs",
+    "hint": "Seeds, fertiliser, animal feeds and vet medicines",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Seeds",
+     "Fertilisers",
+     "Animal feeds",
+     "Vet medicines",
+     "Pesticides"
+    ],
+    "services": [],
+    "keywords": "agro farm inputs"
+   },
+   {
+    "id": "pharmacy",
+    "label": "Pharmacy / chemist",
+    "hint": "Medicines and personal care",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Medicines",
+     "First aid",
+     "Personal care",
+     "Baby care"
+    ],
+    "services": [],
+    "keywords": "chemist drugstore"
+   },
+   {
+    "id": "farm",
+    "label": "Farmer / farm produce",
+    "hint": "Sell your harvest, milk, eggs or livestock",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Crops",
+     "Dairy",
+     "Poultry & eggs",
+     "Livestock"
+    ],
+    "services": [],
+    "keywords": "shamba agriculture dairy poultry kuku"
+   },
+   {
+    "id": "butchery",
+    "label": "Butchery",
+    "hint": "Meat, chicken and fish",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Beef",
+     "Goat",
+     "Chicken",
+     "Fish"
+    ],
+    "services": [],
+    "keywords": "meat nyama choma"
+   },
+   {
+    "id": "clothing",
+    "label": "Clothes, shoes & mitumba",
+    "hint": "New or second-hand clothing and shoes",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Men",
+     "Women",
+     "Children",
+     "Shoes",
+     "Accessories"
+    ],
+    "services": [],
+    "keywords": "boutique fashion mitumba"
+   },
+   {
+    "id": "beauty_shop",
+    "label": "Cosmetics & beauty shop",
+    "hint": "Hair, skin care and make-up products",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Hair products",
+     "Skin care",
+     "Make-up",
+     "Fragrance"
+    ],
+    "services": [],
+    "keywords": "cosmetics"
+   },
+   {
+    "id": "stationery",
+    "label": "Bookshop & stationery",
+    "hint": "Books, stationery and school supplies",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Books",
+     "Stationery",
+     "School supplies"
+    ],
+    "services": [],
+    "keywords": "books school"
+   },
+   {
+    "id": "food",
+    "label": "Food kiosk, café or hotel",
+    "hint": "Meals, snacks and drinks",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Meals",
+     "Snacks",
+     "Drinks"
+    ],
+    "services": [],
+    "keywords": "restaurant kibanda hotel cafe chips"
+   },
+   {
+    "id": "drinks",
+    "label": "Drinks & wines shop",
+    "hint": "Soft drinks, beer, wines and spirits",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Soft drinks",
+     "Beer",
+     "Wines",
+     "Spirits"
+    ],
+    "services": [],
+    "keywords": "liquor bar"
+   },
+   {
+    "id": "gas_water",
+    "label": "Gas & water refill",
+    "hint": "Cooking gas refills, cylinders and water",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Gas refills",
+     "Cylinders",
+     "Water refills",
+     "Accessories"
+    ],
+    "services": [],
+    "keywords": "lpg"
+   },
+   {
+    "id": "wholesale",
+    "label": "Wholesale / distributor",
+    "hint": "Sell in bulk to other businesses",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [],
+    "keywords": "distributor bulk supplier"
+   },
+   {
+    "id": "other_goods",
+    "label": "Other goods",
+    "hint": "Describe what you sell",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [],
+    "keywords": ""
+   }
+  ],
+  "SERVICES": [
+   {
+    "id": "barber",
+    "label": "Barbershop",
+    "hint": "Haircuts, shaves and beard trims",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Haircut",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Kids haircut",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Shave",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Beard trim",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Hair dye",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "kinyozi barber"
+   },
+   {
+    "id": "salon",
+    "label": "Beauty salon",
+    "hint": "Hair, nails and make-up",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Braiding",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Wash & set",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Relaxer",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Manicure",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Pedicure",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Make-up",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "hair nails spa"
+   },
+   {
+    "id": "phone_repair",
+    "label": "Phone & computer repair",
+    "hint": "Screens, batteries, charging ports and software",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Screen replacement",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Battery replacement",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Charging port repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Software flashing",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Water damage repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     }
+    ],
+    "keywords": "fundi simu phone repair laptop"
+   },
+   {
+    "id": "appliance_repair",
+    "label": "Electrical & appliance repair",
+    "hint": "TVs, fridges, radios, irons and wiring",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "TV repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Fridge repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Radio & sound system repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Iron & kettle repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "House wiring",
+      "billing_unit": "PER_HOUR",
+      "requires_job": false
+     }
+    ],
+    "keywords": "fundi electrician electronics"
+   },
+   {
+    "id": "tailoring",
+    "label": "Tailoring & fashion design",
+    "hint": "Alterations and made-to-measure clothes",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Alterations",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Dress making",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Suit making",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "School uniform",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     }
+    ],
+    "keywords": "tailor fundi nguo seamstress"
+   },
+   {
+    "id": "cobbler",
+    "label": "Shoe repair",
+    "hint": "Sole repair, stitching and polishing",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Sole repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Stitching",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Shoe polish",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "cobbler shoes"
+   },
+   {
+    "id": "mechanic",
+    "label": "Garage / mechanic",
+    "hint": "Car and motorbike service and repair",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Vehicle service",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Puncture repair",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Welding",
+      "billing_unit": "PER_HOUR",
+      "requires_job": false
+     },
+     {
+      "name": "Boda boda service",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     }
+    ],
+    "keywords": "garage boda motorbike car"
+   },
+   {
+    "id": "car_wash",
+    "label": "Car wash",
+    "hint": "Vehicle and motorbike washing",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Exterior wash",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Full wash",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Engine wash",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Motorbike wash",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "carwash"
+   },
+   {
+    "id": "laundry",
+    "label": "Laundry & dry cleaning",
+    "hint": "Washing, ironing and dry cleaning",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Wash & fold",
+      "billing_unit": "PER_ITEM",
+      "requires_job": true
+     },
+     {
+      "name": "Dry cleaning",
+      "billing_unit": "PER_ITEM",
+      "requires_job": true
+     },
+     {
+      "name": "Ironing",
+      "billing_unit": "PER_ITEM",
+      "requires_job": false
+     }
+    ],
+    "keywords": "dhobi laundry"
+   },
+   {
+    "id": "cyber",
+    "label": "Cyber café & printing",
+    "hint": "Printing, photocopy, typing and online services",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Printing",
+      "billing_unit": "PER_PAGE",
+      "requires_job": false
+     },
+     {
+      "name": "Photocopy",
+      "billing_unit": "PER_COPY",
+      "requires_job": false
+     },
+     {
+      "name": "Scanning",
+      "billing_unit": "PER_PAGE",
+      "requires_job": false
+     },
+     {
+      "name": "Typing",
+      "billing_unit": "PER_PAGE",
+      "requires_job": false
+     },
+     {
+      "name": "Browsing",
+      "billing_unit": "PER_HOUR",
+      "requires_job": false
+     },
+     {
+      "name": "Online application",
+      "billing_unit": "PER_DOCUMENT",
+      "requires_job": false
+     }
+    ],
+    "keywords": "cyber printing photocopy ecitizen kra"
+   },
+   {
+    "id": "photography",
+    "label": "Photography & video",
+    "hint": "Passport photos, events and printing",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Passport photos",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Event coverage",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Photo printing",
+      "billing_unit": "PER_ITEM",
+      "requires_job": false
+     }
+    ],
+    "keywords": "photo studio"
+   },
+   {
+    "id": "cleaning",
+    "label": "Cleaning & fumigation",
+    "hint": "Homes, offices and pest control",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "House cleaning",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Office cleaning",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Fumigation",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Carpet cleaning",
+      "billing_unit": "PER_ITEM",
+      "requires_job": false
+     }
+    ],
+    "keywords": "cleaners"
+   },
+   {
+    "id": "mpesa_agent",
+    "label": "M-Pesa / mobile money agent",
+    "hint": "Deposits, withdrawals and float",
+    "modules": {
+     "SOLO": [
+      "expenses",
+      "mpesa",
+      "reports"
+     ],
+     "SMALL": [
+      "expenses",
+      "mpesa",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "expenses",
+      "mpesa",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [],
+    "keywords": "agent mobile money float"
+   },
+   {
+    "id": "other_services",
+    "label": "Other services",
+    "hint": "Describe the service you offer",
+    "modules": {
+     "SOLO": [
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [],
+    "keywords": ""
+   }
+  ],
+  "MIXED": [
+   {
+    "id": "cyber_shop",
+    "label": "Cyber, accessories & M-Pesa",
+    "hint": "Printing and online services, phone accessories and an M-Pesa till",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "locations",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "mpesa",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "locations",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "mpesa",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "locations",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "mpesa",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Phone accessories",
+     "Computer accessories",
+     "Stationery"
+    ],
+    "services": [
+     {
+      "name": "Printing",
+      "billing_unit": "PER_PAGE",
+      "requires_job": false
+     },
+     {
+      "name": "Photocopy",
+      "billing_unit": "PER_COPY",
+      "requires_job": false
+     },
+     {
+      "name": "Typing",
+      "billing_unit": "PER_PAGE",
+      "requires_job": false
+     },
+     {
+      "name": "Online application",
+      "billing_unit": "PER_DOCUMENT",
+      "requires_job": false
+     }
+    ],
+    "keywords": "cyber digital point"
+   },
+   {
+    "id": "repair_shop",
+    "label": "Repair shop with spare parts",
+    "hint": "Repairs plus spare parts and accessories for sale",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Spare parts",
+     "Accessories"
+    ],
+    "services": [
+     {
+      "name": "Screen replacement",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Battery replacement",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Charging port repair",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     }
+    ],
+    "keywords": "fundi phone electronics spares"
+   },
+   {
+    "id": "salon_shop",
+    "label": "Salon with beauty products",
+    "hint": "Hair and beauty services plus products for sale",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Hair products",
+     "Skin care"
+    ],
+    "services": [
+     {
+      "name": "Braiding",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Wash & set",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Manicure",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "salon cosmetics"
+   },
+   {
+    "id": "garage_spares",
+    "label": "Garage with spare parts",
+    "hint": "Vehicle repairs plus spare parts and oils",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Spare parts",
+     "Oils & lubricants",
+     "Tyres"
+    ],
+    "services": [
+     {
+      "name": "Vehicle service",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Puncture repair",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "mechanic boda"
+   },
+   {
+    "id": "agrovet_vet",
+    "label": "Agrovet with vet services",
+    "hint": "Farm inputs plus animal treatment and AI services",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Animal feeds",
+     "Vet medicines",
+     "Seeds",
+     "Fertilisers"
+    ],
+    "services": [
+     {
+      "name": "Animal treatment",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Artificial insemination",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     },
+     {
+      "name": "Vaccination",
+      "billing_unit": "FIXED",
+      "requires_job": false
+     }
+    ],
+    "keywords": "vet agro"
+   },
+   {
+    "id": "tailor_shop",
+    "label": "Tailor with fabrics & clothes",
+    "hint": "Tailoring plus fabric and ready-made clothes",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Fabrics",
+     "Ready-made clothes"
+    ],
+    "services": [
+     {
+      "name": "Alterations",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     },
+     {
+      "name": "Dress making",
+      "billing_unit": "FIXED",
+      "requires_job": true
+     }
+    ],
+    "keywords": "tailor boutique"
+   },
+   {
+    "id": "other_mixed",
+    "label": "Other mix of goods and services",
+    "hint": "Describe what you sell and do",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "services",
+      "pos",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "services",
+      "pos",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [],
+    "keywords": ""
+   }
+  ]
+ },
+ "other_sectors": [
+  "other_goods",
+  "other_mixed",
+  "other_services"
+ ]
+}

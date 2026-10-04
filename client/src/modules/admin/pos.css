@@ -5,15 +5,15 @@
 }
 .posCatalogue article {
   min-width: 0;
-  background: #fff;
-  color: #111;
+  background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   overflow: hidden;
 }
 .posCatalogue article > button {
-  background: #fff;
-  color: #111;
+  background: var(--surface);
+  color: var(--text);
   width: 100%;
   text-align: left;
   padding: 0.75rem;
@@ -21,7 +21,7 @@
   min-height: 0;
 }
 .posCatalogue article > button:hover:not(:disabled) {
-  background: #f3f4f6;
+  background: var(--primary2);
 }
 .posCatalogue button:disabled {
   opacity: 0.6;

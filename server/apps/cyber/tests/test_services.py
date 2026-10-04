@@ -29,6 +29,7 @@ def cyber_data(db):
 @pytest.mark.django_db
 def test_cyber_job_totals_and_mpesa_sale_payment_are_distinct(cyber_data):
     owner, variants = cyber_data
+    Store.objects.create(name="Cyber branch")
     job = create_job(user=owner, lines=[{"variant_id": variants["B&W Print"].id, "quantity": 10}, {"variant_id": variants["Scanning"].id, "quantity": 5}, {"variant_id": variants["Binding"].id, "quantity": 1}])
     assert job.total == Decimal("300.00")
     sale = complete_job(job=job, user=owner, payment_method="MPESA", payment_reference="SALE-PAYMENT")

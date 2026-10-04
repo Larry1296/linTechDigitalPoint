@@ -45,5 +45,11 @@ class MpesaCommissionAdmin(admin.ModelAdmin):
     list_display = ["outlet", "period", "amount", "reference", "recognized_at"]
     readonly_fields = ["recorded_by", "created_at", "updated_at"]
 
+    def has_add_permission(self, request):
+        return False  # recorded in the app, which posts it to the books and the shift
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
     def has_delete_permission(self, request, obj=None):
         return False

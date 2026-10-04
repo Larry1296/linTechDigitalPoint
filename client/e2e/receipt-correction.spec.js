@@ -30,10 +30,7 @@ for (const [width, theme] of [
       supplier_name: "Supplier",
       lines: [line],
     };
-    await page.addInitScript(
-      (theme) => localStorage.setItem("theme", theme),
-      theme,
-    );
+    await page.emulateMedia({ colorScheme: theme });
     await page.setViewportSize({ width, height: 1000 });
     await page.route("**/api/v1/**", async (route) => {
       const request = route.request();

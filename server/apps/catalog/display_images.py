@@ -64,11 +64,6 @@ def save_display_image(product, upload, variant=None):
     return image
 
 
-def photo_required(visible, upload, product=None, reuse=True):
-    if visible and not upload and not (product and reuse and actual_images(product)):
-        raise serializers.ValidationError({"display_image": "Add a Product display image before making this product visible to customers."})
-
-
 def boolean(data, key, default=True):
     return serializers.BooleanField().run_validation(data.get(key, default))
 

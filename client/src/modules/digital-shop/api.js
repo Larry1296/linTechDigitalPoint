@@ -1,5 +1,8 @@
 import { api } from "../../core/api/client";
 export const loadZones = () => api("/api/v1/locations/zones/");
+// Shops that do not use Shelves & locations have no shelf map; their pages must still load (stock is kept unplaced).
+export const usesShelves = (user) => Boolean(user?.organization?.enabled_modules?.includes("locations"));
+export const loadZonesIfUsed = (user) => (usesShelves(user) ? loadZones() : Promise.resolve([]));
 export const createZone = (payload) =>
   api("/api/v1/locations/zones/", {
     method: "POST",
@@ -30,3 +33,12 @@ export const saveCategory = (id, payload) =>
     method: id ? "PATCH" : "POST",
     body: JSON.stringify(payload),
   });
+export const deleteCategory = (id) =>
+  api(`/api/v1/catalog/categories/${id}/`, { method: "DELETE" });
+export const updateZone = (id, payload) =>
+  api(`/api/v1/locations/zones/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+export const removeZone = (id) =>
+  api(`/api/v1/locations/zones/${id}/`, { method: "DELETE" });

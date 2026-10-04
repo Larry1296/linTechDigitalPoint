@@ -1,3 +1,4 @@
+import { businessCurrency } from "../../core/organization/presentation";
 import { FormField } from "../../components/forms/FormField";
 import { useState } from "react";
 export function CyberJobForm({ services, onSave }) {
@@ -40,7 +41,7 @@ export function CyberJobForm({ services, onSave }) {
               .filter((service) => service.active)
               .map((service) => (
                 <option key={service.id} value={service.variant}>
-                  {service.name} · KSh {service.selling_price}/
+                  {service.name}{service.variant_name && service.variant_name !== "Standard" ? ` — ${service.variant_name}` : ""} · {businessCurrency()} {service.selling_price}/
                   {service.billing_unit.replace("PER_", "").toLowerCase()}
                 </option>
               ))}

@@ -21,7 +21,7 @@ vi.mock("../../core/cart/CartContext", () => ({
   useCart: () => ({ refreshCart: async () => {} }),
 }));
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: async () => true }));
-const user = { id: 42, authenticated: true, is_staff: true, permissions: [] };
+const user = { id: 42, username: "staff", authenticated: true, is_staff: true, permissions: [], organization: {id: 7, name: "Test Business", enabled_modules: ["inventory", "locations"]}, memberships: [] };
 beforeEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
@@ -32,11 +32,11 @@ beforeEach(() => {
 });
 function renderFlow() {
   return render(
-    <MemoryRouter initialEntries={["/admin-app/receiving"]}>
+    <MemoryRouter initialEntries={["/admin/receive"]}>
       <AuthProvider>
         <Routes>
           <Route
-            path="/admin-app/receiving"
+            path="/admin/receive"
             element={
               <StaffProtectedRoute>
                 <ReceivePage />
@@ -51,12 +51,12 @@ function renderFlow() {
 }
 it("revisits earlier receipt steps and reviews the amended entries", async () => {
   sessionStorage.setItem(
-    "receipt-draft:42",
+    "receipt-draft:7:42",
     JSON.stringify({
       version: 1,
       categoryId: "1",
       step: 3,
-      details: { supplier_name: "Original supplier", notes: "" },
+      details: { supplier_name: "Original supplier", external_reference: "INV-1", notes: "" },
       lines: [
         {
           variant_id: "7",
@@ -145,12 +145,12 @@ it("revisits earlier receipt steps and reviews the amended entries", async () =>
 
 it("keeps unfinished product creation fields when returning to earlier receipt steps", async () => {
   sessionStorage.setItem(
-    "receipt-draft:42",
+    "receipt-draft:7:42",
     JSON.stringify({
       version: 1,
       categoryId: "1",
       step: 2,
-      details: { supplier_name: "Supplier" },
+      details: { supplier_name: "Supplier", external_reference: "INV-2" },
       lines: [
         {
           variant_id: "",
@@ -195,7 +195,7 @@ it("keeps unfinished product creation fields when returning to earlier receipt s
   });
   expect(screen.getByLabelText("Product name")).toHaveValue("Corrected cable");
 });
-it("saves edits before expiry, shows the message, and restores them after login", async () => {
+it("keeps unsaved edits behind the password unlock overlay", async () => {
   renderFlow();
   fireEvent.change(await screen.findByLabelText("Supplier name"), {
     target: { value: "Cable supplier" },
@@ -203,19 +203,15 @@ it("saves edits before expiry, shows the message, and restores them after login"
   fireEvent.change(screen.getByLabelText("General notes"), {
     target: { value: "Unfinished delivery" },
   });
-  const saved = JSON.parse(sessionStorage.getItem("receipt-draft:42"));
+  const saved = JSON.parse(sessionStorage.getItem("receipt-draft:7:42"));
   expect(saved.details.supplier_name).toBe("Cable supplier");
-  act(() => window.dispatchEvent(new Event("session-expired")));
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    SESSION_EXPIRED_MESSAGE,
-  );
-  fireEvent.change(screen.getByLabelText("Username or email"), {
-    target: { value: "staff" },
-  });
+  act(() => window.dispatchEvent(new CustomEvent("session-locked")));
+  expect(await screen.findByRole("dialog")).toHaveTextContent(SESSION_EXPIRED_MESSAGE);
+  expect(screen.queryByLabelText("Username or email")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Password", { exact: true }), {
     target: { value: "password" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
   expect(await screen.findByLabelText("Supplier name")).toHaveValue(
     "Cable supplier",
   );
@@ -223,7 +219,7 @@ it("saves edits before expiry, shows the message, and restores them after login"
     "Unfinished delivery",
   );
   expect(
-    JSON.parse(sessionStorage.getItem("receipt-draft:42")).idempotencyKey,
+    JSON.parse(sessionStorage.getItem("receipt-draft:7:42")).idempotencyKey,
   ).toBe(saved.idempotencyKey);
 });
 it("restores review lines and placements, then clears a successfully submitted draft", async () => {
@@ -232,7 +228,7 @@ it("restores review lines and placements, then clears a successfully submitted d
     categoryId: "1",
     step: 3,
     idempotencyKey: "receipt-retry-key",
-    details: { supplier_name: "Supplier", notes: "Keep dry" },
+    details: { supplier_name: "Supplier", external_reference: "INV-3", notes: "Keep dry" },
     lines: [
       {
         variant_id: "7",
@@ -244,7 +240,7 @@ it("restores review lines and placements, then clears a successfully submitted d
       },
     ],
   };
-  sessionStorage.setItem("receipt-draft:42", JSON.stringify(draft));
+  sessionStorage.setItem("receipt-draft:7:42", JSON.stringify(draft));
   api.mockImplementation(async (path, options) => {
     if (path.includes("/auth/")) return user;
     if (options?.method === "POST")
@@ -264,10 +260,12 @@ it("restores review lines and placements, then clears a successfully submitted d
   );
   expect(JSON.parse(options.body)).toEqual({
     ...draft.details,
+    document_status: "SUPPLIER_DOCUMENT",
+    landed_costs: [],
     lines: draft.lines,
     idempotency_key: draft.idempotencyKey,
   });
   await waitFor(() =>
-    expect(sessionStorage.getItem("receipt-draft:42")).toBeNull(),
+    expect(sessionStorage.getItem("receipt-draft:7:42")).toBeNull(),
   );
 });

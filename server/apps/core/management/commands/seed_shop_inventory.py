@@ -1,3 +1,4 @@
+from apps.tenancy.commands import LintechCommand
 from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -11,7 +12,7 @@ from apps.inventory.models import Shelf, ShelfStackCategory, StockReceipt
 from apps.inventory.services import complete_stock_receipt
 
 
-class Command(BaseCommand):
+class Command(LintechCommand):
     help = "Receive only new permanent real-shop receipt rounds."
 
     def add_arguments(self, parser):

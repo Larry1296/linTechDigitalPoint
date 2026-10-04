@@ -1,3 +1,4 @@
+vi.mock("../../components/PrivateImage", () => ({ PrivateImage: props => <img {...props} /> }));
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -40,12 +41,12 @@ it.each(["/shop?category=7&search=Amaya", "/#categories"])(
       </MemoryRouter>,
     );
     fireEvent.click(
-      await screen.findByRole("link", { name: "Choose variant" }),
+      await screen.findByRole("link", { name: "Choose an option" }),
     );
     await screen.findByRole("heading", { name: variants[0].display_name });
     scrollTo.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
-    await screen.findByRole("link", { name: "Choose variant" });
+    await screen.findByRole("link", { name: "Choose an option" });
     await waitFor(() =>
       expect(scrollTo).toHaveBeenCalledWith({ top: 850, behavior: "instant" }),
     );
@@ -195,7 +196,7 @@ it("product/search cards identify each connector and link to variant choice", ()
       screen.getByRole("img", { name: variant.display_name }),
     ).toHaveAttribute("src", variant.images[0].url);
   }
-  expect(screen.getAllByRole("link", { name: "Choose variant" })).toHaveLength(
+  expect(screen.getAllByRole("link", { name: "Choose an option" })).toHaveLength(
     2,
   );
   expect(
@@ -216,7 +217,7 @@ it.each(variants)(
     );
     expect(
       await screen.findByRole("button", {
-        name: "Choose a variant to add to cart",
+        name: "Choose an option to add to cart",
       }),
     ).toBeDisabled();
     expect(mocks.addToCart).not.toHaveBeenCalled();

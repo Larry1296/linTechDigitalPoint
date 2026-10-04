@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { api } from "../../core/api/client";
 import { DisplayImageInput } from "./components/DisplayImageInput";
+import { FormError } from "../../components/forms/FormNotice";
 
 export function ProductPhotos({
   product,
   onSaved,
   onClose,
   canCreateVariant = false,
+  embedded = false,
 }) {
   const [scope, setScope] = useState(
     product.selectedVariantId ? String(product.selectedVariantId) : "",
@@ -38,6 +40,12 @@ export function ProductPhotos({
         `/api/v1/catalog/products/${product.id}/${adding ? "variants" : "display-image"}/`,
         { method: "POST", body: data },
       );
+      if (embedded) {
+        setFile(null);
+        setReuse(false);
+        setAdding(false);
+        event.target.reset?.();
+      }
       onSaved();
     } catch (error) {
       setError(error.message);
@@ -46,8 +54,9 @@ export function ProductPhotos({
     }
   };
   return (
-    <section className="panel">
-      <h2>Display photos — {product.name}</h2>
+    <section className="panel" aria-label="Photos">
+      {!embedded && <button type="button" className="pageBackLink" onClick={onClose}>← Back</button>}
+      {embedded ? <h3>Photos and new types</h3> : <h2>Display photos — {product.name}</h2>}
       <p>
         Use a separate photograph of each cable package. Do not use a group
         photo containing Type-B and Type-C together.
@@ -63,7 +72,7 @@ export function ProductPhotos({
             setError("");
           }}
         >
-          {adding ? "Edit existing photos" : "Create another variant"}
+          {adding ? "Edit existing photos" : "Add another type"}
         </button>
       )}
       <form onSubmit={submit}>
@@ -87,6 +96,10 @@ export function ProductPhotos({
                   step="0.01"
                   required
                 />
+              </label>
+              <label>
+                Lowest price (bargaining guide, optional)
+                <input name="minimum_price" type="number" min="0" step="0.01" />
               </label>
             </>
           ) : (
@@ -131,17 +144,17 @@ export function ProductPhotos({
               required
             />
           )}
-          {error && <p role="alert">{error}</p>}
           <button>
             {saving
               ? "Saving…"
               : adding
-                ? "Create variant"
+                ? "Add type"
                 : "Save display image"}
           </button>
-          <button type="button" className="secondary" onClick={onClose}>
+          {!embedded && <button type="button" className="secondary" onClick={onClose}>
             Cancel
-          </button>
+          </button>}
+          <FormError title={adding ? "Could not add the type." : "Could not save the display image."} message={error} />
         </fieldset>
       </form>
     </section>

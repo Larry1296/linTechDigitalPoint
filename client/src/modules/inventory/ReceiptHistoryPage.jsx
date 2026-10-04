@@ -1,12 +1,14 @@
+import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { confirmAction } from "../../core/ui/alerts";
+import { FormError } from "../../components/forms/FormNotice";
 
 const allowed = (user, permission) =>
   Boolean(user?.is_superuser || user?.permissions?.includes(permission));
-const money = (value) => `KSh ${Number(value).toFixed(2)}`;
+const money = (value) => `${businessCurrency()} ${Number(value).toFixed(2)}`;
 const identity = (line) =>
   `${line.product_name} — ${line.variant_name} · ${line.sku}`;
 
@@ -69,7 +71,7 @@ export function ReceiptHistoryPage() {
               />
             </label>
             {selected && (
-              <Link className="button" to={`/admin-app/receipts/${selected}`}>
+              <Link className="button" to={`/admin/receipts/${selected}`}>
                 Open receipt {selected}
               </Link>
             )}
@@ -78,11 +80,11 @@ export function ReceiptHistoryPage() {
           {rows?.length === 0 && <p>No receipts found.</p>}
           {rows?.map((r) => (
             <article className="panel" key={r.id}>
-              <Link to={`/admin-app/receipts/${r.id}`}>
+              <Link to={`/admin/receipts/${r.id}`}>
                 Receipt {r.id} · {r.receipt_number}
               </Link>
               <p>
-                {r.supplier_name} · {new Date(r.received_at).toLocaleString()} ·{" "}
+                {r.supplier_name} · {new Date(r.received_at).toLocaleString(undefined, {timeZone: businessTimeZone()})} ·{" "}
                 {r.line_count} lines · {Number(r.total_units)} units
               </p>
             </article>
@@ -90,7 +92,7 @@ export function ReceiptHistoryPage() {
         </>
       ) : (
         <>
-          <Link to="/admin-app/receipts">← All receipts</Link>
+          <Link to="/admin/receipts">← All receipts</Link>
           {!receipt && !error && <p role="status">Loading receipt…</p>}
           {receipt && (
             <>
@@ -99,7 +101,7 @@ export function ReceiptHistoryPage() {
               </h2>
               <p>
                 {receipt.supplier_name} ·{" "}
-                {new Date(receipt.received_at).toLocaleString()} ·{" "}
+                {new Date(receipt.received_at).toLocaleString(undefined, {timeZone: businessTimeZone()})} ·{" "}
                 {receipt.external_reference}
               </p>
               {receipt.notes && <p>{receipt.notes}</p>}
@@ -151,7 +153,7 @@ export function ReceiptHistoryPage() {
                         <article key={c.id}>
                           <p>
                             Correction #{c.id} · {c.administrator} ·{" "}
-                            {new Date(c.created_at).toLocaleString()}
+                            {new Date(c.created_at).toLocaleString(undefined, {timeZone: businessTimeZone()})}
                           </p>
                           <ValueComparison before={c.before} after={c.after} />
                           <p>Reason: {c.reason}</p>
@@ -182,7 +184,7 @@ function ValueComparison({ before, after }) {
         </thead>
         <tbody>
           <tr>
-            <th>Product variant</th>
+            <th>Item</th>
             <td>{identity(before)}</td>
             <td>{identity(after)}</td>
           </tr>
@@ -310,7 +312,6 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
   }
   return (
     <form className="receiptCorrection" onSubmit={submit} aria-label="Correct receipt line">
-      {error && <p role="alert">{error}</p>}
       <fieldset disabled={busy}>
         <legend>Correct receipt line</legend>
         <label>
@@ -328,6 +329,8 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
               if (selected)
                 setVariant({ ...selected, variant_id: selected.id });
             }}
+            // While typing, open into a list so every match shows at once.
+            size={query.trim() ? Math.min(variants.length + 1, 10) : undefined}
           >
             {!variants.some((v) => v.id === variant.variant_id) && (
               <option value={variant.variant_id}>{identity(variant)}</option>
@@ -340,7 +343,7 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
           </select>
         </label>
         <label>
-          Buying price per unit (KSh)
+          Buying price per unit ({businessCurrency()})
           <input
             required
             type="number"
@@ -414,6 +417,7 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
           Cancel
         </button>
       </fieldset>
+      <FormError title="Could not post the correction." message={error} />
     </form>
   );
 }

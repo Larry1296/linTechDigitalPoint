@@ -1,0 +1,169 @@
+.admin > aside,
+.customerSidebar {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.admin > aside > nav,
+.customerSidebar > nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+  margin: 0;
+  padding-bottom: 20px;
+}
+
+.sidebarAccount {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--chrome-line);
+  color: var(--chrome-text);
+}
+
+.sidebarAccountRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 12px;
+}
+
+.sidebarIdentity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sidebarIdentity strong { color: var(--chrome-text); }
+.sidebarIdentity span { color: var(--chrome-muted); font-size: 13px; }
+.sidebarAccount .theme { color: var(--chrome-muted); }
+.sidebarAccount .theme span { display: block; }
+.sidebarAccount .logoutButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  padding: 10px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #ffdc47 0%, #f5c400 48%, #e7ad00 100%);
+  border: 1px solid #d49d00;
+  color: #241900;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 #fff3a6, 0 2px 7px #d49d0033;
+}
+.sidebarAccount .logoutButton:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffe36a 0%, #ffce08 48%, #efb600 100%);
+  color: #241900;
+}
+.sidebarAccount .logoutButton:focus-visible { outline: 2px solid #ffd326; outline-offset: 3px; }
+.sidebarAccount .logoutButton:disabled { opacity: 1; cursor: wait; }
+.sidebarAccount > p { margin: 0; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .admin > aside,
+  .customerSidebar { display: none; }
+  .admin > aside.sidebarOpen,
+  .customerSidebar.isOpen {
+    display: flex;
+    flex-direction: column;
+    max-height: none;
+    padding: 20px;
+    padding-top: 68px;
+    overflow: hidden;
+  }
+  .admin > aside > nav,
+  .customerSidebar > nav {
+    width: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    margin: 0;
+    padding-bottom: 20px;
+  }
+  .admin > aside nav section { border-right: 0; padding-right: 0; }
+}
+
+@media print {
+  .customerSidebar { display: none; }
+}
+
+/* Desktop: the whole sidebar scrolls as one column so no menu item hides behind
+   the account card, with a visible scrollbar whenever there is more to see. */
+@media (min-width: 761px) {
+  .admin > aside {
+    padding-top: 20px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #3b6aa8 transparent;
+  }
+  .admin > aside::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+    height: auto;
+  }
+  .admin > aside::-webkit-scrollbar-thumb {
+    background: #3b6aa8;
+    border-radius: 8px;
+  }
+  .admin > aside > nav {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+    margin-top: 0;
+  }
+  .admin > aside nav a {
+    padding: 9px 12px;
+  }
+}
+
+/* Business groups (Shop Management, Cyber Services, M-Pesa Agent, Business): a heading that opens its links. */
+.admin > aside nav .navGroupToggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+.admin > aside nav .navGroupToggle:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+.admin > aside nav .navGroupToggle:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.admin > aside nav .navGroupToggle svg { width: 19px; flex: 0 0 auto; }
+.admin > aside nav .navGroupToggle span { flex: 1 1 auto; min-width: 0; }
+.admin > aside nav .navGroupChevron { transition: transform 0.15s ease; }
+.admin > aside nav .navGroupToggle[aria-expanded="true"] .navGroupChevron { transform: rotate(180deg); }
+.admin > aside nav .navGroup.current > .navGroupToggle { color: #3b82f6; }
+.admin > aside nav .navGroupLinks {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 6px 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--chrome-line, #8883);
+}
+.admin > aside nav .navGroupLinks[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .admin > aside nav .navGroupChevron { transition: none; }
+}

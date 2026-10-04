@@ -1,9 +1,15 @@
+import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
+import { label } from "../../core/ui/labels";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
+import { loadZonesIfUsed } from "../digital-shop/api";
 import { confirmAction } from "../../core/ui/alerts";
+import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
+import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { ProductSearch } from "../storefront/components/ProductSearch";
 
 const reasons = [
   "Opening stock correction",
@@ -22,18 +28,20 @@ export function AdjustmentReport() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
-  useEffect(() => {
+  const load = () => {
     if (canAdjust(user))
       api("/api/v1/inventory/adjustments/")
         .then(setRows)
         .catch((e) => setError(e.message));
-  }, [user]);
+  };
+  useEffect(load, [user]);
+  useLiveRefresh(load);
   if (!canAdjust(user)) return null;
   return (
     <section className="panel">
       <h2>Stock adjustment report</h2>
       {error && <p role="alert">{error}</p>}
-      {!rows.length && <p>No adjustments posted.</p>}
+      {!rows.length && <p>No stock changes yet.</p>}
       {rows.map((a) => (
         <article key={a.id}>
           <b>
@@ -46,7 +54,7 @@ export function AdjustmentReport() {
           </p>
           <p>
             {a.notes} · {a.reference} · {a.administrator} ·{" "}
-            {new Date(a.created_at).toLocaleString()}
+            {new Date(a.created_at).toLocaleString(undefined, {timeZone: businessTimeZone()})}
           </p>
         </article>
       ))}
@@ -59,7 +67,6 @@ export function StockAdjustmentPage() {
   const [params] = useSearchParams();
   const [variant, setVariant] = useState(params.get("variant") || "");
   const [query, setQuery] = useState("");
-  const [variants, setVariants] = useState([]);
   const [zones, setZones] = useState([]);
   const [shelf, setShelf] = useState("");
   const [context, setContext] = useState(null);
@@ -75,22 +82,8 @@ export function StockAdjustmentPage() {
   const requestKey = useRef(null);
   const posting = useRef(false);
   useEffect(() => {
-    if (!canAdjust(user)) return;
-    let active = true;
-    api("/api/v1/inventory/variants/search/?q=" + encodeURIComponent(query))
-      .then((rows) => {
-        if (active) setVariants(rows);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [query, user]);
-  useEffect(() => {
     if (canAdjust(user))
-      api("/api/v1/locations/zones/")
+      loadZonesIfUsed(user)
         .then(setZones)
         .catch((e) => setError(e.message));
   }, [user]);
@@ -108,6 +101,11 @@ export function StockAdjustmentPage() {
         if (active) {
           setContext(data);
           if (data.lots.length === 1) setLot(String(data.lots[0].id));
+          // Start on the place that holds this item, so the form opens with what is stored.
+          const places = data.locations || [];
+          setShelf((current) =>
+            places.some((p) => p.shelf_id === current) ? current : places[0]?.shelf_id ?? current,
+          );
         }
       })
       .catch((e) => {
@@ -118,26 +116,39 @@ export function StockAdjustmentPage() {
     };
   }, [variant, user]);
   useEffect(() => {
-    setCounted("");
-    setResult(null);
+    // Prefill the count with the stored quantity; the user changes only what differs.
+    const stored = (context?.balances || [])
+      .filter((b) => b.shelf_id === shelf)
+      .reduce((sum, b) => sum + Number(b.quantity), 0);
+    setCounted(context && shelf ? String(stored) : "");
     requestKey.current = null;
-  }, [shelf]);
+  }, [shelf, context]);
+  useEffect(() => setResult(null), [shelf]);
   if (!canAdjust(user))
     return <p role="alert">Stock adjustment permission is required.</p>;
+  const locations = context?.locations || [];
+  const totalStored = locations.reduce((sum, l) => sum + Number(l.quantity), 0);
+  const virtualShelf = locations.some((l) => l.shelf_id === shelf && l.virtual);
   const balances = context?.balances.filter((b) => b.shelf_id === shelf) || [];
   const current = balances.reduce((sum, b) => sum + Number(b.quantity), 0);
   const reserved = balances.reduce((sum, b) => sum + Number(b.reserved), 0);
   const difference =
     counted === "" ? null : Number((Number(counted) - current).toFixed(3));
-  const valid =
-    context &&
-    shelf &&
-    counted !== "" &&
-    Number.isFinite(Number(counted)) &&
-    Number(counted) >= reserved &&
-    difference !== 0 &&
-    reason &&
-    (difference < 0 || lot || cost !== "");
+  // The first thing still stopping the adjustment, shown beside the disabled button.
+  const blocker =
+    !variant ? "Search and choose the item to adjust."
+    : !context ? "Loading this item's stock…"
+    : !zones.length && !locations.length ? "No shop areas are set up. Add a shop area, rack and compartment first."
+    : !shelf ? "Choose the compartment: shop area, rack, level and compartment."
+    : counted === "" ? "Enter the physical counted quantity."
+    : !Number.isFinite(Number(counted)) ? "The counted quantity must be a number."
+    : Number(counted) < 0 ? "The counted quantity cannot be negative."
+    : Number(counted) < reserved ? `The count cannot be below the ${reserved} reserved units.`
+    : difference === 0 ? `The count matches the system quantity (${current}), so there is nothing to adjust.`
+    : difference > 0 && !lot && cost === "" ? "Enter what one found item cost, or choose which delivery it belongs to."
+    : !reason ? "Choose a reason."
+    : "";
+  const valid = !blocker;
   async function post(event) {
     event.preventDefault();
     if (!valid || posting.current) return;
@@ -197,46 +208,76 @@ export function StockAdjustmentPage() {
         Enter the physical count, including reserved units. Posted adjustments
         cannot be edited; correct mistakes with another adjustment.
       </p>
-      {error && <p role="alert">{error}</p>}
-      {result && (
-        <p role="status">
-          Adjustment #{result.id} posted. Quantity: {result.quantity_after}.
-        </p>
-      )}
       <form className="panel" onSubmit={post}>
         <fieldset disabled={busy}>
-          <label>
-            Search variant or SKU
-            <input value={query} onChange={(e) => setQuery(e.target.value)} />
-          </label>
-          <label>
-            Exact variant
-            <select
-              required
-              value={variant}
-              onChange={(e) => setVariant(e.target.value)}
-            >
-              <option value="">Choose variant</option>
-              {variant &&
-                context &&
-                !variants.some((v) => String(v.id) === String(variant)) && (
-                  <option value={variant}>
-                    {context.display_name} · {context.sku}
-                  </option>
-                )}
-              {variants.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.product_name} — {v.variant_name} · {v.sku}
-                </option>
+          <div className="stockItemSearch">
+            <span>Find the item</span>
+            <ProductSearch
+              embedded
+              label="Find the item to adjust"
+              value={query}
+              onChange={setQuery}
+              endpoint="/api/v1/inventory/variants/search/"
+              minLength={1}
+              limit={50}
+              onSelect={(row) => {
+                setVariant(String(row.id));
+                setQuery("");
+              }}
+              onSearch={() => {}}
+              exactScan
+              renderResult={(row) => (
+                <span className="productSearchDetails">
+                  <strong>{row.product_name} — {row.variant_name}</strong>
+                  <span>{row.sku}{row.category ? ` · ${row.category}` : ""}</span>
+                  <span>{Number(row.available)} in stock</span>
+                </span>
+              )}
+              placeholder="Start typing a name, item code or barcode…"
+            />
+            {variant && context && (
+              <p className="muted">
+                Adjusting: <strong>{context.display_name}</strong> · {context.sku}
+              </p>
+            )}
+          </div>
+          {locations.length > 0 && (
+            <fieldset className="stockLocations">
+              <legend>
+                Where the stock is · {totalStored} in the system in total
+              </legend>
+              {locations.map((l) => (
+                <label key={l.shelf_id} className="choiceRow">
+                  <input
+                    type="radio"
+                    name="stock-location"
+                    checked={shelf === l.shelf_id}
+                    onChange={() => setShelf(l.shelf_id)}
+                  />
+                  <span>
+                    <strong>{l.virtual ? l.name : `${l.label} — ${l.name}`}</strong>{" "}
+                    · {Number(l.quantity)} in system
+                    {Number(l.reserved) > 0 && ` (${Number(l.reserved)} reserved)`}
+                  </span>
+                </label>
               ))}
-            </select>
-          </label>
+              {locations.length > 1 && (
+                <small className="muted">
+                  Each place is counted separately. Choose one, enter what is
+                  really there, then do the next.
+                </small>
+              )}
+            </fieldset>
+          )}
           {zones.length > 0 && (
             <PhysicalLocationPicker
               zones={zones}
-              value={shelf}
-              onChange={setShelf}
-              required
+              // The unplaced location has no rack, so the picker shows nothing chosen for it.
+              value={virtualShelf ? "" : shelf}
+              onChange={(next) => {
+                if (next !== "" || !virtualShelf) setShelf(next);
+              }}
+              required={!virtualShelf}
             />
           )}
           {context && shelf && (
@@ -267,19 +308,19 @@ export function StockAdjustmentPage() {
           {difference > 0 && (
             <>
               <label>
-                Stock lot
+                Which delivery
                 <select value={lot} onChange={(e) => setLot(e.target.value)}>
-                  <option value="">New adjustment lot (found stock)</option>
+                  <option value="">New batch (found stock)</option>
                   {context.lots.map((l) => (
                     <option key={l.id} value={l.id}>
-                      Lot {l.id} · {l.reference}
+                      Delivery {l.reference} (#{l.id})
                     </option>
                   ))}
                 </select>
               </label>
               {!lot && (
                 <label>
-                  Found stock unit cost (KSh)
+                  Found stock unit cost ({businessCurrency()})
                   <input
                     type="number"
                     min="0"
@@ -320,8 +361,11 @@ export function StockAdjustmentPage() {
               onChange={(e) => setReference(e.target.value)}
             />
           </label>
-          <button disabled={!valid || busy}>Review and post adjustment</button>
+          <button disabled={!valid || busy} aria-describedby={blocker ? "adjustment-blocker" : undefined}>Review and post adjustment</button>
+          {blocker && <p id="adjustment-blocker" className="muted" role="status">{blocker}</p>}
         </fieldset>
+        <FormError title="Could not post the adjustment." message={error} />
+        {result && <FormSuccess message={`Stock change #${result.id} saved. Quantity now: ${result.quantity_after}.`} />}
       </form>
       {context && (
         <section className="panel">
@@ -332,7 +376,7 @@ export function StockAdjustmentPage() {
           {context.history.map((m) => (
             <article key={m.id}>
               <p>
-                {m.movement_type} · {m.shelf} · Lot {m.lot_id} · Quantity{" "}
+                {label(m.movement_type)} · {m.shelf} · Lot {m.lot_id} · Quantity{" "}
                 {m.quantity}
               </p>
               {m.adjustment_id && (
@@ -342,7 +386,7 @@ export function StockAdjustmentPage() {
               )}
               <p>
                 {m.notes} · {m.reference} · {m.administrator} ·{" "}
-                {new Date(m.created_at).toLocaleString()}
+                {new Date(m.created_at).toLocaleString(undefined, {timeZone: businessTimeZone()})}
               </p>
             </article>
           ))}
