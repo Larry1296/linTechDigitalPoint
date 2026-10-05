@@ -173,7 +173,10 @@ def _reverse_journals(entry, user, reason):
     for key, undo_key in [(f"commission:{entry.pk}", f"commission-reversal:{entry.pk}"), (f"commission-earned:{entry.pk}", f"commission-earned-reversal:{entry.pk}")]:
         journal = JournalEntry.objects.filter(source_key=key).first()
         if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
-            reverse_journal(journal, user=user, reason=reason, key=undo_key)
+            # Undone on the day it was counted, so the month it was earned in no longer shows it and today's sales
+            # are not reduced by it; only when that period's books are closed does the undo count today.
+            day = None if _closed(journal.posting_date) else journal.posting_date
+            reverse_journal(journal, user=user, reason=reason, key=undo_key, date=day)
 
 
 def mark_undone(entry, reason):

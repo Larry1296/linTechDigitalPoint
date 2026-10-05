@@ -167,3 +167,20 @@ def test_reminds_for_last_month_and_agency_profit_takes_off_its_running_costs(ag
     assert (D(str(month["commission"])), D(str(month["expenses"])), D(str(month["profit"]))) == (D("3500"), D("1000"), D("2500"))
     _, pl, _ = _books(org, last_month, _month_end(last_month))
     assert pl["revenue"] == D("3500")
+
+
+@pytest.mark.parametrize("settlement", ["AGENCY_FLOAT", "MPESA"])
+def test_undoing_last_months_commission_takes_it_out_of_last_month_not_today(agency, settlement):
+    # Undoing 1020 earned last month and paid today must not show today's sales as 1020 lower (e.g. 780 - 1020 = -240).
+    client, org, owner, outlet, today, last_month = agency
+    if settlement == "AGENCY_FLOAT":
+        with organization_context(org):
+            from apps.mpesa.services import open_session
+            open_session(outlet=outlet, operator=owner, opening_cash="1000", opening_float="1000")
+    made = _record(client, outlet, last_month, "1020", "SJQ7COMM07", settlement)
+    assert made.status_code == 201, made.content
+    assert client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": "Entered by mistake"}, format="json").status_code == 200
+    _, last_pl, _ = _books(org, last_month, _month_end(last_month))
+    _, this_pl, _ = _books(org, today.replace(day=1), today)
+    assert (last_pl["revenue"], this_pl["revenue"]) == (0, 0)
+    assert _books(org)[0]["1160"]["balance"] == 0
