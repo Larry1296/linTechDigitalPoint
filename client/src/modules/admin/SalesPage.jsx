@@ -7,11 +7,12 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { businessCurrency } from "../../core/organization/presentation";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
+import { askForm } from "../../core/ui/alerts";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
 // The one line shown for a sale until it is opened: when, which sale, who, what, how much and whether it is paid.
-function SaleSummary({ sale }) {
+function SaleSummary({ sale, onDelete }) {
   const when = new Date(sale.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const names = sale.items.map((i) => `${String(i.item).split(" — ")[0]}${Number(i.quantity) !== 1 ? ` × ${Number(i.quantity)}` : ""}`);
   const what = names.length > 2 ? `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` : names.join(", ");
@@ -25,6 +26,7 @@ function SaleSummary({ sale }) {
     <span className="saleWhat"><b>{what || "—"}</b><small>{sale.number} · {sale.customer}</small></span>
     <span className="saleAmount">{money(sale.charged ?? sale.total)}{Number(sale.charged) !== Number(sale.total) && sale.status === "COMPLETED" && <small>was {money(sale.total)}</small>}</span>
     <span className={`saleStatus ${tone}`}>{label}</span>
+    {waiting && onDelete && <button type="button" className="danger saleQuickDelete" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onDelete(sale); }}>Delete</button>}
   </span>;
 }
 
@@ -49,6 +51,26 @@ export function SalesPage() {
   useEffect(()=>{if(canNameDebtor)api('/api/v1/commerce/customers/').then(list=>setCustomers(Array.isArray(list)?list:[])).catch(()=>{});},[canNameDebtor]);
   useLiveRefresh(load);
   const filter=(change)=>{setPage(1);setNotice(null);change();};
+  // From the list line of a sale whose M-Pesa is not confirmed: delete the whole sale (to record it again) or only
+  // the waiting payment (the sale stays, still owed).
+  const canDeleteSale=canCorrect, canDeletePayment=can('accounting.reverse_cashentry');
+  const quickDelete=async(sale)=>{
+    const waiting=sale.payments.filter(p=>['PENDING','MANUAL_REVIEW'].includes(p.status));
+    const choices=[...(canDeleteSale?[['sale','The whole sale: I will record it again']]:[]),
+      ...(canDeletePayment?[['payment',`Only the waiting M-Pesa payment${waiting.length>1?'s':''}: the sale stays, still owed`]]:[])];
+    const values=await askForm({title:`Delete from ${sale.number}?`,confirmButtonText:'Delete',
+      text:`${money(sale.charged ?? sale.total)} · its M-Pesa payment is not confirmed.`,
+      fields:[{name:'what',label:'What to delete',type:'select',options:choices,value:choices[0][0],required:true},
+        {name:'reason',label:'Reason',required:true,placeholder:'e.g. recorded wrongly, will record again'}]});
+    if(!values)return;
+    setFailed(null);setNotice(null);
+    try{
+      if(values.what==='sale')await api(`/api/v1/commerce/sales/${sale.id}/delete/`,{method:'POST',body:JSON.stringify({reason:values.reason})});
+      else for(const p of waiting)await api(`/api/v1/commerce/payments/${p.id}/delete/`,{method:'POST',body:JSON.stringify({reason:values.reason})});
+      setNotice({saleId:null,text:values.what==='sale'?`${sale.number} deleted. Record the sale again if needed.`:`Waiting M-Pesa payment deleted. ${sale.number} now shows what is owed.`});
+      await load();
+    }catch(e){setFailed({path:'quick-delete',text:e.message});}
+  };
   // Once an action succeeds, fold its form and the sale away and bring the person back to the sale's line in the list,
   // where the updated status (Paid, Owes …) and a confirmation are shown. A failure stays in the open form, under its button.
   const submit=async(event,path,extra={},done='Saved.')=>{
@@ -69,10 +91,10 @@ export function SalesPage() {
       <label className="checkLabel"><input type="checkbox" checked={owing} onChange={e=>{const value=e.target.checked;filter(()=>setOwing(value));}} /> Only sales that still owe money</label>
     </div>
     {error&&<FormError title="Could not load sales." message={error} />}
-    {can('accounts.add_customerprofile')&&<details><summary>Add a customer</summary><form onSubmit={e=>submit(e,'/api/v1/commerce/customers/',{},'Customer saved. You can now pick them at the till or name them on a sale.')}><label>Name<input name="name" required maxLength="150" /></label><label>Phone<input name="phone" maxLength="30" /></label><button disabled={busy}>Save customer</button>{problem('/api/v1/commerce/customers/','Could not save the customer.')}</form></details>}{notice&&notice.saleId===null&&<FormSuccess message={notice.text} />}
+    {can('accounts.add_customerprofile')&&<details><summary>Add a customer</summary><form onSubmit={e=>submit(e,'/api/v1/commerce/customers/',{},'Customer saved. You can now pick them at the till or name them on a sale.')}><label>Name<input name="name" required maxLength="150" /></label><label>Phone<input name="phone" maxLength="30" /></label><button disabled={busy}>Save customer</button>{problem('/api/v1/commerce/customers/','Could not save the customer.')}</form></details>}{notice&&notice.saleId===null&&<FormSuccess message={notice.text} />}{failed?.path==='quick-delete'&&<FormError title="Could not delete." message={failed.text} />}
     {!data ? <p>Loading sales…</p> : !data.count ? <p>{search||owing ? 'No sales match. Clear the search or untick "Only sales that still owe money" to see all sales.' : 'No sales yet. Your completed sales will appear here.'}</p> : <>{(search||owing)&&<p className="muted">{data.count} {data.count===1?'sale matches':'sales match'}.</p>}{data.results.map(s=>{
       const pay=`/api/v1/commerce/sales/${s.id}/payments/`, namePath=`/api/v1/commerce/sales/${s.id}/customer/`;
-      return <Fragment key={s.id}><details className="saleRow" data-sale-id={s.id}><summary><SaleSummary sale={s} /></summary><section className="accountingPanel"><div className="saleHeading"><h2>{s.number}</h2><button type="button" className="secondary" onClick={()=>setReceiptSale(s.id)}>Receipt</button></div>
+      return <Fragment key={s.id}><details className="saleRow" data-sale-id={s.id}><summary><SaleSummary sale={s} onDelete={(canDeleteSale||canDeletePayment)&&s.status==='COMPLETED'?quickDelete:null} /></summary><section className="accountingPanel"><div className="saleHeading"><h2>{s.number}</h2><button type="button" className="secondary" onClick={()=>setReceiptSale(s.id)}>Receipt</button></div>
       <p>{s.customer} · {label(s.status)} · Total {money(s.charged ?? s.total)} · {Number(s.outstanding)>0?`Still owes ${money(s.outstanding)}`:'Nothing owed'}{s.due_date?` · Due ${s.due_date}`:''}</p>
       <ul className="saleLines">{s.items.map(i=><li key={i.id}><span>{Number(i.quantity)} × {i.item} @ {i.unit_price}{i.list_price&&Number(i.list_price)!==Number(i.unit_price)?<small className="muted"> (catalogue {i.list_price})</small>:null}{Number(i.discount)?<small className="muted"> · less {i.discount}</small>:null}{Number(i.returned_quantity)?<small className="muted"> · {Number(i.returned_quantity)} returned</small>:null}</span>
         {canSeeProfit&&<button type="button" className="linkButton" onClick={()=>setExplainItem(i.id)}>Explain profit</button>}</li>)}</ul>

@@ -2337,6 +2337,9 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .saleRow > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .saleRow > .accountingPanel { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; box-shadow: none; }
 .saleSummary { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto 12rem; align-items: center; gap: 4px 14px; }
+/* A sale whose M-Pesa is not confirmed has a Delete button at the end of its line. */
+.saleSummary:has(.saleQuickDelete) { grid-template-columns: 7.5rem minmax(0, 1fr) auto 12rem auto; }
+.saleQuickDelete { padding: 5px 12px; font-size: 13px; border-radius: 10px; }
 .saleWhen { color: var(--muted); font-size: 13.5px; }
 .saleWhat { display: grid; min-width: 0; }
 .saleWhat b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2351,7 +2354,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 [data-theme="dark"] .saleStatus.owed { color: #f97066; }
 [data-theme="dark"] .saleStatus.warn { color: #fbbf24; }
 @media (max-width: 640px) {
-  .saleSummary { grid-template-columns: minmax(0, 1fr) auto; }
+  .saleSummary, .saleSummary:has(.saleQuickDelete) { grid-template-columns: minmax(0, 1fr) auto; }
   .saleWhen { grid-column: 1 / -1; }
   .saleStatus { grid-column: 1 / -1; justify-self: start; }
 }

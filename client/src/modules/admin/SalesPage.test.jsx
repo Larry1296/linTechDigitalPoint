@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/ui/alerts", () => ({ askForm: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["commerce.add_payment", "commerce.change_sale", "commerce.change_payment", "accounting.reverse_cashentry", "accounts.view_customerprofile"] } }) }));
 import { api } from "../../core/api/client";
 import { SalesPage } from "./SalesPage";
@@ -123,4 +124,20 @@ it("deletes a whole sale recorded wrongly, with a reason, so it can be recorded 
   fireEvent.click(within(remove).getByRole("button", { name: "Delete sale" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/commerce/sales/7/delete/", expect.objectContaining({ method: "POST" })));
   expect(JSON.parse(api.mock.calls.find(([p]) => p.endsWith("/delete/"))[1].body)).toEqual({ reason: "Recorded twice" });
+});
+
+it("puts a Delete button on the line of a sale whose M-Pesa is not confirmed, and deletes the sale or only the payment", async () => {
+  const { askForm } = await import("../../core/ui/alerts");
+  const waiting = sale(8, { outstanding: "100.00", payments: [{ id: 81, method: "MPESA", amount: "100.00", status: "MANUAL_REVIEW", reference: "UJ53K9U3L5" }] });
+  api.mockReset();
+  api.mockImplementation(async (path) => (path.endsWith("/delete/") ? {} : { count: 2, results: [waiting, sale(9)] }));
+  render(<SalesPage />);
+  await screen.findAllByText("C-C HEAD(45W)");
+  expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(1);  // only on the waiting sale
+  askForm.mockResolvedValueOnce({ what: "sale", reason: "Recorded wrongly" });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Delete" })); });
+  expect(api).toHaveBeenCalledWith("/api/v1/commerce/sales/8/delete/", { method: "POST", body: JSON.stringify({ reason: "Recorded wrongly" }) });
+  askForm.mockResolvedValueOnce({ what: "payment", reason: "Wrong code" });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Delete" })); });
+  expect(api).toHaveBeenCalledWith("/api/v1/commerce/payments/81/delete/", { method: "POST", body: JSON.stringify({ reason: "Wrong code" }) });
 });
