@@ -64,7 +64,7 @@ class CyberServiceViewSet(viewsets.ModelViewSet):
     serializer_class = CyberServiceSerializer
     permission_classes = [HasLinTechPermission]
     permission_required = "cyber.view_cyberserviceprofile"
-    queryset = CyberServiceProfile.objects.select_related("variant__product").order_by("variant__product__name")
+    queryset = CyberServiceProfile.objects.filter(removed_at__isnull=True).select_related("variant__product").order_by("variant__product__name")
 
     def get_permissions(self):
         action_permission = {"create": "add", "update": "change", "partial_update": "change", "destroy": "delete"}.get(self.action, "view")

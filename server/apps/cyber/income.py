@@ -104,9 +104,11 @@ def _group_category(category_id):
     return category
 
 
-def _services(request, product_id=None):
+def _services(request, product_id=None, removed=False):
     root_id = services_category().pk
     profiles = CyberServiceProfile.objects.select_related("variant__product__category__parent").order_by("variant__product__name", "variant__pk")
+    if not removed:
+        profiles = profiles.filter(removed_at__isnull=True)
     if product_id:
         profiles = profiles.filter(variant__product_id=product_id)
     show_cost = has_business_permission(request.user, "accounting.view_profit")
@@ -119,6 +121,7 @@ def _services(request, product_id=None):
         group, subgroup = _place(product.category, root_id)
         row = {"id": product.pk, "name": product.name, "notes": options[0].notes, "group": group, "subgroup": subgroup,
                "active": product.active and any(p.active and p.variant.active for p in options),
+               "removed": all(p.removed_at for p in options),
                "options": [_option(p, sums, show_cost) for p in options]}
         row.update({period: _sum(sums, period, [p.variant_id for p in options]) for period in _periods()})
         rows.append(row)
@@ -161,8 +164,8 @@ def income_by_service(request):
             if option and option != profile.variant.name:
                 ProductVariant.objects.filter(pk=profile.variant_id).update(name=option[:120])
         return Response(_services(request, profile.variant.product_id)[0], status=201)
-    rows = _services(request)
-    return Response({"services": rows, "groups": groups(),
+    rows = _services(request, removed=True)  # deleted services' past income still counts in the totals
+    return Response({"services": [r for r in rows if not r["removed"]], "groups": groups(),
                      "totals": {period: sum((r[period]["amount"] for r in rows), ZERO) for period in _periods()}})
 
 
@@ -416,3 +419,34 @@ def service_settings(request, pk):
         AuditLog.objects.create(action="CYBER_SERVICE_SAVED", object_type="Product", object_id=str(product.pk), user=request.user,
                                 before=before, after={"name": name, "category": category.pk})
     return _detail(request, product.pk)
+
+
+@api_view(["POST"])
+@permission_classes([HasLinTechPermission])
+def delete_service(request, pk):
+    """Deletes a service. One never used is erased; one with income recorded is removed from every list and can no
+    longer be sold, while its past income, receipts and the books stay as they were."""
+    _require(request, "cyber.delete_cyberserviceprofile")
+    product = get_object_or_404(Product, pk=pk, product_type=Product.SERVICE)
+    from apps.commerce.models import OrderItem, SaleItem
+    from .models import ServiceMaterialRequirement
+    with transaction.atomic():
+        profiles = CyberServiceProfile.objects.select_for_update().filter(variant__product=product, removed_at__isnull=True)
+        if not profiles.exists():
+            raise ValidationError("This service is already deleted.")
+        variants = product.variants.all()
+        used = (CyberJobLine.objects.filter(variant__in=variants).exists() or SaleItem.objects.filter(variant__in=variants).exists()
+                or OrderItem.objects.filter(variant__in=variants).exists())
+        if used:
+            profiles.update(active=False, removed_at=timezone.now())
+            variants.update(active=False)
+            Product.objects.filter(pk=product.pk).update(active=False)
+            result = "removed"
+        else:
+            ServiceMaterialRequirement.objects.filter(service_variant__in=variants).delete()
+            CyberServiceProfile.objects.filter(variant__product=product).delete()
+            product.delete()
+            result = "deleted"
+        AuditLog.objects.create(action="CYBER_SERVICE_DELETED", object_type="Product", object_id=str(pk), user=request.user,
+                                before={"name": product.name}, after={"result": result})
+    return Response({"result": result, "name": product.name})

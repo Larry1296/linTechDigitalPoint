@@ -205,3 +205,20 @@ it("shows no add or edit buttons to staff without permission", async () => {
   expect(within(form).queryByRole("button", { name: "+ New service" })).toBeNull();
   expect(within(form).queryByRole("button", { name: /Edit Printing/ })).toBeNull();
 });
+
+it("lets the owner delete a service from its page and goes back to the list; staff see no Delete", async () => {
+  perms.list = [...OWNER, "cyber.delete_cyberserviceprofile"];
+  api.mockImplementation(async (path) => (path.endsWith("/delete/") ? { result: "deleted", name: kra.name } : { ...kra, history: [], groups: GROUPS }));
+  const { unmount } = render(<MemoryRouter initialEntries={["/admin/cyber/income/7"]}><Routes>
+    <Route path="/admin/cyber/income/:serviceId" element={<CyberServiceIncomePage />} />
+    <Route path="/admin/cyber/income" element={<p>Service list</p>} /></Routes></MemoryRouter>);
+  const button = await screen.findByRole("button", { name: "Delete service" });
+  await act(async () => { fireEvent.click(button); });
+  expect(api).toHaveBeenCalledWith("/api/v1/cyber/income/7/delete/", { method: "POST" });
+  expect(await screen.findByText("Service list")).toBeInTheDocument();
+  unmount();
+  perms.list = OWNER;
+  render(<MemoryRouter initialEntries={["/admin/cyber/income/7"]}><Routes><Route path="/admin/cyber/income/:serviceId" element={<CyberServiceIncomePage />} /></Routes></MemoryRouter>);
+  await screen.findByRole("heading", { name: kra.name });
+  expect(screen.queryByRole("button", { name: "Delete service" })).toBeNull();
+});

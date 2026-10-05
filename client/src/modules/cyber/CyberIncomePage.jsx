@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
@@ -534,11 +534,37 @@ export function CyberIncomePage() {
   );
 }
 
+// Deletes the service after asking. The server erases one never used; one with income is removed from every list
+// and can no longer be sold, while its past income stays in the totals and the books.
+function DeleteService({ service, onDeleted }) {
+  const [error, setError] = useState("");
+  const used = service.history.length > 0;
+  const remove = async () => {
+    if (!(await confirmAction({ title: `Delete ${service.name}?`, confirmButtonText: "Delete service",
+      text: used ? "It disappears from your services and can no longer be sold. Its past income and receipts are kept."
+        : "It is removed permanently with its price options." }))) return;
+    setError("");
+    try {
+      onDeleted(await api(`/api/v1/cyber/income/${service.id}/delete/`, { method: "POST" }));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  return (
+    <>
+      <button type="button" className="danger" onClick={() => void remove()}>Delete service</button>
+      <FormError title="Could not delete the service." message={error} />
+    </>
+  );
+}
+
 /** One service as a full page: its revenue, quick entry, price options and history. */
 export function CyberServiceIncomePage() {
   const { serviceId } = useParams();
   const { user } = useAuth();
   const canEditService = ["cyber.change_cyberserviceprofile", "catalog.change_product"].every((p) => user?.permissions?.includes(p));
+  const canDelete = Boolean(user?.permissions?.includes("cyber.delete_cyberserviceprofile"));
+  const navigate = useNavigate();
   const { data, setData, error, load } = useLoad(`/api/v1/cyber/income/${serviceId}/`);
   const [receipt, setReceipt] = useState(null);
   if (error) return <ErrorState message={error} retry={load} />;
@@ -550,6 +576,7 @@ export function CyberServiceIncomePage() {
       <h1>{data.name}</h1>
       <p className="muted">{[data.group ? [data.group.name, data.subgroup?.name].filter(Boolean).join(" › ") : "No group", data.notes].filter(Boolean).join(" · ")}</p>
       {canEditService && <ServiceDetails service={data} onSaved={(saved) => setData(saved)} />}
+      {canDelete && <DeleteService service={data} onDeleted={() => navigate("/admin/cyber/income")} />}
       <Totals totals={data} unitCode={single} />
       <RecordIncome key={data.id} services={[data]} fixedService={data} onSaved={(saved) => setData(saved)} />
       <PriceOptions service={data} onSaved={(saved) => setData(saved)} />

@@ -210,3 +210,25 @@ def test_deleting_a_waiting_job_needs_the_delete_permission(cyber):
     assert till.delete(f"/api/v1/cyber/jobs/{job}/").status_code == 403  # a till operator cannot delete jobs
     assert owner.delete(f"/api/v1/cyber/jobs/{job}/").status_code == 204
     assert owner.get(f"/api/v1/cyber/jobs/{job}/").status_code == 404
+
+
+def test_a_service_is_deleted_and_one_with_income_keeps_its_past_income(cyber):
+    owner, till, org, printing, typing = cyber
+    printed, typed = printing.variant.product_id, typing.variant.product_id
+    assert _record(owner, printed, printing.pk, "10", "d1").status_code == 201
+    assert till.post(f"/api/v1/cyber/income/{typed}/delete/").status_code == 403  # staff cannot delete services
+    # Never used: erased.
+    gone = owner.post(f"/api/v1/cyber/income/{typed}/delete/")
+    assert gone.status_code == 200 and gone.json()["result"] == "deleted"
+    with organization_context(org):
+        from apps.catalog.models import Product
+        assert not Product.objects.filter(pk=typed).exists()
+    # Used: off every list and no longer sold, but its income still counts.
+    removed = owner.post(f"/api/v1/cyber/income/{printed}/delete/")
+    assert removed.status_code == 200 and removed.json()["result"] == "removed"
+    listing = owner.get("/api/v1/cyber/income/").json()
+    assert listing["services"] == [] and D(str(listing["totals"]["today"])) == D("100")
+    desk = owner.get("/api/v1/cyber/services/").json()
+    assert (desk.get("results") if isinstance(desk, dict) else desk) == []  # gone from the Service Desk too
+    assert _record(owner, printed, printing.pk, "1", "d2").status_code == 400
+    assert owner.post(f"/api/v1/cyber/income/{printed}/delete/").status_code == 400  # already deleted

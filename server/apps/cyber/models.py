@@ -24,6 +24,8 @@ class CyberServiceProfile(TimeStamped):
     notes = models.TextField(blank=True)
     # A price option whose amount differs every time (e.g. "Other online service"): staff type the amount received.
     price_varies = models.BooleanField(default=False)
+    # Deleted after income was recorded for it: gone from every list, its past income kept in the books and totals.
+    removed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.variant} ({self.get_billing_unit_display()})"
