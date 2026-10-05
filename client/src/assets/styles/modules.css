@@ -49,6 +49,18 @@ label {
   @apply tw:text-[13px];
   @apply tw:font-[700];
 }
+/* A tick box or round choice keeps its own size and sits beside its words, not stretched across like a text box.
+   Kept at the weakest level so screens that style their own choices (delete dialog, stock locations) win. */
+input[type="radio"],
+input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+}
+label:where(:has(> input[type="radio"])) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .heading,
 .cartTotal,
 .statusRow {
@@ -1184,7 +1196,7 @@ label {
 .tableWrap th, .tableWrap td { padding:8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
 .checkList { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px 16px; }
 .checkList label, label.checkRow { display:flex; align-items:center; gap:8px; }
-.checkList input[type="checkbox"], label.checkRow input[type="checkbox"] { width:auto; margin:0; }
+.checkList input[type="checkbox"], label.checkRow input[type="checkbox"], label.checkRow input[type="radio"] { width:auto; margin:0; padding:0; flex:none; }
 .checkList label.lockedTool { color:var(--muted); cursor:not-allowed; }
 .checkList label.lockedTool small { font-weight:700; color:color-mix(in srgb, #b45309 70%, var(--text)); }
 
@@ -2161,6 +2173,14 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .openingStock { display:grid; gap:10px; margin:0; padding:16px; border:1.5px solid var(--primary); border-radius:14px; background:var(--primary2); }
 .openingStock legend { padding:0 6px; font-weight:700; color:var(--text); }
 .openingStock p { margin:0; }
+/* Add Product: "How is it sold?" — one at a time or in packs, each choice with its button beside its words. */
+.packChoice { display:grid; gap:10px; margin:0; padding:16px; border:1px solid var(--line); border-radius:14px; }
+.packChoice legend { padding:0 6px; font-weight:700; color:var(--text); }
+.packChoice label.checkRow { align-items:flex-start; color:var(--text); font-size:14px; font-weight:500; line-height:1.4; }
+.packChoice label.checkRow input[type="radio"] { width:18px; height:18px; margin-top:1px; accent-color:var(--primary); }
+.packFields { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.packFields small { grid-column:1 / -1; }
+@media (max-width: 640px) { .packFields { grid-template-columns:1fr; } }
 
 /* Products page: items at or below their restock level, above the category list. */
 .restockSection { margin: 12px 0 20px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid #d97706; border-radius: 12px; background: var(--surface); }
