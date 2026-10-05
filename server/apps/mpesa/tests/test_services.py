@@ -337,3 +337,20 @@ def test_a_returning_depositor_is_found_by_phone_number(db):
     assert (found["found"], found["id_number"], found["visits"]) == (True, "34299508", 1)
     assert client.get("/api/v1/mpesa/customers/lookup/?phone=0700000000").json()["found"] is False
     assert client.get("/api/v1/mpesa/customers/lookup/?phone=123").json() == {"found": False}
+
+
+@pytest.mark.django_db
+def test_money_in_operation_is_corrected_by_a_manager_with_a_reason(mpesa_shift):
+    operator, session = mpesa_shift
+    with pytest.raises(ValidationError, match="Say why"):
+        post_transaction(session=session, transaction_type="ADJUSTMENT", transaction_amount="5000", user=operator, idempotency_key="adjust-0",
+                         cash_delta="-5000", float_delta="0")
+    entry, _ = post_transaction(session=session, transaction_type="ADJUSTMENT", transaction_amount="5500", user=operator, idempotency_key="adjust-1",
+                                cash_delta="-5000", float_delta="-500", notes="Opening cash was counted twice")
+    assert entry.provider_reference is None
+    assert session_balances(session) == (Decimal("15000.00"), Decimal("29500.00"))
+    with pytest.raises(ValidationError, match="physical cash"):
+        post_transaction(session=session, transaction_type="ADJUSTMENT", transaction_amount="20000", user=operator, idempotency_key="adjust-2",
+                         cash_delta="-20000", float_delta="0", notes="Too much")
+    reverse_transaction(original=entry, user=operator, idempotency_key="undo-adjust", reason="Wrong shift")
+    assert session_balances(session) == (Decimal("20000.00"), Decimal("30000.00"))

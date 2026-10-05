@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet"] } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet", "mpesa.reverse_mpesa_transaction"] } }) }));
 vi.mock("./api", () => ({
   getMpesaDashboard: vi.fn(), getMpesaOutlets: vi.fn(), getMpesaTransactions: vi.fn(), createMpesaOutlet: vi.fn(),
   updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), reverseMpesaTransaction: vi.fn(),
@@ -98,4 +98,22 @@ it("leaves a reversed transaction and its reversal out of every list", async () 
   expect(screen.getByText("MPA-KEPT")).toBeInTheDocument();
   expect(screen.queryByText("MPA-WRONG")).not.toBeInTheDocument();
   expect(screen.queryByText("MPR-UNDO")).not.toBeInTheDocument();
+});
+
+it("lets a manager correct the money in operation down, with a reason", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 8, opened_at: new Date().toISOString() }, cash: "20000.00", float: "30000.00",
+    in_operation: { total: "50000.00", opening: "50000.00" } });
+  api.postMpesaTransaction.mockResolvedValue({});
+  render(<MpesaDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Correct money in operation" }));
+  const form = screen.getByRole("form", { name: "Correct money in operation" });
+  expect(within(form).getByLabelText("Cash should be")).toHaveValue(20000);
+  expect(within(form).getByRole("button", { name: "Correct money in operation" })).toBeDisabled();
+  fireEvent.change(within(form).getByLabelText("Cash should be"), { target: { value: "15000" } });
+  fireEvent.change(within(form).getByLabelText("Reason"), { target: { value: "Opening cash counted twice" } });
+  expect(form).toHaveTextContent("(−5,000.00)");
+  fireEvent.click(within(form).getByRole("button", { name: "Correct money in operation" }));
+  await waitFor(() => expect(api.postMpesaTransaction).toHaveBeenCalled());
+  expect(api.postMpesaTransaction.mock.calls[0][0]).toEqual(expect.objectContaining({ session: 8, transaction_type: "ADJUSTMENT", amount: "5000.00",
+    cash_delta: "-5000.00", float_delta: "0.00", notes: "Opening cash counted twice" }));
 });

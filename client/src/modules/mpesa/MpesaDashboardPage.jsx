@@ -175,6 +175,56 @@ function CloseShift({ dashboard, onClose, onCancel }) {
     </form>
   );
 }
+// A manager sets the cash and float to what they really are, with a reason. The difference is recorded as an
+// adjustment (never an edit), so the books and the monthly report show it, and it can be reversed like any other.
+function CorrectMoney({ dashboard, onDone, onCancel }) {
+  const [cash, setCash] = useState(String(Number(dashboard.cash)));
+  const [float, setFloat] = useState(String(Number(dashboard.float)));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const cashChange = Number((Number(cash || 0) - Number(dashboard.cash)).toFixed(2));
+  const floatChange = Number((Number(float || 0) - Number(dashboard.float)).toFixed(2));
+  const total = Number(cash || 0) + Number(float || 0);
+  const change = cashChange + floatChange;
+  const changed = cashChange !== 0 || floatChange !== 0;
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!changed) return setError("Change the cash or the float to what it should be.");
+    if (!(await confirmAction({ title: `Correct the money in operation to ${amount(total)}?`,
+      text: `Cash ${signedFigure(cashChange)}, float ${signedFigure(floatChange)}. It is recorded as an adjustment with your reason.`,
+      confirmButtonText: "Correct it" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await postMpesaTransaction({ session: dashboard.session.id, transaction_type: "ADJUSTMENT", amount: (Math.abs(cashChange) + Math.abs(floatChange)).toFixed(2),
+        cash_delta: cashChange.toFixed(2), float_delta: floatChange.toFixed(2), notes: reason, idempotency_key: crypto.randomUUID() });
+      await onDone();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="formCard shiftForm" onSubmit={(event) => void submit(event)} aria-label="Correct money in operation">
+      <h2>Correct money in operation</h2>
+      <p className="muted">Enter what the cash and float really are. Lower them to take money out, raise them to add it.</p>
+      <fieldset disabled={busy}>
+        <FormField label="Cash should be" name="cash" type="number" min="0" step="0.01" required value={cash} onChange={(event) => setCash(event.target.value)} />
+        <FormField label="Float should be" name="float" type="number" min="0" step="0.01" required value={float} onChange={(event) => setFloat(event.target.value)} />
+        <dl className="reportPosition">
+          <div><dt>Money in operation: now vs corrected</dt><dd>{amount(dashboard.in_operation.total)} vs <strong>{amount(total)}</strong>{changed && ` (${signedFigure(change)})`}</dd></div>
+        </dl>
+        <FormField label="Reason" name="reason" required maxLength={240} placeholder="e.g. opening cash was counted twice" value={reason} onChange={(event) => setReason(event.target.value)} />
+        <div className="actionRow">
+          <button disabled={!changed}>Correct money in operation</button>
+          <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+        </div>
+      </fieldset>
+      <FormError title="Could not correct the money in operation." message={error} />
+    </form>
+  );
+}
 export function MpesaDashboardPage() {
   const { user } = useAuth();
   // A new business day starts at 00:00: reload everything so today's lists, balances and warnings start fresh.
@@ -189,6 +239,8 @@ export function MpesaDashboardPage() {
   const [error, setError] = useState("");
   const [openingCount, setOpeningCount] = useState(emptyCount);
   const [closing, setClosing] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const canCorrect = Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
   const load = async () => {
     try {
       const [summary, outletRows, entries] = await Promise.all([
@@ -370,10 +422,14 @@ export function MpesaDashboardPage() {
             <button onClick={() => void rebalance("CASH_REBALANCE")}>
               Cash rebalance
             </button>
+            {canCorrect && <button className="secondary" onClick={() => setCorrecting(true)}>
+              Correct money in operation
+            </button>}
             <button className="secondary" onClick={() => setClosing(true)}>
               Close & reconcile shift
             </button>
           </div>
+          {correcting && <CorrectMoney dashboard={dashboard} onCancel={() => setCorrecting(false)} onDone={async () => { setCorrecting(false); await load(); }} />}
           {closing && <CloseShift dashboard={dashboard} onClose={close} onCancel={() => setClosing(false)} />}
           <div className="deskGrid mpesaDesk">
             <MpesaDepositForm

@@ -145,8 +145,9 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
     provider_reference = (provider_reference or "").strip().upper() or None
     if transaction_type in ["FLOAT_TOPUP", "CASH_REBALANCE", "ADJUSTMENT", "INVESTMENT", "COMMISSION"] and not privileged:
         raise ValidationError("Manager or Owner permission is required for balance adjustments.")
-    if transaction_type == "ADJUSTMENT" and (not notes.strip() or not provider_reference):
-        raise ValidationError("Adjustments require both a reason and reference.")
+    # A correction to the money in operation: the reason is required, a reference only if there is one.
+    if transaction_type == "ADJUSTMENT" and not notes.strip():
+        raise ValidationError("Say why the money in operation is being corrected.")
     if transaction_type == "ADJUSTMENT" and (cash_delta is None or float_delta is None):
         raise ValidationError("Adjustments require explicit cash and float effects.")
     cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged)
