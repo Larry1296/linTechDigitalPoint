@@ -32,3 +32,15 @@ it("shows what the app expects and how, then compares a note-by-note count", asy
 it("says plainly when the money matches", () => {
   expect(differenceText("0")).toBe("Exactly what the app expected.");
 });
+
+it("offers to record money found over the expected amount on the till as money already there", async () => {
+  const till = { method: "MPESA", label: "Lipa na M-Pesa (till)", expected: "0.00", last_check: null, parts: [] };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : { places: [till], history: [] }));
+  render(<MemoryRouter><MoneyCheckPage /></MemoryRouter>);
+  const place = await screen.findByRole("region", { name: "Lipa na M-Pesa (till)" });
+  fireEvent.change(within(place).getByLabelText(/Amount you have on Lipa na M-Pesa/), { target: { value: "2500" } });
+  expect(within(place).getByText(/KSh 2,500.00 more than the app expected/)).toBeInTheDocument();
+  fireEvent.click(within(place).getByRole("button", { name: "Add KSh 2,500.00 as money I already had" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/", expect.objectContaining({ method: "POST" })));
+  expect(JSON.parse(api.mock.calls.find(([p]) => p.endsWith("/starting/"))[1].body)).toMatchObject({ method: "MPESA", amount: "2500.00" });
+});

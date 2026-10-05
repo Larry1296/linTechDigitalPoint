@@ -22,7 +22,7 @@ export function differenceText(difference) {
     : `${money(value)} more than the app expected. Something may not have been recorded (a sale, money you added), or starting money is missing.`;
 }
 
-function CountForm({ place, onSaved }) {
+function CountForm({ place, onSaved, canAddStarting, onStartingAdded }) {
   const cash = place.method === "CASH";
   const [count, setCount] = useState(emptyCount);
   const [amount, setAmount] = useState("");
@@ -30,6 +30,24 @@ function CountForm({ place, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const actual = cash ? countTotal(count) : Number(amount || 0);
+  const extra = Math.round((actual - Number(place.expected)) * 100) / 100;
+  // More than expected because money was already there before the app was used: record the difference as starting money.
+  const addAsStarting = async () => {
+    if (!(await confirmAction({ title: `Add ${money(extra)} as money you already had on ${place.label}?`,
+      text: "Use this when the money was there before you started recording in the app (money you put in yourself). It is not a sale and does not count as profit.",
+      confirmButtonText: "Add as money I already had" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/v1/accounting/money-check/starting/", { method: "POST", body: JSON.stringify({ method: place.method, amount: extra.toFixed(2),
+        note: "Money already there before using the app", idempotency_key: crypto.randomUUID() }) });
+      await onStartingAdded();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
@@ -54,6 +72,11 @@ function CountForm({ place, onSaved }) {
           : <FormField label={`Amount you have on ${place.label} (${businessCurrency()})`} type="number" min="0" step="0.01" required
             value={amount} onChange={(event) => setAmount(event.target.value)} />}
         {(cash || amount !== "") && <p className="moneyCompare">You have <b>{money(actual)}</b> · the app expects <b>{money(place.expected)}</b> · {differenceText(actual - Number(place.expected))}</p>}
+        {canAddStarting && extra > 0 && (cash || amount !== "") && <div className="formNotice formNoticeInfo">
+          <p>Was this money already there before you started using the app, or money you put in yourself? Record it as money you already had,
+            then save the count.</p>
+          <button type="button" className="secondary" onClick={() => void addAsStarting()}>Add {money(extra)} as money I already had</button>
+        </div>}
         <FormField label="Note (optional)" value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="e.g. evening count" />
         <button>Save this count</button>
       </fieldset>
@@ -88,7 +111,8 @@ function StartingMoney({ places, onSaved }) {
   return (
     <form className="formCard" onSubmit={(event) => void submit(event)}>
       <h3>Money you already had</h3>
-      <p className="muted">For example the shop's cash in the drawer on the day you started using the app. Not M-Pesa agency money.</p>
+      <p className="muted">For example the shop's cash in the drawer, or what was already on the Lipa na M-Pesa till, on the day you started
+        using the app, or money you put in yourself. Not M-Pesa agency money.</p>
       <fieldset disabled={busy}>
         <FormField label="Where is it kept?">
           <select name="method" defaultValue="CASH">{[...places.map((p) => [p.method, p.label]), ...[["BANK", "Bank"], ["OTHER", "Other"]].filter(([m]) => !places.some((p) => p.method === m))]
@@ -139,7 +163,8 @@ export function MoneyCheckPage() {
             <tr className="reportTotal"><th scope="row">Expected</th><td>{money(place.expected)}</td></tr>
           </tbody></table>
           {place.last_check && <p className="muted">Last counted {when(place.last_check.created_at)}: {money(place.last_check.actual)} ({differenceText(place.last_check.difference)})</p>}
-          {can("accounting.add_moneycheck") && <CountForm place={place} onSaved={async (saved) => { setResult(saved); await load(); }} />}
+          {can("accounting.add_moneycheck") && <CountForm place={place} onSaved={async (saved) => { setResult(saved); await load(); }}
+            canAddStarting={can("accounting.add_cashentry")} onStartingAdded={load} />}
         </section>
       ))}</div>
       {can("accounting.add_cashentry") && <StartingMoney places={data.places} onSaved={load} />}
