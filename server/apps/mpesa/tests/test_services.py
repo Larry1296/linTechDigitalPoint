@@ -354,3 +354,33 @@ def test_money_in_operation_is_corrected_by_a_manager_with_a_reason(mpesa_shift)
                          cash_delta="-20000", float_delta="0", notes="Too much")
     reverse_transaction(original=entry, user=operator, idempotency_key="undo-adjust", reason="Wrong shift")
     assert session_balances(session) == (Decimal("20000.00"), Decimal("30000.00"))
+
+
+@pytest.mark.django_db
+def test_a_closed_shifts_records_can_be_opened_again_by_its_time(db):
+    from rest_framework.test import APIClient
+    from apps.tenancy.context import organization_context
+    from apps.tenancy.models import Membership, Organization, OrganizationSubscription
+    owner = User.objects.create_user("past-owner", password="Safe-pass-1848")
+    org = Organization.objects.create(name="Past", slug="past", owner=owner)
+    Membership.objects.create(user=owner, organization=org, role="OWNER")
+    OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
+    with organization_context(org):
+        outlet = MpesaOutlet.objects.create(store=Store.objects.create(name="Past shop"), display_name="Till")
+    client = APIClient()
+    client.force_login(owner)
+    empty = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1000", "opening_float": "5000"}, format="json").json()
+    client.post(f"/api/v1/mpesa/sessions/{empty['id']}/reconcile/", {"actual_cash": "1000", "actual_float": "5000"}, format="json")
+    first = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1000", "opening_float": "5000"}, format="json").json()
+    client.post("/api/v1/mpesa/transactions/", {"session": first["id"], "transaction_type": "CUSTOMER_DEPOSIT", "amount": "500",
+                "customer_phone": "0712345678", "customer_id_number": "12345678", "idempotency_key": "p1"}, format="json")
+    assert client.get("/api/v1/mpesa/sessions/past/").json() == []  # still open: it is on the desk
+    client.post(f"/api/v1/mpesa/sessions/{first['id']}/reconcile/", {"actual_cash": "1500", "actual_float": "4500"}, format="json")
+    second = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1500", "opening_float": "4500"}, format="json").json()
+    client.post("/api/v1/mpesa/transactions/", {"session": second["id"], "transaction_type": "CUSTOMER_DEPOSIT", "amount": "200",
+                "customer_phone": "0712345678", "customer_id_number": "12345678", "idempotency_key": "p2"}, format="json")
+    past = client.get("/api/v1/mpesa/sessions/past/").json()
+    assert [(row["id"], row["records"]) for row in past] == [(first["id"], 1)]  # the empty shift has nothing to open
+    assert past[0]["closed_at"] and Decimal(past[0]["closing_cash"]) == Decimal("1500")
+    records = client.get(f"/api/v1/mpesa/transactions/?session={first['id']}").json()
+    assert [(row["session"], Decimal(row["amount"])) for row in records] == [(first["id"], Decimal("500"))]

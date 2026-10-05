@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet", "mpesa.reverse_mpesa_transaction"] } }) }));
 vi.mock("./api", () => ({
   getMpesaDashboard: vi.fn(), getMpesaOutlets: vi.fn(), getMpesaTransactions: vi.fn(), createMpesaOutlet: vi.fn(),
-  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), reverseMpesaTransaction: vi.fn(),
+  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), getPastMpesaShifts: vi.fn(async () => []), getMpesaShiftTransactions: vi.fn(), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), reverseMpesaTransaction: vi.fn(),
 }));
 import * as api from "./api";
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true) }));

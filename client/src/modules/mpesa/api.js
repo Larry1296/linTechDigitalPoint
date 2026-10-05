@@ -5,6 +5,9 @@ export const createMpesaOutlet = (body) =>
   api("/api/v1/mpesa/outlets/", { method: "POST", body: JSON.stringify(body) });
 // Only transactions in open shifts: the desk starts afresh when a shift closes.
 export const getMpesaTransactions = () => api("/api/v1/mpesa/transactions/?shift=open");
+// Closed shifts that hold records, newest first, and one shift's records, so a cleared desk's records can be looked at again.
+export const getPastMpesaShifts = () => api("/api/v1/mpesa/sessions/past/");
+export const getMpesaShiftTransactions = (id) => api(`/api/v1/mpesa/transactions/?session=${encodeURIComponent(id)}`);
 export const openMpesaSession = (body) =>
   api("/api/v1/mpesa/sessions/", {
     method: "POST",

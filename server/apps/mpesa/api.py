@@ -130,6 +130,18 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         result = reconcile_session(session=self.get_object(), user=request.user, actual_cash=request.data.get("actual_cash"), actual_float=request.data.get("actual_float"), reason=request.data.get("reason", ""), notes=request.data.get("notes", ""), cash_count=request.data.get("cash_count"))
         return Response(ReconciliationSerializer(result).data, status=201)
 
+    @action(detail=False)
+    def past(self, request):
+        # Closed shifts that hold records, newest first, each named by when it ran, so a cleared desk's records can be opened again.
+        rows = (self.get_queryset().filter(status=MpesaSession.CLOSED).annotate(records=Count("transactions")).filter(records__gt=0)
+                .prefetch_related(None).select_related("reconciliation").order_by("-opened_at", "-pk"))
+        return Response([{"id": s.pk, "outlet": s.outlet.display_name, "operator": s.operator.get_full_name() or s.operator.username,
+                          "opened_at": s.opened_at, "closed_at": s.closed_at, "records": s.records,
+                          "opening_cash": s.opening_cash, "opening_float": s.opening_float,
+                          "closing_cash": s.closing_cash_actual, "closing_float": s.closing_float_actual,
+                          "cash_variance": getattr(getattr(s, "reconciliation", None), "cash_variance", None),
+                          "float_variance": getattr(getattr(s, "reconciliation", None), "float_variance", None)} for s in rows])
+
 
 class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TransactionSerializer
@@ -141,6 +153,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         rows = super().get_queryset()
         if self.request.query_params.get("shift") == "open":
             rows = rows.filter(session__status=MpesaSession.OPEN)
+        if self.request.query_params.get("session", "").isdigit():
+            rows = rows.filter(session_id=self.request.query_params["session"])
         if is_business_manager(self.request.user):
             return rows
         return rows.filter(session__operator=self.request.user)

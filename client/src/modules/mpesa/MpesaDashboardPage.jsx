@@ -21,6 +21,7 @@ import { MpesaDepositForm } from "./MpesaDepositForm";
 import { CustomerTransactionList } from "./CustomerTransactionList";
 import { CorrectTransaction } from "./CorrectTransaction";
 import { MonthlyReport } from "./MonthlyReport";
+import { PastShifts } from "./PastShifts";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
@@ -263,7 +264,7 @@ export function MpesaDashboardPage() {
   useLiveRefresh(load, { pollMs: 20000 });
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
-  // Only the open shift's transactions are shown; closing it starts the desk afresh. Closed shifts stay on record.
+  // Only the open shift's transactions are shown; closing it starts the desk afresh. Closed shifts stay on record (Past shifts).
   // A reversed transaction and its reversal cancel out, so neither is listed (both stay on record and in the monthly report).
   const reversedIds = new Set(transactions.filter((entry) => entry.reversal_of).map((entry) => entry.reversal_of));
   const shiftTransactions = dashboard.session ? transactions.filter((entry) => entry.session === dashboard.session.id
@@ -360,6 +361,7 @@ export function MpesaDashboardPage() {
         </MetricCard>
       </div>
       <MonthlyReport />
+      <PastShifts />
       <section className="outletSection" aria-labelledby="outlets-heading">
         <div className="sectionHeading">
           <h2 id="outlets-heading">Outlets</h2>

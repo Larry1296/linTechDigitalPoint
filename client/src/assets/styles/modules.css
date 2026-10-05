@@ -2270,6 +2270,12 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .monthlyReportReady button, .monthlyReportEarlier button { margin: 0; }
 .monthlyReportEarlier { align-items: end; margin-top: 12px; }
 .monthlyReport > p.muted { margin: 10px 0 0; font-size: 13px; }
+.pastShifts .sectionHeading { align-items: center; margin-bottom: 8px; }
+.pastShifts .sectionHeading h2 { margin: 0; }
+.pastShifts label { display: grid; gap: 6px; max-width: 100%; }
+.pastShifts select { max-width: 100%; }
+.pastShiftSummary { margin: 10px 0 0; }
+.pastShiftRecords > section { margin-top: 16px; overflow-x: auto; }
 
 /* Money lent: one card per loan, overdue ones marked red. */
 .loanSummary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 12px 0 16px; }

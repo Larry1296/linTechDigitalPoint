@@ -33,23 +33,23 @@ function AddCode({ entry, onSaved }) {
   );
 }
 
-// One kind of transaction from the open shift (the caller passes only that shift's), newest first: deposits with the number and ID taken to process them,
-// and each one's M-Pesa transaction ID once it is added.
-export function CustomerTransactionList({ title, type, transactions, onChanged }) {
+// One kind of transaction from one shift (the caller passes only that shift's), newest first: deposits with the number and ID taken to process them,
+// and each one's M-Pesa transaction ID once it is added. A closed shift's list (closed) can no longer be corrected.
+export function CustomerTransactionList({ title, type, transactions, onChanged, scope = "this shift", closed = false }) {
   const { user } = useAuth();
-  const canCorrect = Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
+  const canCorrect = !closed && Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
   const reversed = new Set(transactions.filter((t) => t.reversal_of).map((t) => t.reversal_of));
   const rows = transactions.filter((t) => t.transaction_type === type);
   const deposit = type === "CUSTOMER_DEPOSIT";
   const total = rows.filter((t) => !reversed.has(t.id)).reduce((sum, t) => sum + Number(t.amount), 0);
   return (
-    <section aria-labelledby={`${type}-heading`}>
-      <h2 id={`${type}-heading`}>{title} this shift ({rows.length})</h2>
-      {!rows.length ? <p className="muted">None recorded this shift.</p> : <>
+    <section aria-labelledby={`${type}-heading${closed ? "-past" : ""}`}>
+      <h2 id={`${type}-heading${closed ? "-past" : ""}`}>{title} {scope} ({rows.length})</h2>
+      {!rows.length ? <p className="muted">None recorded {scope}.</p> : <>
         <p className="muted">Total {businessCurrency()} {total.toLocaleString()}{reversed.size ? ", not counting reversed ones" : ""}.</p>
         {/* Same grid table as "Agency transactions", so the three read alike. */}
         <div className={`table ledgerTable customerLedger ${deposit ? "depositLedger" : "withdrawalLedger"}`} role="table"
-          aria-label={`${title} this shift`}>
+          aria-label={`${title} ${scope}`}>
           <div role="row">
             <b role="columnheader">Time</b>
             {deposit && <><b role="columnheader">M-Pesa number</b><b role="columnheader">ID number</b></>}
