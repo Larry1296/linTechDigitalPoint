@@ -27,7 +27,7 @@ export function CyberJobForm({ services, onSave }) {
         lines,
       });
       const who = form.get("customer")?.trim();
-      setCreated(`Job ${job.number} created${who ? ` for ${who}` : ""}. It is waiting in Active & ready jobs.`);
+      setCreated(`Job ${job.number} created${who ? ` for ${who}` : ""}. It is waiting under Jobs.`);
       element.reset();
       setLines([emptyLine()]);
     } catch (err) {
@@ -38,7 +38,9 @@ export function CyberJobForm({ services, onSave }) {
   };
   return (
     <form className="saleCart operatorForm" onSubmit={submit} aria-label="New job" aria-busy={busy}>
-      <h2>New job / Quick service</h2>
+      <h2>Take in a job for later</h2>
+      <p className="muted">For work you will do after the customer leaves (e.g. typing, design, applications). It waits under
+        Jobs; they pay with Pay &amp; complete when it is done. Nothing is paid or counted yet.</p>
       {created && <FormSuccess message={created} />}
       <FormField label="Customer name (optional)" name="customer" />
       <FormField label="Phone (optional)" name="phone" inputMode="tel" />
@@ -68,7 +70,7 @@ export function CyberJobForm({ services, onSave }) {
               ))}
           </select>
           <input
-            aria-label={`Billable units ${index + 1}`}
+            aria-label={`How many ${index + 1}`}
             type="number"
             min="0.001"
             step="0.001"
@@ -106,7 +108,7 @@ export function CyberJobForm({ services, onSave }) {
           ])
         }
       >
-        Add another service
+        + Another item for this job
       </button>
       <FormField
         label="Discount"
@@ -125,7 +127,7 @@ export function CyberJobForm({ services, onSave }) {
       <button
         disabled={busy || !services.length || lines.some((line) => !line.variant_id)}
       >
-        {busy ? "Creating job…" : "Create job"}
+        {busy ? "Saving job…" : "Save job for later"}
       </button>
       <FormError title="Could not create the job." message={error} />
     </form>

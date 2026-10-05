@@ -19,6 +19,8 @@ import {
   transitionCyberJob,
 } from "./api";
 import { CyberJobForm } from "./CyberJobForm";
+import { RecordIncome } from "./CyberIncomePage";
+import { api } from "../../core/api/client";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
@@ -38,16 +40,22 @@ export function CyberDashboardPage() {
   const [receipt, setReceipt] = useState("");
   const [receiptSale, setReceiptSale] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  // What the person is doing: recording a service already done and paid for, or taking in work for later.
+  const [mode, setMode] = useState("done");
+  const [income, setIncome] = useState({ services: [], groups: [] });
+  const [addingService, setAddingService] = useState(false);
   const load = async () => {
     try {
-      const [summary, jobRows, serviceRows] = await Promise.all([
+      const [summary, jobRows, serviceRows, incomeRows] = await Promise.all([
         getCyberDashboard(),
         getCyberJobs(),
         getCyberServices(),
+        api("/api/v1/cyber/income/").catch(() => ({ services: [], groups: [] })),
       ]);
       setDashboard(summary);
       setJobs(jobRows);
       setServices(serviceRows);
+      setIncome(incomeRows || { services: [], groups: [] });
     } catch (err) {
       setError(err.message);
     }
@@ -145,17 +153,26 @@ export function CyberDashboardPage() {
           {businessCurrency()} {dashboard.today.average}
         </MetricCard>
       </div>
+      <div className="deskChoice" role="group" aria-label="What are you doing?">
+        <button type="button" aria-pressed={mode === "done"} className={mode === "done" ? "deskChoiceOn" : "secondary"} onClick={() => setMode("done")}>
+          <b>Already done: record what was paid</b><small>The customer has been served and pays now.</small>
+        </button>
+        <button type="button" aria-pressed={mode === "job"} className={mode === "job" ? "deskChoiceOn" : "secondary"} onClick={() => setMode("job")}>
+          <b>Work for later: take in a job</b><small>You will do it after they leave; they pay when it is done.</small>
+        </button>
+      </div>
       <div className="deskGrid">
-        <CyberJobForm
+        {mode === "done" ? <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
+          title="Record a service already done" /> : <CyberJobForm
           services={services.filter((service) => service.active)}
           onSave={async (data) => {
             const job = await createCyberJob(data);
             await load();
             return job;
           }}
-        />
+        />}
         <section>
-          <h2>Active & ready jobs</h2>
+          <h2>Jobs</h2>
           {!jobs.length ? (
             <Empty>No Cyber jobs yet.</Empty>
           ) : (
@@ -265,7 +282,8 @@ export function CyberDashboardPage() {
         </section>
       </div>
       <section>
-        <h2>Service price list</h2>
+        <h2>Your services and prices</h2>
+        <p className="muted">What you offer and what you charge. Changing this list does not record any sale or payment.</p>
         {!services.length && <Empty>No services yet.{canManageServices ? " Add your first service below." : " Ask the business owner to add services."}</Empty>}
         <div className="serviceGrid">
           {services.map((service) => (
@@ -289,9 +307,14 @@ export function CyberDashboardPage() {
           ))}
         </div>
         {serviceError?.place === "list" && <FormError title={serviceError.title} message={serviceError.message} />}
-        {canManageServices && (
-          <form className="formCard" onSubmit={(event) => void addService(event)}>
-            <h3>Add a service</h3>
+        {canManageServices && !addingService && (
+          <button type="button" className="secondary" onClick={() => setAddingService(true)}>+ Add a new service to your price list</button>
+        )}
+        {canManageServices && addingService && (
+          <form className="formCard" onSubmit={(event) => void addService(event)} aria-label="New service for your price list">
+            <h3>New service for your price list</h3>
+            <p className="muted">Something you offer, with its price. This does not record a sale; to record work done, use
+              "Already done: record what was paid" at the top.</p>
             <FormField label="Service name" name="name" required maxLength={180} placeholder="e.g. Black & white printing" />
             <FormField label={`Price (${businessCurrency()})`} name="selling_price" type="number" min="0" step="0.01" required />
             <label>
@@ -302,7 +325,10 @@ export function CyberDashboardPage() {
             </label>
             <label className="checkRow"><input type="checkbox" name="requires_job" /> Track as a job (for work that takes time, like typing or repairs)</label>
             <FormField label="Notes (optional)" name="notes" />
-            <button>Add service</button>
+            <div className="actionRow">
+              <button>Add to price list</button>
+              <button type="button" className="secondary" onClick={() => setAddingService(false)}>Cancel</button>
+            </div>
             {serviceError?.place === "add" && <FormError title={serviceError.title} message={serviceError.message} />}
           </form>
         )}

@@ -120,7 +120,7 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
       )}
       {!fixedService && (onAddService || (onEditService && state.service)) && (
         <div className="actionRow serviceManage">
-          {onAddService && <button type="button" className="linkButton" onClick={onAddService}>+ New service</button>}
+          {onAddService && <button type="button" className="linkButton" onClick={onAddService}>Not in the list? Add it to your price list</button>}
           {onEditService && state.service && <button type="button" className="linkButton" onClick={() => onEditService(state.service.id)}>
             Edit {state.service.name}: name, group or prices</button>}
         </div>
@@ -153,7 +153,7 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
 
 /** One customer's visit: each service done (group, service, price option, how many, amount charged), then one payment
  * and one receipt for the lot. On a service's own page the service is already chosen. */
-function RecordIncome({ services, groups = [], fixedService, onSaved, onServicesChanged }) {
+export function RecordIncome({ services, groups = [], fixedService, onSaved, onServicesChanged, title = "Record income" }) {
   const { user } = useAuth();
   const can = (p) => Boolean(user?.permissions?.includes(p));
   const canRecord = can("cyber.add_cyberjob") && can("cyber.complete_cyber_job");
@@ -235,8 +235,8 @@ function RecordIncome({ services, groups = [], fixedService, onSaved, onServices
   return (
     <>
     <form className="formCard incomeEntry" onSubmit={(event) => void submit(event)} aria-label="Record income">
-      <h2>Record income</h2>
-      {!fixedService && <p className="muted">Add each service the customer had done, then how they paid. It all goes on one receipt.</p>}
+      <h2>{title}</h2>
+      {!fixedService && <p className="muted">For a customer already served: choose each thing they had done, then how they paid. It all goes on one receipt.</p>}
       <div className="incomeLines" aria-busy={busy}>
         {lines.map((line, index) => (
           <IncomeLine key={line.key} line={line} state={states[index]} sections={sections} fixedService={fixedService} number={index + 1}
@@ -245,7 +245,7 @@ function RecordIncome({ services, groups = [], fixedService, onSaved, onServices
             onEditService={canEditService ? (serviceId) => setManaging({ lineKey: line.key, serviceId }) : null} />
         ))}
       </div>
-      {!fixedService && <button type="button" className="secondary" disabled={busy} onClick={() => setLines((rows) => [...rows, newLine()])}>+ Add another service</button>}
+      {!fixedService && <button type="button" className="secondary" disabled={busy} onClick={() => setLines((rows) => [...rows, newLine()])}>+ Another item for this customer</button>}
       {lines.length > 1 && (
         <ul className="incomeSummary" aria-label="This visit">
           {lines.map((line, index) => states[index].ready && <li key={line.key}><span>{describe(states[index], line)}</span><span>{money(states[index].total)}</span></li>)}

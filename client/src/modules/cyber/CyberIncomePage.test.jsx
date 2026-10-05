@@ -133,7 +133,7 @@ it("records one customer's visit: colour printing with design for 30 and three A
   fireEvent.change(within(first).getByLabelText("Service"), { target: { value: "4" } });
   fireEvent.change(within(first).getByLabelText("Price option"), { target: { value: "43" } });
   fireEvent.change(within(first).getByLabelText(/Amount charged/), { target: { value: "30" } });
-  fireEvent.click(within(form).getByRole("button", { name: "+ Add another service" }));
+  fireEvent.click(within(form).getByRole("button", { name: "+ Another item for this customer" }));
   const second = within(form).getByRole("group", { name: "Service 2" });
   fireEvent.change(within(second).getByLabelText("Group"), { target: { value: "3" } });
   fireEvent.change(within(second).getByLabelText("Service"), { target: { value: "9" } });
@@ -166,7 +166,7 @@ it("lets the owner add a service from the dropdowns; it is then picked on that l
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
   fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "3" } });
-  fireEvent.click(within(form).getByRole("button", { name: "+ New service" }));
+  fireEvent.click(within(form).getByRole("button", { name: "Not in the list? Add it to your price list" }));
   const adding = screen.getAllByRole("form", { name: "Add a service" }).at(0);
   expect(within(adding).getByLabelText("Group")).toHaveValue("3");  // the group the line was on
   fireEvent.change(within(adding).getByLabelText("Service name"), { target: { value: "Binding" } });
@@ -202,7 +202,7 @@ it("shows no add or edit buttons to staff without permission", async () => {
   const form = await overview();
   fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "1" } });
   fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "4" } });
-  expect(within(form).queryByRole("button", { name: "+ New service" })).toBeNull();
+  expect(within(form).queryByRole("button", { name: "Not in the list? Add it to your price list" })).toBeNull();
   expect(within(form).queryByRole("button", { name: /Edit Printing/ })).toBeNull();
 });
 

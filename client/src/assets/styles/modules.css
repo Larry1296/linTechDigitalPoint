@@ -2635,3 +2635,12 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 [data-theme="dark"] .commissionBar i { background: #3b82f6; }
 [data-theme="dark"] .commissionBar.costs i { background: #c2700a; }
 .commissionMonths .negative, strong.negative { color: var(--danger, #b42318); }
+
+/* Service Desk: first say what is being done — a service already done and paid for, or work taken in for later. */
+.deskChoice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.deskChoice button { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; text-align: left; font: inherit; cursor: pointer; }
+.deskChoice button b { font-size: 1.02rem; }
+.deskChoice button small { font-weight: 400; opacity: 0.85; }
+.deskChoice .deskChoiceOn { background: var(--primary); color: var(--on-primary); border: 2px solid var(--primary); }
+.deskChoice .secondary { border: 2px solid var(--line); }
+@media (max-width: 640px) { .deskChoice { grid-template-columns: 1fr; } }
