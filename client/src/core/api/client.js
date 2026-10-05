@@ -1,4 +1,5 @@
 import { announceDataChanged } from "../data/liveRefresh";
+import { mutationFinished, mutationStarted } from "../ui/outcome";
 let accessToken;
 let accessExpiresAt = 0;
 let refreshFlight;
@@ -114,9 +115,22 @@ function waitForUnlock(signal) {
     signal?.addEventListener("abort", aborted, { once: true });
   });
 }
-export async function api(path, options = {}, retried = false, coordinated = false) {
+// Every request; a save (a changing request after a form is submitted) also ends in a full-screen outcome (see outcome.js).
+export async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const tracked = !["GET", "HEAD", "OPTIONS"].includes(method) && mutationStarted(path);
+  try {
+    const data = await request(path, options);
+    if (tracked) mutationFinished(true);
+    return data;
+  } catch (err) {
+    if (tracked) mutationFinished(false, err.message);
+    throw err;
+  }
+}
+async function request(path, options = {}, retried = false, coordinated = false) {
   if (!coordinated && navigator.locks && ['/api/v1/auth/lock/', '/api/v1/auth/unlock/', '/api/v1/auth/logout/'].includes(path)) {
-    return navigator.locks.request('lintech-refresh', () => api(path, options, retried, true));
+    return navigator.locks.request('lintech-refresh', () => request(path, options, retried, true));
   }
   if (path === "/api/v1/auth/refresh/") return refreshAccess();
   const requestOptions = { ...options };
@@ -147,13 +161,13 @@ export async function api(path, options = {}, retried = false, coordinated = fal
     // is safe to send once more with a fresh token.
     if (response.status === 401 && data.code === 'token_expired' && protectedPath && !retried && !workspaceLocked) {
       await refreshAccess();
-      return api(path, options, true);
+      return request(path, options, true);
     }
     if (response.status === 423 && data.code === "session_locked") {
       notifyLocked(data.session);
       if (safe && protectedPath && !retried) {
         await waitForUnlock(requestOptions.signal);
-        return api(path, options, true);
+        return request(path, options, true);
       }
       throw new ApiError(423, data.detail || SESSION_EXPIRED_MESSAGE);
     }
@@ -161,7 +175,7 @@ export async function api(path, options = {}, retried = false, coordinated = fal
       const state = await checkExpiredSession();
       if (state === "expired") throw new ApiError(response.status, SESSION_EXPIRED_MESSAGE);
       if (state === "locked") {
-        if (safe && !retried) { await waitForUnlock(requestOptions.signal); return api(path, options, true); }
+        if (safe && !retried) { await waitForUnlock(requestOptions.signal); return request(path, options, true); }
         throw new ApiError(423, SESSION_EXPIRED_MESSAGE);
       }
     }

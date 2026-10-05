@@ -1,5 +1,6 @@
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
+import { beginAction, outcomeOverlays, showOutcome } from "./outcome";
 
 export async function confirmAction({
   title,
@@ -17,14 +18,17 @@ export async function confirmAction({
     reverseButtons: true,
     focusCancel: true,
   });
+  if (result.isConfirmed) beginAction();
   return result.isConfirmed;
 }
 
 export function showSuccess(title, text) {
+  if (outcomeOverlays()) return showOutcome("success", title, text);
   return Swal.fire({ title, text, icon: "success", confirmButtonText: "Done" });
 }
 
 export function showError(title, text) {
+  if (outcomeOverlays()) return showOutcome("error", title, text);
   return Swal.fire({ title, text, icon: "error", confirmButtonText: "Close" });
 }
 
@@ -54,5 +58,6 @@ export async function askForm({ title, text, fields, confirmButtonText = "Save" 
       return values;
     },
   });
+  if (result.isConfirmed) beginAction();
   return result.isConfirmed ? result.value : null;
 }
