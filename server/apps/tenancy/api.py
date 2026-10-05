@@ -285,14 +285,17 @@ def create_business(request):
     with organization_context(organization):
         store = Store.objects.create(name=branch_name, currency=organization.currency, timezone=organization.timezone,
                                      phone=organization.phone, email=organization.email, address=organization.address)
-        from apps.accounting.ledger import CHART, post_journal, paired
+        from apps.accounting.ledger import CHART
         from apps.accounting.models import LedgerAccount, CashAccount
         for code, (name, kind, is_cash) in CHART.items():
             LedgerAccount.objects.create(code=code, name=name, kind=kind, is_cash=is_cash)
         CashAccount.objects.create(name='Main till', business_unit='SHOP', payment_method='CASH')
-        if opening_cash or opening_bank:
-            post_journal(key='setup:opening', description='Opening balances supplied during setup', branch=store,
-                user=request.user, lines=paired('1000','3000',opening_cash)+paired('1010','3000',opening_bank))
+        # Through the cash book, so Money check, the drawer and net worth start from it as well as the books.
+        from apps.accounting.services import post as post_cash
+        for method, amount in (('CASH', opening_cash), ('BANK', opening_bank)):
+            if amount:
+                post_cash(unit='SHOP', method=method, amount=amount, kind='OPENING', reference='Starting money entered at setup',
+                          key=f'opening:setup-{method.lower()}', user=request.user, branch=store)
         seed_starter_records(request.user, organization.enabled_modules, starter_categories, starter_services)
         AuditLog.objects.create(action="BUSINESS_CREATED", object_type="Organization", object_id=str(organization.pk), user=request.user)
     request.session["organization_id"] = organization.pk

@@ -7,6 +7,7 @@ import { ErrorState, Loading } from "../../components/States";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InvestmentReminder } from "../investments/InvestmentReminder";
 import { CommissionReminder } from "../mpesa/CommissionReminder";
+import { RecordsSummary } from "./RecordsSummary";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -80,6 +81,7 @@ export function DashboardPage() {
     </nav>
     <InvestmentReminder />
     <CommissionReminder />
+    <RecordsSummary records={data.records} money={money} />
     {period && <section className="financialTrend" aria-labelledby="profit-loss-title">
       <h2 id="profit-loss-title">How the business is doing</h2><p>Pick the dates you want to look at. A sale counts on the day you make it, even if the customer pays later. <a href="/admin/reports">Full reports</a> have the same figures in more detail.</p>
       <form className="reportPeriod" onSubmit={event => {

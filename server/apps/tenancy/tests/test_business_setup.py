@@ -40,6 +40,10 @@ def test_a_mixed_business_is_created_with_its_own_tools_contacts_and_location(ow
         assert (branch.name, branch.phone, branch.timezone) == ("Kiandas market stall", "0712 000 111", "Africa/Kampala")
     report = owner.get(f"/api/v1/accounting/ledger/reports/?branch={branch.pk}").json()
     assert Decimal(str(report["balance_sheet"]["assets"])) == 15000
+    # The starting cash is in the drawer too, not only in the books: Money check and net worth start from it.
+    with organization_context(organization):
+        from apps.accounting.money_check import expected
+        assert expected("CASH")[0] == 15000
 
 
 @pytest.mark.parametrize("model,modules,message", [

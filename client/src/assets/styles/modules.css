@@ -1137,6 +1137,17 @@ label:where(:has(> input[type="radio"])) {
 .businessDashboard .chartDates { display:flex; justify-content:space-between; }
 .businessDashboard .trendTable table { width:100%; border-collapse:collapse; font-size:13px; }
 .businessDashboard .trendTable th, .businessDashboard .trendTable td { padding:12px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--line); }
+.recordsSummary { padding:20px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+.recordsSummary > h2 { margin:0 0 6px; }
+.recordsGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap:14px; margin-top:14px; }
+.recordsGroup { padding:14px 16px; border:1px solid var(--line); border-radius:12px; min-width:0; }
+.recordsGroup h3 { margin:0 0 8px; font-size:15px; }
+.recordsGroup dl { margin:0; display:grid; gap:6px; }
+.recordsGroup dl > div { display:flex; justify-content:space-between; gap:12px; font-size:14px; }
+.recordsGroup dt { color:var(--muted); }
+.recordsGroup dd { margin:0; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+.recordsSummary .formNotice ul { margin:6px 0 0; padding-left:18px; }
+@media(max-width:760px) { .recordsSummary { padding:16px; } }
 .businessDashboard .trendTable th:first-child { text-align:left; }
 .businessDashboard .trendTable caption { text-align:left; padding:12px; color:var(--muted); }
 
