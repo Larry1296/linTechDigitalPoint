@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { api, clearAccessToken, resetCsrfToken, setActiveOrganization, setWorkspaceLocked, SESSION_EXPIRED_MESSAGE } from "./client";
+import { api, clearAccessToken, resetCsrfToken, setActiveOrganization, setWorkspaceLocked, SERVER_UNREACHABLE, SESSION_EXPIRED_MESSAGE } from "./client";
 const response = (status, data) => ({
   status,
   ok: status < 400,
@@ -169,4 +169,13 @@ it("sends a write once more with a fresh token when the short-lived token expire
   await expect(api("/api/v1/tenancy/create/", { method: "POST", body: "{}" })).resolves.toEqual({ id: 9 });
   expect(created).toBe(1);
   expect(fetch.mock.calls.filter(([path]) => path === "/api/v1/tenancy/create/")).toHaveLength(2);
+});
+it("says plainly that the server can't be reached when it sends back nothing or is off", async () => {
+  resetCsrfToken();
+  const empty = { status: 500, ok: false, json: async () => { throw new SyntaxError("Unexpected end of JSON input"); } };
+  vi.stubGlobal("fetch", vi.fn(async () => empty));
+  await expect(api("/api/v1/auth/login/", { method: "POST", body: "{}" })).rejects.toThrow(SERVER_UNREACHABLE);
+  resetCsrfToken();
+  vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+  await expect(api("/api/v1/auth/login/", { method: "POST", body: "{}" })).rejects.toThrow(SERVER_UNREACHABLE);
 });

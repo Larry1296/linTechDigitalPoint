@@ -19,8 +19,8 @@ export async function refreshAccess() {
     const rotate = async () => {
       if (workspaceLocked) throw new ApiError(423, SESSION_EXPIRED_MESSAGE);
       const csrf = await getCsrfToken();
-      const response = await fetch('/api/v1/auth/refresh/', { method:'POST', credentials:'include', headers:{ 'X-CSRFToken':csrf } });
-      const data = await response.json();
+      const response = await send('/api/v1/auth/refresh/', { method:'POST', credentials:'include', headers:{ 'X-CSRFToken':csrf } });
+      const data = await readJson(response);
       if (response.status === 423) { notifyLocked(data.session); throw new ApiError(423, data.detail); }
       if (!response.ok) { if (response.status === 401) window.dispatchEvent(new Event('session-expired')); throw new ApiError(response.status, data.detail); }
       if (!workspaceLocked) acceptAccess(data);
@@ -33,6 +33,25 @@ export async function refreshAccess() {
       .finally(() => { refreshFlight = undefined; });
   }
   return refreshFlight;
+}
+// What the person sees when the server sends nothing usable back (it is off, restarting or the connection dropped),
+// instead of a browser error such as "Unexpected end of JSON input".
+export const SERVER_UNREACHABLE = "Can't reach the LinTech server right now. Check your internet connection, or that the server is running, then try again.";
+async function send(path, options) {
+  try {
+    return await fetch(path, options);
+  } catch (err) {
+    if (err?.name === "AbortError" || err?.name === "TimeoutError") throw err;
+    throw new ApiError(0, SERVER_UNREACHABLE);
+  }
+}
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    if (response.ok) return {};
+    throw new ApiError(response.status, SERVER_UNREACHABLE);
+  }
 }
 let csrfToken;
 let activeOrganization;
@@ -59,8 +78,8 @@ function notifyLocked(session) {
 async function getCsrfToken() {
   if (csrfToken) return csrfToken;
   if (!csrfRequest) {
-    csrfRequest = fetch("/api/v1/auth/csrf/", { credentials: "include" })
-      .then(response => response.json())
+    csrfRequest = send("/api/v1/auth/csrf/", { credentials: "include" })
+      .then(readJson)
       .then(data => { csrfToken = data.csrfToken; return csrfToken; })
       .finally(() => { csrfRequest = undefined; });
   }
@@ -151,11 +170,11 @@ async function request(path, options = {}, retried = false, coordinated = false)
   }
   if (activeBranch && protectedPath && !path.startsWith('/api/v1/tenancy/')) requestOptions.headers = { ...requestOptions.headers, 'X-Branch-ID':activeBranch };
   if (accessToken) requestOptions.headers = { ...requestOptions.headers, Authorization:`Bearer ${accessToken}` };
-  const response = await fetch(path, { credentials: "include", ...requestOptions });
+  const response = await send(path, { credentials: "include", ...requestOptions });
   // A saved change means figures elsewhere may be out of date: let open pages refresh themselves.
   if (response.ok && !safe && protectedPath) announceDataChanged(path);
   if (response.status === 204) return undefined;
-  const data = await response.json().catch(() => ({ detail: "Request failed." }));
+  const data = await response.json().catch(() => ({ detail: response.status >= 500 ? SERVER_UNREACHABLE : "Request failed." }));
   if (!response.ok) {
     // The server refuses an expired token before running the request, so any request (a sale, creating a business)
     // is safe to send once more with a fresh token.
