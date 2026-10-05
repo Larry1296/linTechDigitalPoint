@@ -107,6 +107,13 @@ def dismiss_payment(*, payment, user, reason):
     return payment
 
 
+def _open_day(journal):
+    """The day a journal was posted when its books are still open, else None (today)."""
+    from apps.accounting.models import FinancialPeriod
+    day = journal.posting_date
+    return None if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists() else day
+
+
 @transaction.atomic
 def return_sale(*, sale, user, reason):
     Organization.objects.select_for_update().get(pk=organization_id())
@@ -117,6 +124,33 @@ def return_sale(*, sale, user, reason):
         return sale
     if sale.status != 'COMPLETED' or sale.items.filter(variant__product__product_type='SERVICE').exists():
         raise ValidationError('Full stock returns are supported for completed goods sales.')
+    return _undo_sale(sale, user, reason, status='REFUNDED')
+
+
+@transaction.atomic
+def delete_sale(*, sale, user, reason):
+    """A sale recorded by mistake (wrong item, wrong amount, entered twice): it is taken out as if it never happened.
+    Goods go back on the shelf, its income and any money recorded for it come out on the day of the sale (so that
+    day's figures are right), waiting payments are dropped, and it no longer shows in sales. Nothing is erased: the
+    reversing entries and the reason are kept. Record the sale again correctly afterwards."""
+    Organization.objects.select_for_update().get(pk=organization_id())
+    sale = Sale.objects.select_for_update().get(pk=sale.pk)
+    if not str(reason or '').strip():
+        raise ValidationError('Say why this sale is being deleted, e.g. "recorded twice".')
+    if sale.status == 'CANCELLED':
+        return sale
+    if sale.status != 'COMPLETED':
+        raise ValidationError('Only a completed sale can be deleted. A returned sale is already out of your figures.')
+    sale = _undo_sale(sale, user, reason, status='CANCELLED', dated=True)
+    from apps.core.models import AuditLog
+    AuditLog.objects.create(action='SALE_DELETED', object_type='Sale', object_id=str(sale.pk), user=user,
+                            after={'number': sale.number, 'total': str(sale.total), 'reason': reason})
+    return sale
+
+
+def _undo_sale(sale, user, reason, *, status, dated=False):
+    """Takes a whole sale back: stock to the shelf, its journal and received payments reversed. With ``dated`` the
+    reversals are posted on the day of the sale and of each payment (a mistake), otherwise today (a return)."""
     if sale.returns.exists() or sale.adjustments.exists():
         raise ValidationError('This sale already has a partial return or price correction. Return the remaining items line by line instead.')
     original = JournalEntry.objects.filter(source_key=f'sale:{sale.pk}').first()
@@ -132,7 +166,7 @@ def return_sale(*, sale, user, reason):
             StockLot.objects.filter(pk=allocation.lot_id).update(remaining_quantity=F('remaining_quantity')+allocation.quantity)
             Movement.objects.create(variant=item.variant, lot=allocation.lot, destination=allocation.shelf,
                 quantity=allocation.quantity, movement_type='SALE_RETURN', reference=sale.number, performed_by=user)
-    reverse_journal(original, user=user, reason=reason, key=f'return:{sale.pk}')
+    reverse_journal(original, user=user, reason=reason, key=f'return:{sale.pk}', date=_open_day(original) if dated else None)
     if money(added_cost):
         from apps.accounting.ledger import post_journal, paired
         post_journal(key=f'return-cost:{sale.pk}', description=f'Return supplied buying cost for {sale.number}',
@@ -140,11 +174,29 @@ def return_sale(*, sale, user, reason):
     for payment in sale.payments.filter(status='COMPLETED'):
         journal = JournalEntry.objects.get(source_key=f'payment:{payment.pk}')
         # Not "refund:<id>": that namespace belongs to partial-return refunds, keyed by return id.
-        reverse_journal(journal, user=user, reason=reason, key=f'payment-refund:{payment.pk}')
+        reverse_journal(journal, user=user, reason=reason, key=f'payment-refund:{payment.pk}', date=_open_day(journal) if dated else None)
         entry = CashEntry.objects.filter(source_key=f'payment:{payment.pk}').first()
         if entry:
             reverse(entry=entry, user=user, reason=reason)
         payment.status='REFUNDED'; payment.save(update_fields=['status'])
     sale.payments.filter(status__in=['PENDING','MANUAL_REVIEW']).update(status='FAILED')
-    sale.status='REFUNDED'; sale.save(update_fields=['status', 'updated_at'])
+    sale.status=status; sale.save(update_fields=['status', 'updated_at'])
     return sale
+
+
+@transaction.atomic
+def delete_payment(*, payment, user, reason):
+    """A payment that was not done right (wrong method, wrong code, recorded twice): a waiting one is dropped and a
+    received one comes back out of the money, so the sale shows what is still owed. Record the right payment again."""
+    if payment.status in {'PENDING', 'MANUAL_REVIEW'}:
+        return dismiss_payment(payment=payment, user=user, reason=reason)
+    if payment.status != 'COMPLETED':
+        raise ValidationError('This payment is already out of your figures.')
+    if not str(reason or '').strip():
+        raise ValidationError('Say why this payment is being deleted.')
+    entry = CashEntry.objects.filter(source_key=f'payment:{payment.pk}').first()
+    if not entry:
+        raise ValidationError('This payment has no cash-book entry to take back.')
+    reverse(entry=entry, user=user, reason=reason)
+    payment.refresh_from_db()
+    return payment

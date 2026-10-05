@@ -22,7 +22,7 @@ def sale_balance(sale):
     returned = SaleReturnLine.objects.filter(sale_return__sale=sale).aggregate(v=Sum("payable_amount"))["v"] or ZERO
     refunded = SaleReturn.objects.filter(sale=sale).aggregate(v=Sum("refund_amount"))["v"] or ZERO
     paid = sale.payments.filter(status="COMPLETED").aggregate(v=Sum("amount"))["v"] or ZERO
-    if sale.status == "REFUNDED":
+    if sale.status in ("REFUNDED", "CANCELLED"):
         return ZERO
     return sale.total + notes.get("DEBIT", ZERO) - notes.get("CREDIT", ZERO) - returned - paid + refunded
 

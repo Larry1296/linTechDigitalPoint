@@ -328,7 +328,7 @@ def explain_sale_item(item_id):
 
 def _payment_status(sale):
     from apps.commerce.returns import sale_balance
-    if sale.status == "REFUNDED":
+    if sale.status in ("REFUNDED", "CANCELLED"):
         return "REVERSED"
     payments = list(sale.payments.all())
     if payments and all(p.status == "FAILED" for p in payments):

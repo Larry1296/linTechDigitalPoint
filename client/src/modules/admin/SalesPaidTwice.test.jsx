@@ -11,10 +11,10 @@ const earphones = { id: 5, number: "POS-E400BA491A", created_at: "2026-10-01T01:
   payments: [{ id: 51, method: "MPESA", amount: "250.00", status: "MANUAL_REVIEW" }, { id: 52, method: "CASH", amount: "250.00", status: "COMPLETED" }],
   items: [{ id: 5, item: "ORAIMO ORIGINAL EARPHONES — ORIGINAL", quantity: "1.000", list_price: "300.00", unit_price: "250.00", discount: "0", returned_quantity: "0" }] };
 
-it("explains a sale paid twice instead of offering a confirmation that must fail, and can drop the duplicate M-Pesa", async () => {
+it("explains a sale paid twice instead of offering a confirmation that must fail, and can delete the duplicate M-Pesa", async () => {
   let dropped = false;
   api.mockImplementation(async (path) => {
-    if (path.includes("/not-received/")) { dropped = true; return { id: 51, status: "FAILED" }; }
+    if (path.includes("/payments/51/delete/")) { dropped = true; return { id: 51, status: "FAILED" }; }
     return { count: 1, results: [dropped ? { ...earphones, payments: [{ ...earphones.payments[0], status: "FAILED" }, earphones.payments[1]] } : earphones] };
   });
   render(<SalesPage />);
@@ -22,11 +22,12 @@ it("explains a sale paid twice instead of offering a confirmation that must fail
   expect(row.querySelector("summary")).toHaveTextContent("Paid twice? Check payments");
   expect(within(row).getByText(/already paid by the other payment here \(Cash KSh 250\)/)).toBeInTheDocument();
   expect(within(row).queryByRole("button", { name: "Confirm money received" })).toBeNull();
-  fireEvent.change(within(row).getByPlaceholderText("e.g. customer paid cash instead"), { target: { value: "Same money as the cash" } });
-  await act(async () => { fireEvent.click(within(row).getByRole("button", { name: "Mark as not received" })); });
-  const call = api.mock.calls.find(([p]) => p === "/api/v1/commerce/payments/51/not-received/");
+  const mpesa = within(row).getAllByText("Delete this payment")[0].closest("details");
+  fireEvent.change(within(mpesa).getByLabelText("Reason"), { target: { value: "Same money as the cash" } });
+  await act(async () => { fireEvent.click(within(mpesa).getByRole("button", { name: "Delete payment" })); });
+  const call = api.mock.calls.find(([p]) => p === "/api/v1/commerce/payments/51/delete/");
   expect(JSON.parse(call[1].body)).toEqual({ reason: "Same money as the cash" });
-  expect(await screen.findByText("M-Pesa payment of KSh 250 marked as not received.")).toBeInTheDocument();
+  expect(await screen.findByText("Payment of KSh 250 deleted. POS-E400BA491A now shows what is owed.")).toBeInTheDocument();
   expect(row.querySelector("summary")).toHaveTextContent("Paid");
 });
 

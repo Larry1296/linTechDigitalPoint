@@ -70,7 +70,7 @@ def receipt_data(sale, organization, request=None):
     # After returns and price corrections (credit/debit notes) the customer is charged a different amount; the
     # balance due is the same figure Sales history shows, never the original total less payments.
     from .returns import sale_amounts, sale_balance
-    charged, paid = sale_amounts(sale) if sale.status != "REFUNDED" else (Decimal(0), Decimal(0))
+    charged, paid = sale_amounts(sale) if sale.status not in ("REFUNDED", "CANCELLED") else (Decimal(0), Decimal(0))
     cashier = sale.created_by
     customer = sale.customer
     return {
@@ -84,8 +84,8 @@ def receipt_data(sale, organization, request=None):
         "customer": (customer.get_full_name() or customer.username) if customer else "Walk-in customer",
         "items": items, "subtotal": sale.subtotal, "discount": sale.discount, "total": sale.total,
         "charged": charged, "payments": payments, "paid": paid,
-        "refunded": sum((p["amount"] for p in payments if p["status"] == "COMPLETED"), Decimal(0)) - paid if sale.status != "REFUNDED" else Decimal(0),
-        "balance": Decimal(0) if sale.status == "REFUNDED" else max(Decimal(0), sale_balance(sale)),
+        "refunded": sum((p["amount"] for p in payments if p["status"] == "COMPLETED"), Decimal(0)) - paid if sale.status not in ("REFUNDED", "CANCELLED") else Decimal(0),
+        "balance": Decimal(0) if sale.status in ("REFUNDED", "CANCELLED") else max(Decimal(0), sale_balance(sale)),
         "footer": branch.receipt_footer if branch else "",
     }
 

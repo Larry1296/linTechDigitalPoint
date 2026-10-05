@@ -27,23 +27,23 @@ it("shows one summary line per sale and the details only when it is opened", asy
   expect(adapter).toHaveAttribute("open");
 });
 
-it("after reversing a payment it folds the sale away and returns to its line, now showing what is owed", async () => {
+it("after deleting a payment it folds the sale away and returns to its line, now showing what is owed", async () => {
   const glue = sale(3, { total: "50.00", charged: "50.00", payments: [{ id: 3, method: "CASH", amount: "50.00", status: "COMPLETED" }],
     items: [{ id: 3, item: "SUPER GLUE — 3g", quantity: "1.000", unit_price: "50.00", discount: "0", returned_quantity: "0" }] });
   let reversed = false;
   api.mockReset();
   api.mockImplementation(async (path) => {
-    if (path.includes("/reverse/")) { reversed = true; return { id: 3, status: "REVERSED" }; }
+    if (path.includes("/payments/3/delete/")) { reversed = true; return { id: 3, status: "REVERSED" }; }
     return { count: 1, results: [reversed ? { ...glue, outstanding: "50.00", payments: [{ ...glue.payments[0], status: "REVERSED" }] } : glue] };
   });
   render(<SalesPage />);
   const row = (await screen.findByText("SUPER GLUE")).closest("details");
   fireEvent.click(row.querySelector("summary"));
-  const reverse = screen.getByText("Reverse this payment").closest("details");
+  const reverse = screen.getByText("Delete this payment").closest("details");
   fireEvent.click(reverse.querySelector("summary"));
   fireEvent.change(within(reverse).getByLabelText("Reason"), { target: { value: "Given on credit" } });
-  fireEvent.click(screen.getByRole("button", { name: "Reverse payment" }));
-  expect(await screen.findByRole("status")).toHaveTextContent("Payment of KSh 50 reversed");
+  fireEvent.click(screen.getByRole("button", { name: "Delete payment" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Payment of KSh 50 deleted");
   await waitFor(() => expect(row.querySelector("summary")).toHaveTextContent("Owes KSh 50"));
   expect(reverse).not.toHaveAttribute("open");
   expect(row).not.toHaveAttribute("open");
@@ -110,4 +110,17 @@ it("fills in the M-Pesa code typed at the sale, so confirming takes one click", 
   fireEvent.click((await screen.findByText("C-C HEAD(45W)")).closest("summary"));
   expect(screen.getByLabelText("M-Pesa code from the confirmation message")).toHaveValue("UJ5FF97VNX");
   expect(screen.getByRole("button", { name: "Confirm money received" })).toBeVisible();
+});
+
+it("deletes a whole sale recorded wrongly, with a reason, so it can be recorded again", async () => {
+  api.mockReset();
+  api.mockImplementation(async (path) => (path.endsWith("/delete/") ? { id: 7, status: "CANCELLED" } : { count: 1, results: [sale(7)] }));
+  render(<SalesPage />);
+  fireEvent.click((await screen.findByText("C-C HEAD(45W)")).closest("summary"));
+  const remove = screen.getByText("Delete this sale").closest("details");
+  fireEvent.click(remove.querySelector("summary"));
+  fireEvent.change(within(remove).getByLabelText("Reason"), { target: { value: "Recorded twice" } });
+  fireEvent.click(within(remove).getByRole("button", { name: "Delete sale" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/commerce/sales/7/delete/", expect.objectContaining({ method: "POST" })));
+  expect(JSON.parse(api.mock.calls.find(([p]) => p.endsWith("/delete/"))[1].body)).toEqual({ reason: "Recorded twice" });
 });

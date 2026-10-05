@@ -232,3 +232,36 @@ def test_a_service_is_deleted_and_one_with_income_keeps_its_past_income(cyber):
     assert (desk.get("results") if isinstance(desk, dict) else desk) == []  # gone from the Service Desk too
     assert _record(owner, printed, printing.pk, "1", "d2").status_code == 400
     assert owner.post(f"/api/v1/cyber/income/{printed}/delete/").status_code == 400  # already deleted
+
+
+def test_a_sale_or_payment_recorded_wrongly_is_deleted_and_the_days_figures_are_right(cyber):
+    owner, till, org, printing, typing = cyber
+    from apps.commerce.models import Payment, Sale
+    printed = printing.variant.product_id
+    # 100 paid by M-Pesa (waiting) and again in cash: the muddle to clean up.
+    made = _record(owner, printed, printing.pk, "10", "mix", payment_method="MPESA")
+    assert made.status_code == 201, made.content
+    with organization_context(org):
+        sale = Sale.objects.get(cyber_job__lines__variant=printing.variant)
+        waiting = sale.payments.get()
+    cash = owner.post(f"/api/v1/commerce/sales/{sale.pk}/payments/", {"amount": "100", "method": "CASH", "idempotency_key": "c1"}, format="json")
+    assert cash.status_code == 201, cash.content
+    # Delete one payment: a received one comes back out of the money, a waiting one is dropped.
+    assert owner.post(f"/api/v1/commerce/payments/{cash.json()['id']}/delete/", {"reason": "entered twice"}, format="json").json()["status"] == "REVERSED"
+    assert owner.post(f"/api/v1/commerce/payments/{waiting.pk}/delete/", {"reason": "wrong code"}, format="json").json()["status"] == "FAILED"
+    assert owner.post(f"/api/v1/commerce/payments/{waiting.pk}/delete/", {"reason": ""}, format="json").status_code == 400
+    # Delete the whole sale: gone from sales, from Cyber income and from the day's figures.
+    assert _record(owner, printed, printing.pk, "5", "cash-sale").status_code == 201
+    with organization_context(org):
+        second = Sale.objects.exclude(pk=sale.pk).get()
+    assert till.post(f"/api/v1/commerce/sales/{second.pk}/delete/", {"reason": "x"}, format="json").status_code == 403
+    for target in (sale, second):
+        gone = owner.post(f"/api/v1/commerce/sales/{target.pk}/delete/", {"reason": "recorded wrongly"}, format="json")
+        assert gone.status_code == 200 and gone.json()["status"] == "CANCELLED", gone.content
+    assert owner.get("/api/v1/commerce/sales/").json()["count"] == 0
+    assert D(str(owner.get("/api/v1/cyber/income/").json()["totals"]["today"])) == 0
+    with organization_context(org):
+        from apps.accounting import statements
+        balances, pl = statements.balances(None, None), statements.profit_and_loss(None, None)
+        assert pl["revenue"] == 0 and balances.get("1000", {"balance": 0})["balance"] == 0 and balances.get("1100", {"balance": 0})["balance"] == 0
+        assert Payment.objects.get(sale=second).status == "REFUNDED"

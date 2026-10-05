@@ -10,7 +10,7 @@ from apps.core.permissions import HasLinTechPermission
 from apps.accounts.models import CustomerProfile
 from .models import Sale, Payment
 from .returns import sale_amounts, sale_balance
-from .settlements import collect, confirm_payment, dismiss_payment, return_sale
+from .settlements import collect, confirm_payment, delete_payment, delete_sale, dismiss_payment, return_sale
 
 
 class SalesView(APIView):
@@ -19,7 +19,8 @@ class SalesView(APIView):
     def get(self, request):
         from django.db.models import Q
         page = serializers.IntegerField(min_value=1).run_validation(request.query_params.get('page', 1))
-        rows = Sale.objects.select_related('customer').prefetch_related('payments', 'items__variant__product').order_by('-created_at')
+        # A deleted sale (recorded by mistake) is out of the books and out of this list.
+        rows = Sale.objects.exclude(status='CANCELLED').select_related('customer').prefetch_related('payments', 'items__variant__product').order_by('-created_at')
         # Find a sale by its number, the customer's name or phone, or what was sold.
         query = str(request.query_params.get('q') or '').strip()[:80]
         if query:
@@ -119,6 +120,26 @@ class PaymentReverseView(APIView):
         reverse(entry=entry,user=request.user,reason=reason)
         payment.refresh_from_db()
         return Response({'id':payment.pk,'status':payment.status})
+
+
+class DeletePaymentView(APIView):
+    """Delete a payment that was not done right; record the right one again afterwards."""
+    permission_classes=[HasLinTechPermission]
+    permission_required='accounting.reverse_cashentry'
+    def post(self,request,pk):
+        reason=serializers.CharField(max_length=240).run_validation(request.data.get('reason'))
+        payment=delete_payment(payment=get_object_or_404(Payment,pk=pk),user=request.user,reason=reason)
+        return Response({'id':payment.pk,'status':payment.status})
+
+
+class DeleteSaleView(APIView):
+    """Delete a sale recorded by mistake; it comes out of that day's figures and can be recorded again."""
+    permission_classes=[HasLinTechPermission]
+    permission_required='commerce.change_sale'
+    def post(self,request,pk):
+        reason=serializers.CharField(max_length=240).run_validation(request.data.get('reason'))
+        sale=delete_sale(sale=get_object_or_404(Sale,pk=pk),user=request.user,reason=reason)
+        return Response({'id':sale.pk,'status':sale.status})
 
 
 class ReturnSaleView(APIView):
