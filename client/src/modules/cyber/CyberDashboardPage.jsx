@@ -12,6 +12,7 @@ import {
   updateCyberService,
   createCyberJob,
   deleteCyberJob,
+  deleteCyberSale,
   getCyberDashboard,
   getCyberJobs,
   getCyberServices,
@@ -28,6 +29,7 @@ export function CyberDashboardPage() {
   const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
   const canChangeServices = Boolean(user?.permissions?.includes("cyber.change_cyberserviceprofile"));
   const canDeleteJobs = Boolean(user?.permissions?.includes("cyber.delete_cyberjob"));
+  const canDeleteSales = Boolean(user?.permissions?.includes("commerce.change_sale"));
   const [serviceError, setServiceError] = useState(null);
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
@@ -207,6 +209,25 @@ export function CyberDashboardPage() {
                           )
                             return;
                           await act(`Could not delete job ${job.number}.`, () => deleteCyberJob(job.id));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {canDeleteSales && job.status === "COMPLETED" && job.sale && (
+                      <button
+                        type="button"
+                        className="danger"
+                        aria-label={`Delete paid job ${job.number}`}
+                        onClick={async () => {
+                          const values = await askForm({
+                            title: `Delete ${job.number}?`,
+                            text: "Use this when it was recorded wrongly. Its money and payment come out of that day's figures and it disappears from the desk, sales and income. Record it again correctly afterwards.",
+                            confirmButtonText: "Delete",
+                            fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. recorded wrongly, will record again" }],
+                          });
+                          if (!values) return;
+                          await act(`Could not delete ${job.number}.`, () => deleteCyberSale(job.sale, values.reason));
                         }}
                       >
                         Delete

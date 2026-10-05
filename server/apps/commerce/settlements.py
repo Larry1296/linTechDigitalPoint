@@ -142,6 +142,8 @@ def delete_sale(*, sale, user, reason):
     if sale.status != 'COMPLETED':
         raise ValidationError('Only a completed sale can be deleted. A returned sale is already out of your figures.')
     sale = _undo_sale(sale, user, reason, status='CANCELLED', dated=True)
+    from apps.cyber.models import CyberJob
+    CyberJob.objects.filter(sale=sale).update(status='CANCELLED', updated_at=timezone.now())  # off the Service Desk too
     from apps.core.models import AuditLog
     AuditLog.objects.create(action='SALE_DELETED', object_type='Sale', object_id=str(sale.pk), user=user,
                             after={'number': sale.number, 'total': str(sale.total), 'reason': reason})

@@ -109,7 +109,8 @@ class CyberJobViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CyberJobSerializer
     permission_classes = [HasLinTechPermission]
     permission_required = "cyber.view_cyberjob"
-    queryset = CyberJob.objects.select_related("customer", "operator", "sale").prefetch_related("lines", "sale__payments")
+    # A job whose sale was deleted (recorded by mistake) no longer exists for the desk.
+    queryset = CyberJob.objects.exclude(sale__status="CANCELLED").select_related("customer", "operator", "sale").prefetch_related("lines", "sale__payments")
 
     def create(self, request):
         if not has_business_permission(request.user, "cyber.add_cyberjob"):
@@ -158,8 +159,8 @@ def dashboard(request):
     if not has_business_permission(request.user, "cyber.view_cyberjob"):
         return Response({"detail": "Cyber access required."}, status=403)
     today = timezone.localdate()
-    jobs = CyberJob.objects.filter(created_at__date=today)
-    completed = CyberJob.objects.filter(completed_at__date=today, sale__isnull=False)
+    jobs = CyberJob.objects.filter(created_at__date=today).exclude(sale__status="CANCELLED")
+    completed = CyberJob.objects.filter(completed_at__date=today, sale__status="COMPLETED")  # deleted or returned sales are not income
     totals = completed.aggregate(revenue=Sum("total"), jobs=Count("id"), average=Avg("total"), cogs=Sum("sale__cogs"), profit=Sum("sale__gross_profit"))
     if not has_business_permission(request.user, "accounting.view_profit"):
         totals.pop("cogs", None)

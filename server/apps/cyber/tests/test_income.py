@@ -259,6 +259,9 @@ def test_a_sale_or_payment_recorded_wrongly_is_deleted_and_the_days_figures_are_
         gone = owner.post(f"/api/v1/commerce/sales/{target.pk}/delete/", {"reason": "recorded wrongly"}, format="json")
         assert gone.status_code == 200 and gone.json()["status"] == "CANCELLED", gone.content
     assert owner.get("/api/v1/commerce/sales/").json()["count"] == 0
+    desk = owner.get("/api/v1/cyber/jobs/").json()
+    assert (desk.get("results") if isinstance(desk, dict) else desk) == []  # gone from the Service Desk too
+    assert D(str(owner.get("/api/v1/cyber/dashboard/").json()["today"].get("revenue") or 0)) == 0
     assert D(str(owner.get("/api/v1/cyber/income/").json()["totals"]["today"])) == 0
     with organization_context(org):
         from apps.accounting import statements

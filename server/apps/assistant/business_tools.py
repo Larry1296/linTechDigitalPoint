@@ -388,7 +388,7 @@ def expense_analysis(ctx, args):
 def service_jobs(ctx, args):
     from apps.cyber.models import CyberJob, CyberJobLine
     start, end = _period(args)
-    jobs = CyberJob.objects.filter(created_at__date__range=(start, end))
+    jobs = CyberJob.objects.filter(created_at__date__range=(start, end)).exclude(sale__status="CANCELLED")
     by_status = {row["status"]: row["n"] for row in jobs.values("status").annotate(n=Count("id"))}
     done = jobs.filter(status="COMPLETED", started_at__isnull=False, completed_at__isnull=False)
     hours = [(j.completed_at - j.started_at).total_seconds() / 3600 for j in done.only("started_at", "completed_at")]

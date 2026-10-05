@@ -5,7 +5,7 @@ vi.mock("./api", () => ({
   getCyberDashboard: vi.fn(async () => ({ today: { revenue: "0", jobs: 0, average: "0" }, active_jobs: 0, ready_jobs: 0 })),
   getCyberJobs: vi.fn(async () => []),
   getCyberServices: vi.fn(async () => [{ id: 1, variant: 11, product: 5, name: "Typing", variant_name: "Standard", selling_price: "50.00", billing_unit: "PER_PAGE", requires_job: true, active: true }]),
-  createCyberJob: vi.fn(), deleteCyberJob: vi.fn(async () => undefined),
+  createCyberJob: vi.fn(), deleteCyberJob: vi.fn(async () => undefined), deleteCyberSale: vi.fn(async () => ({})),
   createCyberService: vi.fn(), updateCyberService: vi.fn(), completeCyberJob: vi.fn(), transitionCyberJob: vi.fn(),
 }));
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), askForm: vi.fn(), showError: vi.fn() }));
@@ -67,4 +67,14 @@ it("hides Delete from people without permission to delete jobs", async () => {
   cyber.getCyberJobs.mockResolvedValue([job(1, "QUEUED")]);
   await renderDesk();
   expect(screen.queryByRole("button", { name: "Delete job CYB-1" })).toBeNull();
+});
+
+it("deletes a paid job recorded wrongly, with a reason, so it can be recorded again", async () => {
+  const { askForm } = await import("../../core/ui/alerts");
+  perms.list = [...perms.list, "commerce.change_sale"];
+  cyber.getCyberJobs.mockResolvedValue([job(4, "COMPLETED", { sale: 40 }), job(5, "COMPLETED", { sale: 50 })]);
+  askForm.mockResolvedValueOnce({ reason: "Recorded wrongly" });
+  await renderDesk();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Delete paid job CYB-4" })); });
+  expect(cyber.deleteCyberSale).toHaveBeenCalledWith(40, "Recorded wrongly");
 });

@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
-import { confirmAction } from "../../core/ui/alerts";
+import { askForm, confirmAction } from "../../core/ui/alerts";
+import { deleteCyberSale } from "./api";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { FormField } from "../../components/forms/FormField";
@@ -564,6 +565,22 @@ export function CyberServiceIncomePage() {
   const { user } = useAuth();
   const canEditService = ["cyber.change_cyberserviceprofile", "catalog.change_product"].every((p) => user?.permissions?.includes(p));
   const canDelete = Boolean(user?.permissions?.includes("cyber.delete_cyberserviceprofile"));
+  const canDeleteSales = Boolean(user?.permissions?.includes("commerce.change_sale"));
+  const [deleteError, setDeleteError] = useState("");
+  // A payment recorded wrongly: its whole receipt is deleted, out of that day's figures, then it can be recorded again.
+  const removeSale = async (row) => {
+    const values = await askForm({ title: `Delete receipt ${row.receipt_number}?`, confirmButtonText: "Delete",
+      text: "Use this when it was recorded wrongly. Everything on this receipt and its payment come out of that day's figures and disappear from the desk, sales and income. Record it again correctly afterwards.",
+      fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. recorded wrongly, will record again" }] });
+    if (!values) return;
+    setDeleteError("");
+    try {
+      await deleteCyberSale(row.sale_id, values.reason);
+      await load();
+    } catch (err) {
+      setDeleteError(err.message);
+    }
+  };
   const navigate = useNavigate();
   const { data, setData, error, load } = useLoad(`/api/v1/cyber/income/${serviceId}/`);
   const [receipt, setReceipt] = useState(null);
@@ -582,9 +599,10 @@ export function CyberServiceIncomePage() {
       <PriceOptions service={data} onSaved={(saved) => setData(saved)} />
       <section aria-labelledby="income-history">
         <h2 id="income-history">History</h2>
+        <FormError title="Could not delete the receipt." message={deleteError} />
         {!data.history.length ? <Empty>Nothing recorded for {data.name} yet.</Empty> : (
           <table className="incomeTable">
-            <thead><tr><th>When</th><th>Option</th><th>How many</th><th>Amount</th><th>Paid by</th><th>Customer</th><th>Receipt</th></tr></thead>
+            <thead><tr><th>When</th><th>Option</th><th>How many</th><th>Amount</th><th>Paid by</th><th>Customer</th><th>Receipt</th>{canDeleteSales && <th><span className="visuallyHidden">Delete</span></th>}</tr></thead>
             <tbody>{data.history.map((row) => (
               <tr key={row.id}>
                 <td>{when(row.date)}</td>
@@ -594,6 +612,7 @@ export function CyberServiceIncomePage() {
                 <td>{label(row.payment_method) || "—"}</td>
                 <td>{row.customer || "—"}</td>
                 <td><button type="button" className="linkButton" onClick={() => setReceipt(row.sale_id)}>{row.receipt_number}</button></td>
+                {canDeleteSales && <td><button type="button" className="danger" aria-label={`Delete ${row.receipt_number}`} onClick={() => void removeSale(row)}>Delete</button></td>}
               </tr>
             ))}</tbody>
           </table>

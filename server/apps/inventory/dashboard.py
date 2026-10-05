@@ -153,7 +153,7 @@ def dashboard_snapshot(request):
         if key == 'SHOP':
             data['retail'] = {**unit, 'sales': sales.exclude(channel=Sale.CYBER).count() if allowed else None, 'restricted': not allowed}
         elif key == 'CYBER':
-            jobs = CyberJob.objects.filter(created_at__lte=now)
+            jobs = CyberJob.objects.filter(created_at__lte=now).exclude(sale__status='CANCELLED')
             data['cyber'] = {**unit, 'active_jobs': jobs.exclude(status__in=['COMPLETED', 'CANCELLED']).count() if allowed else None,
                              'ready_jobs': jobs.filter(status='READY').count() if allowed else None,
                              'jobs_today': jobs.filter(created_at__date=today).count() if allowed else None, 'restricted': not allowed}
