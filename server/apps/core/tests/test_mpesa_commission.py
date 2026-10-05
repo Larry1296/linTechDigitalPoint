@@ -184,3 +184,26 @@ def test_undoing_last_months_commission_takes_it_out_of_last_month_not_today(age
     _, this_pl, _ = _books(org, today.replace(day=1), today)
     assert (last_pl["revenue"], this_pl["revenue"]) == (0, 0)
     assert _books(org)[0]["1160"]["balance"] == 0
+
+
+def test_commission_undone_on_the_wrong_day_before_the_fix_is_repaired(agency):
+    # Records left by the old undo: last month's 1020 taken out today, so today's sales were 1020 too low.
+    from io import StringIO
+    from django.core.management import call_command
+    client, org, owner, outlet, today, last_month = agency
+    entry = _record(client, outlet, last_month, "1020", "SJQ8COMM08", "MPESA").json()
+    with organization_context(org):
+        from apps.accounting.ledger import reverse_journal
+        from apps.accounting.models import JournalEntry
+        for key, undo_key in [("commission", "commission-reversal"), ("commission-earned", "commission-earned-reversal")]:
+            journal = JournalEntry.objects.get(source_key=f"{key}:{entry['id']}")
+            reverse_journal(journal, user=owner, reason="old undo", key=f"{undo_key}:{entry['id']}")
+    assert _books(org, today.replace(day=1), today)[1]["revenue"] == D("-1020")
+    out = StringIO()
+    call_command("fix_commission_undo_dates", stdout=out)
+    assert "Would correct" in out.getvalue() and _books(org, today.replace(day=1), today)[1]["revenue"] == D("-1020")  # a dry run changes nothing
+    call_command("fix_commission_undo_dates", "--apply", stdout=out)
+    call_command("fix_commission_undo_dates", "--apply", stdout=out)  # running it again does nothing more
+    assert _books(org, last_month, _month_end(last_month))[1]["revenue"] == 0
+    assert _books(org, today.replace(day=1), today)[1]["revenue"] == 0
+    assert _books(org)[0]["1160"]["balance"] == 0
