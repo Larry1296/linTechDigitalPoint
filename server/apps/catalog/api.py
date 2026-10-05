@@ -103,6 +103,17 @@ class ImageSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+def pack_size(value):
+    """Pieces sold together for one price (1 = sold one at a time)."""
+    try:
+        size = int(str(value or 1).strip())
+    except ValueError:
+        raise serializers.ValidationError({"pack_size": "Enter how many pieces are in one pack, e.g. 2."})
+    if not 1 <= size <= 100000:
+        raise serializers.ValidationError({"pack_size": "A pack holds between 1 and 100,000 pieces."})
+    return size
+
+
 class VariantSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -500,6 +511,8 @@ class ProductViewSet(SecuredModelViewSet):
                 "service_cost": request.data.get("service_cost", 0),
                 "minimum_stock": request.data.get("minimum_stock", 0),
                 "target_stock": request.data.get("target_stock", 0),
+                "pack_size": pack_size(request.data.get("pack_size")),
+                "piece_name": " ".join(str(request.data.get("piece_name") or "").split())[:40],
             },
             preferred_shelf=shelf,
             opening_quantity=request.data.get("opening_quantity", 0),

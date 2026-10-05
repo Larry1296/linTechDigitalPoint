@@ -98,7 +98,7 @@ def variant_search(request):
     if q:qs=qs.filter(Q(name__icontains=q)|Q(product__name__icontains=q)|Q(sku__icontains=q)|Q(barcode__icontains=q)|Q(product__brand__name__icontains=q)|Q(product__category__name__icontains=q))
     # Live stock, limited to the balances this user's branch can see.
     qs=qs.annotate(on_hand=Sum(F("lots__balances__quantity")-F("lots__balances__reserved"),filter=Q(lots__balances__in=StockBalance.objects.all()))).order_by("product__name","name","id")
-    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"available":v.on_hand or Decimal("0")} for v in qs[:50]])
+    return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":v.on_hand or Decimal("0")} for v in qs[:50]])
 
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])

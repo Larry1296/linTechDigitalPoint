@@ -23,26 +23,31 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
   const opening = source === "OPENING";
   // This screen always ADDS to what is recorded; it never replaces the count. Say so when the item already has stock.
   const already = item ? Number(item.available || 0) : 0;
+  // An item sold in packs (paper 2 sheets for 5) is counted here in pieces and kept as packs.
+  const size = Math.max(1, Number(item?.pack_size || 1));
+  const piece = size > 1 ? `${(item.piece_name || "piece").replace(/s$/i, "")}s` : "";
+  const packs = size > 1 ? Math.round(Number(quantity || 0) / size * 1000) / 1000 : Number(quantity || 0);
+  const packCost = size > 1 && cost !== "" ? String(Math.round(Number(cost) * size * 100) / 100) : cost;
   const submit = async event => {
     event.preventDefault(); if (!item || busy) return;
     const problem = !(Number(quantity) > 0) ? "Enter how many you have." : opening ? (cost !== "" && Number(cost) < 0 ? "The buying price cannot be negative." : "")
       : receiptCostsProblem(details) || (!(Number(cost) > 0) ? "Enter the buying price for one unit." : "");
     if (problem) { setError(problem); return; }
     if (opening && already > 0 && !(await confirmAction({
-      title: `Add ${quantity} more?`,
-      text: `The system already has ${already} of ${item.product_name}. This will make it ${already + Number(quantity)}. `
+      title: `Add ${packs} more?`,
+      text: `The system already has ${already} of ${item.product_name}. This will make it ${already + packs}. `
         + "If you only want to correct the count, cancel and use Adjust stock instead.",
-      confirmButtonText: `Yes, add ${quantity} more`,
+      confirmButtonText: `Yes, add ${packs} more`,
     }))) return;
     setBusy(true); setError(''); setReceipt(null);
     // Opening stock with no known buying price is kept without a value ("cost pending") until the price is added.
     const unknownCost = opening && !(Number(cost) > 0);
-    const line = { variant_id: item.id, received_quantity: quantity, placements: [], ...(unknownCost ? { uncosted: true } : { unit_cost: cost }) };
+    const line = { variant_id: item.id, received_quantity: String(packs), placements: [], ...(unknownCost ? { uncosted: true } : { unit_cost: packCost }) };
     try {
       const body = opening ? { document_status: "OPENING_BALANCE", idempotency_key: key, notes: "Stock already in the shop", lines: [line] }
         : { ...receiptCostsPayload(details), idempotency_key: key, lines: [line] };
       const result = await api('/api/v1/inventory/receipts/', { method: 'POST', body: JSON.stringify(body) });
-      setReceipt({ ...result, item: `${item.product_name} ${item.variant_name}`.trim(), quantity, unknownCost });
+      setReceipt({ ...result, item: `${item.product_name} ${item.variant_name}`.trim(), quantity: packs, unknownCost });
       setKey(crypto.randomUUID()); setItem(null); setQuery('');
       setQuantity(''); setCost(''); setDetails({ ...NEW_RECEIPT_COSTS, supplier_name: details.supplier_name, external_reference: "" });
     } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -67,15 +72,17 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       To fix a wrong count instead, use <Link to={`/admin/adjust-stock?variant=${item.id}`}>Adjust stock</Link>.
     </p>}
     <form onSubmit={submit}>
-      <label>{opening ? (already > 0 ? "How many more to add" : "How many you have now") : "Quantity received"}<input type="number" min="0.001" step="0.001" required value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label>
-      <label>{opening ? "Buying price for one (if you know it)" : "Buying price for one"}
+      {size > 1 && <p className="muted" role="note">This item is sold in packs of {size} {piece}. Enter {piece} here; they are kept as packs.</p>}
+      <label>{opening ? (already > 0 ? `How many more ${piece} to add`.replace("  ", " ") : `How many ${piece} you have now`.replace("  ", " ")) : size > 1 ? `How many ${piece} arrived` : "Quantity received"}<input type="number" min="0.001" step="0.001" required value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label>
+      {size > 1 && Number(quantity) > 0 && <small className="muted" role="status">= {packs} packs of {size}{cost !== "" && Number(cost) > 0 ? `, bought at ${packCost} a pack` : ""}.</small>}
+      <label>{size > 1 ? `Buying price for one ${piece.replace(/s$/, "")}${opening ? " (if you know it)" : ""}` : opening ? "Buying price for one (if you know it)" : "Buying price for one"}
         <input type="number" min={opening ? "0" : "0.01"} step="0.01" required={!opening} value={cost} onChange={(e) => setCost(e.target.value)} placeholder={opening ? "Leave empty if unknown" : undefined} />
       </label>
       {opening && <small className="muted">Unknown buying price? Leave it empty. The stock can still be sold; it is marked cost pending until you add the price, so profit is not guessed.</small>}
       {!opening && <>
         <label>Supplier<input maxLength="180" required value={details.supplier_name} onChange={(e) => setDetails({ ...details, supplier_name: e.target.value })} /></label>
         <ReceiptDocumentFields details={details} onChange={setDetails} />
-        <ReceiptCostFields details={details} onChange={setDetails} goodsTotal={Number(quantity || 0) * Number(cost || 0)} />
+        <ReceiptCostFields details={details} onChange={setDetails} goodsTotal={packs * Number(packCost || 0)} />
       </>}
       <button disabled={!item || busy}>{busy ? 'Recording…' : opening ? 'Add to my stock' : 'Receive stock'}</button>
       <FormError title="Could not record the stock." message={error} />

@@ -442,6 +442,13 @@ export function ReceivePage() {
                     Current selling price: {businessCurrency()} {selected.selling_price}
                   </p>
                 )}
+                {selected && Number(selected.pack_size) > 1 && (
+                  <p className="notice" role="note">
+                    Sold in packs of {selected.pack_size} {(selected.piece_name || "piece").replace(/s$/i, "")}s: enter the quantity
+                    and buying price per <b>pack</b> (e.g. a ream of 500 sheets = {Math.round(500 / Number(selected.pack_size) * 1000) / 1000} packs
+                    of {selected.pack_size}). To enter {(selected.piece_name || "piece").replace(/s$/i, "")}s instead, use Quick receive.
+                  </p>
+                )}
                 <div className="formGrid">
                   <label>
                     Received quantity

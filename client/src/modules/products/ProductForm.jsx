@@ -21,6 +21,22 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
   const [brands, setBrands] = useState([]);
   const [productName, setProductName] = useState("");
   const [variantName, setVariantName] = useState("Standard");
+  // Sold one at a time, or in packs (paper 2 sheets for 5, cable clips 10 to a pack). One pack is one unit of stock and price.
+  const [inPacks, setInPacks] = useState(false);
+  const [packSize, setPackSize] = useState("2");
+  const [pieceName, setPieceName] = useState("piece");
+  const [openingPieces, setOpeningPieces] = useState("0");
+  const [pieceCost, setPieceCost] = useState("0");
+  const size = inPacks ? Math.max(1, Math.floor(Number(packSize) || 1)) : 1;
+  const pieces = (pieceName.trim() || "piece").replace(/s$/i, "") + "s";
+  const packLabel = `pack of ${size} ${pieces}`;
+  const choosePacks = (on, nextSize = packSize, nextPiece = pieceName) => {
+    setInPacks(on);
+    // Name the variant after the pack while it still has the default name, so the till and receipts say what is sold.
+    if (on && (variantName === "Standard" || /^Pack of /.test(variantName)))
+      setVariantName(`Pack of ${Math.max(1, Math.floor(Number(nextSize) || 1))} ${(nextPiece.trim() || "piece").replace(/s$/i, "")}s`);
+    if (!on && /^Pack of /.test(variantName)) setVariantName("Standard");
+  };
   const [type, setType] = useState(defaults.product_type || "STOCK_ITEM");
   const [shelf, setShelf] = useState(preferredShelf ?? (defaults.shelf ? Number(defaults.shelf) : undefined));
   const [error, setError] = useState("");
@@ -61,6 +77,13 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
     data.set("ecommerce_visible", "true");
     data.set("online_orderable", "true");
     if (displayImage) data.set("display_image", displayImage);
+    data.set("pack_size", String(size));
+    data.set("piece_name", inPacks ? pieceName.trim() : "");
+    if (inPacks && type === "STOCK_ITEM") {
+      // Counted in pieces here; kept as packs (e.g. 500 sheets = 250 packs of 2, 0.90 a sheet = 1.80 a pack).
+      data.set("opening_quantity", String(Math.round((Number(openingPieces) || 0) / size * 1000) / 1000));
+      data.set("opening_unit_cost", String(Math.round((Number(pieceCost) || 0) * size * 100) / 100));
+    }
     try {
       await api("/api/v1/catalog/products/create-with-stock/", {
         method: "POST",
@@ -137,6 +160,18 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
           <option value="SERVICE">Billable service</option>
         </select>
       </label>
+      {type === "STOCK_ITEM" && <fieldset className="packChoice">
+        <legend>How is it sold?</legend>
+        <label className="checkRow"><input type="radio" name="sold_as" checked={!inPacks} onChange={() => choosePacks(false)} /> One at a time (e.g. a charger, a mouse)</label>
+        <label className="checkRow"><input type="radio" name="sold_as" checked={inPacks} onChange={() => choosePacks(true)} /> In packs: several pieces for one price (e.g. paper 2 sheets for 5, cable clips 10 for 20)</label>
+        {inPacks && <div className="packFields">
+          <FormField label="Pieces in one pack" type="number" min="2" step="1" required value={packSize}
+            onChange={(event) => { setPackSize(event.target.value); choosePacks(true, event.target.value, pieceName); }} />
+          <FormField label="One piece is called" required maxLength={40} value={pieceName} placeholder="e.g. sheet, clip"
+            onChange={(event) => { setPieceName(event.target.value); choosePacks(true, packSize, event.target.value); }} />
+          <small className="muted">The price, the till and your stock count packs: one {packLabel}. You can still enter stock in {pieces}.</small>
+        </div>}
+      </fieldset>}
       <label>
         {type === "SERVICE" ? "Service option" : "Variant"}
         <input
@@ -155,7 +190,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
       <DisplayImageInput file={displayImage} onChange={setDisplayImage} />
       <FormField
-        label="Selling price"
+        label={inPacks && type === "STOCK_ITEM" ? `Selling price for one ${packLabel}` : "Selling price"}
         name="selling_price"
         type="number"
         min="0"
@@ -190,7 +225,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       ) : (
         <>
           <FormField
-            label="Minimum stock"
+            label={inPacks ? "Minimum stock (packs)" : "Minimum stock"}
             name="minimum_stock"
             type="number"
             min="0"
@@ -198,7 +233,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
             defaultValue={defaults.minimum_stock || "0"}
           />
           <FormField
-            label="Target stock"
+            label={inPacks ? "Target stock (packs)" : "Target stock"}
             name="target_stock"
             type="number"
             min="0"
@@ -217,6 +252,15 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
           <fieldset className="openingStock">
             <legend>Stock you have now (optional)</legend>
             <p className="muted">Items already in your shop. They are added as stock you own, not as a new purchase, so nothing is recorded as money spent or owed to a supplier.</p>
+            {inPacks ? <>
+              <FormField label={`How many ${pieces} you have now`} type="number" min="0" step="1" value={openingPieces}
+                onChange={(event) => setOpeningPieces(event.target.value)} />
+              <FormField label={`Buying price for one ${pieces.replace(/s$/, "")}`} type="number" min="0" step=".01" value={pieceCost}
+                onChange={(event) => setPieceCost(event.target.value)} />
+              <small className="muted" role="status">{Number(openingPieces) > 0
+                ? `= ${Math.round(Number(openingPieces) / size * 1000) / 1000} packs of ${size}${Number(pieceCost) > 0 ? `, bought at ${Math.round(Number(pieceCost) * size * 100) / 100} a pack` : ""}.`
+                : `E.g. a ream of paper is 500 sheets: what you paid for the ream ÷ 500 is the price for one sheet.`}</small>
+            </> : <>
             <FormField
               label="Quantity you have now"
               name="opening_quantity"
@@ -234,6 +278,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
               defaultValue="0"
             />
             <small className="muted">What you paid for one. If you do not know it, leave 0: the stock is marked cost pending and you can add the price later.</small>
+            </>}
           </fieldset>
         </>
       )}

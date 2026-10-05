@@ -66,3 +66,30 @@ def test_image_backfill_is_idempotent_and_preserves_custom_photos():
     call_command("assign_catalog_images")
     call_command("assign_catalog_images")
     assert product.images.get().image_url == "https://example.test/photo.jpg"
+
+
+@pytest.mark.django_db
+def test_paper_sold_two_sheets_for_five_is_counted_and_sold_in_packs():
+    from decimal import Decimal
+    owner = User.objects.create_superuser("paper-owner", "paper@example.test", "Strong-pass-1296")
+    from apps.core.models import Store
+    Store.objects.create(name="Main")
+    category = Category.objects.create(name="Cyber Essentials", slug="cyber-essentials")
+    client = APIClient()
+    client.force_authenticate(owner)
+    # One ream of 500 sheets bought at 450 = 250 packs of 2 at 1.80 each; the form converts sheets to packs.
+    made = client.post("/api/v1/catalog/products/create-with-stock/", {"name": "A4 Printing Paper", "category_id": category.id,
+        "variant_name": "Pack of 2 sheets", "sku": "PAPER-A4-2", "selling_price": "5", "pack_size": "2", "piece_name": "sheet",
+        "opening_quantity": "250", "opening_unit_cost": "1.80"}, format="json")
+    assert made.status_code == 201, made.content
+    paper = ProductVariant.objects.get(pk=made.json()["variant_id"])
+    assert (paper.pack_size, paper.piece_name) == (2, "sheet")
+    assert sum(b.quantity for b in StockBalance.objects.filter(lot__variant=paper)) == Decimal("250")
+    found = client.get("/api/v1/inventory/variants/search/", {"q": "PAPER-A4"}).json()[0]
+    assert (found["pack_size"], found["piece_name"]) == (2, "sheet")
+    sold = client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": paper.pk, "quantity": 3}]}, format="json")
+    assert sold.status_code == 201 and Decimal(str(sold.json()["total"])) == Decimal("15")  # 3 packs = 6 sheets = 15 bob
+    assert sum(b.quantity for b in StockBalance.objects.filter(lot__variant=paper)) == Decimal("247")
+    bad = client.post("/api/v1/catalog/products/create-with-stock/", {"name": "Clips", "category_id": category.id, "sku": "CLIP-0",
+        "selling_price": "20", "pack_size": "0"}, format="json")
+    assert bad.status_code == 400 and "pack" in str(bad.json()).lower()

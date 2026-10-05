@@ -26,11 +26,15 @@ class Product(TimeStamped):
 class ProductVariant(TimeStamped):
     use_product_image = models.BooleanField(default=True)
     product=models.ForeignKey(Product,related_name="variants",on_delete=models.CASCADE); name=models.CharField(max_length=120,default="Standard"); sku=models.CharField(max_length=64); barcode=models.CharField(max_length=64,null=True,blank=True); selling_price=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); minimum_price=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"),help_text="Lowest price a cashier may agree when bargaining; 0 means no bargaining without a manager."); service_cost=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0")); minimum_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); target_stock=models.DecimalField(max_digits=14,decimal_places=3,default=Decimal("0")); active=models.BooleanField(default=True)
+    # Sold in packs (e.g. 2 sheets of paper for 5, 10 cable clips): one unit in stock, at the till and in its price is one
+    # pack of ``pack_size`` pieces. Stock coming in can be counted in pieces and is turned into packs.
+    pack_size=models.PositiveIntegerField(default=1)
+    piece_name=models.CharField(max_length=40,blank=True)
     def __str__(self): return f"{self.product} — {self.name}"
     class Meta:
         base_manager_name = "objects"
         default_manager_name = "objects"
-        constraints = [models.UniqueConstraint(fields=["organization", "sku"], name="cata_productvariant_sku_org"), models.UniqueConstraint(fields=["organization", "barcode"], name="cata_productvariant_barcode_org")]
+        constraints = [models.CheckConstraint(condition=models.Q(pack_size__gte=1), name="cata_variant_pack_size_positive"), models.UniqueConstraint(fields=["organization", "sku"], name="cata_productvariant_sku_org"), models.UniqueConstraint(fields=["organization", "barcode"], name="cata_productvariant_barcode_org")]
 class ProductOptionType(TimeStamped):
     product=models.ForeignKey(Product,related_name="option_types",on_delete=models.CASCADE)
     name=models.CharField(max_length=80)
