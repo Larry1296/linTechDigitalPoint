@@ -178,7 +178,17 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     def reverse(self, request, pk=None):
         if not has_business_permission(request.user, "mpesa.reverse_mpesa_transaction"):
             return Response({"detail": "M-Pesa reversal permission required."}, status=403)
-        entry, created = reverse_transaction(original=self.get_object(), user=request.user, idempotency_key=request.data.get("idempotency_key"), reason=request.data.get("reason", ""))
+        original = self.get_object()
+        commission = getattr(original, "commission", None)
+        if commission:
+            # Commission paid into the float or cash: undo the whole commission, so its income comes out of the books too.
+            if not has_business_permission(request.user, "accounting.reverse_cashentry"):
+                return Response({"detail": "Permission to correct the books is required to undo commission."}, status=403)
+            from .commission import undo
+            undo(entry=commission, user=request.user, reason=str(request.data.get("reason") or ""))
+            original.refresh_from_db()
+            return Response(self.get_serializer(original.reversal).data, status=201)
+        entry, created = reverse_transaction(original=original, user=request.user, idempotency_key=request.data.get("idempotency_key"), reason=request.data.get("reason", ""))
         return Response(self.get_serializer(entry).data, status=201 if created else 200)
 
 

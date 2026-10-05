@@ -87,12 +87,15 @@ def test_commission_into_the_float_goes_through_the_open_shift_and_can_be_undone
     assert accounts["4010"]["balance"] == D("-3000") and accounts["1160"]["balance"] == 0
     assert checks["agency_float"]["reconciled"]
     # The desk cannot reverse or fake it on its own.
-    assert client.post(f"/api/v1/mpesa/transactions/{moved.pk}/reverse/", {"reason": "x", "idempotency_key": "r1"}, format="json").status_code == 400
     assert client.post("/api/v1/mpesa/transactions/", {"session": session.pk, "transaction_type": "COMMISSION", "amount": "1",
                        "idempotency_key": "sneak"}, format="json").status_code == 400
     assert client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": ""}, format="json").status_code == 400
-    undone = client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": "Wrong month"}, format="json")
-    assert undone.status_code == 200 and undone.json()["reversed_at"]
+    assert client.post(f"/api/v1/mpesa/transactions/{moved.pk}/reverse/", {"reason": "", "idempotency_key": "r1"}, format="json").status_code == 400
+    # Reverse on the desk undoes the whole commission: the float and its income both come back out.
+    reversed_ = client.post(f"/api/v1/mpesa/transactions/{moved.pk}/reverse/", {"reason": "Wrong month", "idempotency_key": "r1"}, format="json")
+    assert reversed_.status_code == 201 and reversed_.json()["reversal_of"] == moved.pk
+    undone = client.get(f"/api/v1/mpesa/commission/{made.json()['id']}/")
+    assert undone.json()["reversed_at"] and undone.json()["reverse_reason"] == "Wrong month"
     with organization_context(org):
         assert session_balances(session) == (D("10000.00"), D("20000.00"))
     accounts, pl, checks = _books(org)
@@ -130,7 +133,17 @@ def test_impossible_commission_is_refused(agency):
         body = {"settlement_method": "MPESA", **extra}
         response = _record(client, outlet, period, "100", f"SJQ5BAD{index}", body.pop("settlement_method"), **body)
         assert response.status_code == 400 and message in str(response.json()), (message, response.json())
-    assert _record(client, outlet, last_month, "100", "x", "MPESA").status_code == 400  # a reference is required
+
+
+def test_commission_needs_no_mpesa_code(agency):
+    # Safaricom pays commission without giving a code, so it records with none, more than once.
+    client, org, _, outlet, today, last_month = agency
+    for key in ["first", "second"]:
+        made = client.post("/api/v1/mpesa/commission/", {"outlet": outlet.pk, "period": str(last_month), "amount": "500",
+                           "settlement_method": "BANK", "idempotency_key": key}, format="json")
+        assert made.status_code == 201, made.content
+        assert made.json()["reference"] == ""
+    assert _books(org)[0]["4010"]["balance"] == D("-1000")
 
 
 def test_reminds_for_last_month_and_agency_profit_takes_off_its_running_costs(agency):
