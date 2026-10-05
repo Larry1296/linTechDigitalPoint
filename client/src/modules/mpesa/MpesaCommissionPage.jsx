@@ -15,7 +15,7 @@ const monthValue = (value) => String(value || "").slice(0, 7);
 const lastMonth = () => { const d = new Date(); d.setDate(0); return d.toLocaleDateString("en-CA").slice(0, 7); };
 const monthName = (value) => new Date(`${monthValue(value)}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
-// Commission Safaricom paid: for which month, how much, when and where the money went.
+// Commission Safaricom paid: for which month, how much, when and where the money went (Safaricom gives no M-Pesa code for it).
 function RecordForm({ data, onSaved, onCancel }) {
   const [outlet, setOutlet] = useState(String(data.outlets[0]?.id ?? ""));
   const [place, setPlace] = useState("AGENCY_FLOAT");
@@ -37,7 +37,7 @@ function RecordForm({ data, onSaved, onCancel }) {
     setError("");
     try {
       await api("/api/v1/mpesa/commission/", { method: "POST", body: JSON.stringify({ outlet: Number(outlet), period: `${month}-01`, amount: values.amount,
-        reference: values.reference, settlement_method: place, paid_on: paidOn, notes: values.notes,
+        settlement_method: place, paid_on: paidOn, notes: values.notes,
         ...(agency && shop?.open_session ? { session_id: shop.open_session } : {}), idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
@@ -56,7 +56,6 @@ function RecordForm({ data, onSaved, onCancel }) {
         </FormField>}
         <FormField label="Month it was earned" name="month" type="month" required max={today().slice(0, 7)} value={month} onChange={(event) => setMonth(event.target.value)} />
         <FormField label={`Amount Safaricom paid (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01" required />
-        <FormField label="M-Pesa code or statement reference" name="reference" required minLength={3} maxLength={100} autoComplete="off" placeholder="e.g. SJQ1AB2CD3" />
         <FormField label="Where the money went">
           <select value={place} onChange={(event) => setPlace(event.target.value)}>
             {data.places.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -161,7 +160,7 @@ export function MpesaCommissionPage() {
               <td>{money(e.amount)}{e.reversed_at && <small> · undone ({e.reverse_reason})</small>}</td>
               <td>{date(e.paid_on)}</td>
               <td>{Object.fromEntries(data.places)[e.settlement_method] || e.settlement_method}</td>
-              <td>{e.reference}</td>
+              <td>{e.reference || "—"}</td>
               <td>{!e.reversed_at && can("accounting.reverse_cashentry") && <button type="button" className="secondary" onClick={() => void undo(e)}>Undo</button>}</td>
             </tr>))}</tbody>
         </table></div> : <p className="muted">No commission recorded yet.</p>}

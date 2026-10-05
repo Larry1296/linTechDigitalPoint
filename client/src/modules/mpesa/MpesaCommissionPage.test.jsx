@@ -34,11 +34,12 @@ it("records commission paid into the float through today's open shift", async ()
   expect(within(form).getByLabelText("Month it was earned")).toHaveValue("2026-09");
   expect(within(form).queryByLabelText("Date it was paid")).toBeNull();  // agency money moves today, through the shift
   fireEvent.change(within(form).getByLabelText(/Amount Safaricom paid/), { target: { value: "4200" } });
-  fireEvent.change(within(form).getByLabelText(/M-Pesa code/), { target: { value: "SJQ9NEW001" } });
+  expect(within(form).queryByLabelText(/M-Pesa code/)).toBeNull();  // Safaricom gives no code for commission
   await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record commission" })); });
   expect(confirmAction.mock.calls[0][0].title).toBe("Record KSh 4,200 commission for September 2026?");
   const body = JSON.parse(api.mock.calls.find(([p, o]) => p === "/api/v1/mpesa/commission/" && o?.method === "POST")[1].body);
-  expect(body).toEqual(expect.objectContaining({ outlet: 2, period: "2026-09-01", amount: "4200", reference: "SJQ9NEW001", settlement_method: "AGENCY_FLOAT", session_id: 9 }));
+  expect(body).not.toHaveProperty("reference");
+  expect(body).toEqual(expect.objectContaining({ outlet: 2, period: "2026-09-01", amount: "4200", settlement_method: "AGENCY_FLOAT", session_id: 9 }));
 });
 
 it("asks for the payment date when the money went elsewhere, and undoes a mistake with a reason", async () => {

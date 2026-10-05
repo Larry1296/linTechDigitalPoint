@@ -201,7 +201,7 @@ class CommissionInput(serializers.Serializer):
     outlet = serializers.IntegerField()
     period = serializers.DateField()
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
-    reference = serializers.CharField(max_length=100)
+    reference = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
     settlement_method = serializers.CharField(max_length=40)
     paid_on = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")

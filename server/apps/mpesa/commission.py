@@ -67,6 +67,7 @@ def _open_shift(outlet, session_id=None):
 def record(*, outlet, user, period, amount, reference, settlement, key=None, paid_on=None, notes="", session_id=None):
     """Commission Safaricom paid for the month ``period`` falls in, received on ``paid_on`` (today if not given)."""
     lock_business()
+    reference = " ".join(str(reference or "").split()).upper()[:100]  # optional: Safaricom often pays commission without a code
     key = str(key or reference or "").strip()
     existing = MpesaCommissionEntry.objects.filter(idempotency_key=key).first() if key else None
     if existing:
@@ -88,10 +89,7 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
         raise ValidationError("The date it was paid cannot be in the future.")
     if paid < period:
         raise ValidationError("It cannot have been paid before the month it was earned in began.")
-    reference = " ".join(str(reference or "").split()).upper()[:100]
-    if len(reference) < 3:
-        raise ValidationError("Enter the M-Pesa confirmation code or Safaricom statement reference for this payment.")
-    if MpesaCommissionEntry.objects.filter(reference=reference).exists():
+    if reference and MpesaCommissionEntry.objects.filter(reference=reference).exists():
         raise ValidationError(f"Commission with the reference {reference} is already recorded.")
     settlement = LEGACY.get(str(settlement or "").upper(), str(settlement or "").upper())
     if settlement not in AGENCY | OUTSIDE:
@@ -110,7 +108,7 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
         from .services import post_transaction
         shift = _open_shift(outlet, session_id)
         agency, _ = post_transaction(session=shift, transaction_type="COMMISSION", transaction_amount=value, user=user,
-                                     idempotency_key=f"commission:{key}", provider_reference=reference,
+                                     idempotency_key=f"commission:{key}", provider_reference=reference or None,
                                      notes=f"Safaricom commission for {period:%B %Y}",
                                      cash_delta=value if settlement == "AGENCY_CASH" else 0, float_delta=value if settlement == "AGENCY_FLOAT" else 0)
     entry = MpesaCommissionEntry.objects.create(outlet=outlet, period=period, amount=value, reference=reference, settlement_method=settlement,
@@ -119,7 +117,7 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
     branch = outlet.store_id
     # The shift already posted the float or cash against owner capital (3000); the commission replaces that.
     received = "3000" if agency else cash_code(settlement)
-    words = f"Safaricom commission for {period:%B %Y} ({reference})"
+    words = f"Safaricom commission for {period:%B %Y}" + (f" ({reference})" if reference else "")
     if earned_on < paid:
         post_journal(key=f"commission-earned:{entry.pk}", description=f"{words}, earned", branch=branch, date=earned_on, user=user,
                      lines=paired("1160", "4010", value))
@@ -129,7 +127,7 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
         post_journal(key=f"commission:{entry.pk}", description=words, branch=branch, date=paid, user=user, lines=paired(received, "4010", value))
     if not agency:
         from apps.accounting.services import post
-        post(unit="MPESA", method=settlement, amount=value, kind="INCOME", reference=reference, key=f"commission:{entry.pk}", user=user,
+        post(unit="MPESA", method=settlement, amount=value, kind="INCOME", reference=reference or f"Commission {period:%b %Y}", key=f"commission:{entry.pk}", user=user,
              occurred_at=paid_at, branch=outlet.store, journal=False)
     from apps.core.models import AuditLog
     AuditLog.objects.create(action="MPESA_COMMISSION_RECORDED", object_type="MpesaCommissionEntry", object_id=str(entry.pk), user=user,

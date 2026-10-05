@@ -115,7 +115,7 @@ class MpesaCommissionEntry(TimeStamped):
     outlet = models.ForeignKey(MpesaOutlet, related_name="commissions", on_delete=models.PROTECT)
     period = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
-    reference = models.CharField(max_length=100)
+    reference = models.CharField(max_length=100, blank=True)  # optional: Safaricom often pays commission without an M-Pesa code
     # Where Safaricom's money went: AGENCY_FLOAT or AGENCY_CASH (through the open shift), or MPESA, BANK, CASH, OTHER.
     settlement_method = models.CharField(max_length=40)
     recognized_at = models.DateTimeField()
@@ -131,7 +131,7 @@ class MpesaCommissionEntry(TimeStamped):
         constraints = [models.CheckConstraint(condition=Q(amount__gte=0), name="nonnegative_mpesa_commission")]
         base_manager_name = "objects"
         default_manager_name = "objects"
-        constraints = [*constraints, models.UniqueConstraint(fields=["organization", "reference"], name="mpes_mpesacommissione_reference_org")]
+        constraints = [*constraints, models.UniqueConstraint(fields=["organization", "reference"], condition=~Q(reference=""), name="mpes_mpesacommissione_reference_org")]
 
 
 class MpesaReconciliation(TenantModel):
