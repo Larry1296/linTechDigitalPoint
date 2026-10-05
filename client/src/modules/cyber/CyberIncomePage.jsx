@@ -22,6 +22,7 @@ const when = (value) => new Date(value).toLocaleString(undefined, { day: "numeri
 const cents = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 const OTHER = "other";
+const NEW_SERVICE = "new-service";
 // Every place a service can go, for a dropdown: main groups and "Group › Sub-group".
 const groupChoices = (groups) => groups.flatMap((g) => [{ id: g.id, label: g.name }, ...g.subgroups.map((sub) => ({ id: sub.id, label: `${g.name} › ${sub.name}` }))]);
 // Services in the order of their groups (then sub-groups), with services in no group last.
@@ -95,34 +96,28 @@ function lineState(line, services, fixedService, isManager) {
 
 function IncomeLine({ line, state, sections, fixedService, number, onChange, onRemove, onAddService, onEditService }) {
   const { options, option, listed, mustType, canEdit, total, lowest, tooLow, tooHigh } = state;
-  const inGroup = sections.find((section) => section.key === line.groupId);
   const id = (name) => `${name}-${line.key}`;
   return (
     <fieldset className="incomeLine">
       <legend>{fixedService ? "What was done" : `Service ${number}`}</legend>
       {!fixedService && (
-        <FormField label="Group">
-          <select value={line.groupId} onChange={(event) => onChange({ groupId: event.target.value, serviceId: "", optionId: "", typed: "", quantity: "1" })} required>
-            <option value="" disabled>Choose the group</option>
-            {sections.map((section) => <option key={section.key} value={section.key}>{section.name}</option>)}
-          </select>
-        </FormField>
-      )}
-      {!fixedService && inGroup && (
+        // Every service in one list (under its group when there are groups); the last choice creates a new one.
         <FormField label="Service">
-          <select value={line.serviceId} onChange={(event) => onChange({ serviceId: event.target.value, optionId: "", typed: "", quantity: "1" })} required>
-            <option value="" disabled>Choose the service</option>
-            {inGroup.parts.map((part) => (part.name
-              ? <optgroup key={part.name} label={part.name}>{part.services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>
-              : part.services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)))}
+          <select value={line.serviceId} required onChange={(event) => (event.target.value === NEW_SERVICE ? onAddService?.()
+            : onChange({ serviceId: event.target.value, optionId: "", typed: "", quantity: "1" }))}>
+            <option value="" disabled>Choose the service done</option>
+            {sections.map((section) => {
+              const options = section.parts.flatMap((part) => part.services.map((s) => (
+                <option key={s.id} value={s.id}>{part.name ? `${part.name} › ` : ""}{s.name}</option>)));
+              return sections.length > 1 ? <optgroup key={section.key} label={section.name}>{options}</optgroup> : options;
+            })}
+            {onAddService && <option value={NEW_SERVICE}>+ Create a new service…</option>}
           </select>
         </FormField>
       )}
-      {!fixedService && (onAddService || (onEditService && state.service)) && (
+      {!fixedService && onEditService && state.service && (
         <div className="actionRow serviceManage">
-          {onAddService && <button type="button" className="linkButton" onClick={onAddService}>Not in the list? Add it to your price list</button>}
-          {onEditService && state.service && <button type="button" className="linkButton" onClick={() => onEditService(state.service.id)}>
-            Edit {state.service.name}: name, group or prices</button>}
+          <button type="button" className="linkButton" onClick={() => onEditService(state.service.id)}>Edit {state.service.name}: name, group or prices</button>
         </div>
       )}
       {options.length > 1 && (
@@ -370,7 +365,7 @@ function PriceOptions({ service, onSaved }) {
   );
 }
 
-function NewService({ groups, onSaved, startOpen = false, defaultGroup = "", onCancel }) {
+export function NewService({ groups, onSaved, startOpen = false, defaultGroup = "", onCancel }) {
   const [open, setOpen] = useState(startOpen);
   const close = () => { setOpen(false); onCancel?.(); };
   const [busy, setBusy] = useState(false);
@@ -392,10 +387,11 @@ function NewService({ groups, onSaved, startOpen = false, defaultGroup = "", onC
       setBusy(false);
     }
   };
-  if (!open) return <button type="button" className="secondary" onClick={() => setOpen(true)}>Add a service</button>;
+  if (!open) return <button type="button" className="secondary" onClick={() => setOpen(true)}>+ Create a new service</button>;
   return (
-    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Add a service">
-      <h2>Add a service</h2>
+    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Create a new service">
+      <h2>Create a new service</h2>
+      <p className="muted">A service you offer, with its price. This does not record a sale.</p>
       <fieldset disabled={busy} className="loanFields">
         <FormField label="Service name" name="service_name" required maxLength={160} placeholder="e.g. Binding" />
         <GroupSelect groups={groups} value={defaultGroup} />
@@ -403,8 +399,8 @@ function NewService({ groups, onSaved, startOpen = false, defaultGroup = "", onC
         <FormField label="Note (optional)" name="notes" maxLength={240} placeholder="e.g. government fees are separate" />
       </fieldset>
       <p className="muted">You can add more price options to it afterwards.</p>
-      <div className="actionRow"><button disabled={busy}>Add service</button><button type="button" className="secondary" onClick={close}>Cancel</button></div>
-      <FormError title="Could not add the service." message={error} />
+      <div className="actionRow"><button disabled={busy}>Create service</button><button type="button" className="secondary" onClick={close}>Cancel</button></div>
+      <FormError title="Could not create the service." message={error} />
     </form>
   );
 }

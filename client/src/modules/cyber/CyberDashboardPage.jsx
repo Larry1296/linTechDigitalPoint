@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { useAuth } from "../../core/auth/AuthContext";
-import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import {
   completeCyberJob,
-  createCyberService,
   updateCyberService,
   createCyberJob,
   deleteCyberJob,
@@ -19,19 +17,19 @@ import {
   transitionCyberJob,
 } from "./api";
 import { CyberJobForm } from "./CyberJobForm";
-import { RecordIncome } from "./CyberIncomePage";
+import { NewService, RecordIncome } from "./CyberIncomePage";
 import { api } from "../../core/api/client";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
-const billingUnits = ["PER_PAGE", "PER_COPY", "PER_SHEET", "PER_DOCUMENT", "PER_HOUR", "PER_ITEM", "FIXED"];
 export function CyberDashboardPage() {
   const { user } = useAuth();
   const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
   const canChangeServices = Boolean(user?.permissions?.includes("cyber.change_cyberserviceprofile"));
   const canDeleteJobs = Boolean(user?.permissions?.includes("cyber.delete_cyberjob"));
   const canDeleteSales = Boolean(user?.permissions?.includes("commerce.change_sale"));
+  const canDeleteServices = Boolean(user?.permissions?.includes("cyber.delete_cyberserviceprofile"));
   const [serviceError, setServiceError] = useState(null);
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
@@ -40,8 +38,7 @@ export function CyberDashboardPage() {
   const [receipt, setReceipt] = useState("");
   const [receiptSale, setReceiptSale] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
-  // What the person is doing: recording a service already done and paid for, or taking in work for later.
-  const [mode, setMode] = useState("done");
+  const [takingJob, setTakingJob] = useState(false);
   const [income, setIncome] = useState({ services: [], groups: [] });
   const [addingService, setAddingService] = useState(false);
   const load = async () => {
@@ -66,32 +63,25 @@ export function CyberDashboardPage() {
   useLiveRefresh(load);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
-  const addService = async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    setServiceError(null);
-    try {
-      await createCyberService({
-        name: values.get("name"),
-        selling_price: values.get("selling_price"),
-        billing_unit: values.get("billing_unit"),
-        requires_job: values.get("requires_job") === "on",
-        notes: values.get("notes") || "",
-      });
-      form.reset();
-      await load();
-    } catch (err) {
-      setServiceError({ place: "add", title: "Could not add the service.", message: err.message });
-    }
-  };
+  // Hide or show again every price option of a service (a hidden service cannot be chosen when recording).
   const toggleService = async (service) => {
     setServiceError(null);
     try {
-      await updateCyberService(service.id, { active: !service.active });
+      for (const profile of services.filter((row) => row.product === service.id)) await updateCyberService(profile.id, { active: !service.active });
       await load();
     } catch (err) {
       setServiceError({ place: "list", title: `Could not update ${service.name}.`, message: err.message });
+    }
+  };
+  const removeService = async (service) => {
+    if (!(await confirmAction({ title: `Delete ${service.name}?`, confirmButtonText: "Delete service",
+      text: "It disappears from your services and can no longer be recorded. Money already recorded for it is kept in your totals." }))) return;
+    setServiceError(null);
+    try {
+      await api(`/api/v1/cyber/income/${service.id}/delete/`, { method: "POST" });
+      await load();
+    } catch (err) {
+      setServiceError({ place: "list", title: `Could not delete ${service.name}.`, message: err.message });
     }
   };
   // A job action that fails says so instead of silently doing nothing.
@@ -153,26 +143,25 @@ export function CyberDashboardPage() {
           {businessCurrency()} {dashboard.today.average}
         </MetricCard>
       </div>
-      <div className="deskChoice" role="group" aria-label="What are you doing?">
-        <button type="button" aria-pressed={mode === "done"} className={mode === "done" ? "deskChoiceOn" : "secondary"} onClick={() => setMode("done")}>
-          <b>Already done: record what was paid</b><small>The customer has been served and pays now.</small>
-        </button>
-        <button type="button" aria-pressed={mode === "job"} className={mode === "job" ? "deskChoiceOn" : "secondary"} onClick={() => setMode("job")}>
-          <b>Work for later: take in a job</b><small>You will do it after they leave; they pay when it is done.</small>
-        </button>
-      </div>
       <div className="deskGrid">
-        {mode === "done" ? <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
-          title="Record a service already done" /> : <CyberJobForm
-          services={services.filter((service) => service.active)}
-          onSave={async (data) => {
-            const job = await createCyberJob(data);
-            await load();
-            return job;
-          }}
-        />}
+        <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
+          title="Record a service done" />
         <section>
-          <h2>Jobs</h2>
+          <div className="sectionHeading">
+            <h2>Jobs</h2>
+            {!takingJob && <button type="button" className="secondary" onClick={() => setTakingJob(true)}>+ Take in a job for later</button>}
+          </div>
+          {takingJob && <>
+            <CyberJobForm
+              services={services.filter((service) => service.active)}
+              onSave={async (data) => {
+                const job = await createCyberJob(data);
+                await load();
+                return job;
+              }}
+            />
+            <button type="button" className="secondary" onClick={() => setTakingJob(false)}>Close</button>
+          </>}
           {!jobs.length ? (
             <Empty>No Cyber jobs yet.</Empty>
           ) : (
@@ -281,57 +270,29 @@ export function CyberDashboardPage() {
           )}
         </section>
       </div>
-      <section>
-        <h2>Your services and prices</h2>
-        <p className="muted">What you offer and what you charge. Changing this list does not record any sale or payment.</p>
-        {!services.length && <Empty>No services yet.{canManageServices ? " Add your first service below." : " Ask the business owner to add services."}</Empty>}
+      <section aria-labelledby="your-services">
+        <div className="sectionHeading">
+          <h2 id="your-services">Your services</h2>
+          {canManageServices && !addingService && <button type="button" onClick={() => setAddingService(true)}>+ Create a new service</button>}
+        </div>
+        {canManageServices && addingService && <NewService groups={income.groups || []} startOpen
+          onSaved={async () => { setAddingService(false); await load(); }} onCancel={() => setAddingService(false)} />}
+        {!(income.services || []).length && <Empty>No services yet.{canManageServices ? " Create your first service." : " Ask the business owner to add services."}</Empty>}
         <div className="serviceGrid">
-          {services.map((service) => (
-            <article key={service.id}>
+          {(income.services || []).map((service) => (
+            <article key={service.id} className={service.active ? undefined : "muted"}>
               <b>{service.name}</b>
-              <strong>{businessCurrency()} {service.selling_price}</strong>
-              <small>
-                {service.billing_unit.replaceAll("_", " ")}
-                {service.requires_job ? " · Job workflow" : " · Quick service"}
-                {!service.active && " · Inactive"}
-              </small>
-              {canChangeServices && service.product && (
-                <Link className="button secondary" to={`/admin/cyber/income/${service.product}`} aria-label={`Edit ${service.name}`}>Edit</Link>
-              )}
-              {canChangeServices && (
-                <button type="button" className="secondary" onClick={() => void toggleService(service)}>
-                  {service.active ? "Deactivate" : "Activate"}
-                </button>
-              )}
+              <small>{service.options.filter((o) => o.active).map((o) => `${service.options.length > 1 ? `${o.name}: ` : ""}${o.price_varies || Number(o.price) <= 0 ? "amount varies" : `${businessCurrency()} ${Number(o.price).toLocaleString()}${o.billing_unit === "FIXED" ? "" : ` per ${o.billing_unit.replace("PER_", "").toLowerCase()}`}`}`).join(" · ")}
+                {!service.active && " · Hidden"}</small>
+              <div className="actionRow">
+                {canChangeServices && <Link className="button secondary" to={`/admin/cyber/income/${service.id}`} aria-label={`Edit ${service.name}`}>Edit</Link>}
+                {canChangeServices && <button type="button" className="secondary" onClick={() => void toggleService(service)}>{service.active ? "Hide" : "Show again"}</button>}
+                {canDeleteServices && <button type="button" className="danger" aria-label={`Delete ${service.name}`} onClick={() => void removeService(service)}>Delete</button>}
+              </div>
             </article>
           ))}
         </div>
         {serviceError?.place === "list" && <FormError title={serviceError.title} message={serviceError.message} />}
-        {canManageServices && !addingService && (
-          <button type="button" className="secondary" onClick={() => setAddingService(true)}>+ Add a new service to your price list</button>
-        )}
-        {canManageServices && addingService && (
-          <form className="formCard" onSubmit={(event) => void addService(event)} aria-label="New service for your price list">
-            <h3>New service for your price list</h3>
-            <p className="muted">Something you offer, with its price. This does not record a sale; to record work done, use
-              "Already done: record what was paid" at the top.</p>
-            <FormField label="Service name" name="name" required maxLength={180} placeholder="e.g. Black & white printing" />
-            <FormField label={`Price (${businessCurrency()})`} name="selling_price" type="number" min="0" step="0.01" required />
-            <label>
-              Charged
-              <select name="billing_unit" defaultValue="PER_PAGE">
-                {billingUnits.map((unit) => <option key={unit} value={unit}>{unit.replaceAll("_", " ").toLowerCase()}</option>)}
-              </select>
-            </label>
-            <label className="checkRow"><input type="checkbox" name="requires_job" /> Track as a job (for work that takes time, like typing or repairs)</label>
-            <FormField label="Notes (optional)" name="notes" />
-            <div className="actionRow">
-              <button>Add to price list</button>
-              <button type="button" className="secondary" onClick={() => setAddingService(false)}>Cancel</button>
-            </div>
-            {serviceError?.place === "add" && <FormError title={serviceError.title} message={serviceError.message} />}
-          </form>
-        )}
       </section>
     </>
   );

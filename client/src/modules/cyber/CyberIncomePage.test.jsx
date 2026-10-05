@@ -35,13 +35,13 @@ const overview = async () => {
   return screen.findByRole("form", { name: "Record income" });
 };
 
-it("records income by group, then service and price option; the amount fills in and follows the option's rules", async () => {
+it("records income from one Service list of every service (under its group), then price option; the amount follows the option's rules", async () => {
   const form = await overview();
-  expect(within(form).queryByLabelText("Service")).toBeNull();  // the group comes first
-  expect(within(within(form).getByLabelText("Group")).getAllByRole("option").map((o) => o.textContent))
-    .toEqual(["Choose the group", "Printing & Copying", "Finishing & Files", "Online Applications"]);
-  fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "1" } });
-  expect(within(within(form).getByLabelText("Service")).queryByRole("option", { name: "KRA PIN registration / retrieval" })).toBeNull();
+  expect(within(form).queryByLabelText("Group")).toBeNull();  // no group to pick first: the services are listed straight away
+  const list = within(form).getByLabelText("Service");
+  expect(within(list).getAllByRole("group").map((g) => g.getAttribute("label"))).toEqual(["Printing & Copying", "Finishing & Files", "Online Applications"]);
+  expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["Choose the service done", "Printing", "Lamination",
+    "Government & KRA › KRA PIN registration / retrieval"]);
   fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "4" } });
   fireEvent.change(within(form).getByLabelText("Price option"), { target: { value: "42" } });
   fireEvent.change(within(form).getByLabelText("How many pages"), { target: { value: "10" } });
@@ -62,8 +62,6 @@ it("records income by group, then service and price option; the amount fills in 
 
 it("asks for the amount when a service has no price yet, and lists revenue by group with links to each service's page", async () => {
   const form = await overview();
-  fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "2" } });
-  expect(within(form).getByRole("group", { name: "Government & KRA" })).toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "7" } });
   expect(within(form).queryByLabelText("Price option")).toBeNull();
   expect(within(form).getByLabelText(/Amount charged/)).toHaveAttribute("placeholder", "Type the amount");
@@ -129,13 +127,11 @@ it("records one customer's visit: colour printing with design for 30 and three A
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
   const first = within(form).getByRole("group", { name: "Service 1" });
-  fireEvent.change(within(first).getByLabelText("Group"), { target: { value: "1" } });
   fireEvent.change(within(first).getByLabelText("Service"), { target: { value: "4" } });
   fireEvent.change(within(first).getByLabelText("Price option"), { target: { value: "43" } });
   fireEvent.change(within(first).getByLabelText(/Amount charged/), { target: { value: "30" } });
   fireEvent.click(within(form).getByRole("button", { name: "+ Another item for this customer" }));
   const second = within(form).getByRole("group", { name: "Service 2" });
-  fireEvent.change(within(second).getByLabelText("Group"), { target: { value: "3" } });
   fireEvent.change(within(second).getByLabelText("Service"), { target: { value: "9" } });
   fireEvent.change(within(second).getByLabelText("Price option"), { target: { value: "92" } });
   fireEvent.change(within(second).getByLabelText("How many items"), { target: { value: "3" } });
@@ -165,25 +161,23 @@ it("lets the owner add a service from the dropdowns; it is then picked on that l
   });
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
-  fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "3" } });
-  fireEvent.click(within(form).getByRole("button", { name: "Not in the list? Add it to your price list" }));
-  const adding = screen.getAllByRole("form", { name: "Add a service" }).at(0);
-  expect(within(adding).getByLabelText("Group")).toHaveValue("3");  // the group the line was on
+  fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "new-service" } });  // the last choice in the list
+  const adding = screen.getAllByRole("form", { name: "Create a new service" }).at(0);
+  fireEvent.change(within(adding).getByLabelText("Group"), { target: { value: "3" } });
   fireEvent.change(within(adding).getByLabelText("Service name"), { target: { value: "Binding" } });
   fireEvent.click(within(adding).getByLabelText(/The amount varies/));
-  await act(async () => { fireEvent.click(within(adding).getByRole("button", { name: "Add service" })); });
+  await act(async () => { fireEvent.click(within(adding).getByRole("button", { name: "Create service" })); });
   const [path, options] = api.mock.calls.find(([, o]) => o?.method === "POST");
   expect(path).toBe("/api/v1/cyber/income/");
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ name: "Binding", category_id: 3, price_varies: true }));
   expect(within(form).getByLabelText("Service")).toHaveValue("12");
   expect(within(form).getByLabelText(/Amount charged/)).toHaveAttribute("placeholder", "Type the amount");
-  expect(screen.queryAllByRole("form", { name: "Add a service" })).toHaveLength(0);
+  expect(screen.queryAllByRole("form", { name: "Create a new service" })).toHaveLength(0);
 });
 
 it("lets the owner edit the chosen service's name, group and prices without leaving the form; staff see neither button", async () => {
   perms.list = OWNER;
   const form = await overview();
-  fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "1" } });
   fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "4" } });
   fireEvent.click(within(form).getByRole("button", { name: /Edit Printing/ }));
   const editor = screen.getByRole("region", { name: "Edit Printing" });
@@ -200,9 +194,8 @@ it("lets the owner edit the chosen service's name, group and prices without leav
 
 it("shows no add or edit buttons to staff without permission", async () => {
   const form = await overview();
-  fireEvent.change(within(form).getByLabelText("Group"), { target: { value: "1" } });
   fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "4" } });
-  expect(within(form).queryByRole("button", { name: "Not in the list? Add it to your price list" })).toBeNull();
+  expect(within(within(form).getByLabelText("Service")).queryByRole("option", { name: "+ Create a new service…" })).toBeNull();
   expect(within(form).queryByRole("button", { name: /Edit Printing/ })).toBeNull();
 });
 

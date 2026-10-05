@@ -21,7 +21,7 @@ const job = (id, status, extra = {}) => ({ id, number: `CYB-${id}`, walk_in_cust
   lines: [{ id: id * 10, service_name: "Typing", quantity: "2" }], ...extra });
 const renderDesk = async () => {
   await act(async () => { render(<MemoryRouter><CyberDashboardPage /></MemoryRouter>); });
-  fireEvent.click(screen.getByRole("button", { name: /Work for later/ }));
+  fireEvent.click(screen.getByRole("button", { name: "+ Take in a job for later" }));
   return screen.getByRole("form", { name: "New job" });
 };
 
@@ -81,14 +81,25 @@ it("deletes a paid job recorded wrongly, with a reason, so it can be recorded ag
   expect(cyber.deleteCyberSale).toHaveBeenCalledWith(40, "Recorded wrongly");
 });
 
-it("asks first whether the service is already done or work for later, and keeps the price list apart", async () => {
-  perms.list = [...perms.list, "cyber.complete_cyber_job", "cyber.add_cyberserviceprofile", "catalog.add_product"];
+it("puts recording a service done first, and lists your services with Edit and Delete and a Create button", async () => {
+  const { api } = await import("../../core/api/client");
+  const { confirmAction } = await import("../../core/ui/alerts");
+  perms.list = [...perms.list, "cyber.complete_cyber_job", "cyber.add_cyberserviceprofile", "catalog.add_product",
+    "cyber.change_cyberserviceprofile", "cyber.delete_cyberserviceprofile"];
+  const typing = { id: 3, name: "Typing", notes: "", active: true, group: null, subgroup: null,
+    options: [{ id: 30, name: "Standard", price: "20.00", minimum_price: "0", billing_unit: "PER_PAGE", price_varies: false, active: true }] };
+  api.mockImplementation(async (path) => (path.endsWith("/delete/") ? {} : { services: [typing], groups: [] }));
   await act(async () => { render(<MemoryRouter><CyberDashboardPage /></MemoryRouter>); });
-  expect(screen.getByRole("button", { name: /Already done: record what was paid/ })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByRole("form", { name: "New job" })).toBeNull();  // taking in a job is the other choice
-  fireEvent.click(screen.getByRole("button", { name: /Work for later/ }));
-  expect(screen.getByRole("heading", { name: "Take in a job for later" })).toBeInTheDocument();
-  expect(screen.queryByRole("form", { name: "New service for your price list" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "+ Add a new service to your price list" }));
-  expect(screen.getByRole("form", { name: "New service for your price list" })).toHaveTextContent("This does not record a sale");
+  const record = screen.getByRole("form", { name: "Record income" });
+  expect(within(record).getByRole("heading", { name: "Record a service done" })).toBeInTheDocument();
+  expect(within(within(record).getByLabelText("Service")).getAllByRole("option").map((o) => o.textContent))
+    .toEqual(["Choose the service done", "Typing", "+ Create a new service…"]);
+  expect(screen.queryByRole("form", { name: "New job" })).toBeNull();  // taking in a job is under Jobs, behind its own button
+  const card = screen.getByText("KSh 20 per page").closest("article");
+  expect(within(card).getByRole("link", { name: "Edit Typing" })).toHaveAttribute("href", "/admin/cyber/income/3");
+  await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "Delete Typing" })); });
+  expect(confirmAction).toHaveBeenCalled();
+  expect(api).toHaveBeenCalledWith("/api/v1/cyber/income/3/delete/", { method: "POST" });
+  fireEvent.click(screen.getByRole("button", { name: "+ Create a new service" }));
+  expect(screen.getByRole("form", { name: "Create a new service" })).toHaveTextContent("This does not record a sale");
 });
