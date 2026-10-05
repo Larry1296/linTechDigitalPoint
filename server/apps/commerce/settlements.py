@@ -15,6 +15,17 @@ from .returns import sale_balance, return_unit_cost
 METHOD_WORDS = {'CASH': 'cash', 'MPESA': 'M-Pesa', 'BANK': 'bank', 'OTHER': 'other'}
 
 
+def mpesa_code(method, reference):
+    """An M-Pesa payment recorded with the code from its confirmation SMS is confirmed: the code is the proof the money
+    arrived. Returns the code to confirm it with, or None when the payment must wait (no code, or not M-Pesa)."""
+    code = ' '.join(str(reference or '').split()).upper()
+    if method != 'MPESA' or not code:
+        return None
+    if Payment.objects.filter(provider_transaction_id=code).exists():
+        raise ValidationError(f'The M-Pesa code {code} is already recorded on another payment. Check the code in the SMS.')
+    return code
+
+
 @transaction.atomic
 def collect(*, sale, amount, method, key, reference='', confirmed=False):
     Organization.objects.select_for_update().get(pk=organization_id())
@@ -29,14 +40,20 @@ def collect(*, sale, amount, method, key, reference='', confirmed=False):
         if (previous.sale_id, previous.amount, previous.method, previous.reference) != (sale.pk, amount, method, reference):
             raise ValidationError('Payment key already used for different details.')
         return previous
+    # The M-Pesa code entered here for a sale whose M-Pesa payment is waiting is that payment's confirmation,
+    # not a second payment.
+    waiting = sale.payments.filter(method='MPESA', status__in=['PENDING', 'MANUAL_REVIEW'], amount=amount).order_by('pk').first()
+    if method == 'MPESA' and reference.strip() and waiting:
+        return confirm_payment(payment=waiting, reference=' '.join(reference.split()).upper())
     # Owed after returns and price corrections, not the original total.
     if amount > sale_balance(sale):
         raise ValidationError('Payment exceeds the outstanding balance.')
     if method == 'MPESA' and confirmed and not reference.strip():
         raise ValidationError('A confirmed mobile-money payment needs its provider reference.')
+    code = mpesa_code(method, reference)
     return Payment.objects.create(sale=sale, method=method, amount=amount, idempotency_key=key,
-        reference=reference, provider_transaction_id=reference if method == 'MPESA' and confirmed else None,
-        status='COMPLETED' if method != 'MPESA' or confirmed else 'MANUAL_REVIEW')
+        reference=reference, provider_transaction_id=code,
+        status='COMPLETED' if method != 'MPESA' or code else 'MANUAL_REVIEW')
 
 
 @transaction.atomic

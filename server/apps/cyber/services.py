@@ -188,12 +188,15 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
     sale.save(update_fields=["subtotal", "discount", "tax_total", "net_total", "total", "cogs", "gross_profit", "updated_at"])
     from apps.accounting.ledger import post_sale
     post_sale(sale)
+    from apps.commerce.settlements import mpesa_code
+    code = mpesa_code(payment_method, payment_reference)  # M-Pesa with its SMS code is confirmed; without one it waits
     Payment.objects.create(
         sale=sale,
         method=payment_method,
         amount=sale.total,
         reference=payment_reference,
-        status="MANUAL_REVIEW" if payment_method == "MPESA" else "COMPLETED",
+        provider_transaction_id=code,
+        status="MANUAL_REVIEW" if payment_method == "MPESA" and not code else "COMPLETED",
         idempotency_key=key,
     )
     job.sale = sale

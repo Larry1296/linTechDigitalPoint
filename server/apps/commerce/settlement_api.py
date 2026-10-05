@@ -36,7 +36,7 @@ class SalesView(APIView):
             'customer':s.customer.get_full_name() or s.customer.username if s.customer else 'Walk-in',
             'customer_id':s.customer_id, 'status':s.status, 'due_date':s.due_date,
             'outstanding':max(Decimal(0), sale_balance(s)),
-            'payments':[{'id':p.pk,'method':p.method,'amount':p.amount,'status':p.status} for p in s.payments.all()],
+            'payments':[{'id':p.pk,'method':p.method,'amount':p.amount,'status':p.status,'reference':p.reference} for p in s.payments.all()],
             'items':[{'id':i.pk,'item':str(i.variant),'quantity':i.quantity,'list_price':i.list_price,'unit_price':i.unit_price,
                       'discount':i.discount,'net_amount':i.net_amount,'tax_amount':i.tax_amount,'returned_quantity':i.returned_quantity} for i in s.items.all()]}
             for s in rows[(page-1)*50:page*50]]})

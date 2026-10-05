@@ -93,19 +93,29 @@ def test_money_check_is_shop_money_only_never_the_mpesa_agency(owner_shop):
     client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1}], "payment_method": "MPESA",
                 "payment_reference": "SJK4ABC123"}, format="json")
     till = next(p for p in client.get("/api/v1/accounting/money-check/").json()["places"] if p["method"] == "MPESA")
-    assert D(till["expected"]) == 0  # an M-Pesa sale counts in the till once its code is confirmed, not before
+    assert D(till["expected"]) == D("300")  # an M-Pesa sale with the code from its SMS is in the till at once
 
 
-def test_mpesa_sale_at_the_lowest_price_waits_then_is_confirmed_from_the_till(owner_shop):
+def test_mpesa_sale_with_its_code_is_confirmed_at_once_and_without_one_waits_for_the_code(owner_shop):
     client, org, charger = owner_shop
+    paid = client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1, "unit_price": "250"}],
+                       "payment_method": "MPESA", "payment_reference": "sjk4h7xq11"}, format="json")
+    assert paid.status_code == 201 and "waiting_payment" not in paid.json()  # the code is the proof: nothing to confirm
+    with organization_context(org):
+        from apps.commerce.models import Payment
+        assert Payment.objects.get(sale_id=paid.json()["sale_id"]).provider_transaction_id == "SJK4H7XQ11"
+    again = client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1, "unit_price": "250"}],
+                        "payment_method": "MPESA", "payment_reference": "SJK4H7XQ11"}, format="json")
+    assert again.status_code == 400 and "already recorded" in str(again.json())  # one code pays for one sale
     sold = client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1, "unit_price": "250"}],
-                       "payment_method": "MPESA", "payment_reference": "SJK4H7XQ2P"}, format="json")
+                       "payment_method": "MPESA"}, format="json")
     assert sold.status_code == 201, sold.content
     waiting = sold.json()["waiting_payment"]
-    assert (waiting["method"], D(waiting["amount"]), waiting["reference"]) == ("MPESA", D("250"), "SJK4H7XQ2P")
-    confirmed = client.post(f"/api/v1/commerce/payments/{waiting['id']}/confirm/", {"reference": "SJK4H7XQ2P"}, format="json")
-    assert confirmed.status_code == 200, confirmed.content
-    assert confirmed.json()["status"] == "COMPLETED"
+    assert (waiting["method"], D(waiting["amount"])) == ("MPESA", D("250"))
+    # The code typed into "Record a payment" confirms the waiting M-Pesa payment instead of adding a second one.
+    recorded = client.post(f"/api/v1/commerce/sales/{sold.json()['sale_id']}/payments/", {"amount": "250", "method": "MPESA",
+                           "reference": "SJK4H7XQ22", "idempotency_key": "late-code"}, format="json")
+    assert recorded.status_code == 201 and recorded.json() == {"id": waiting["id"], "status": "COMPLETED"}
     with organization_context(org):
         from apps.commerce.models import Sale
         from apps.commerce.returns import sale_balance

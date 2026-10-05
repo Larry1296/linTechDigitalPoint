@@ -471,7 +471,12 @@ def complete_sale(*,lines,channel,number,user=None,customer=None,discount=0,disc
     if payment_amount < 0 or payment_amount > sale.total:raise ValidationError("Payment must be between zero and the sale total.")
     if require_customer_for_balance and payment_amount<sale.total and customer is None:
         raise ValidationError(f"{sale.total-payment_amount} will still be owed. Choose the customer who owes it (or add them) instead of Walk-in customer.")
-    if payment_amount:Payment.objects.create(sale=sale,method=payment_method,amount=payment_amount,reference=payment_reference,status=payment_status,idempotency_key=idempotency_key or number)
+    if payment_amount:
+        # M-Pesa with the code from its SMS is confirmed at once; without a code it waits for confirmation.
+        from apps.commerce.settlements import mpesa_code
+        code=mpesa_code(payment_method,payment_reference)
+        Payment.objects.create(sale=sale,method=payment_method,amount=payment_amount,reference=payment_reference,provider_transaction_id=code,
+            status="COMPLETED" if code else payment_status,idempotency_key=idempotency_key or number)
     _audit("SALE_COMPLETED",sale,user,after={"number":number,"total":str(sale.total),"net":str(sale.net_total),"cogs":str(sale.cogs)}); return sale
 
 

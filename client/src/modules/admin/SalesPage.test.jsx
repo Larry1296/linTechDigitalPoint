@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["commerce.add_payment", "commerce.change_sale", "accounting.reverse_cashentry", "accounts.view_customerprofile"] } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["commerce.add_payment", "commerce.change_sale", "commerce.change_payment", "accounting.reverse_cashentry", "accounts.view_customerprofile"] } }) }));
 import { api } from "../../core/api/client";
 import { SalesPage } from "./SalesPage";
 
@@ -101,4 +101,13 @@ it("shows a failed payment under the payment form, which stays open", async () =
   fireEvent.click(within(form).getByRole("button", { name: "Record payment" }));
   expect(await within(form).findByRole("alert")).toHaveTextContent("Could not record the payment. Payment exceeds the outstanding balance.");
   expect(row).toHaveAttribute("open");
+});
+
+it("fills in the M-Pesa code typed at the sale, so confirming takes one click", async () => {
+  api.mockResolvedValue({ count: 1, results: [sale(5, { outstanding: "50.00", total: "50.00", charged: "50.00",
+    payments: [{ id: 5, method: "MPESA", amount: "50.00", status: "MANUAL_REVIEW", reference: "UJ5FF97VNX" }] })] });
+  render(<SalesPage />);
+  fireEvent.click((await screen.findByText("C-C HEAD(45W)")).closest("summary"));
+  expect(screen.getByLabelText("M-Pesa code from the confirmation message")).toHaveValue("UJ5FF97VNX");
+  expect(screen.getByRole("button", { name: "Confirm money received" })).toBeVisible();
 });
