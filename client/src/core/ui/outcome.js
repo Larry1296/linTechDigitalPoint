@@ -1,6 +1,6 @@
 import Swal from "sweetalert2";
 
-// Every save ends in a full-screen overlay: success or error. After a success the form that was submitted is reset
+// Every save ends in an overlay: success or error. After a success the form that was submitted is reset
 // for the next entry; after an error its fields are kept so only the mistake needs fixing.
 //
 // A save is a changing request (POST, PATCH, …) made within a minute of submitting a form or confirming a dialog.
@@ -38,9 +38,13 @@ export function beginAction() {
   else start(null);
 }
 
+// A card in the middle of the screen in the page's own theme, with the page blurred behind it (styles: .outcomeOverlay).
+// A success confirms what was just done and closes by itself; an error waits to be read and closed.
 function overlay(icon, title, text) {
-  return Swal.fire({ icon, title, text, grow: "fullscreen", confirmButtonText: icon === "error" ? "Close" : "Done",
-    customClass: { container: "outcomeOverlay" } });
+  const error = icon === "error";
+  return Swal.fire({ icon, title, text, buttonsStyling: false, returnFocus: true,
+    ...(error ? { confirmButtonText: "Close" } : { showConfirmButton: false, timer: 1600, timerProgressBar: true }),
+    customClass: { container: "outcomeOverlay", popup: `outcomeCard ${error ? "outcomeError" : "outcomeSuccess"}`, confirmButton: "outcomeButton" } });
 }
 
 async function succeed(title, text) {

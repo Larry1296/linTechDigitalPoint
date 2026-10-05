@@ -21,7 +21,7 @@ it("covers the screen when a submitted form saves, then clears the form", async 
   expect(mutationStarted("/api/v1/mpesa/transactions/")).toBe(true);
   mutationFinished(true);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success", title: "Saved", text: "Customer deposit", grow: "fullscreen" }));
+  expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success", title: "Saved", text: "Customer deposit", timer: 1600, showConfirmButton: false }));
   expect(form.querySelector("input").value).toBe("");
 });
 
@@ -32,7 +32,7 @@ it("shows the page's own success message instead of a plain one", async () => {
   await showOutcome("success", "Done", "Recorded deposit of KSh 4,200.");
   await vi.advanceTimersByTimeAsync(1000);
   expect(Swal.fire).toHaveBeenCalledTimes(1);
-  expect(Swal.fire.mock.calls[0][0]).toEqual(expect.objectContaining({ text: "Recorded deposit of KSh 4,200.", grow: "fullscreen" }));
+  expect(Swal.fire.mock.calls[0][0]).toEqual(expect.objectContaining({ text: "Recorded deposit of KSh 4,200.", showConfirmButton: false }));
   expect(form.querySelector("input").value).toBe("");
 });
 
@@ -42,7 +42,7 @@ it("covers the screen with the error and keeps what was typed", async () => {
   mutationFinished(false, "Insufficient electronic float for this operation.");
   await vi.advanceTimersByTimeAsync(1000);
   expect(Swal.fire).toHaveBeenCalledTimes(1);
-  expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error", text: "Insufficient electronic float for this operation.", grow: "fullscreen" }));
+  expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error", text: "Insufficient electronic float for this operation.", confirmButtonText: "Close" }));
   expect(form.querySelector("input").value).toBe("4200");
 });
 
