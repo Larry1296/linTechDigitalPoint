@@ -2239,11 +2239,15 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 [data-theme="dark"] .outletCard.due, [data-theme="dark"] .outletCard.due .outletMoney, [data-theme="dark"] .outletDue { --danger: #f97066; }
 
 /* M-Pesa deposit/withdrawal: cash and float now, the change, and after, in aligned columns. */
-.mpesaDesk { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
-.balancePreview { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+/* Side by side only when each form has room for its balance table; otherwise they stack. */
+.mpesaDesk { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.mpesaDesk > * { min-width: 0; }
+/* Never cut words off: headings wrap, and in a very narrow space the table scrolls instead of hiding columns. */
+.balancePreview { border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 .balancePreview table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .balancePreview caption { padding: 8px 12px 0; text-align: left; color: var(--muted); font-size: 12.5px; font-weight: 700; }
-.balancePreview th, .balancePreview td { padding: 8px 12px; text-align: right; white-space: nowrap; }
+.balancePreview th, .balancePreview td { padding: 8px 10px; text-align: right; white-space: nowrap; }
+.balancePreview thead th, .balancePreview tbody th, .admin .balancePreview thead th, .admin .balancePreview tbody th { white-space: normal; overflow-wrap: break-word; }
 .balancePreview thead th { color: var(--muted); font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--line); }
 .balancePreview tbody th { text-align: left; font-weight: 600; }
 .balancePreview tbody tr + tr { border-top: 1px solid var(--line); }
@@ -2276,6 +2280,8 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .airtimePaidBy { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .airtimePaidBy label { display: flex; gap: 8px; align-items: flex-start; margin: 0; }
 .airtimePaidBy small { display: block; }
+.operatorForm .airtimePaidBy input { flex: none; width: auto; min-height: 0; margin: 3px 0 0; }
+.airtimePaidBy label > span { min-width: 0; }
 .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); }
 .customerLedger > div { align-items: center; }
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
