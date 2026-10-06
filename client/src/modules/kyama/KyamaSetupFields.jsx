@@ -14,7 +14,7 @@ const blankMember = (role = "MEMBER") => ({ full_name: "", id_number: "", phone:
 export function emptyKyama(user) {
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.name || "";
   return { name: "", contribution_amount: "", frequency: "WEEKLY", start_date: today(), grace_days: "1", fine_amount: "",
-    payout_mode: "ROTATION", periods_per_round: "1", notes: "",
+    payout_mode: "ROTATION", periods_per_round: "1", turn_choice: "ORDER", first_receiver: "", notes: "",
     // The person setting it up is usually the treasurer; they can change that.
     members: [{ full_name: name, id_number: "", phone: user?.phone || "", role: "TREASURER" }, blankMember()] };
 }
@@ -44,11 +44,16 @@ export function kyamaProblem(kyama) {
   return "";
 }
 
-// What the server receives: blank member rows are left out.
-export const kyamaPayload = (kyama) => ({
-  ...kyama, grace_days: Number(kyama.grace_days || 0), fine_amount: kyama.fine_amount || 0, periods_per_round: Number(kyama.periods_per_round || 1),
-  members: kyama.members.filter((m) => m.full_name.trim() || m.id_number.trim() || m.phone.trim()),
-});
+const filled = (m) => Boolean(m.full_name.trim() || m.id_number.trim() || m.phone.trim());
+
+// What the server receives: blank member rows are left out, and the first receiver is counted among the rest.
+export function kyamaPayload(kyama) {
+  const chosen = kyama.first_receiver === "" || kyama.first_receiver == null ? null : Number(kyama.first_receiver);
+  const agreed = kyama.payout_mode === "ROTATION" && kyama.turn_choice === "AGREED" && chosen != null && filled(kyama.members[chosen] || { full_name: "", id_number: "", phone: "" });
+  return { ...kyama, grace_days: Number(kyama.grace_days || 0), fine_amount: kyama.fine_amount || 0, periods_per_round: Number(kyama.periods_per_round || 1),
+    turn_choice: kyama.turn_choice || "ORDER", members: kyama.members.filter(filled),
+    first_receiver: agreed ? kyama.members.slice(0, chosen).filter(filled).length : null };
+}
 
 export function KyamaSetupFields({ value, onChange }) {
   const set = (field) => (event) => onChange({ ...value, [field]: event.target.value });
@@ -61,15 +66,20 @@ export function KyamaSetupFields({ value, onChange }) {
     });
     onChange({ ...value, members });
   };
+  // The chosen first receiver follows their row when rows move or are removed.
+  const chosen = value.first_receiver === "" || value.first_receiver == null ? null : Number(value.first_receiver);
   const move = (index, step) => {
     const members = [...value.members];
     [members[index], members[index + step]] = [members[index + step], members[index]];
-    onChange({ ...value, members });
+    const first = chosen === index ? index + step : chosen === index + step ? index : chosen;
+    onChange({ ...value, members, first_receiver: first ?? "" });
   };
-  const remove = (index) => onChange({ ...value, members: value.members.filter((_, i) => i !== index) });
+  const remove = (index) => onChange({ ...value, members: value.members.filter((_, i) => i !== index),
+    first_receiver: chosen == null || chosen === index ? "" : chosen > index ? chosen - 1 : chosen });
   const word = periodWord(value.frequency);
   const currency = businessCurrency();
   const rotation = value.payout_mode === "ROTATION";
+  const agreed = rotation && value.turn_choice === "AGREED";
   const count = value.members.filter((m) => m.full_name.trim()).length;
   const pot = Number(value.contribution_amount || 0) * count * Number(value.periods_per_round || 1);
   return <div className="kyamaSetup">
@@ -102,10 +112,22 @@ export function KyamaSetupFields({ value, onChange }) {
         </button>
       </div>
       {rotation && <label className="kyamaRound">Contributions in each turn<input type="number" min="1" max="60" step="1" value={value.periods_per_round} onChange={set("periods_per_round")} />
-        <small className="muted">1 means a member receives every {word}.{pot > 0 ? ` Each turn's money: about ${currency} ${pot.toLocaleString()}.` : ""}</small></label>}
+        <small className="muted">1 means a member receives every {word}.{value.frequency === "DAILY" ? " 7 means everyone gives every day for a week, then one member receives." : ""}{pot > 0 ? ` Each turn's money: about ${currency} ${pot.toLocaleString()}.` : ""}</small></label>}
+      {rotation && <div className="choiceGrid wideChoices kyamaTurnChoice" role="group" aria-label="Who receives next">
+        <button type="button" className={`choiceCard${!agreed ? " selected" : ""}`} aria-pressed={!agreed} onClick={() => onChange({ ...value, turn_choice: "ORDER" })}>
+          <strong>In the order listed</strong><span>Turns follow the member list below. The members can still agree to let someone go next.</span>
+        </button>
+        <button type="button" className={`choiceCard${agreed ? " selected" : ""}`} aria-pressed={agreed} onClick={() => onChange({ ...value, turn_choice: "AGREED" })}>
+          <strong>Members agree who receives next</strong><span>After each turn, the members agree the next member to receive, and the treasurer records it.</span>
+        </button>
+      </div>}
+      {agreed && <label className="kyamaRound">Who receives the first turn<select value={chosen ?? ""} onChange={set("first_receiver")}>
+        <option value="">Not agreed yet</option>
+        {value.members.map((member, index) => filled(member) && <option key={index} value={index}>{member.full_name || `Member ${index + 1}`}</option>)}
+      </select><small className="muted">Each member receives once before anyone receives again.</small></label>}
     </fieldset>
     <fieldset className="choiceGroup">
-      <legend>Leaders and members <small>{rotation ? "List them in the order they receive the money, starting with whoever receives next." : "Every member, including the leaders."}</small></legend>
+      <legend>Leaders and members <small>{rotation && !agreed ? "List them in the order they receive the money, starting with whoever receives next." : "Every member, including the leaders."}</small></legend>
       <ol className="kyamaMemberRows">
         {value.members.map((member, index) => <li key={index} className="kyamaMemberRow">
           <span className="kyamaTurn" aria-hidden="true">{index + 1}</span>

@@ -17,8 +17,8 @@ from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission, IsInternalStaff
 from apps.tenancy.permissions import has_business_permission
 from . import services
-from .models import FREQUENCIES, METHODS, PAYOUT_MODES, ROLES, Kyama, KyamaAllocation, KyamaDue, KyamaMember, KyamaPayment, KyamaPayout
-from .services import ZERO, fine_owed, held, period_date, period_index, round_of, schedule, sync, with_totals
+from .models import FREQUENCIES, METHODS, PAYOUT_MODES, ROLES, TURN_CHOICES, Kyama, KyamaAllocation, KyamaDue, KyamaMember, KyamaPayment, KyamaPayout
+from .services import ZERO, agreed_next, cycle, fine_owed, held, period_date, period_index, round_of, schedule, sync, with_totals
 
 ROLE_LABELS = dict(ROLES)
 
@@ -85,9 +85,9 @@ def kyama_summary(kyama, today):
     next_turn = None
     if kyama.payout_mode == "ROTATION":
         rows = [row for row in schedule(kyama, today, ahead=1) if row["status"] != "GIVEN"]
-        next_turn = {"member": rows[0]["member"], "date": rows[0]["date"], "round": rows[0]["round"]} if rows else None
+        next_turn = {"member": rows[0]["member"], "date": rows[0]["date"], "round": rows[0]["round"], "agreed": rows[0]["agreed"]} if rows else None
     return {"id": kyama.pk, "name": kyama.name, "contribution_amount": kyama.contribution_amount, "frequency": kyama.frequency,
-            "payout_mode": kyama.payout_mode, "members": len(active), "held": held(kyama), "current_period": current, "next_period": upcoming,
+            "payout_mode": kyama.payout_mode, "turn_choice": kyama.turn_choice, "members": len(active), "held": held(kyama), "current_period": current, "next_period": upcoming,
             "paid_count": sum(1 for due in board if due.paid >= due.amount), "due_count": len(board),
             "late_count": sum(1 for due in board if _due_status(due, today) == "LATE"),
             "collected": sum((due.paid for due in board), ZERO), "expected": sum((due.amount for due in board), ZERO), "next_turn": next_turn}
@@ -107,6 +107,7 @@ def _payout_row(payout):
 
 
 def kyama_detail(kyama, today):
+    kyama.refresh_from_db()  # actions update the kyama row directly; show what was saved
     current, upcoming = _periods(kyama, today)
     members = list(kyama.members.all())
     totals = _member_totals(kyama, today)
@@ -127,10 +128,15 @@ def kyama_detail(kyama, today):
     in_money = KyamaPayment.objects.filter(kyama=kyama, reversed_at__isnull=True)
     fines_in = KyamaAllocation.objects.filter(due__kyama=kyama, part="FINE", payment__reversed_at__isnull=True)
     fines_total = sum((a.amount for a in fines_in), ZERO)
+    waiting = cycle(kyama)[2] if kyama.payout_mode == "ROTATION" else []
+    agreed = agreed_next(kyama, waiting)
     return {
         "id": kyama.pk, "name": kyama.name, "contribution_amount": kyama.contribution_amount, "frequency": kyama.frequency,
         "start_date": kyama.start_date, "grace_days": kyama.grace_days, "fine_amount": kyama.fine_amount, "payout_mode": kyama.payout_mode,
-        "periods_per_round": kyama.periods_per_round, "notes": kyama.notes, "today": today,
+        "periods_per_round": kyama.periods_per_round, "notes": kyama.notes, "today": today, "turn_choice": kyama.turn_choice,
+        "next_receiver": {"id": agreed.pk, "full_name": agreed.full_name, "note": kyama.next_receiver_note, "agreed_at": kyama.next_receiver_set_at}
+        if agreed else None,
+        "still_to_receive": [{"id": m.pk, "full_name": m.full_name} for m in waiting],
         "schedule_locked": kyama.dues.exists(), "turns_locked": kyama.payouts.filter(reversed_at__isnull=True).exists(),
         "current_period": current, "next_period": upcoming,
         "current_round": round_of(kyama, current) if current else None,
@@ -170,6 +176,8 @@ class KyamaInput(serializers.Serializer):
     fine_amount = serializers.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     payout_mode = serializers.ChoiceField(choices=[m for m, _ in PAYOUT_MODES], default="ROTATION")
     periods_per_round = serializers.IntegerField(default=1)
+    turn_choice = serializers.ChoiceField(choices=[c for c, _ in TURN_CHOICES], default="ORDER")
+    first_receiver = serializers.IntegerField(required=False, allow_null=True, default=None)  # position in `members`, counting from 0
     notes = serializers.CharField(allow_blank=True, default="")
     members = MemberInput(many=True)
 
@@ -231,7 +239,7 @@ class KyamaListView(APIView):
     def get(self, request):
         today = timezone.localdate()
         return Response({"kyamas": [kyama_summary(sync(kyama, today), today) for kyama in Kyama.objects.all()],
-                         "frequencies": FREQUENCIES, "roles": ROLES, "methods": METHODS, "payout_modes": PAYOUT_MODES})
+                         "frequencies": FREQUENCIES, "roles": ROLES, "turn_choices": TURN_CHOICES, "methods": METHODS, "payout_modes": PAYOUT_MODES})
 
 
 class RulesInput(serializers.Serializer):
@@ -243,6 +251,7 @@ class RulesInput(serializers.Serializer):
     fine_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     payout_mode = serializers.ChoiceField(choices=[m for m, _ in PAYOUT_MODES], required=False)
     periods_per_round = serializers.IntegerField(required=False)
+    turn_choice = serializers.ChoiceField(choices=[c for c, _ in TURN_CHOICES], required=False)
     notes = serializers.CharField(allow_blank=True, required=False)
 
 
@@ -416,3 +425,19 @@ class PayoutReverseView(APIView):
         payout = services.reverse_payout(payout=get_object_or_404(KyamaPayout, pk=pk), user=request.user,
                                          reason=str(request.data.get("reason") or ""))
         return Response(kyama_detail(payout.kyama, timezone.localdate()))
+
+
+class NextReceiverView(APIView):
+    """Who the members agreed receives the next turn. Send no member to clear the agreement."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "kyama.change_kyama"
+
+    def post(self, request, pk):
+        kyama = get_object_or_404(Kyama, pk=pk)
+        member = request.data.get("member")
+        try:
+            member = int(member) if member not in (None, "") else None
+        except (TypeError, ValueError):
+            member = -1  # not a member of this kyama
+        services.set_next_receiver(kyama=kyama, member_id=member, note=request.data.get("note"), user=request.user)
+        return Response(kyama_detail(kyama, timezone.localdate()))

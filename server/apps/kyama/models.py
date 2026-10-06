@@ -15,6 +15,7 @@ from apps.tenancy.base import TenantModel
 
 FREQUENCIES = [("DAILY", "Every day"), ("WEEKLY", "Every week"), ("MONTHLY", "Every month")]
 PAYOUT_MODES = [("ROTATION", "Members take turns to receive the money"), ("SAVINGS", "Money is saved together, no turns")]
+TURN_CHOICES = [("ORDER", "In the order the members are listed"), ("AGREED", "The members agree who receives next, each turn")]
 ROLES = [("CHAIRPERSON", "Chairperson"), ("VICE_CHAIRPERSON", "Vice-chairperson"), ("SECRETARY", "Secretary"),
          ("TREASURER", "Treasurer"), ("ORGANISER", "Organising secretary"), ("MEMBER", "Member")]
 LEADERSHIP = [role for role, _ in ROLES if role != "MEMBER"]
@@ -30,6 +31,11 @@ class Kyama(TenantModel):
     fine_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payout_mode = models.CharField(max_length=10, choices=PAYOUT_MODES, default="ROTATION")
     periods_per_round = models.PositiveSmallIntegerField(default=1)  # contributions collected before one member receives
+    turn_choice = models.CharField(max_length=10, choices=TURN_CHOICES, default="ORDER")
+    # The member the members agreed receives the next turn; cleared once that turn is given out.
+    next_receiver = models.ForeignKey("KyamaMember", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    next_receiver_note = models.CharField(max_length=500, blank=True)
+    next_receiver_set_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
     dues_through = models.DateField(null=True, blank=True)  # contributions are owed (rows exist) up to this period
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+")

@@ -67,6 +67,14 @@ it("adds a kyama step to registration when kyama management is chosen", async ()
   expect(screen.getAllByLabelText("Role").map((select) => select.value)).toEqual(["MEMBER", "TREASURER"]);
   fireEvent.click(screen.getByRole("button", { name: "Move Mary Achieng up" }));
   expect(screen.getAllByLabelText("Full name").map((input) => input.value)).toEqual(["Mary Achieng", "Larry Musau"]);
+  // Give 100 every day; after a week one member receives, and the members agree who.
+  fireEvent.change(screen.getByLabelText("How often"), { target: { value: "DAILY" } });
+  fireEvent.change(screen.getByLabelText(/Contributions in each turn/), { target: { value: "7" } });
+  expect(screen.getByText(/7 means everyone gives every day for a week/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Members agree who receives next/ }));
+  fireEvent.change(screen.getByLabelText(/Who receives the first turn/), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Move Larry Musau up" }));  // the choice follows Larry's row
+  expect(screen.getByLabelText(/Who receives the first turn/)).toHaveValue("0");
   next();
   next();
   next();
@@ -76,8 +84,9 @@ it("adds a kyama step to registration when kyama management is chosen", async ()
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
   expect(body.enabled_modules).toContain("kyama");
-  expect(body.kyama).toMatchObject({ name: "Wamama Chama", contribution_amount: "300", fine_amount: "50", frequency: "WEEKLY", payout_mode: "ROTATION",
-    members: [{ full_name: "Mary Achieng", role: "TREASURER" }, { full_name: "Larry Musau", id_number: "12345678", role: "MEMBER" }] });
+  expect(body.kyama).toMatchObject({ name: "Wamama Chama", contribution_amount: "300", fine_amount: "50", payout_mode: "ROTATION",
+    frequency: "DAILY", periods_per_round: 7, turn_choice: "AGREED", first_receiver: 0,
+    members: [{ full_name: "Larry Musau", id_number: "12345678", role: "MEMBER" }, { full_name: "Mary Achieng", role: "TREASURER" }] });
 }, 20000);  // a whole multi-step set-up: slow when every test file runs at once
 
 it("offers the owner a kyama on the dashboard, or shows each kyama at a glance", async () => {
@@ -106,13 +115,14 @@ const due = (status, paid, extra = {}) => ({ id: 50 + paid, member_id: 1, period
   status, excused_until: null, excuse_reason: "", fine_amount: "0", fine_paid: "0", fine_owed: "0", fined_on: null, fine_waived: false, fine_waive_reason: "", ...extra });
 const DETAIL = {
   id: 3, name: "Umoja", contribution_amount: "500", frequency: "WEEKLY", start_date: "2026-10-06", grace_days: 2, fine_amount: "50", payout_mode: "ROTATION",
-  periods_per_round: 1, notes: "", today: "2026-10-09", schedule_locked: true, turns_locked: false, current_period: "2026-10-06", next_period: "2026-10-13", current_round: 1,
+  periods_per_round: 1, notes: "", today: "2026-10-09", turn_choice: "AGREED", next_receiver: null,
+  still_to_receive: [{ id: 1, full_name: "Larry Musau" }, { id: 2, full_name: "Mary Achieng" }, { id: 3, full_name: "John Kamau" }], schedule_locked: true, turns_locked: false, current_period: "2026-10-06", next_period: "2026-10-13", current_round: 1,
   money: { held: "500", paid_in: "500", fines_paid: "0", given_out: "0", unpaid: "1000", late: "1000", fines_owed: "100" },
   members: [member(1, "Larry Musau", "TREASURER", { paid_in: "500", this_period: due("PAID", 500), next_turn: { round: 1, date: "2026-10-06" } }),
     member(2, "Mary Achieng", "MEMBER", { unpaid: "500", late: "500", fines_owed: "50", this_period: due("LATE", 0, { member_id: 2, fine_amount: "50", fine_owed: "50" }) }),
     member(3, "John Kamau", "MEMBER", { unpaid: "500", this_period: due("EXCUSED", 0, { member_id: 3, excused_until: "2026-10-20", excuse_reason: "Salary" }) })],
-  turns: [{ round: 1, date: "2026-10-06", member_id: 1, member: "Larry Musau", expected: "1500", collected: "500", status: "DUE" },
-    { round: 2, date: "2026-10-13", member_id: 2, member: "Mary Achieng", expected: "1500", collected: "0", status: "UPCOMING" }],
+  turns: [{ round: 1, date: "2026-10-06", member_id: null, member: "", agreed: false, expected: "1500", collected: "500", status: "DUE" },
+    { round: 2, date: "2026-10-13", member_id: null, member: "", agreed: false, expected: "1500", collected: "0", status: "UPCOMING" }],
   fines: [{ ...due("LATE", 0, { member_id: 2, fine_amount: "50", fine_owed: "50" }), member: "Mary Achieng" }],
   excuses: [{ ...due("EXCUSED", 0, { member_id: 3, excused_until: "2026-10-20", excuse_reason: "Salary" }), member: "John Kamau" }],
   payments: [{ id: 7, member_id: 1, member: "Larry Musau", amount: "500", paid_on: "2026-10-06", method: "MPESA", reference: "SK1", recorded_by: "Larry",
@@ -134,9 +144,21 @@ it("shows who has paid, fines, excuses and whose turn it is", async () => {
   fireEvent.click(screen.getAllByRole("button", { name: "Record payment" })[1]);
   expect(screen.getByRole("form", { name: "Payment from Mary Achieng" })).toBeInTheDocument();
   expect(screen.getByLabelText(/Amount/)).toHaveValue(550);  // contribution and fine owed
+  expect(screen.getByText("not agreed yet")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Turns" }));
-  expect(screen.getByRole("button", { name: "Give Larry Musau their money" })).toBeInTheDocument();
+  expect(screen.getByText(/Not agreed yet. Record the member/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /their money/ })).not.toBeInTheDocument();  // not until the members agree
   expect(screen.getByText(/collected KSh 500 of KSh 1,500/)).toBeInTheDocument();
+  api.mockImplementation(async (path) => (path === "/api/v1/kyama/3/next-receiver/" ? { ...DETAIL,
+    next_receiver: { id: 2, full_name: "Mary Achieng", note: "Agreed on Sunday" },
+    turns: [{ ...DETAIL.turns[0], member_id: 2, member: "Mary Achieng", agreed: true }, DETAIL.turns[1]] } : DETAIL));
+  fireEvent.click(screen.getByRole("button", { name: "Record who the members agreed" }));
+  fireEvent.change(screen.getByLabelText("The members agreed"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText(/Note/), { target: { value: "Agreed on Sunday" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save who receives next" })); });
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/kyama/3/next-receiver/")[1].body)).toEqual({ member: "2", note: "Agreed on Sunday" });
+  expect(screen.getByRole("button", { name: "Give Mary Achieng their money" })).toBeInTheDocument();
+  expect(screen.getAllByText("To be agreed")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Fines & excuses" }));
   expect(screen.getByRole("button", { name: "Waive" })).toBeInTheDocument();
   expect(screen.getByText("Salary")).toBeInTheDocument();

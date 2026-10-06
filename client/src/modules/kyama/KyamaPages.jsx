@@ -85,7 +85,7 @@ export function KyamaSummaryCard({ kyama }) {
       ? <span>This {word}: <b>{kyama.paid_count} of {kyama.due_count}</b> paid · {money(kyama.collected)} of {money(kyama.expected)}{kyama.late_count > 0 && <b className="loanLate"> · {kyama.late_count} late</b>}</span>
       : <span>First contribution on {date(kyama.next_period)}</span>}
     <span>The treasurer holds <b>{money(kyama.held)}</b></span>
-    {kyama.next_turn && <span>Next turn: <b>{kyama.next_turn.member}</b> on {date(kyama.next_turn.date)}</span>}
+    {kyama.next_turn && <span>Next turn: <b>{kyama.next_turn.member || "to be agreed by the members"}</b> on {date(kyama.next_turn.date)}</span>}
   </Link>;
 }
 
@@ -158,7 +158,7 @@ export function KyamaDetailPage() {
       <h1>{kyama.name}</h1>
       <p className="muted">{money(kyama.contribution_amount)} {FREQUENCIES.find(([f]) => f === kyama.frequency)?.[1].toLowerCase()}
         {Number(kyama.fine_amount) > 0 ? ` · fine ${money(kyama.fine_amount)} if not paid ${kyama.grace_days ? `within ${kyama.grace_days} day${kyama.grace_days === 1 ? "" : "s"}` : "on the day"}` : " · no fines"}
-        {kyama.payout_mode === "ROTATION" ? " · members take turns" : " · saving together"}
+        {kyama.payout_mode === "ROTATION" ? (kyama.turn_choice === "AGREED" ? " · members agree who receives next" : " · members take turns") : " · saving together"}
         {" · "}{kyama.members.filter((m) => m.active).length} members</p>
     </header>
     <dl className="loanFigures kyamaMoney">
@@ -259,6 +259,10 @@ function Board({ kyama, setKyama, can }) {
   return <section aria-labelledby="board-heading">
     <h2 id="board-heading">Contribution of {date(kyama.current_period)}</h2>
     <p className="muted">{paid} of {due.length} members have paid this {word}. The next contribution is on {date(kyama.next_period)}.</p>
+    {kyama.payout_mode === "ROTATION" && kyama.turns.find((t) => t.status !== "GIVEN") && (() => {
+      const turn = kyama.turns.find((t) => t.status !== "GIVEN");
+      return <p className="kyamaNext">Next to receive: <b>{turn.member || "not agreed yet"}</b>, turn {turn.round} on {date(turn.date)}</p>;
+    })()}
     <ul className="kyamaBoard">{active.map((member) => <li key={member.id} className={`kyamaBoardRow ${member.this_period?.status?.toLowerCase() || ""}`}>
       <div className="kyamaWho">
         <strong>{member.full_name}</strong>
@@ -365,14 +369,15 @@ function Members({ kyama, setKyama, can, reload }) {
 function PayoutForm({ kyama, setKyama, next, onDone }) {
   const [method, setMethod] = useState("CASH");
   const { send, error, busy } = usePost(setKyama);
-  const active = kyama.members.filter((m) => m.active);
+  const active = next ? kyama.still_to_receive : kyama.members.filter((m) => m.active);
   const suggested = next ? Math.min(Number(next.collected ?? kyama.money.held), Number(kyama.money.held)) : Number(kyama.money.held);
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const who = active.find((m) => String(m.id) === values.member)?.full_name;
+    const swap = next?.member_id && String(next.member_id) !== values.member;
     if (!(await confirmAction({ title: `Give ${money(values.amount)} to ${who}?`,
-      text: next ? `This is turn ${next.round}${String(next.member_id) !== values.member ? `, which was ${next.member}'s turn` : ""}.` : "It comes out of the money the treasurer holds.",
+      text: next ? `This is turn ${next.round}${swap ? `, which was ${next.member}'s turn` : ""}.` : "It comes out of the money the treasurer holds.",
       confirmButtonText: "Record payout" }))) return;
     if (await send(`/api/v1/kyama/${kyama.id}/payouts/`, { ...values, idempotency_key: crypto.randomUUID() })) onDone();
   };
@@ -392,6 +397,42 @@ function PayoutForm({ kyama, setKyama, next, onDone }) {
   </form>;
 }
 
+// The members agree who receives next; the treasurer records it here.
+function NextReceiver({ kyama, setKyama, can, next }) {
+  const [editing, setEditing] = useState(false);
+  const { send, error, busy } = usePost(setKyama);
+  const agreed = kyama.next_receiver;
+  const submit = async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (await send(`/api/v1/kyama/${kyama.id}/next-receiver/`, values)) setEditing(false);
+  };
+  return <div className="kyamaNextReceiver">
+    <h3>Who receives turn {next.round} ({date(next.date)})</h3>
+    {agreed ? <p>The members agreed: <b>{agreed.full_name}</b>{agreed.note && <span className="muted"> · {agreed.note}</span>}</p>
+      : kyama.turn_choice === "AGREED" ? <p className="loanLate">Not agreed yet. Record the member the members agree on before giving out the money.</p>
+        : <p className="muted">Next in the list: <b>{next.member}</b>. If the members agree someone else goes next, record it here.</p>}
+    <p className="muted">Still to receive in this round of turns: {kyama.still_to_receive.map((m) => m.full_name).join(", ")}</p>
+    {can("kyama.change_kyama") && (editing
+      ? <form className="kyamaInlineForm" onSubmit={(event) => void submit(event)} aria-label="Agreed next receiver">
+        <fieldset disabled={busy} className="loanFields">
+          <FormField label="The members agreed"><select name="member" defaultValue={agreed?.id || ""} required>
+            <option value="" disabled>Choose the member</option>
+            {kyama.still_to_receive.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select></FormField>
+          <FormField label="Note (optional)"><input name="note" maxLength={500} placeholder="e.g. agreed at Sunday's meeting" /></FormField>
+        </fieldset>
+        <div className="actionRow"><button disabled={busy}>Save who receives next</button><button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel</button></div>
+        <FormError title="Could not save who receives next." message={error} />
+      </form>
+      : <div className="actionRow">
+        <button type="button" className={agreed ? "secondary" : undefined} onClick={() => setEditing(true)}>{agreed ? "Change who receives next" : "Record who the members agreed"}</button>
+        {agreed && <button type="button" className="secondary" disabled={busy} onClick={() => void send(`/api/v1/kyama/${kyama.id}/next-receiver/`, { member: null })}>Clear</button>}
+      </div>)}
+    {!editing && error && <FormError title="Could not change who receives next." message={error} />}
+  </div>;
+}
+
 function Turns({ kyama, setKyama, can }) {
   const [giving, setGiving] = useState(false);
   const [order, setOrder] = useState(null);
@@ -404,12 +445,13 @@ function Turns({ kyama, setKyama, can }) {
   return <section aria-labelledby="turns-heading">
     <h2 id="turns-heading">Whose turn</h2>
     <p className="muted">Each turn is {kyama.periods_per_round} contribution{kyama.periods_per_round === 1 ? "" : "s"}. A member receives the money on the last contribution date of their turn.</p>
+    {next && <NextReceiver kyama={kyama} setKyama={setKyama} can={can} next={next} />}
     {next && can("kyama.add_kyamapayout") && (giving
       ? <PayoutForm kyama={kyama} setKyama={setKyama} next={next} onDone={() => setGiving(false)} />
-      : <button type="button" onClick={() => setGiving(true)}>Give {next.member} their money</button>)}
+      : next.member_id ? <button type="button" onClick={() => setGiving(true)}>Give {next.member} their money</button> : null)}
     <ol className="kyamaTurns">{kyama.turns.map((turn) => <li key={turn.round} className={`kyamaTurnRow ${turn.status.toLowerCase()}`}>
       <span className="kyamaTurn">{turn.round}</span>
-      <div><strong>{turn.member}</strong><span className="muted"> · {date(turn.status === "GIVEN" ? turn.paid_on : turn.date)}</span></div>
+      <div><strong>{turn.member || "To be agreed"}</strong>{turn.agreed && <small className="muted"> · agreed by the members</small>}<span className="muted"> · {date(turn.status === "GIVEN" ? turn.paid_on : turn.date)}</span></div>
       <span className={`loanStatus ${turn.status === "GIVEN" ? "repaid" : turn.status === "DUE" ? "overdue" : ""}`}>
         {turn.status === "GIVEN" ? `Received ${money(turn.amount)}` : turn.status === "DUE" ? "Due now" : "Coming"}
         {turn.collected != null && turn.status !== "GIVEN" ? ` · collected ${money(turn.collected)} of ${money(turn.expected)}` : ""}
@@ -418,7 +460,7 @@ function Turns({ kyama, setKyama, can }) {
         <ReverseButton path={`/api/v1/kyama/payouts/${turn.payout_id}/reverse/`} title={`Reverse ${turn.member}'s payout of ${money(turn.amount)}?`}
           text="Use this only if it was recorded by mistake. The money goes back to the treasurer and it becomes their turn again." setKyama={setKyama} />}
     </li>)}</ol>
-    {can("kyama.change_kyama") && <details className="kyamaOrder">
+    {can("kyama.change_kyama") && kyama.turn_choice !== "AGREED" && <details className="kyamaOrder">
       <summary>Change the turn order</summary>
       <p className="muted">Members who have already received this cycle keep their place; the order decides who is next among the rest.</p>
       <ol>{list.map((id, index) => <li key={id}><span>{nameOf(id)}</span>
@@ -517,6 +559,10 @@ function Rules({ kyama, setKyama, can }) {
       <FormField label="Days allowed to pay after it" name="grace_days" type="number" min="0" max="60" step="1" defaultValue={kyama.grace_days} />
       <FormField label={`Fine for paying late (${businessCurrency()})`} name="fine_amount" type="number" min="0" step="0.01" defaultValue={Number(kyama.fine_amount)} />
       <FormField label="How often"><select name="frequency" defaultValue={kyama.frequency} disabled={kyama.schedule_locked}>{FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></FormField>
+      {kyama.payout_mode === "ROTATION" && <FormField label="Who receives next"><select name="turn_choice" defaultValue={kyama.turn_choice}>
+        <option value="ORDER">In the order the members are listed</option>
+        <option value="AGREED">The members agree who receives next, each turn</option>
+      </select></FormField>}
       <FormField label="Contributions in each turn" name="periods_per_round" type="number" min="1" max="60" step="1" defaultValue={kyama.periods_per_round} disabled={kyama.turns_locked || kyama.payout_mode !== "ROTATION"} />
       <FormField label="Notes (optional)"><textarea name="notes" maxLength={2000} defaultValue={kyama.notes} placeholder="e.g. agreed rules, meeting day, bank account" /></FormField>
     </fieldset>

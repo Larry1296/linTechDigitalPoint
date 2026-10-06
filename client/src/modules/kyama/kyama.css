@@ -64,3 +64,8 @@
 .kyamaOrder { margin-top: 16px; }
 .kyamaOrder ol { display: grid; gap: 6px; max-width: 420px; padding-left: 22px; }
 .kyamaOrder li > span { display: inline-block; min-width: 220px; }
+.kyamaTurnChoice { margin-top: 12px; }
+.kyamaNext { margin: 0 0 12px; font-size: 16px; }
+.kyamaNextReceiver { display: grid; gap: 6px; margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--primary); border-radius: 15px; background: var(--primary2); }
+.kyamaNextReceiver h3, .kyamaNextReceiver p { margin: 0; }
+.kyamaNextReceiver .actionRow button { margin: 0; }

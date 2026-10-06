@@ -226,6 +226,10 @@ def _rules(data, today, kyama=None):
         values["payout_mode"] = str(data["payout_mode"] or "").upper()
         if values["payout_mode"] not in {"ROTATION", "SAVINGS"}:
             raise ValidationError("Choose whether members take turns to receive the money or save it together.")
+    if "turn_choice" in data:
+        values["turn_choice"] = str(data["turn_choice"] or "ORDER").upper()
+        if values["turn_choice"] not in {"ORDER", "AGREED"}:
+            raise ValidationError("Choose whether turns follow the members' order or the members agree who receives next.")
     if "periods_per_round" in data:
         try:
             values["periods_per_round"] = int(data["periods_per_round"] or 1)
@@ -255,7 +259,9 @@ def create_kyama(*, user, data):
     missing = [field for field in required if data.get(field) in (None, "")]
     if missing:
         raise ValidationError("Enter the kyama's name, the contribution, how often it is paid and the first contribution date.")
-    values = _rules({"grace_days": 0, "fine_amount": 0, "payout_mode": "ROTATION", "periods_per_round": 1, **data}, today)
+    first_receiver = data.get("first_receiver")
+    values = _rules({"grace_days": 0, "fine_amount": 0, "payout_mode": "ROTATION", "periods_per_round": 1, "turn_choice": "ORDER",
+                     **{key: value for key, value in data.items() if key not in {"members", "first_receiver"}}}, today)
     people = list(data.get("members") or [])
     if len(people) < 2:
         raise ValidationError("A kyama needs at least two members. Add every member, including yourself if you contribute.")
@@ -279,6 +285,11 @@ def create_kyama(*, user, data):
     rows = [KyamaMember.objects.create(kyama=kyama, full_name=name, id_number=number, phone=phone, role=role, turn_position=position,
                                        joined_on=kyama.start_date) for name, number, phone, role, position in members]
     # Contributions already due today are owed straight away, but not fined: they were not recorded here in time.
+    if first_receiver is not None and kyama.payout_mode == "ROTATION":
+        if not 0 <= first_receiver < len(rows):
+            raise ValidationError("Choose who receives the first turn from the members listed.")
+        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=rows[first_receiver], next_receiver_note="Agreed when the kyama was set up",
+                                                 next_receiver_set_at=timezone.now())
     _create_dues(kyama, rows, None, today, fines=False)
     Kyama.objects.filter(pk=kyama.pk).update(dues_through=today)
     kyama.dues_through = today
@@ -388,6 +399,7 @@ def member_leaves(*, member, user, reason):
     member.left_on = today + timedelta(days=1)
     member.leave_reason = str(reason).strip()
     member.save(update_fields=["left_on", "leave_reason"])
+    Kyama.objects.filter(pk=member.kyama_id, next_receiver=member).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
     KyamaDue.objects.filter(member=member, period_date__gte=member.left_on).filter(allocations__isnull=True).delete()
     _log("KYAMA_MEMBER_LEFT", member, user, name=member.full_name, reason=member.leave_reason)
     return member
@@ -576,30 +588,74 @@ def _round_money(kyama, number, members):
     return expected, collected
 
 
-def schedule(kyama, today=None, ahead=None):
-    """Every turn: those already given out, then who receives next, in turn order, for one full cycle."""
-    today = today or timezone.localdate()
-    members = list(kyama.members.all())
-    order = [m for m in members if m.left_on is None]
+def cycle(kyama):
+    """The turns given out so far, the members in turn order, and who has not yet received in this round of turns."""
+    order = list(kyama.members.filter(left_on__isnull=True))
     payouts = list(kyama.payouts.filter(reversed_at__isnull=True, round_number__isnull=False).select_related("member").order_by("round_number"))
     received = set()
     for payout in payouts:
         received.add(payout.member_id)
         if order and all(m.pk in received for m in order):
             received = set()  # everyone has had a turn: a new cycle starts
-    queue = [m for m in order if m.pk not in received] + order * 2
+    return payouts, order, [m for m in order if m.pk not in received]
+
+
+def agreed_next(kyama, waiting):
+    """The member the members agreed receives next, while that agreement still applies."""
+    return next((m for m in waiting if m.pk == kyama.next_receiver_id), None)
+
+
+def schedule(kyama, today=None, ahead=None):
+    """Every turn: those already given out, then who receives next for one full cycle.
+
+    In turn order, the agreed next receiver (if any) goes first and the rest follow the list. When the members agree
+    each turn, only the agreed next receiver is known; later turns show as still to be agreed.
+    """
+    today = today or timezone.localdate()
+    members = list(kyama.members.all())
+    payouts, order, waiting = cycle(kyama)
+    agreed = agreed_next(kyama, waiting)
+    if kyama.turn_choice == "AGREED":
+        queue = [agreed] + [None] * (len(order) * 2)
+    else:
+        queue = ([agreed] if agreed else []) + [m for m in waiting if m != agreed] + order * 2
     rows = [{"round": p.round_number, "date": round_dates(kyama, p.round_number)[-1], "member_id": p.member_id, "member": p.member.full_name,
              "amount": p.amount, "paid_on": p.paid_on, "payout_id": p.pk, "status": "GIVEN"} for p in payouts]
     next_round = (payouts[-1].round_number if payouts else 0) + 1
     for offset in range(ahead if ahead is not None else len(order)):
-        if not queue:
+        if not order:
             break
         number, member = next_round + offset, queue[offset]
         day = round_dates(kyama, number)[-1]
         expected, collected = _round_money(kyama, number, members) if offset < 2 else (None, None)
-        rows.append({"round": number, "date": day, "member_id": member.pk, "member": member.full_name, "expected": expected,
-                     "collected": collected, "status": "DUE" if day <= today else "UPCOMING"})
+        rows.append({"round": number, "date": day, "member_id": member.pk if member else None, "member": member.full_name if member else "",
+                     "agreed": bool(offset == 0 and agreed), "expected": expected, "collected": collected,
+                     "status": "DUE" if day <= today else "UPCOMING"})
     return rows
+
+
+@transaction.atomic
+def set_next_receiver(*, kyama, member_id, note, user):
+    """Record who the members agreed receives the next turn, or clear it (member_id None)."""
+    kyama = sync(kyama)
+    if kyama.payout_mode != "ROTATION":
+        raise ValidationError("This kyama saves its money together; members do not take turns.")
+    if member_id is None:
+        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
+        _log("KYAMA_NEXT_RECEIVER_CLEARED", kyama, user)
+        return kyama
+    member = _member_of(kyama, member_id)
+    _, _, waiting = cycle(kyama)
+    if member.left_on:
+        raise ValidationError(f"{member.full_name} has left the kyama.")
+    if member not in waiting:
+        names = ", ".join(m.full_name for m in waiting)
+        raise ValidationError(f"{member.full_name} has already received in this round of turns. Each member receives once before anyone "
+                              f"receives again. Still to receive: {names}.")
+    note = str(note or "").strip()[:500]
+    Kyama.objects.filter(pk=kyama.pk).update(next_receiver=member, next_receiver_note=note, next_receiver_set_at=timezone.now())
+    _log("KYAMA_NEXT_RECEIVER_AGREED", kyama, user, member=member.full_name, note=note)
+    return kyama
 
 
 @transaction.atomic
@@ -616,20 +672,26 @@ def record_payout(*, kyama, member_id=None, amount, paid_on=None, method, refere
     if paid_on > today:
         raise ValidationError("The payout date cannot be in the future.")
     method, reference = _method(method, reference)
-    available = held(kyama)
-    if amount > available:
-        raise ValidationError(f"The kyama holds only {available:,.2f}, so {amount:,.2f} cannot be given out.")
     round_number, scheduled = None, None
     if kyama.payout_mode == "ROTATION":
         upcoming = [row for row in schedule(kyama, today, ahead=1) if row["status"] != "GIVEN"]
         if not upcoming:
             raise ValidationError("There are no members to receive the money.")
         round_number, scheduled = upcoming[0]["round"], upcoming[0]["member_id"]
+        if not (member_id or scheduled):
+            raise ValidationError("The members have not agreed who receives this turn yet. Choose the member they agreed on.")
     member = _member_of(kyama, member_id or scheduled)
     if member.left_on:
         raise ValidationError(f"{member.full_name} has left the kyama.")
+    if round_number and member not in cycle(kyama)[2]:
+        raise ValidationError(f"{member.full_name} has already received in this round of turns. Each member receives once before anyone receives again.")
+    available = held(kyama)
+    if amount > available:
+        raise ValidationError(f"The kyama holds only {available:,.2f}, so {amount:,.2f} cannot be given out.")
     payout = KyamaPayout.objects.create(kyama=kyama, member=member, round_number=round_number, amount=amount, paid_on=paid_on, method=method,
                                         reference=reference, notes=str(notes or "")[:1000], idempotency_key=key, created_by=user)
+    if round_number:  # the agreement was for this turn
+        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
     _log("KYAMA_PAYOUT", payout, user, kyama=kyama.name, member=member.full_name, amount=amount, round=round_number or "",
          instead_of=scheduled if scheduled and scheduled != member.pk else "")
     return payout

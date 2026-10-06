@@ -32,6 +32,13 @@ permissions by default. Managers, read-only staff and other roles get them only 
 - **Turns.** In a rotating kyama, a turn is one or more contributions (`periods_per_round`). Members receive the
   money in turn order, once per cycle; the order can be changed and a payout can go to a different member (a swap),
   which the schedule then follows. Payouts are recorded in turn order and only the latest can be reversed.
+- **Who receives next.** A kyama chooses either *in the order listed* or *the members agree who receives next*. A
+  common kyama: everyone gives 100 every day, and after a week (7 contributions per turn) one member receives; the
+  members then agree who receives the next week. The treasurer records the agreed member (with a note) under
+  Turns, or picks the first receiver at set-up. Only members who have not yet received in the current round of
+  turns can be chosen; each member receives once before anyone receives again. In listed order, an agreement lets
+  a member go next out of order. When the members agree each turn, the money cannot be given out until the next
+  receiver is recorded. The agreement is cleared once that turn is given out.
 - **Corrections.** Nothing is deleted. A payment or payout entered by mistake is reversed with a reason; reversing a
   payment makes the member owe it again and re-applies the fine rule. Changes are written to the audit log.
 
@@ -44,6 +51,7 @@ permissions by default. Managers, read-only staff and other roles get them only 
 | `<id>/` | GET the full kyama (board, members, turns, fines, excuses, money record); PATCH its rules |
 | `<id>/members/`, `<id>/members/<m>/`, `.../leave/` | add, change, see a statement, or record a member leaving |
 | `<id>/turns/` | POST `{order: [member ids]}` |
+| `<id>/next-receiver/` | POST `{member, note}` the member agreed to receive next; `{member: null}` clears it |
 | `<id>/payments/`, `payments/<p>/reverse/` | money in, and its correction |
 | `<id>/excuses/` | POST `{member, period_date, pay_by, reason}` |
 | `dues/<d>/waive-fine/` | waive a fine with a reason |

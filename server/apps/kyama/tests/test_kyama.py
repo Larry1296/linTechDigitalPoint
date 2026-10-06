@@ -318,3 +318,47 @@ def test_only_the_owner_and_administrators_see_a_kyama_by_default(on):
     assert other_client.get(f"/api/v1/kyama/{kyama.pk}/").status_code == 404  # another business's kyama does not exist for them
     with organization_context(org):
         assert KyamaMember.objects.count() == 3
+
+
+def test_members_give_daily_for_a_week_and_agree_who_receives_next(on):
+    """100 every day; after a week of contributions one member receives, and the members agree who that is each turn."""
+    org, owner, client = business(modules=["kyama"])
+    made = client.post("/api/v1/kyama/setup/", setup_data(contribution_amount="100", frequency="DAILY", grace_days=0, fine_amount="0",
+                       periods_per_round=7, turn_choice="AGREED", first_receiver=2), format="json")
+    assert made.status_code == 201, made.content
+    data = made.json()
+    larry, mary, john = (m["id"] for m in data["members"])
+    assert data["next_receiver"]["full_name"] == "John Kamau"  # agreed when the kyama was set up
+    assert [(t["round"], t["date"], t["member"]) for t in data["turns"]] == [
+        (1, str(TODAY + timedelta(days=6)), "John Kamau"), (2, str(TODAY + timedelta(days=13)), ""), (3, str(TODAY + timedelta(days=20)), "")]
+    with organization_context(org):
+        kyama = Kyama.objects.get(pk=data["id"])
+        for member in (larry, mary, john):  # each pays the whole week
+            services.record_payment(kyama=kyama, member_id=member, amount="700", paid_on=None, method="CASH", key=f"week-{member}", user=owner)
+    on(TODAY + timedelta(days=6))
+    turn = client.get(f"/api/v1/kyama/{kyama.pk}/").json()["turns"][0]
+    assert (turn["status"], Decimal(turn["collected"]), Decimal(turn["expected"])) == ("DUE", Decimal("2100"), Decimal("2100"))
+    given = client.post(f"/api/v1/kyama/{kyama.pk}/payouts/", {"amount": "2100", "method": "CASH", "idempotency_key": "w1"}, format="json").json()
+    assert given["payouts"][0]["member"] == "John Kamau" and given["next_receiver"] is None
+    assert [m["full_name"] for m in given["still_to_receive"]] == ["Larry Musau", "Mary Achieng"]
+    # Next week nobody has been agreed yet, so the money cannot go out until the members choose.
+    on(TODAY + timedelta(days=13))
+    refused = client.post(f"/api/v1/kyama/{kyama.pk}/payouts/", {"amount": "10", "method": "CASH", "idempotency_key": "w2"}, format="json")
+    assert refused.status_code == 400 and "not agreed" in refused.content.decode()
+    again = client.post(f"/api/v1/kyama/{kyama.pk}/next-receiver/", {"member": john, "note": "Again"}, format="json")
+    assert again.status_code == 400 and "already received" in again.content.decode()
+    agreed = client.post(f"/api/v1/kyama/{kyama.pk}/next-receiver/", {"member": mary, "note": "Agreed at Sunday's meeting"}, format="json").json()
+    assert agreed["next_receiver"]["note"] == "Agreed at Sunday's meeting" and agreed["turns"][1]["member"] == "Mary Achieng"
+    assert agreed["turns"][1]["agreed"] is True
+    cleared = client.post(f"/api/v1/kyama/{kyama.pk}/next-receiver/", {"member": None}, format="json").json()
+    assert cleared["next_receiver"] is None
+
+
+def test_an_agreed_receiver_jumps_the_listed_order(on):
+    org, owner, client = business(modules=["kyama"])
+    kyama = make(org, owner)
+    with organization_context(org):
+        john = kyama.members.get(full_name="John Kamau")
+    data = client.post(f"/api/v1/kyama/{kyama.pk}/next-receiver/", {"member": john.pk, "note": "Hospital bill"}, format="json").json()
+    assert [t["member"] for t in data["turns"]] == ["John Kamau", "Larry Musau", "Mary Achieng"]
+    assert data["turn_choice"] == "ORDER"
