@@ -14,8 +14,10 @@ from rest_framework.exceptions import ValidationError
 from .models import MpesaOutlet, MpesaSession, MpesaTransaction
 
 ZERO = Decimal("0")
-TYPE_LABELS = {"CUSTOMER_DEPOSIT": "Deposit", "CUSTOMER_WITHDRAWAL": "Withdrawal", "FLOAT_TOPUP": "Float top-up",
+TYPE_LABELS = {"CUSTOMER_DEPOSIT": "Deposit", "CUSTOMER_WITHDRAWAL": "Withdrawal", "AIRTIME_SALE": "Airtime sale", "FLOAT_TOPUP": "Float top-up",
                "CASH_REBALANCE": "Cash rebalance", "ADJUSTMENT": "Adjustment", "REVERSAL": "Reversal"}
+
+PAID_BY = {"CASH": "Cash", "MPESA_FLOAT": "M-Pesa (agent line)", "MPESA_OTHER": "M-Pesa (other number)"}
 
 
 def month_bounds(value):
@@ -170,6 +172,7 @@ def render_pdf(data, organization):
               table([["", "Number", "Amount"],
                      ["Deposits", totals["CUSTOMER_DEPOSIT"]["count"] - totals["CUSTOMER_DEPOSIT"]["reversed"], _money(totals["CUSTOMER_DEPOSIT"]["net"])],
                      ["Withdrawals", totals["CUSTOMER_WITHDRAWAL"]["count"] - totals["CUSTOMER_WITHDRAWAL"]["reversed"], _money(totals["CUSTOMER_WITHDRAWAL"]["net"])],
+                     ["Airtime sold", totals["AIRTIME_SALE"]["count"] - totals["AIRTIME_SALE"]["reversed"], _money(totals["AIRTIME_SALE"]["net"])],
                      ["Float top-ups", totals["FLOAT_TOPUP"]["count"] - totals["FLOAT_TOPUP"]["reversed"], _money(totals["FLOAT_TOPUP"]["net"])],
                      ["Days with activity", len(set(by_day) | set(shifts_by_day)), ""]], [60, 25, 35], numeric=(1, 2))]
     if data["reversals"]:
@@ -192,8 +195,9 @@ def render_pdf(data, organization):
             story += [section("Money in operation", table(shift_rows, [20, 28, 21, 21, 21, 21, 21, 21], numeric=(2, 3, 4, 5, 6, 7)))]
         deposits = [t for t in rows if t.transaction_type == "CUSTOMER_DEPOSIT"]
         withdrawals = [t for t in rows if t.transaction_type == "CUSTOMER_WITHDRAWAL"]
+        airtime = [t for t in rows if t.transaction_type == "AIRTIME_SALE"]
         topups = [t for t in rows if t.transaction_type == "FLOAT_TOPUP"]
-        others = [t for t in rows if t.transaction_type not in {"CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "FLOAT_TOPUP"}]
+        others = [t for t in rows if t.transaction_type not in {"CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE", "FLOAT_TOPUP"}]
         story += [section(f"Deposits ({len(deposits)}) — total {_money(total(deposits))}",
                   table([["Time", "M-Pesa number", "ID number", "Amount", "Transaction ID", "Note"]] +
                         [[_time(t.occurred_at), _phone(t.customer_phone), t.customer_id_number, _money(t.amount),
@@ -203,6 +207,11 @@ def render_pdf(data, organization):
                   table([["Time", "Amount", "Transaction ID", "Note"]] +
                         [[_time(t.occurred_at), _money(t.amount), t.provider_reference or "", note(t)] for t in withdrawals],
                         [16, 26, 36, 24], numeric=(1,)) if withdrawals else Paragraph("None.", small))]
+        if airtime:
+            story += [section(f"Airtime sold ({len(airtime)}) — total {_money(total(airtime))}",
+                      table([["Time", "Sent to", "Amount", "Paid by", "Transaction ID", "Note"]] +
+                            [[_time(t.occurred_at), _phone(t.customer_phone), _money(t.amount), PAID_BY.get(t.paid_by, ""),
+                              t.provider_reference or "", note(t)] for t in airtime], [16, 30, 24, 30, 30, 24], numeric=(2,)))]
         story += [section(f"Float top-ups ({len(topups)}) — total {_money(total(topups))}",
                   table([["Time", "Amount", "Reference", "Note"]] +
                         [[_time(t.occurred_at), _money(t.amount), t.provider_reference or "", note(t)] for t in topups],

@@ -67,7 +67,7 @@ function RecordForm({ data, onSaved, onCancel }) {
           : <FormField label="Date it was paid" name="paid_on" type="date" required max={today()} defaultValue={today()} />}
         <FormField label="Note (optional)" name="notes" maxLength={500} autoComplete="off" />
       </fieldset>
-      <p className="muted">Commission counts as income in the month it was earned, even when Safaricom pays it the next month.</p>
+      <p className="muted">Commission counts as income in the month it was earned, even when Safaricom pays it the next month. Include the commission on airtime you sold; if Safaricom pays it separately, record it as its own entry with a note such as “Airtime commission”.</p>
       <div className="actionRow">
         <button disabled={busy || (agency && !shop?.open_session)}>Record commission</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
@@ -134,8 +134,8 @@ export function MpesaCommissionPage() {
         <h1>Safaricom commission</h1>
         {canAdd && !adding && data.outlets.length > 0 && <button type="button" onClick={() => setAdding(true)}>Record commission</button>}
       </div>
-      <p className="muted">What the M-Pesa agency earns. Customers' deposits and withdrawals are their money, not income; the agency's income is the
-        commission Safaricom pays each month, less the agency's own running costs.</p>
+      <p className="muted">What the M-Pesa agency earns. Customers' deposits and withdrawals, and the money for airtime you sell, are not income; the
+        agency's income is the commission Safaricom pays each month, including commission on airtime, less the agency's own running costs.</p>
       {data.due_month && <section className="investReminder" role="status" aria-label="Commission due">
         <div><b>{data.due_label}'s commission is not recorded yet</b>
           <p>The agency worked in {data.due_label}. When Safaricom pays it, record it here so that month's profit is right.</p></div>

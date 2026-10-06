@@ -23,6 +23,7 @@ import { CorrectTransaction } from "./CorrectTransaction";
 import { MonthlyReport } from "./MonthlyReport";
 import { PastShifts } from "./PastShifts";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
+import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
 import { CashCounter, countPayload, countTotal, emptyCount } from "./CashCounter";
@@ -340,8 +341,8 @@ export function MpesaDashboardPage() {
       <span className="eyebrow">Agent money (kept separate from the shop)</span>
       <h1>M-Pesa Agent</h1>
       <p className="privacyNotice">
-        Agency deposits and withdrawals move cash and electronic float. Their
-        principal is never sales revenue.
+        Agency deposits, withdrawals and airtime sales move cash and electronic float. Their
+        principal is never sales revenue; only commission is.
       </p>
       <div className="metrics">
         <MetricCard label="Money in operation">
@@ -355,6 +356,9 @@ export function MpesaDashboardPage() {
         </MetricCard>
         <MetricCard label="Today's withdrawals">
           {businessCurrency()} {dashboard.withdrawals}
+        </MetricCard>
+        <MetricCard label="Today's airtime sold">
+          {businessCurrency()} {dashboard.airtime ?? 0}
         </MetricCard>
         <MetricCard label="Transactions">
           {dashboard.transaction_count}
@@ -446,11 +450,18 @@ export function MpesaDashboardPage() {
               availableFloat={dashboard.float}
               onPosted={load}
             />
+            <MpesaAirtimeForm
+              sessionId={dashboard.session.id}
+              availableCash={dashboard.cash}
+              availableFloat={dashboard.float}
+              onPosted={load}
+            />
           </div>
         </>
       )}
       <CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" transactions={shiftTransactions} onChanged={load} />
       <CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" transactions={shiftTransactions} onChanged={load} />
+      <CustomerTransactionList title="Airtime sold" type="AIRTIME_SALE" transactions={shiftTransactions} onChanged={load} />
       <section>
         <h2>Agency transactions this shift</h2>
         {!shiftTransactions.length ? (

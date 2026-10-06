@@ -64,6 +64,7 @@ export function RecordsSummary({ records, money }) {
         ["Shifts", `${count(mpesa.shifts_closed)} closed · ${count(mpesa.shifts_open)} open`],
         ["Customer deposits", `${many(mpesa.deposits, "deposit", "deposits")} · ${money(mpesa.deposits_value)}`],
         ["Customer withdrawals", `${many(mpesa.withdrawals, "withdrawal", "withdrawals")} · ${money(mpesa.withdrawals_value)}`],
+        Number(mpesa.airtime) > 0 && ["Airtime sold", `${many(mpesa.airtime, "sale", "sales")} · ${money(mpesa.airtime_value)}`],
         Number(mpesa.float_topups) > 0 && ["Float bought", money(mpesa.float_topups)],
         ["Commission earned", money(mpesa.commission)],
       ]} />}

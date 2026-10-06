@@ -168,7 +168,7 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "Record Safaricom's commission on the Commission page."}, status=400)
         session = MpesaSession.objects.get(pk=request.data.get("session"))
         entry, created = post_transaction(session=session, transaction_type=request.data.get("transaction_type"), transaction_amount=request.data.get("amount"), user=request.user, idempotency_key=request.data.get("idempotency_key"), provider_reference=request.data.get("provider_reference"), customer_reference=request.data.get("customer_reference", ""), notes=request.data.get("notes", ""), cash_delta=request.data.get("cash_delta"), float_delta=request.data.get("float_delta"),
-            customer_name=request.data.get("customer_name", ""), customer_phone=request.data.get("customer_phone", ""), customer_id_number=request.data.get("customer_id_number", ""))
+            customer_name=request.data.get("customer_name", ""), customer_phone=request.data.get("customer_phone", ""), customer_id_number=request.data.get("customer_id_number", ""), paid_by=request.data.get("paid_by", ""))
         return Response(self.get_serializer(entry).data, status=201 if created else 200)
 
     @action(detail=True, methods=["post"])
@@ -185,7 +185,7 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         data = request.data
         entry = correct_transaction(original=self.get_object(), user=request.user, key=str(data.get("idempotency_key") or ""), reason=str(data.get("reason") or ""),
                                     amount=data.get("amount"), customer_phone=data.get("customer_phone"), customer_id_number=data.get("customer_id_number"),
-                                    provider_reference=data.get("provider_reference"))
+                                    provider_reference=data.get("provider_reference"), paid_by=data.get("paid_by"))
         return Response(self.get_serializer(entry).data, status=201)
 
     @action(detail=True, methods=["post"])
@@ -291,12 +291,13 @@ def dashboard(request):
     entries = entries.exclude(transaction_type="REVERSAL").filter(reversal__isnull=True)
     deposits = entries.filter(transaction_type="CUSTOMER_DEPOSIT").aggregate(value=Sum("amount"))["value"] or 0
     withdrawals = entries.filter(transaction_type="CUSTOMER_WITHDRAWAL").aggregate(value=Sum("amount"))["value"] or 0
+    airtime = entries.filter(transaction_type="AIRTIME_SALE").aggregate(value=Sum("amount"))["value"] or 0
     commission = MpesaCommissionEntry.objects.filter(recognized_at__date=today).aggregate(value=Sum("amount"))["value"] or 0
-    # Deposits, withdrawals and float bought with cash only swap cash for float, so this total stays put;
-    # only cash brought in (rebalance) and manager adjustments change it.
+    # Deposits, withdrawals, airtime paid in cash and float bought with cash only swap cash for float, so this total
+    # stays put; cash brought in (rebalance), manager adjustments and airtime paid to another number change it.
     in_operation = {"total": cash + electronic_float,
                     "opening": (session.opening_cash + session.opening_float) if session else 0}
-    return Response({"in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    return Response({"in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):

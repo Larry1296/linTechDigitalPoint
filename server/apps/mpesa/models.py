@@ -61,6 +61,7 @@ class MpesaTransaction(TenantModel):
         for value in [
             "CUSTOMER_DEPOSIT",
             "CUSTOMER_WITHDRAWAL",
+            "AIRTIME_SALE",  # airtime (credit) bought for a customer with the agency float
             "FLOAT_TOPUP",
             "CASH_REBALANCE",
             "REVERSAL",
@@ -84,6 +85,9 @@ class MpesaTransaction(TenantModel):
     customer_name = models.CharField(max_length=120, blank=True)
     customer_phone = models.CharField(max_length=15, blank=True)  # stored as 2547XXXXXXXX / 2541XXXXXXXX
     customer_id_number = models.CharField(max_length=20, blank=True)
+    # How the customer paid for airtime: cash, M-Pesa into this agent line, or M-Pesa to another number (till or phone).
+    paid_by = models.CharField(max_length=12, blank=True, choices=[("CASH", "Cash"), ("MPESA_FLOAT", "M-Pesa to this agent line"),
+                                                                   ("MPESA_OTHER", "M-Pesa to another number")])
     status = models.CharField(max_length=12, default=POSTED)
     reversal_of = models.OneToOneField(
         "self", null=True, blank=True, related_name="reversal", on_delete=models.PROTECT

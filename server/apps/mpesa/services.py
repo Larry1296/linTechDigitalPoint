@@ -88,7 +88,18 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     return session
 
 
-def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privileged=False):
+# Airtime is sent from the float. What comes back depends on how the customer paid: cash into the drawer, M-Pesa into
+# the same agent line (back into the float, so nothing changes), or M-Pesa to another number such as a till, which
+# is outside the agency: the float goes down and that money is no longer counted here.
+AIRTIME_PAYMENTS = {"CASH": lambda value: (value, -value), "MPESA_FLOAT": lambda value: (Decimal("0"), Decimal("0")),
+                    "MPESA_OTHER": lambda value: (Decimal("0"), -value)}
+
+
+def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privileged=False, paid_by=""):
+    if transaction_type == "AIRTIME_SALE":
+        if paid_by not in AIRTIME_PAYMENTS:
+            raise ValidationError("Choose how the customer paid for the airtime: cash or M-Pesa.")
+        return AIRTIME_PAYMENTS[paid_by](value)
     if transaction_type == "CUSTOMER_DEPOSIT":
         return value, -value
     if transaction_type == "CUSTOMER_WITHDRAWAL":
@@ -116,8 +127,11 @@ def normalise_phone(value):
 
 def customer_details(transaction_type, name, phone, id_number):
     """A deposit may record the customer's number and ID (or passport) number; both are optional, but checked when
-    given. A withdrawal records only its amount, with the confirmation code added afterwards. A name is kept only if given."""
+    given. Airtime may record the number it was sent to. A withdrawal records only its amount, with the confirmation
+    code added afterwards. A name is kept only if given."""
     name, id_number = " ".join(str(name or "").split())[:120], str(id_number or "").replace(" ", "").upper()
+    if transaction_type == "AIRTIME_SALE":
+        return name, normalise_phone(phone) if str(phone or "").strip() else "", ""
     if transaction_type != "CUSTOMER_DEPOSIT":
         return name, "", ""
     if id_number and not (4 <= len(id_number) <= 20 and id_number.isalnum()):
@@ -127,7 +141,7 @@ def customer_details(transaction_type, name, phone, id_number):
 
 @transaction.atomic
 def post_transaction(*, session, transaction_type, transaction_amount, user, idempotency_key, provider_reference=None, customer_reference="", notes="", cash_delta=None, float_delta=None,
-                     customer_name="", customer_phone="", customer_id_number=""):
+                     customer_name="", customer_phone="", customer_id_number="", paid_by=""):
     lock_business()
     if not idempotency_key:
         raise ValidationError("An idempotency key is required.")
@@ -150,11 +164,13 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         raise ValidationError("Say why the money in operation is being corrected.")
     if transaction_type == "ADJUSTMENT" and (cash_delta is None or float_delta is None):
         raise ValidationError("Adjustments require explicit cash and float effects.")
-    cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged)
+    paid_by = str(paid_by or "").upper() if transaction_type == "AIRTIME_SALE" else ""
+    cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged, paid_by=paid_by)
     current_cash, current_float = session_balances(session)
     if current_cash + cash_effect < 0:
         raise ValidationError("Insufficient physical cash for this operation.")
-    if current_float + float_effect < 0:
+    if current_float + float_effect < 0 or (transaction_type == "AIRTIME_SALE" and current_float < value):
+        # Airtime always goes out of the float first, even when the customer pays back into it.
         raise ValidationError("Insufficient electronic float for this operation.")
     try:
         with transaction.atomic():
@@ -172,6 +188,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
                 customer_name=customer[0],
                 customer_phone=customer[1],
                 customer_id_number=customer[2],
+                paid_by=paid_by,
                 performed_by=user,
                 occurred_at=timezone.now(),
                 notes=notes,
@@ -183,7 +200,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         if provider_reference and MpesaTransaction.objects.filter(provider_reference=provider_reference).exists():
             raise ValidationError("That M-Pesa agency reference has already been posted.") from exc
         raise
-    action = {"CUSTOMER_DEPOSIT": "MPESA_DEPOSIT_POSTED", "CUSTOMER_WITHDRAWAL": "MPESA_WITHDRAWAL_POSTED", "FLOAT_TOPUP": "MPESA_FLOAT_TOPUP", "ADJUSTMENT": "MPESA_ADJUSTMENT", "INVESTMENT": "MPESA_INVESTMENT_TRANSFER", "COMMISSION": "MPESA_COMMISSION_RECEIVED"}.get(transaction_type, "MPESA_REBALANCE")
+    action = {"CUSTOMER_DEPOSIT": "MPESA_DEPOSIT_POSTED", "CUSTOMER_WITHDRAWAL": "MPESA_WITHDRAWAL_POSTED", "FLOAT_TOPUP": "MPESA_FLOAT_TOPUP", "ADJUSTMENT": "MPESA_ADJUSTMENT", "INVESTMENT": "MPESA_INVESTMENT_TRANSFER", "COMMISSION": "MPESA_COMMISSION_RECEIVED", "AIRTIME_SALE": "MPESA_AIRTIME_SOLD"}.get(transaction_type, "MPESA_REBALANCE")
     audit(action, entry, user, after={"amount": str(value), "cash": str(current_cash + cash_effect), "float": str(current_float + float_effect)})
     return entry, True
 
@@ -243,7 +260,7 @@ def reverse_transaction(*, original, user, idempotency_key, reason, allow_invest
 
 
 @transaction.atomic
-def correct_transaction(*, original, user, key, reason, amount, customer_phone=None, customer_id_number=None, provider_reference=None):
+def correct_transaction(*, original, user, key, reason, amount, customer_phone=None, customer_id_number=None, provider_reference=None, paid_by=None):
     """Fixes a mistake in a recorded transaction (amount, customer details, transaction ID) in one step: the wrong
     entry is reversed and the right one recorded, linked to it. Nothing is overwritten, so cash, float, the books and
     the monthly report all show what happened and why. Managers and owners, while the shift is open."""
@@ -255,7 +272,7 @@ def correct_transaction(*, original, user, key, reason, amount, customer_phone=N
         return existing
     original = MpesaTransaction.objects.select_for_update().select_related("session").get(pk=original.pk)
     if original.transaction_type in {"REVERSAL", "ADJUSTMENT", "INVESTMENT", "COMMISSION"}:
-        raise ValidationError("Only deposits, withdrawals, float top-ups and cash rebalances can be corrected.")
+        raise ValidationError("Only deposits, withdrawals, airtime sales, float top-ups and cash rebalances can be corrected.")
     if hasattr(original, "reversal"):
         raise ValidationError("This transaction was already reversed or corrected.")
     code = (original.provider_reference if provider_reference is None else str(provider_reference or "").strip().upper()) or None
@@ -268,7 +285,7 @@ def correct_transaction(*, original, user, key, reason, amount, customer_phone=N
                                                                 notes=(original.notes + f" [Transaction ID {code} moved to its correction]").strip())
     corrected, _ = post_transaction(session=original.session, transaction_type=original.transaction_type, transaction_amount=amount, user=user,
                                     idempotency_key=f"{key}-corrected", provider_reference=code, customer_name=original.customer_name,
-                                    customer_phone=phone, customer_id_number=id_number,
+                                    customer_phone=phone, customer_id_number=id_number, paid_by=paid_by or original.paid_by,
                                     notes=f"Correction of {original.internal_reference}: {reason.strip()}")
     MpesaTransaction.objects.filter(pk=corrected.pk).update(corrects=original)
     corrected.refresh_from_db()

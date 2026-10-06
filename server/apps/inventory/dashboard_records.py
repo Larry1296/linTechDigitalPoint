@@ -87,10 +87,12 @@ def _mpesa(commission):
     # A reversed transaction and its reversal cancel out, so neither is counted.
     kept = MpesaTransaction.objects.filter(status='POSTED', reversal_of__isnull=True, reversal__isnull=True)
     deposits, withdrawals = kept.filter(transaction_type='CUSTOMER_DEPOSIT'), kept.filter(transaction_type='CUSTOMER_WITHDRAWAL')
+    airtime = kept.filter(transaction_type='AIRTIME_SALE')
     return {'outlets': MpesaOutlet.objects.count(), 'shifts_open': MpesaSession.objects.filter(status=MpesaSession.OPEN).count(),
             'shifts_closed': MpesaSession.objects.filter(status=MpesaSession.CLOSED).count(),
             'deposits': deposits.count(), 'deposits_value': _sum(deposits, 'amount'),
             'withdrawals': withdrawals.count(), 'withdrawals_value': _sum(withdrawals, 'amount'),
+            'airtime': airtime.count(), 'airtime_value': _sum(airtime, 'amount'),
             'float_topups': _sum(kept.filter(transaction_type='FLOAT_TOPUP'), 'amount'),
             'commission': commission}
 

@@ -2271,6 +2271,11 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 /* M-Pesa deposits/withdrawals today: the Agency transactions grid with their own columns. */
 .customerLedger { margin-top: 10px; }
 .customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); }
+.customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr); }
+/* Airtime: how the customer paid, one choice per line with what it does to cash and float. */
+.airtimePaidBy { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.airtimePaidBy label { display: flex; gap: 8px; align-items: flex-start; margin: 0; }
+.airtimePaidBy small { display: block; }
 .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); }
 .customerLedger > div { align-items: center; }
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -2283,6 +2288,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
   .table.ledgerTable > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; min-width: 620px; }
   .table.ledgerTable > div span:nth-last-child(-n + 2) { text-align: left; }
   .customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); min-width: 560px; }
+  .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr); min-width: 560px; }
   .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); min-width: 0; }
 }
 

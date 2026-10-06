@@ -167,7 +167,8 @@ def dashboard_snapshot(request):
                              'open_sessions': len(shifts) if allowed else None,
                              'transaction_count': transactions.count() if allowed else None,
                              'deposits': (transactions.filter(transaction_type='CUSTOMER_DEPOSIT').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None,
-                             'withdrawals': (transactions.filter(transaction_type='CUSTOMER_WITHDRAWAL').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None}
+                             'withdrawals': (transactions.filter(transaction_type='CUSTOMER_WITHDRAWAL').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None,
+                             'airtime': (transactions.filter(transaction_type='AIRTIME_SALE').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None}
     if not visible_units:
         data['today'] = {key: None for key in data['today']}
         data['today']['restricted'] = True

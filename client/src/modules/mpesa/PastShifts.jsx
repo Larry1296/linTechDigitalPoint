@@ -14,7 +14,7 @@ const signed = (value) => `${Number(value) > 0 ? "+" : ""}${figure(value)}`;
 export const shiftPeriod = (shift) => `${day(shift.opened_at)}, ${clock(shift.opened_at)} – ${
   businessDate(shift.closed_at) === businessDate(shift.opened_at) ? "" : `${day(shift.closed_at)}, `}${clock(shift.closed_at)}`;
 
-const CUSTOMER = ["CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL"];
+const CUSTOMER = ["CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE"];
 
 // Closing a shift clears the desk, but its records are kept. Here they can be opened again: the list holds only
 // closed shifts that have records, each named by when it ran, and picking one shows just that shift's records.
@@ -86,6 +86,7 @@ export function PastShifts() {
         <div className="pastShiftRecords">
           <CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" transactions={records} onChanged={reload} scope="in that shift" closed />
           <CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" transactions={records} onChanged={reload} scope="in that shift" closed />
+          <CustomerTransactionList title="Airtime sold" type="AIRTIME_SALE" transactions={records} onChanged={reload} scope="in that shift" closed />
           {others.length > 0 && (
             <section aria-labelledby="past-other-heading">
               <h2 id="past-other-heading">Other movements in that shift ({others.length})</h2>
