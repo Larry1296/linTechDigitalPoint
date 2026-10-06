@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-MODULES = ["inventory", "locations", "pos", "services", "customers", "expenses", "mpesa", "reports", "branches", "staff"]
+MODULES = ["inventory", "locations", "pos", "services", "customers", "expenses", "mpesa", "reports", "branches", "staff", "kyama"]
 def default_modules():
     return list(MODULES)
 

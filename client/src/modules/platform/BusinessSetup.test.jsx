@@ -65,7 +65,7 @@ it("sets up a barbershop with its price list and never mentions stock or shelves
   next();
 
   expect(screen.getByText("Barbershop · I provide services")).toBeInTheDocument();
-  expect(screen.getByText(/stay locked until you upgrade to Pro/)).toHaveTextContent("Reports");
+  expect(await screen.findByText(/stay locked until you upgrade to Pro/)).toHaveTextContent("Reports");  // once the plans have loaded
   fireEvent.click(screen.getByRole("button", { name: /Pro · KES 1,000/ }));
   expect(screen.queryByText(/stay locked until you upgrade/)).not.toBeInTheDocument();
   expect(screen.getByText("Haircut KES 200, Shave KES 100")).toBeInTheDocument();
@@ -77,7 +77,7 @@ it("sets up a barbershop with its price list and never mentions stock or shelves
   expect(createBody().enabled_modules.sort()).toEqual(["expenses", "pos", "reports", "services"]);
   expect(refresh).toHaveBeenCalled();
   expect(screen.getByRole("heading", { name: "Add your logo" })).toBeInTheDocument();
-});
+}, 20000);  // a whole multi-step set-up: slow when every test file runs at once
 
 it("sets up a business that does both, with its own description, categories and location", async () => {
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);

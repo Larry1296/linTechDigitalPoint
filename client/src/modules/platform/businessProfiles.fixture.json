@@ -14,7 +14,8 @@
     "mpesa",
     "reports",
     "branches",
-    "staff"
+    "staff",
+    "kyama"
    ],
    "requires": [
     "inventory"
@@ -33,7 +34,8 @@
     "mpesa",
     "reports",
     "branches",
-    "staff"
+    "staff",
+    "kyama"
    ],
    "requires": [
     "services",
@@ -55,7 +57,8 @@
     "mpesa",
     "reports",
     "branches",
-    "staff"
+    "staff",
+    "kyama"
    ],
    "requires": [
     "inventory",
@@ -144,6 +147,12 @@
    "id": "staff",
    "label": "Staff",
    "description": "Give each person their own sign-in and role.",
+   "needs": []
+  },
+  {
+   "id": "kyama",
+   "label": "Kyama (chama) management",
+   "description": "Run a kyama you are treasurer of: members, contributions, fines, excuses and whose turn it is. Its money is kept apart from the shop's.",
    "needs": []
   }
  ],

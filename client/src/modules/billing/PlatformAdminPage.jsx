@@ -7,7 +7,7 @@ import { ErrorState, Loading } from "../../components/States";
 import "./billing.css";
 
 const MODULE_LABELS = { inventory: "Products & stock", locations: "Shelves & locations", services: "Services & jobs", pos: "Point of sale",
-  customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff" };
+  customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff", kyama: "Kyama (chama)" };
 const money = (amount, currency = "KES") => `${currency} ${Number(amount || 0).toLocaleString()}`;
 const dateText = (value) => (value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 

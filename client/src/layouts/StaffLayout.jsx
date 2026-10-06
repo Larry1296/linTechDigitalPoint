@@ -30,6 +30,7 @@ import {
   Coins,
   Store,
   Briefcase,
+  Users,
 } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import { SubscriptionBanner } from "../modules/billing/SubscriptionBanner";
@@ -114,6 +115,8 @@ const operations = [
   { title: "Shop Management", icon: Store, collapsible: true, links: shopLinks },
   { title: "Cyber Services", icon: MonitorCog, collapsible: true, links: cyberLinks },
   { title: "M-Pesa Agent", icon: Smartphone, collapsible: true, links: [{ to: "/admin/mpesa", label: "Agent desk", icon: Smartphone, permission: "mpesa.view_mpesasession", end: true }, { to: "/admin/mpesa/commission", label: "Commission", icon: Coins, permission: "mpesa.view_mpesacommissionentry" }] },
+  // A kyama is not part of the shop: its own group, apart from the shop's money under Business.
+  { title: "Kyama", icon: Users, collapsible: true, links: [{ to: "/admin/kyama", label: "My kyama", icon: Users, permission: "kyama.view_kyama" }] },
   { title: "Business", icon: Briefcase, collapsible: true, links: businessLinks },
   { title: "Platform", links: [{ to: "/admin/platform", label: "All businesses", icon: ShieldCheck, permission: null, platformAdmin: true }] },
 ];

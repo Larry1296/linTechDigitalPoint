@@ -3,7 +3,7 @@ from django.contrib.auth.models import Permission
 from .context import organization_id
 from .models import Membership
 
-DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts"}
+DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts", "kyama"}
 
 def membership_for(user):
     if not user or not user.is_authenticated or not user.is_active:
@@ -20,6 +20,8 @@ def _business_permissions(user):
     result = set(membership.permissions) & available
     for key in available:
         app, code = key.split(".")
+        if app == "kyama":
+            continue  # the kyama's members, ID numbers and money are not the shop's: never granted with a role
         if membership.role == "READ_ONLY" and code.startswith("view_") and code != "view_profit":
             result.add(key)
         elif membership.role == "MANAGER" and app in DOMAIN_APPS - {"accounts"}:

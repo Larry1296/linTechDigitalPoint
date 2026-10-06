@@ -7,9 +7,11 @@ import { ErrorState, Loading } from "../../components/States";
 import { BackLink } from "../../components/navigation/BackLink";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import "./platform.css";
+import { KyamaSetupFields, emptyKyama, kyamaPayload, kyamaProblem } from "../kyama/KyamaSetupFields";
 import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleProblem, searchSectors, timeZones, toggleModule, useBusinessProfiles } from "./businessSetupData";
 
-const STEPS = ["Your business", "Kind of business", "Tools & starter list", "Location & contacts", "Opening money", "Review"];
+const STEP_LABELS = { business: "Your business", kind: "Kind of business", tools: "Tools & starter list", kyama: "Your kyama",
+  place: "Location & contacts", money: "Opening money", review: "Review" };
 const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item" };
 
 // A guided set-up that adapts to how the business makes money and what kind it is. Every choice can be changed later in Settings.
@@ -53,6 +55,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [details, setDetails] = useState(draft.details ?? { branch_name: "Main branch", phone: user.phone || "", email: user.email || "", address: "", country: "KE", currency: "KES", timezone: "Africa/Nairobi" });
   const [money, setMoney] = useState(draft.money ?? { opening_cash: "", opening_bank: "" });
   const [plan, setPlan] = useState(draft.plan ?? "BASIC");
+  const [kyama, setKyama] = useState(() => draft.kyama ?? emptyKyama(user));
   const [plans, setPlans] = useState(null);
   useEffect(() => { api("/api/v1/tenancy/plans/").then((data) => setPlans(data.plans)).catch(() => setPlans([])); }, []);
   const [error, setError] = useState(null);
@@ -60,10 +63,14 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [created, setCreated] = useState(null);
   const zones = useMemo(() => timeZones(), []);
   useEffect(() => {
-    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan });
-  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan]);
+    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan, kyama });
+  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan, kyama]);
   if (created) return <LogoStep business={created} onUploaded={refresh} onDone={() => navigate("/admin/dashboard", { replace: true })} />;
 
+  // The kyama step appears only when kyama management is one of the chosen tools.
+  const steps = ["business", "kind", "tools", ...(modules.has("kyama") ? ["kyama"] : []), "place", "money", "review"];
+  const current = steps[Math.min(step, steps.length - 1)];
+  const goTo = (id) => setStep(steps.indexOf(id));
   const sector = sectorId ? findSector(catalogue, sectorId) : null;
   const isOther = catalogue.other_sectors.includes(sectorId);
   const allowed = model ? allowedModules(catalogue, model) : [];
@@ -100,15 +107,16 @@ function SetupWizard({ catalogue, user, refresh }) {
     const country = COUNTRIES.find((item) => item.code === event.target.value);
     setDetails((current) => ({ ...current, country: event.target.value, ...(country ? { currency: country.currency, timezone: country.timezone } : {}) }));
   };
-  const problem = [
-    () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
-    () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Describe what your business does." : "",
-    () => moduleProblem(catalogue, model, modules)
+  const problem = {
+    business: () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
+    kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Describe what your business does." : "",
+    tools: () => moduleProblem(catalogue, model, modules)
       || (services.some((service) => service.selling_price !== "" && Number(service.selling_price) < 0) ? "Service prices cannot be negative." : ""),
-    () => !details.branch_name.trim() ? "Enter the name of your first branch or shop." : "",
-    () => [money.opening_cash, money.opening_bank].some((value) => value !== "" && Number(value) < 0) ? "Opening amounts cannot be negative." : "",
-    () => "",
-  ][step]();
+    kyama: () => kyamaProblem(kyama),
+    place: () => !details.branch_name.trim() ? "Enter the name of your first branch or shop." : "",
+    money: () => [money.opening_cash, money.opening_bank].some((value) => value !== "" && Number(value) < 0) ? "Opening amounts cannot be negative." : "",
+    review: () => "",
+  }[current]();
   const next = () => {
     if (problem) { setError({ title: "Before you continue", text: problem }); return; }
     setError(null);
@@ -125,6 +133,7 @@ function SetupWizard({ catalogue, user, refresh }) {
         starter_services: modules.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
           ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
+        kyama: modules.has("kyama") ? kyamaPayload(kyama) : null,
       }) });
       clearDraft(user);
       // Load the new business into the session before the logo step, so leaving it opens that business's dashboard.
@@ -146,14 +155,14 @@ function SetupWizard({ catalogue, user, refresh }) {
   return <main className="tenantForm businessSetup">
     <BackLink className="authBackButton" />
     <span className="eyebrow">Set up your business</span>
-    <h1>{STEPS[step]}</h1>
+    <h1>{STEP_LABELS[current]}</h1>
     <ol className="setupSteps" aria-label="Set-up progress">
-      {STEPS.map((label, index) => <li key={label} className={index === step ? "current" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}>
+      {steps.map((id) => STEP_LABELS[id]).map((label, index) => <li key={label} className={index === step ? "current" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}>
         <span>{index < step ? <Check size={14} aria-hidden="true" /> : index + 1}</span>{label}
       </li>)}
     </ol>
 
-    {step === 0 && <section className="setupPanel">
+    {current === "business" && <section className="setupPanel">
       <label>Business name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="e.g. Fresh Cuts Barbershop" autoFocus /></label>
       <fieldset className="choiceGroup">
         <legend>How does your business make money?</legend>
@@ -176,7 +185,7 @@ function SetupWizard({ catalogue, user, refresh }) {
       <p className="muted">Built for small and medium businesses. Support for large companies and supermarkets is coming later.</p>
     </section>}
 
-    {step === 1 && <section className="setupPanel">
+    {current === "kind" && <section className="setupPanel">
       <p className="muted">You chose <strong>{modelLabel}</strong>. Which of these is closest to your business?</p>
       <label className="sectorSearch"><Search size={16} aria-hidden="true" /><span className="sr">Search kinds of business</span>
         <input type="search" value={sectorQuery} onChange={(e) => setSectorQuery(e.target.value)} placeholder="Search, e.g. kinyozi, fundi simu, mitumba" />
@@ -195,7 +204,7 @@ function SetupWizard({ catalogue, user, refresh }) {
       {model !== "MIXED" && <p className="muted">Doing more than this? Go back and choose <strong>Both goods and services</strong>.</p>}
     </section>}
 
-    {step === 2 && <section className="setupPanel">
+    {current === "tools" && <section className="setupPanel">
       <p className="muted">We picked the usual tools for a <strong>{typeLabel || "business like yours"}</strong>. Turn any on or off; you can change them later in Settings.</p>
       <fieldset className="choiceGroup">
         <legend>Tools</legend>
@@ -236,7 +245,12 @@ function SetupWizard({ catalogue, user, refresh }) {
       </fieldset>}
     </section>}
 
-    {step === 3 && <section className="setupPanel setupGrid">
+    {current === "kyama" && <section className="setupPanel">
+      <p className="muted">Set up the kyama you run. You can add members, change leaders and turns, and set up more kyamas later from the dashboard.</p>
+      <KyamaSetupFields value={kyama} onChange={setKyama} />
+    </section>}
+
+    {current === "place" && <section className="setupPanel setupGrid">
       <label className="wide">First branch or shop name<input value={details.branch_name} onChange={setDetail("branch_name")} maxLength={160} /></label>
       <label>Phone<input value={details.phone} onChange={setDetail("phone")} type="tel" maxLength={40} placeholder="0712 345 678" /></label>
       <label>Email<input value={details.email} onChange={setDetail("email")} type="email" placeholder="hello@yourbusiness.com" /></label>
@@ -257,23 +271,24 @@ function SetupWizard({ catalogue, user, refresh }) {
       <p className="muted wide">The currency is fixed once you start recording money, so past records stay correct.</p>
     </section>}
 
-    {step === 4 && <section className="setupPanel setupGrid">
+    {current === "money" && <section className="setupPanel setupGrid">
       <p className="muted wide">Enter only money your business already holds today. Leave blank if unsure; an accountant can add verified opening balances later.</p>
       <label>Cash in the till ({details.currency || "—"})<input type="number" min="0" step="0.01" value={money.opening_cash} onChange={(e) => setMoney((m) => ({ ...m, opening_cash: e.target.value }))} placeholder="0" /></label>
       <label>Bank balance ({details.currency || "—"})<input type="number" min="0" step="0.01" value={money.opening_bank} onChange={(e) => setMoney((m) => ({ ...m, opening_bank: e.target.value }))} placeholder="0" /></label>
     </section>}
 
-    {step === 5 && <section className="setupPanel">
+    {current === "review" && <section className="setupPanel">
       <dl className="setupReview">
-        <div><dt>Business</dt><dd>{name} · {catalogue.sizes.find((item) => item.id === size)?.label}</dd><button type="button" className="linkButton" onClick={() => setStep(0)}>Change</button></div>
-        <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => setStep(1)}>Change</button></div>
-        <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => modules.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => setStep(2)}>Change</button></div>
-        {modules.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => setStep(2)}>Change</button></div>}
-        {modules.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => setStep(2)}>Change</button></div>}
-        <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => setStep(3)}>Change</button></div>
-        <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => setStep(3)}>Change</button></div>
-        <div><dt>Country & money</dt><dd>{country?.name || details.country} · {details.currency} · {details.timezone.replaceAll("_", " ")}</dd><button type="button" className="linkButton" onClick={() => setStep(3)}>Change</button></div>
-        <div><dt>Opening money</dt><dd>{Number(money.opening_cash || 0) || Number(money.opening_bank || 0) ? `Cash ${money.opening_cash || 0} · Bank ${money.opening_bank || 0}` : "None"}</dd><button type="button" className="linkButton" onClick={() => setStep(4)}>Change</button></div>
+        <div><dt>Business</dt><dd>{name} · {catalogue.sizes.find((item) => item.id === size)?.label}</dd><button type="button" className="linkButton" onClick={() => goTo("business")}>Change</button></div>
+        <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => goTo("kind")}>Change</button></div>
+        <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => modules.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
+        {modules.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
+        {modules.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
+        {modules.has("kyama") && <div><dt>Kyama</dt><dd>{kyama.name} · {details.currency} {Number(kyama.contribution_amount || 0).toLocaleString()} each · {kyamaPayload(kyama).members.length} members · treasurer {kyama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("kyama")}>Change</button></div>}
+        <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
+        <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
+        <div><dt>Country & money</dt><dd>{country?.name || details.country} · {details.currency} · {details.timezone.replaceAll("_", " ")}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
+        <div><dt>Opening money</dt><dd>{Number(money.opening_cash || 0) || Number(money.opening_bank || 0) ? `Cash ${money.opening_cash || 0} · Bank ${money.opening_bank || 0}` : "None"}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>
       </dl>
       {user.platform_admin && <p className="muted">As the platform administrator, your business gets every Pro feature for free, with no expiry.</p>}
       {!user.platform_admin && <fieldset className="choiceGroup">
@@ -291,7 +306,7 @@ function SetupWizard({ catalogue, user, refresh }) {
 
     <div className="setupActions">
       {step > 0 && <button type="button" className="secondary" onClick={() => { setError(null); setStep(step - 1); }} disabled={busy}>Back</button>}
-      {step < STEPS.length - 1 ? <button type="button" onClick={next}>Continue</button>
+      {step < steps.length - 1 ? <button type="button" onClick={next}>Continue</button>
         : <button type="button" onClick={() => void create()} disabled={busy}>{busy ? "Creating business…" : "Create business workspace"}</button>}
     </div>
     {error && <FormError title={error.title} message={error.text} />}

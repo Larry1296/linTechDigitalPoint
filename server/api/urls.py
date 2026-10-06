@@ -9,6 +9,7 @@ urlpatterns = [
     path("accounting/", include("apps.accounting.urls")),
     path("cyber/", include("apps.cyber.urls")),
     path("mpesa/", include("apps.mpesa.urls")),
+    path("kyama/", include("apps.kyama.urls")),
     path("assistant/", include("apps.assistant.urls")),
     path("business-assistant/", include("apps.assistant.business_urls")),
     path("", include("apps.core.urls")),

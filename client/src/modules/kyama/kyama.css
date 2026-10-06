@@ -1,0 +1,66 @@
+/* Kyama (chama) management: the set-up shared with registration, the board of who has paid, and turns. */
+.kyamaApart { margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid var(--primary); border-radius: 10px; background: var(--primary2); font-size: 14px; }
+.kyamaSetup { display: grid; gap: 18px; }
+.kyamaSetup .setupGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.kyamaSetup .setupGrid .wide { grid-column: 1 / -1; }
+.kyamaRound { display: grid; gap: 4px; max-width: 360px; margin-top: 12px; }
+.kyamaPlainFieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.kyamaMemberRows { display: grid; gap: 10px; margin: 0 0 10px; padding: 0; list-style: none; }
+.kyamaMemberRow { display: grid; grid-template-columns: 32px minmax(160px, 2fr) minmax(110px, 1fr) minmax(120px, 1fr) minmax(130px, 1fr) auto; gap: 8px; align-items: end;
+  padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kyamaMemberRow label { display: grid; gap: 3px; margin: 0; font-size: 13px; }
+.kyamaMemberRow label > span { color: var(--muted); font-weight: 700; }
+.kyamaRowTools { display: flex; gap: 4px; }
+.kyamaTurn { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: var(--primary2); color: var(--primary); font-weight: 800; font-size: 13px; }
+.kyamaMemberRow > .kyamaTurn { align-self: center; }
+@media (max-width: 760px) {
+  .kyamaMemberRow { grid-template-columns: 32px 1fr 1fr; }
+  .kyamaMemberRow > label:first-of-type { grid-column: 2 / -1; }
+  .kyamaRowTools { grid-column: 1 / -1; justify-content: end; }
+}
+.kyamaSetupPage .setupActions { margin-top: 16px; }
+.kyamaLocked { display: grid; gap: 10px; max-width: 720px; }
+.kyamaCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; margin: 12px 0; padding: 0; list-style: none; }
+.kyamaCard { display: grid; gap: 4px; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); color: inherit; text-decoration: none; }
+.kyamaCard:hover { border-color: var(--primary); }
+.kyamaCard strong { font-size: 17px; }
+.kyamaDashboard { margin: 18px 0; }
+.kyamaOffer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 18px 20px; border: 1px dashed var(--primary); border-radius: 15px; background: var(--primary2); }
+.kyamaOffer > div { flex: 1 1 380px; }
+.kyamaOffer h2 { margin: 6px 0; }
+.kyamaOffer p { margin: 0; }
+.kyamaDashboard .proTag, .kyamaOffer .proTag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: color-mix(in srgb, #b45309 16%, var(--surface)); color: color-mix(in srgb, #b45309 70%, var(--text)); }
+.kyamaHead h1 { margin: 4px 0; }
+.kyamaHead p { margin: 0; }
+.kyamaMoney { padding: 14px 16px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
+.kyamaTabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+.kyamaTabs button { margin: 0; }
+.kyamaBoard, .kyamaTurns { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.kyamaBoardRow { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(140px, 1fr) auto; gap: 8px 14px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kyamaBoardRow.late { border-left: 4px solid var(--danger, #b42318); }
+.kyamaBoardRow.paid { border-left: 4px solid #067647; }
+.kyamaBoardRow.excused { border-left: 4px solid #b45309; }
+.kyamaBoardRow .actionRow button { margin: 0; }
+.kyamaBoardRow > .kyamaInlineForm { grid-column: 1 / -1; }
+.kyamaWho { display: grid; }
+.kyamaOwes small { display: block; color: var(--muted); }
+.loanStatus.kyamaPAID, .loanStatus.kyamaUPCOMING { background: color-mix(in srgb, #067647 14%, transparent); color: #067647; }
+.loanStatus.kyamaLATE { background: color-mix(in srgb, var(--danger, #b42318) 14%, transparent); color: var(--danger, #b42318); }
+.loanStatus.kyamaEXCUSED { background: color-mix(in srgb, #b45309 16%, transparent); color: color-mix(in srgb, #b45309 80%, var(--text)); }
+.kyamaInlineForm { display: grid; gap: 10px; margin: 6px 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg, transparent); }
+.kyamaInlineForm p { margin: 0; }
+@media (max-width: 760px) { .kyamaBoardRow { grid-template-columns: 1fr; } }
+.kyamaLeaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+.kyamaLeaders li { display: grid; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kyamaLeaders span { color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.kyamaMembersTable td .actionRow button { margin: 0; padding-block: 4px; }
+.kyamaStatement { margin-top: 12px; overflow-x: auto; }
+.kyamaStatement table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.kyamaTurnRow { display: grid; grid-template-columns: 32px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kyamaTurnRow.given { opacity: .8; }
+.kyamaTurnRow button { margin: 0; }
+@media (max-width: 640px) { .kyamaTurnRow { grid-template-columns: 32px 1fr; } }
+.kyamaOrder { margin-top: 16px; }
+.kyamaOrder ol { display: grid; gap: 6px; max-width: 420px; padding-left: 22px; }
+.kyamaOrder li > span { display: inline-block; min-width: 220px; }

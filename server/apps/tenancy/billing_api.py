@@ -18,7 +18,7 @@ from .models import MODULES, Membership, Organization, OrganizationSubscription,
 PLAN_FEATURES = {"inventory": "Products & stock", "services": "Services & jobs", "pos": "Point of sale & receipts",
                  "customers": "Customers & credit", "expenses": "Expenses", "mpesa": "M-Pesa agency",
                  "reports": "Profit & loss, balance sheet and reports", "locations": "Shelves & locations",
-                 "staff": "Staff accounts & roles", "branches": "More than one branch"}
+                 "staff": "Staff accounts & roles", "branches": "More than one branch", "kyama": "Kyama (chama) management"}
 
 
 def plan_data(plan):
