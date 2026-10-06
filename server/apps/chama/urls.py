@@ -2,9 +2,9 @@ from django.urls import path
 from . import api
 
 urlpatterns = [
-    path("", api.KyamaListView.as_view()),
-    path("setup/", api.KyamaSetupView.as_view()),
-    path("<int:pk>/", api.KyamaDetailView.as_view()),
+    path("", api.ChamaListView.as_view()),
+    path("setup/", api.ChamaSetupView.as_view()),
+    path("<int:pk>/", api.ChamaDetailView.as_view()),
     path("<int:pk>/members/", api.MembersView.as_view()),
     path("<int:pk>/members/<int:member_pk>/", api.MemberView.as_view()),
     path("<int:pk>/members/<int:member_pk>/leave/", api.MemberLeaveView.as_view()),

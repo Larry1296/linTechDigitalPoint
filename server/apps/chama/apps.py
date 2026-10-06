@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
 
-class KyamaConfig(AppConfig):
+class ChamaConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.kyama"
-    verbose_name = "Kyama (chama)"
+    name = "apps.chama"
+    verbose_name = "Chama"

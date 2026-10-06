@@ -24,8 +24,8 @@ MODULES = {
     "reports": {"label": "Reports", "description": "Profit and loss, balance sheet and trends."},
     "branches": {"label": "Branches", "description": "Run more than one shop or location."},
     "staff": {"label": "Staff", "description": "Give each person their own sign-in and role."},
-    "kyama": {"label": "Kyama (chama) management",
-              "description": "Run a kyama you are treasurer of: members, contributions, fines, excuses and whose turn it is. "
+    "chama": {"label": "Chama management",
+              "description": "Run a chama you are treasurer of: members, contributions, fines, excuses and whose turn it is. "
                              "Its money is kept apart from the shop's."},
 }
 
@@ -40,14 +40,14 @@ BUSINESS_MODELS = {
         "label": "I sell goods",
         "phrase": "only sell goods",
         "hint": "You buy, grow or make products and sell them: a duka, kibanda, hardware or farm produce.",
-        "modules": ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "kyama"],
+        "modules": ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama"],
         "requires": ["inventory"],
     },
     SERVICES: {
         "label": "I provide services",
         "phrase": "only provide services",
         "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
-        "modules": ["services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "kyama"],
+        "modules": ["services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama"],
         "requires": ["services", "mpesa"],  # at least one: an M-Pesa agent sells no priced services
     },
     MIXED: {

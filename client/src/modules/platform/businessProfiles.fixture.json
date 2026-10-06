@@ -15,7 +15,7 @@
     "reports",
     "branches",
     "staff",
-    "kyama"
+    "chama"
    ],
    "requires": [
     "inventory"
@@ -35,7 +35,7 @@
     "reports",
     "branches",
     "staff",
-    "kyama"
+    "chama"
    ],
    "requires": [
     "services",
@@ -58,7 +58,7 @@
     "reports",
     "branches",
     "staff",
-    "kyama"
+    "chama"
    ],
    "requires": [
     "inventory",
@@ -150,9 +150,9 @@
    "needs": []
   },
   {
-   "id": "kyama",
-   "label": "Kyama (chama) management",
-   "description": "Run a kyama you are treasurer of: members, contributions, fines, excuses and whose turn it is. Its money is kept apart from the shop's.",
+   "id": "chama",
+   "label": "Chama management",
+   "description": "Run a chama you are treasurer of: members, contributions, fines, excuses and whose turn it is. Its money is kept apart from the shop's.",
    "needs": []
   }
  ],

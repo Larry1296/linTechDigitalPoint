@@ -38,7 +38,7 @@ LOCAL_APPS = [
     "apps.commerce.apps.CommerceConfig",
     "apps.cyber.apps.CyberConfig",
     "apps.mpesa.apps.MpesaConfig",
-    "apps.kyama.apps.KyamaConfig",
+    "apps.chama.apps.ChamaConfig",
     "apps.assistant.apps.AssistantConfig",
     "apps.accounting.apps.AccountingConfig",
 ]

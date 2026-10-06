@@ -1,15 +1,15 @@
-"""The kyama's rules: when contributions are owed, who is late and fined, whose turn it is, and the money held.
+"""The chama's rules: when contributions are owed, who is late and fined, whose turn it is, and the money held.
 
-All of it is the kyama's own record. Nothing here touches the shop's cash book, ledger or reports: the money is
+All of it is the chama's own record. Nothing here touches the shop's cash book, ledger or reports: the money is
 the members', held by the treasurer, never the shop's.
 
-Schedule: contributions fall on the start date and then every day, week or month after it (a monthly kyama
+Schedule: contributions fall on the start date and then every day, week or month after it (a monthly chama
 starting on the 31st falls on the last day of shorter months). A round is `periods_per_round` contributions;
-in a rotating kyama one member receives the money at the end of each round, in turn order.
+in a rotating chama one member receives the money at the end of each round, in turn order.
 
 Fines: once a contribution's deadline (period date + grace days, or the date the member promised in an excuse)
 has passed, the fine rule is applied to it exactly once: if what was paid on or before the deadline is short, the
-kyama's fine at that moment is charged. Contributions entered for days before the kyama was set up here, or before
+chama's fine at that moment is charged. Contributions entered for days before the chama was set up here, or before
 a member was added, are never fined, because nobody could have paid them through this record in time.
 """
 import calendar
@@ -24,7 +24,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.core.models import AuditLog
-from .models import LEADERSHIP, ROLES, Kyama, KyamaAllocation, KyamaDue, KyamaMember, KyamaPayment, KyamaPayout
+from .models import LEADERSHIP, ROLES, Chama, ChamaAllocation, ChamaDue, ChamaMember, ChamaPayment, ChamaPayout
 
 ZERO = Decimal("0")
 ROLE_LABELS = dict(ROLES)
@@ -51,48 +51,48 @@ def _log(action, obj, user, **after):
 
 # --- Schedule ---------------------------------------------------------------------------------------------------
 
-def period_date(kyama, index):
-    start = kyama.start_date
-    if kyama.frequency == "DAILY":
+def period_date(chama, index):
+    start = chama.start_date
+    if chama.frequency == "DAILY":
         return start + timedelta(days=index)
-    if kyama.frequency == "WEEKLY":
+    if chama.frequency == "WEEKLY":
         return start + timedelta(weeks=index)
     months = start.month - 1 + index
     year, month = start.year + months // 12, months % 12 + 1
     return start.replace(year=year, month=month, day=min(start.day, calendar.monthrange(year, month)[1]))
 
 
-def period_index(kyama, day):
+def period_index(chama, day):
     """The latest contribution on or before `day` (0 is the first), or -1 before the first."""
-    start = kyama.start_date
+    start = chama.start_date
     if day < start:
         return -1
-    if kyama.frequency == "DAILY":
+    if chama.frequency == "DAILY":
         return (day - start).days
-    if kyama.frequency == "WEEKLY":
+    if chama.frequency == "WEEKLY":
         return (day - start).days // 7
     months = (day.year - start.year) * 12 + day.month - start.month
-    return months if period_date(kyama, months) <= day else months - 1
+    return months if period_date(chama, months) <= day else months - 1
 
 
-def is_period_date(kyama, day):
-    index = period_index(kyama, day)
-    return index >= 0 and period_date(kyama, index) == day
+def is_period_date(chama, day):
+    index = period_index(chama, day)
+    return index >= 0 and period_date(chama, index) == day
 
 
-def periods_between(kyama, after, through):
+def periods_between(chama, after, through):
     """Contribution dates later than `after` (None: from the start) and on or before `through`."""
-    first = 0 if after is None else period_index(kyama, after) + 1
-    return [period_date(kyama, index) for index in range(first, period_index(kyama, through) + 1)]
+    first = 0 if after is None else period_index(chama, after) + 1
+    return [period_date(chama, index) for index in range(first, period_index(chama, through) + 1)]
 
 
-def round_of(kyama, day):
-    return period_index(kyama, day) // kyama.periods_per_round + 1
+def round_of(chama, day):
+    return period_index(chama, day) // chama.periods_per_round + 1
 
 
-def round_dates(kyama, number):
-    first = (number - 1) * kyama.periods_per_round
-    return [period_date(kyama, index) for index in range(first, first + kyama.periods_per_round)]
+def round_dates(chama, number):
+    first = (number - 1) * chama.periods_per_round
+    return [period_date(chama, index) for index in range(first, first + chama.periods_per_round)]
 
 
 def owes_on(member, day):
@@ -101,32 +101,32 @@ def owes_on(member, day):
 
 # --- Contributions owed and fines ---------------------------------------------------------------------------------
 
-def _create_dues(kyama, members, after, through, fines):
+def _create_dues(chama, members, after, through, fines):
     """Owed contributions for these members from after `after` through `through`. Existing ones are kept."""
-    dates = periods_between(kyama, after, through)
+    dates = periods_between(chama, after, through)
     if not dates or not members:
         return
     today = timezone.localdate()
-    existing = set(KyamaDue.objects.filter(kyama=kyama, period_date__gte=dates[0], period_date__lte=dates[-1])
+    existing = set(ChamaDue.objects.filter(chama=chama, period_date__gte=dates[0], period_date__lte=dates[-1])
                    .values_list("member_id", "period_date"))
     rows = []
     for day in dates:
-        deadline = day + timedelta(days=kyama.grace_days)
+        deadline = day + timedelta(days=chama.grace_days)
         for member in members:
             if owes_on(member, day) and (member.pk, day) not in existing:
                 # Days that passed before they could be recorded here are never fined.
-                rows.append(KyamaDue(kyama=kyama, member=member, period_date=day, amount=kyama.contribution_amount,
+                rows.append(ChamaDue(chama=chama, member=member, period_date=day, amount=chama.contribution_amount,
                                      deadline=deadline, fine_checked=not fines and deadline < today))
-    KyamaDue.objects.bulk_create(rows)
+    ChamaDue.objects.bulk_create(rows)
 
 
-def _due_for(kyama, member, day):
+def _due_for(chama, member, day):
     """The member's contribution for one date, created if it is not owed yet (paying or excusing ahead)."""
-    due = KyamaDue.objects.filter(member=member, period_date=day).first()
+    due = ChamaDue.objects.filter(member=member, period_date=day).first()
     if due:
         return due
-    return KyamaDue.objects.create(kyama=kyama, member=member, period_date=day, amount=kyama.contribution_amount,
-                                   deadline=day + timedelta(days=kyama.grace_days))
+    return ChamaDue.objects.create(chama=chama, member=member, period_date=day, amount=chama.contribution_amount,
+                                   deadline=day + timedelta(days=chama.grace_days))
 
 
 def with_totals(dues):
@@ -140,30 +140,30 @@ def fine_owed(due):
 
 
 def _paid_by_deadline(due):
-    return KyamaAllocation.objects.filter(due=due, part="CONTRIBUTION", payment__reversed_at__isnull=True,
+    return ChamaAllocation.objects.filter(due=due, part="CONTRIBUTION", payment__reversed_at__isnull=True,
                                           payment__paid_on__lte=due.pay_by).aggregate(v=_sum("amount"))["v"]
 
 
-def _apply_fines(kyama, today):
+def _apply_fines(chama, today):
     late = Q(excused_until__isnull=True, deadline__lt=today) | Q(excused_until__lt=today)
-    for due in KyamaDue.objects.filter(kyama=kyama, fine_checked=False).filter(late):
+    for due in ChamaDue.objects.filter(chama=chama, fine_checked=False).filter(late):
         changes = {"fine_checked": True}
-        if kyama.fine_amount > 0 and _paid_by_deadline(due) < due.amount:
-            changes.update(fine_amount=kyama.fine_amount, fined_on=due.pay_by + timedelta(days=1))
-        KyamaDue.objects.filter(pk=due.pk).update(**changes)
+        if chama.fine_amount > 0 and _paid_by_deadline(due) < due.amount:
+            changes.update(fine_amount=chama.fine_amount, fined_on=due.pay_by + timedelta(days=1))
+        ChamaDue.objects.filter(pk=due.pk).update(**changes)
 
 
 @transaction.atomic
-def sync(kyama, today=None):
-    """Bring the kyama up to today: contributions owed so far, and fines for deadlines that have passed."""
+def sync(chama, today=None):
+    """Bring the chama up to today: contributions owed so far, and fines for deadlines that have passed."""
     today = today or timezone.localdate()
-    kyama = Kyama.objects.select_for_update().get(pk=kyama.pk)
-    if kyama.dues_through is None or kyama.dues_through < today:
-        _create_dues(kyama, list(kyama.members.all()), kyama.dues_through, today, fines=True)
-        Kyama.objects.filter(pk=kyama.pk).update(dues_through=today)
-        kyama.dues_through = today
-    _apply_fines(kyama, today)
-    return kyama
+    chama = Chama.objects.select_for_update().get(pk=chama.pk)
+    if chama.dues_through is None or chama.dues_through < today:
+        _create_dues(chama, list(chama.members.all()), chama.dues_through, today, fines=True)
+        Chama.objects.filter(pk=chama.pk).update(dues_through=today)
+        chama.dues_through = today
+    _apply_fines(chama, today)
+    return chama
 
 
 # --- Setting up and members ---------------------------------------------------------------------------------------
@@ -192,17 +192,17 @@ def clean_phone(value):
 def _role(value):
     role = str(value or "MEMBER").upper()
     if role not in ROLE_LABELS:
-        raise ValidationError("Choose the member's role in the kyama.")
+        raise ValidationError("Choose the member's role in the chama.")
     return role
 
 
-def _rules(data, today, kyama=None):
-    """Check the kyama's rules. On an existing kyama only the fields sent are checked."""
+def _rules(data, today, chama=None):
+    """Check the chama's rules. On an existing chama only the fields sent are checked."""
     values = {}
     if "name" in data:
         values["name"] = " ".join(str(data["name"] or "").split())[:120]
         if len(values["name"]) < 2:
-            raise ValidationError("Enter the kyama's name.")
+            raise ValidationError("Enter the chama's name.")
     if "contribution_amount" in data:
         values["contribution_amount"] = money(data["contribution_amount"])
         if values["contribution_amount"] <= 0:
@@ -252,21 +252,21 @@ def _rules(data, today, kyama=None):
 
 
 @transaction.atomic
-def create_kyama(*, user, data):
-    """A new kyama with its leaders and members, listed in the order they will receive the money."""
+def create_chama(*, user, data):
+    """A new chama with its leaders and members, listed in the order they will receive the money."""
     today = timezone.localdate()
     required = ["name", "contribution_amount", "frequency", "start_date"]
     missing = [field for field in required if data.get(field) in (None, "")]
     if missing:
-        raise ValidationError("Enter the kyama's name, the contribution, how often it is paid and the first contribution date.")
+        raise ValidationError("Enter the chama's name, the contribution, how often it is paid and the first contribution date.")
     first_receiver = data.get("first_receiver")
     values = _rules({"grace_days": 0, "fine_amount": 0, "payout_mode": "ROTATION", "periods_per_round": 1, "turn_choice": "ORDER",
                      **{key: value for key, value in data.items() if key not in {"members", "first_receiver"}}}, today)
     people = list(data.get("members") or [])
     if len(people) < 2:
-        raise ValidationError("A kyama needs at least two members. Add every member, including yourself if you contribute.")
+        raise ValidationError("A chama needs at least two members. Add every member, including yourself if you contribute.")
     if len(people) > 500:
-        raise ValidationError("A kyama can have up to 500 members.")
+        raise ValidationError("A chama can have up to 500 members.")
     members, seen, offices = [], set(), {}
     for position, person in enumerate(people, start=1):
         name = clean_name(person.get("full_name"))
@@ -280,87 +280,87 @@ def create_kyama(*, user, data):
             offices[role] = name
         members.append((name, number, phone, role, position))
     if "TREASURER" not in offices:
-        raise ValidationError("Choose the kyama's treasurer: the member who keeps the money and records it here.")
-    kyama = Kyama.objects.create(**values, created_by=user)
-    rows = [KyamaMember.objects.create(kyama=kyama, full_name=name, id_number=number, phone=phone, role=role, turn_position=position,
-                                       joined_on=kyama.start_date) for name, number, phone, role, position in members]
+        raise ValidationError("Choose the chama's treasurer: the member who keeps the money and records it here.")
+    chama = Chama.objects.create(**values, created_by=user)
+    rows = [ChamaMember.objects.create(chama=chama, full_name=name, id_number=number, phone=phone, role=role, turn_position=position,
+                                       joined_on=chama.start_date) for name, number, phone, role, position in members]
     # Contributions already due today are owed straight away, but not fined: they were not recorded here in time.
-    if first_receiver is not None and kyama.payout_mode == "ROTATION":
+    if first_receiver is not None and chama.payout_mode == "ROTATION":
         if not 0 <= first_receiver < len(rows):
             raise ValidationError("Choose who receives the first turn from the members listed.")
-        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=rows[first_receiver], next_receiver_note="Agreed when the kyama was set up",
+        Chama.objects.filter(pk=chama.pk).update(next_receiver=rows[first_receiver], next_receiver_note="Agreed when the chama was set up",
                                                  next_receiver_set_at=timezone.now())
-    _create_dues(kyama, rows, None, today, fines=False)
-    Kyama.objects.filter(pk=kyama.pk).update(dues_through=today)
-    kyama.dues_through = today
-    _log("KYAMA_CREATED", kyama, user, name=kyama.name, members=len(rows), contribution=kyama.contribution_amount, frequency=kyama.frequency)
-    return kyama
+    _create_dues(chama, rows, None, today, fines=False)
+    Chama.objects.filter(pk=chama.pk).update(dues_through=today)
+    chama.dues_through = today
+    _log("CHAMA_CREATED", chama, user, name=chama.name, members=len(rows), contribution=chama.contribution_amount, frequency=chama.frequency)
+    return chama
 
 
 @transaction.atomic
-def update_rules(*, kyama, user, data):
-    kyama = sync(kyama)
-    values = _rules(data, timezone.localdate(), kyama)
-    started = kyama.dues.exists()
+def update_rules(*, chama, user, data):
+    chama = sync(chama)
+    values = _rules(data, timezone.localdate(), chama)
+    started = chama.dues.exists()
     for field in ("frequency", "start_date"):
-        if field in values and values[field] != getattr(kyama, field) and started:
+        if field in values and values[field] != getattr(chama, field) and started:
             raise ValidationError("How often members contribute and the first contribution date cannot change once contributions "
-                                  "have started, because past contributions depend on them. Start a new kyama for a new schedule.")
-    paid_out = kyama.payouts.filter(reversed_at__isnull=True).exists()
+                                  "have started, because past contributions depend on them. Start a new chama for a new schedule.")
+    paid_out = chama.payouts.filter(reversed_at__isnull=True).exists()
     for field in ("payout_mode", "periods_per_round"):
-        if field in values and values[field] != getattr(kyama, field) and paid_out:
+        if field in values and values[field] != getattr(chama, field) and paid_out:
             raise ValidationError("Turns cannot be changed after money has been given out. Reverse those payouts first if they were mistakes.")
-    before = {field: str(getattr(kyama, field)) for field in values}
+    before = {field: str(getattr(chama, field)) for field in values}
     for field, value in values.items():
-        setattr(kyama, field, value)
-    kyama.save()
+        setattr(chama, field, value)
+    chama.save()
     if "start_date" in values and not started:
-        Kyama.objects.filter(pk=kyama.pk).update(dues_through=None)
-        kyama.members.update(joined_on=kyama.start_date)
-        sync(kyama)
-    AuditLog.objects.create(action="KYAMA_RULES_CHANGED", object_type="Kyama", object_id=str(kyama.pk), user=user,
+        Chama.objects.filter(pk=chama.pk).update(dues_through=None)
+        chama.members.update(joined_on=chama.start_date)
+        sync(chama)
+    AuditLog.objects.create(action="CHAMA_RULES_CHANGED", object_type="Chama", object_id=str(chama.pk), user=user,
                             before=before, after={field: str(value) for field, value in values.items()})
-    return kyama
+    return chama
 
 
-def _take_office(kyama, member, role):
+def _take_office(chama, member, role):
     """Giving someone an office moves it from whoever held it; the treasurer's office is never left empty."""
     if member.role == "TREASURER" and role != "TREASURER":
         raise ValidationError(f"{member.full_name} is the treasurer. Make another member treasurer first; the role then moves to them.")
     if role in LEADERSHIP:
-        kyama.members.filter(role=role, left_on__isnull=True).exclude(pk=member.pk).update(role="MEMBER")
+        chama.members.filter(role=role, left_on__isnull=True).exclude(pk=member.pk).update(role="MEMBER")
 
 
 @transaction.atomic
-def add_member(*, kyama, user, data):
-    kyama = sync(kyama)
+def add_member(*, chama, user, data):
+    chama = sync(chama)
     today = timezone.localdate()
     name, number, phone = clean_name(data.get("full_name")), clean_id(data.get("id_number")), clean_phone(data.get("phone"))
     role = _role(data.get("role"))
-    if kyama.members.filter(id_number=number).exists():
-        raise ValidationError(f"A member with ID number {number} is already in this kyama.")
+    if chama.members.filter(id_number=number).exists():
+        raise ValidationError(f"A member with ID number {number} is already in this chama.")
     joined = data.get("joined_on") or today
     if joined > today:
         raise ValidationError("The joining date cannot be in the future.")
-    joined = max(joined, kyama.start_date)
-    position = (kyama.members.aggregate(v=Max("turn_position"))["v"] or 0) + 1
-    member = KyamaMember(kyama=kyama, full_name=name, id_number=number, phone=phone, role="MEMBER", turn_position=position, joined_on=joined)
+    joined = max(joined, chama.start_date)
+    position = (chama.members.aggregate(v=Max("turn_position"))["v"] or 0) + 1
+    member = ChamaMember(chama=chama, full_name=name, id_number=number, phone=phone, role="MEMBER", turn_position=position, joined_on=joined)
     member.save()
     if role != "MEMBER":
-        _take_office(kyama, member, role)
-        KyamaMember.objects.filter(pk=member.pk).update(role=role)
+        _take_office(chama, member, role)
+        ChamaMember.objects.filter(pk=member.pk).update(role=role)
         member.role = role
-    if kyama.dues_through:
+    if chama.dues_through:
         # Owes from the joining date; contributions from before today are not fined.
-        _create_dues(kyama, [member], joined - timedelta(days=1), kyama.dues_through, fines=False)
-    _log("KYAMA_MEMBER_ADDED", member, user, kyama=kyama.name, name=name, role=role, joined_on=joined)
+        _create_dues(chama, [member], joined - timedelta(days=1), chama.dues_through, fines=False)
+    _log("CHAMA_MEMBER_ADDED", member, user, chama=chama.name, name=name, role=role, joined_on=joined)
     return member
 
 
 @transaction.atomic
 def update_member(*, member, user, data):
-    sync(member.kyama)
-    member = KyamaMember.objects.select_for_update().get(pk=member.pk)
+    sync(member.chama)
+    member = ChamaMember.objects.select_for_update().get(pk=member.pk)
     before = {"full_name": member.full_name, "id_number": member.id_number, "phone": member.phone, "role": member.role}
     if "full_name" in data:
         member.full_name = clean_name(data["full_name"])
@@ -368,26 +368,26 @@ def update_member(*, member, user, data):
         member.phone = clean_phone(data["phone"])
     if "id_number" in data:
         number = clean_id(data["id_number"])
-        if KyamaMember.objects.filter(kyama_id=member.kyama_id, id_number=number).exclude(pk=member.pk).exists():
-            raise ValidationError(f"A member with ID number {number} is already in this kyama.")
+        if ChamaMember.objects.filter(chama_id=member.chama_id, id_number=number).exclude(pk=member.pk).exists():
+            raise ValidationError(f"A member with ID number {number} is already in this chama.")
         member.id_number = number
     if "role" in data:
         role = _role(data["role"])
         if role != member.role:
             if member.left_on:
-                raise ValidationError(f"{member.full_name} has left the kyama and cannot hold an office.")
-            _take_office(member.kyama, member, role)
+                raise ValidationError(f"{member.full_name} has left the chama and cannot hold an office.")
+            _take_office(member.chama, member, role)
             member.role = role
     member.save()
-    AuditLog.objects.create(action="KYAMA_MEMBER_CHANGED", object_type="KyamaMember", object_id=str(member.pk), user=user, before=before,
+    AuditLog.objects.create(action="CHAMA_MEMBER_CHANGED", object_type="ChamaMember", object_id=str(member.pk), user=user, before=before,
                             after={"full_name": member.full_name, "id_number": member.id_number, "phone": member.phone, "role": member.role})
     return member
 
 
 @transaction.atomic
 def member_leaves(*, member, user, reason):
-    sync(member.kyama)
-    member = KyamaMember.objects.select_for_update().get(pk=member.pk)
+    sync(member.chama)
+    member = ChamaMember.objects.select_for_update().get(pk=member.pk)
     if not str(reason or "").strip():
         raise ValidationError("Explain why the member is leaving.")
     if member.left_on:
@@ -399,16 +399,16 @@ def member_leaves(*, member, user, reason):
     member.left_on = today + timedelta(days=1)
     member.leave_reason = str(reason).strip()
     member.save(update_fields=["left_on", "leave_reason"])
-    Kyama.objects.filter(pk=member.kyama_id, next_receiver=member).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
-    KyamaDue.objects.filter(member=member, period_date__gte=member.left_on).filter(allocations__isnull=True).delete()
-    _log("KYAMA_MEMBER_LEFT", member, user, name=member.full_name, reason=member.leave_reason)
+    Chama.objects.filter(pk=member.chama_id, next_receiver=member).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
+    ChamaDue.objects.filter(member=member, period_date__gte=member.left_on).filter(allocations__isnull=True).delete()
+    _log("CHAMA_MEMBER_LEFT", member, user, name=member.full_name, reason=member.leave_reason)
     return member
 
 
 @transaction.atomic
-def set_turn_order(*, kyama, user, member_ids):
-    kyama = sync(kyama)
-    active = list(kyama.members.filter(left_on__isnull=True).values_list("pk", flat=True))
+def set_turn_order(*, chama, user, member_ids):
+    chama = sync(chama)
+    active = list(chama.members.filter(left_on__isnull=True).values_list("pk", flat=True))
     try:
         ids = [int(value) for value in member_ids]
     except (TypeError, ValueError):
@@ -416,20 +416,20 @@ def set_turn_order(*, kyama, user, member_ids):
     if sorted(ids) != sorted(active):
         raise ValidationError("List every current member exactly once in the new turn order.")
     for position, pk in enumerate(ids, start=1):
-        KyamaMember.objects.filter(pk=pk).update(turn_position=position)
-    left = kyama.members.filter(left_on__isnull=False).order_by("turn_position", "pk")
+        ChamaMember.objects.filter(pk=pk).update(turn_position=position)
+    left = chama.members.filter(left_on__isnull=False).order_by("turn_position", "pk")
     for offset, member in enumerate(left, start=len(ids) + 1):
-        KyamaMember.objects.filter(pk=member.pk).update(turn_position=offset)
-    _log("KYAMA_TURNS_CHANGED", kyama, user, order=",".join(map(str, ids)))
-    return kyama
+        ChamaMember.objects.filter(pk=member.pk).update(turn_position=offset)
+    _log("CHAMA_TURNS_CHANGED", chama, user, order=",".join(map(str, ids)))
+    return chama
 
 
 # --- Money in ---------------------------------------------------------------------------------------------------
 
-def _member_of(kyama, member_id):
-    member = KyamaMember.objects.filter(kyama=kyama, pk=member_id).first()
+def _member_of(chama, member_id):
+    member = ChamaMember.objects.filter(chama=chama, pk=member_id).first()
     if not member:
-        raise ValidationError("Choose a member of this kyama.")
+        raise ValidationError("Choose a member of this chama.")
     return member
 
 
@@ -444,14 +444,14 @@ def _method(method, reference):
 
 
 @transaction.atomic
-def record_payment(*, kyama, member_id, amount, paid_on, method, reference="", key, user):
+def record_payment(*, chama, member_id, amount, paid_on, method, reference="", key, user):
     """Money from a member, shared out to their oldest unpaid contributions, then fines, then contributions ahead."""
-    kyama = sync(kyama)
-    existing = KyamaPayment.objects.filter(idempotency_key=key).first()
+    chama = sync(chama)
+    existing = ChamaPayment.objects.filter(idempotency_key=key).first()
     if existing:
         return existing
     today = timezone.localdate()
-    member = _member_of(kyama, member_id)
+    member = _member_of(chama, member_id)
     amount = money(amount)
     if amount <= 0:
         raise ValidationError("Enter an amount above zero.")
@@ -459,7 +459,7 @@ def record_payment(*, kyama, member_id, amount, paid_on, method, reference="", k
     if paid_on > today:
         raise ValidationError("The payment date cannot be in the future.")
     method, reference = _method(method, reference)
-    payment = KyamaPayment.objects.create(kyama=kyama, member=member, amount=amount, paid_on=paid_on, method=method, reference=reference,
+    payment = ChamaPayment.objects.create(chama=chama, member=member, amount=amount, paid_on=paid_on, method=method, reference=reference,
                                           idempotency_key=key, created_by=user)
     remaining = amount
     touched = []
@@ -468,22 +468,22 @@ def record_payment(*, kyama, member_id, amount, paid_on, method, reference="", k
         nonlocal remaining
         take = min(remaining, owed)
         if take > 0:
-            KyamaAllocation.objects.create(payment=payment, due=due, part=part, amount=take)
+            ChamaAllocation.objects.create(payment=payment, due=due, part=part, amount=take)
             remaining -= take
             if part == "CONTRIBUTION":
                 touched.append(due)
 
-    owed = list(with_totals(KyamaDue.objects.filter(member=member, period_date__lte=today)).order_by("period_date", "pk"))
+    owed = list(with_totals(ChamaDue.objects.filter(member=member, period_date__lte=today)).order_by("period_date", "pk"))
     for due in owed:
         allocate(due, "CONTRIBUTION", due.amount - due.paid)
     for due in owed:
         allocate(due, "FINE", fine_owed(due))
     if remaining > 0 and not member.left_on:
-        first = period_index(kyama, today) + 1
+        first = period_index(chama, today) + 1
         for index in range(first, first + MAX_AHEAD):
             if remaining <= 0:
                 break
-            due = with_totals(KyamaDue.objects.filter(pk=_due_for(kyama, member, period_date(kyama, index)).pk)).get()
+            due = with_totals(ChamaDue.objects.filter(pk=_due_for(chama, member, period_date(chama, index)).pk)).get()
             allocate(due, "CONTRIBUTION", due.amount - due.paid)
     if remaining > 0:
         raise ValidationError(f"{member.full_name} owes less than {amount:,.2f}, even counting the next {MAX_AHEAD} contributions. "
@@ -493,17 +493,17 @@ def record_payment(*, kyama, member_id, amount, paid_on, method, reference="", k
         due.refresh_from_db()
         if due.fine_amount > 0 and not due.fine_waived_at and not due.allocations.filter(part="FINE", payment__reversed_at__isnull=True).exists() \
                 and _paid_by_deadline(due) >= due.amount:
-            KyamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user,
+            ChamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user,
                                                       fine_waive_reason="Paid on time; the payment was recorded after the deadline.")
-    _log("KYAMA_PAYMENT", payment, user, kyama=kyama.name, member=member.full_name, amount=amount, method=method, reference=reference)
+    _log("CHAMA_PAYMENT", payment, user, chama=chama.name, member=member.full_name, amount=amount, method=method, reference=reference)
     return payment
 
 
 @transaction.atomic
 def reverse_payment(*, payment, user, reason):
     """A payment recorded by mistake: the member owes it again, and the fine rule is applied again where late."""
-    sync(payment.kyama)
-    payment = KyamaPayment.objects.select_for_update().get(pk=payment.pk)
+    sync(payment.chama)
+    payment = ChamaPayment.objects.select_for_update().get(pk=payment.pk)
     if not str(reason or "").strip():
         raise ValidationError("Explain why the payment is being reversed.")
     if payment.reversed_at:
@@ -511,28 +511,28 @@ def reverse_payment(*, payment, user, reason):
     payment.reversed_at, payment.reverse_reason, payment.reversed_by = timezone.now(), str(reason).strip(), user
     payment.save(update_fields=["reversed_at", "reverse_reason", "reversed_by"])
     due_ids = payment.allocations.filter(part="CONTRIBUTION").values_list("due_id", flat=True)
-    KyamaDue.objects.filter(pk__in=list(due_ids), fine_amount=0).update(fine_checked=False)
-    sync(payment.kyama)
-    _log("KYAMA_PAYMENT_REVERSED", payment, user, amount=payment.amount, reason=payment.reverse_reason)
+    ChamaDue.objects.filter(pk__in=list(due_ids), fine_amount=0).update(fine_checked=False)
+    sync(payment.chama)
+    _log("CHAMA_PAYMENT_REVERSED", payment, user, amount=payment.amount, reason=payment.reverse_reason)
     return payment
 
 
 @transaction.atomic
-def excuse(*, kyama, member_id, period, pay_by, reason, user):
+def excuse(*, chama, member_id, period, pay_by, reason, user):
     """A member says in advance (or before the deadline) that they will pay late, and promises a date."""
-    kyama = sync(kyama)
+    chama = sync(chama)
     today = timezone.localdate()
-    member = _member_of(kyama, member_id)
+    member = _member_of(chama, member_id)
     reason = str(reason or "").strip()
     if not reason:
         raise ValidationError("Enter the reason the member gave for paying late.")
-    if not period or not is_period_date(kyama, period):
-        raise ValidationError("Choose one of the kyama's contribution dates.")
-    if period > period_date(kyama, period_index(kyama, today) + MAX_AHEAD):
+    if not period or not is_period_date(chama, period):
+        raise ValidationError("Choose one of the chama's contribution dates.")
+    if period > period_date(chama, period_index(chama, today) + MAX_AHEAD):
         raise ValidationError(f"An excuse can be given for at most the next {MAX_AHEAD} contributions.")
     if not owes_on(member, period):
         raise ValidationError(f"{member.full_name} does not owe a contribution on that date.")
-    due = with_totals(KyamaDue.objects.filter(pk=_due_for(kyama, member, period).pk)).get()
+    due = with_totals(ChamaDue.objects.filter(pk=_due_for(chama, member, period).pk)).get()
     if due.paid >= due.amount:
         raise ValidationError(f"{member.full_name} has already paid this contribution.")
     if due.fine_amount > 0:
@@ -543,39 +543,39 @@ def excuse(*, kyama, member_id, period, pay_by, reason, user):
         raise ValidationError(f"Choose the date the member promises to pay, after the usual deadline ({due.deadline:%d %b %Y}).")
     if pay_by > due.deadline + timedelta(days=MAX_EXCUSE_DAYS):
         raise ValidationError(f"An excuse can delay a contribution by at most {MAX_EXCUSE_DAYS} days.")
-    KyamaDue.objects.filter(pk=due.pk).update(excused_until=pay_by, excuse_reason=reason[:1000], excused_by=user, excused_at=timezone.now())
-    _log("KYAMA_EXCUSE", due, user, member=member.full_name, period=period, pay_by=pay_by, reason=reason)
+    ChamaDue.objects.filter(pk=due.pk).update(excused_until=pay_by, excuse_reason=reason[:1000], excused_by=user, excused_at=timezone.now())
+    _log("CHAMA_EXCUSE", due, user, member=member.full_name, period=period, pay_by=pay_by, reason=reason)
     return due
 
 
 @transaction.atomic
 def waive_fine(*, due, user, reason):
-    sync(due.kyama)
-    due = with_totals(KyamaDue.objects.filter(pk=due.pk)).get()
+    sync(due.chama)
+    due = with_totals(ChamaDue.objects.filter(pk=due.pk)).get()
     if not str(reason or "").strip():
         raise ValidationError("Explain why the fine is being waived.")
     if due.fine_amount <= 0 or due.fine_waived_at:
         raise ValidationError("There is no fine to waive on this contribution.")
     if due.fine_paid > 0:
         raise ValidationError("Part of this fine has been paid. Reverse that payment first if the fine should not have been charged.")
-    KyamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user, fine_waive_reason=str(reason).strip())
-    _log("KYAMA_FINE_WAIVED", due, user, amount=due.fine_amount, reason=reason)
+    ChamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user, fine_waive_reason=str(reason).strip())
+    _log("CHAMA_FINE_WAIVED", due, user, amount=due.fine_amount, reason=reason)
     return due
 
 
 # --- Money out and turns ------------------------------------------------------------------------------------------
 
-def held(kyama):
-    """The kyama's money the treasurer is holding: everything paid in less everything given out."""
-    paid_in = kyama.payments.filter(reversed_at__isnull=True).aggregate(v=_sum("amount"))["v"]
-    paid_out = kyama.payouts.filter(reversed_at__isnull=True).aggregate(v=_sum("amount"))["v"]
+def held(chama):
+    """The chama's money the treasurer is holding: everything paid in less everything given out."""
+    paid_in = chama.payments.filter(reversed_at__isnull=True).aggregate(v=_sum("amount"))["v"]
+    paid_out = chama.payouts.filter(reversed_at__isnull=True).aggregate(v=_sum("amount"))["v"]
     return paid_in - paid_out
 
 
-def _round_money(kyama, number, members):
+def _round_money(chama, number, members):
     """What a round should collect and what has been collected for it so far."""
-    dates = round_dates(kyama, number)
-    dues = {(due.member_id, due.period_date): due for due in with_totals(KyamaDue.objects.filter(kyama=kyama, period_date__in=dates))}
+    dates = round_dates(chama, number)
+    dues = {(due.member_id, due.period_date): due for due in with_totals(ChamaDue.objects.filter(chama=chama, period_date__in=dates))}
     expected = collected = ZERO
     for day in dates:
         for member in members:
@@ -584,14 +584,14 @@ def _round_money(kyama, number, members):
                 expected += due.amount
                 collected += due.paid
             elif owes_on(member, day):
-                expected += kyama.contribution_amount
+                expected += chama.contribution_amount
     return expected, collected
 
 
-def cycle(kyama):
+def cycle(chama):
     """The turns given out so far, the members in turn order, and who has not yet received in this round of turns."""
-    order = list(kyama.members.filter(left_on__isnull=True))
-    payouts = list(kyama.payouts.filter(reversed_at__isnull=True, round_number__isnull=False).select_related("member").order_by("round_number"))
+    order = list(chama.members.filter(left_on__isnull=True))
+    payouts = list(chama.payouts.filter(reversed_at__isnull=True, round_number__isnull=False).select_related("member").order_by("round_number"))
     received = set()
     for payout in payouts:
         received.add(payout.member_id)
@@ -600,34 +600,34 @@ def cycle(kyama):
     return payouts, order, [m for m in order if m.pk not in received]
 
 
-def agreed_next(kyama, waiting):
+def agreed_next(chama, waiting):
     """The member the members agreed receives next, while that agreement still applies."""
-    return next((m for m in waiting if m.pk == kyama.next_receiver_id), None)
+    return next((m for m in waiting if m.pk == chama.next_receiver_id), None)
 
 
-def schedule(kyama, today=None, ahead=None):
+def schedule(chama, today=None, ahead=None):
     """Every turn: those already given out, then who receives next for one full cycle.
 
     In turn order, the agreed next receiver (if any) goes first and the rest follow the list. When the members agree
     each turn, only the agreed next receiver is known; later turns show as still to be agreed.
     """
     today = today or timezone.localdate()
-    members = list(kyama.members.all())
-    payouts, order, waiting = cycle(kyama)
-    agreed = agreed_next(kyama, waiting)
-    if kyama.turn_choice == "AGREED":
+    members = list(chama.members.all())
+    payouts, order, waiting = cycle(chama)
+    agreed = agreed_next(chama, waiting)
+    if chama.turn_choice == "AGREED":
         queue = [agreed] + [None] * (len(order) * 2)
     else:
         queue = ([agreed] if agreed else []) + [m for m in waiting if m != agreed] + order * 2
-    rows = [{"round": p.round_number, "date": round_dates(kyama, p.round_number)[-1], "member_id": p.member_id, "member": p.member.full_name,
+    rows = [{"round": p.round_number, "date": round_dates(chama, p.round_number)[-1], "member_id": p.member_id, "member": p.member.full_name,
              "amount": p.amount, "paid_on": p.paid_on, "payout_id": p.pk, "status": "GIVEN"} for p in payouts]
     next_round = (payouts[-1].round_number if payouts else 0) + 1
     for offset in range(ahead if ahead is not None else len(order)):
         if not order:
             break
         number, member = next_round + offset, queue[offset]
-        day = round_dates(kyama, number)[-1]
-        expected, collected = _round_money(kyama, number, members) if offset < 2 else (None, None)
+        day = round_dates(chama, number)[-1]
+        expected, collected = _round_money(chama, number, members) if offset < 2 else (None, None)
         rows.append({"round": number, "date": day, "member_id": member.pk if member else None, "member": member.full_name if member else "",
                      "agreed": bool(offset == 0 and agreed), "expected": expected, "collected": collected,
                      "status": "DUE" if day <= today else "UPCOMING"})
@@ -635,33 +635,33 @@ def schedule(kyama, today=None, ahead=None):
 
 
 @transaction.atomic
-def set_next_receiver(*, kyama, member_id, note, user):
+def set_next_receiver(*, chama, member_id, note, user):
     """Record who the members agreed receives the next turn, or clear it (member_id None)."""
-    kyama = sync(kyama)
-    if kyama.payout_mode != "ROTATION":
-        raise ValidationError("This kyama saves its money together; members do not take turns.")
+    chama = sync(chama)
+    if chama.payout_mode != "ROTATION":
+        raise ValidationError("This chama saves its money together; members do not take turns.")
     if member_id is None:
-        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
-        _log("KYAMA_NEXT_RECEIVER_CLEARED", kyama, user)
-        return kyama
-    member = _member_of(kyama, member_id)
-    _, _, waiting = cycle(kyama)
+        Chama.objects.filter(pk=chama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
+        _log("CHAMA_NEXT_RECEIVER_CLEARED", chama, user)
+        return chama
+    member = _member_of(chama, member_id)
+    _, _, waiting = cycle(chama)
     if member.left_on:
-        raise ValidationError(f"{member.full_name} has left the kyama.")
+        raise ValidationError(f"{member.full_name} has left the chama.")
     if member not in waiting:
         names = ", ".join(m.full_name for m in waiting)
         raise ValidationError(f"{member.full_name} has already received in this round of turns. Each member receives once before anyone "
                               f"receives again. Still to receive: {names}.")
     note = str(note or "").strip()[:500]
-    Kyama.objects.filter(pk=kyama.pk).update(next_receiver=member, next_receiver_note=note, next_receiver_set_at=timezone.now())
-    _log("KYAMA_NEXT_RECEIVER_AGREED", kyama, user, member=member.full_name, note=note)
-    return kyama
+    Chama.objects.filter(pk=chama.pk).update(next_receiver=member, next_receiver_note=note, next_receiver_set_at=timezone.now())
+    _log("CHAMA_NEXT_RECEIVER_AGREED", chama, user, member=member.full_name, note=note)
+    return chama
 
 
 @transaction.atomic
-def record_payout(*, kyama, member_id=None, amount, paid_on=None, method, reference="", notes="", key, user):
-    kyama = sync(kyama)
-    existing = KyamaPayout.objects.filter(idempotency_key=key).first()
+def record_payout(*, chama, member_id=None, amount, paid_on=None, method, reference="", notes="", key, user):
+    chama = sync(chama)
+    existing = ChamaPayout.objects.filter(idempotency_key=key).first()
     if existing:
         return existing
     today = timezone.localdate()
@@ -673,42 +673,42 @@ def record_payout(*, kyama, member_id=None, amount, paid_on=None, method, refere
         raise ValidationError("The payout date cannot be in the future.")
     method, reference = _method(method, reference)
     round_number, scheduled = None, None
-    if kyama.payout_mode == "ROTATION":
-        upcoming = [row for row in schedule(kyama, today, ahead=1) if row["status"] != "GIVEN"]
+    if chama.payout_mode == "ROTATION":
+        upcoming = [row for row in schedule(chama, today, ahead=1) if row["status"] != "GIVEN"]
         if not upcoming:
             raise ValidationError("There are no members to receive the money.")
         round_number, scheduled = upcoming[0]["round"], upcoming[0]["member_id"]
         if not (member_id or scheduled):
             raise ValidationError("The members have not agreed who receives this turn yet. Choose the member they agreed on.")
-    member = _member_of(kyama, member_id or scheduled)
+    member = _member_of(chama, member_id or scheduled)
     if member.left_on:
-        raise ValidationError(f"{member.full_name} has left the kyama.")
-    if round_number and member not in cycle(kyama)[2]:
+        raise ValidationError(f"{member.full_name} has left the chama.")
+    if round_number and member not in cycle(chama)[2]:
         raise ValidationError(f"{member.full_name} has already received in this round of turns. Each member receives once before anyone receives again.")
-    available = held(kyama)
+    available = held(chama)
     if amount > available:
-        raise ValidationError(f"The kyama holds only {available:,.2f}, so {amount:,.2f} cannot be given out.")
-    payout = KyamaPayout.objects.create(kyama=kyama, member=member, round_number=round_number, amount=amount, paid_on=paid_on, method=method,
+        raise ValidationError(f"The chama holds only {available:,.2f}, so {amount:,.2f} cannot be given out.")
+    payout = ChamaPayout.objects.create(chama=chama, member=member, round_number=round_number, amount=amount, paid_on=paid_on, method=method,
                                         reference=reference, notes=str(notes or "")[:1000], idempotency_key=key, created_by=user)
     if round_number:  # the agreement was for this turn
-        Kyama.objects.filter(pk=kyama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
-    _log("KYAMA_PAYOUT", payout, user, kyama=kyama.name, member=member.full_name, amount=amount, round=round_number or "",
+        Chama.objects.filter(pk=chama.pk).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
+    _log("CHAMA_PAYOUT", payout, user, chama=chama.name, member=member.full_name, amount=amount, round=round_number or "",
          instead_of=scheduled if scheduled and scheduled != member.pk else "")
     return payout
 
 
 @transaction.atomic
 def reverse_payout(*, payout, user, reason):
-    sync(payout.kyama)
-    payout = KyamaPayout.objects.select_for_update().get(pk=payout.pk)
+    sync(payout.chama)
+    payout = ChamaPayout.objects.select_for_update().get(pk=payout.pk)
     if not str(reason or "").strip():
         raise ValidationError("Explain why the payout is being reversed.")
     if payout.reversed_at:
         return payout
-    if payout.round_number and KyamaPayout.objects.filter(kyama_id=payout.kyama_id, reversed_at__isnull=True,
+    if payout.round_number and ChamaPayout.objects.filter(chama_id=payout.chama_id, reversed_at__isnull=True,
                                                            round_number__gt=payout.round_number).exists():
         raise ValidationError("Later turns have already been given out. Reverse the latest one first.")
     payout.reversed_at, payout.reverse_reason, payout.reversed_by = timezone.now(), str(reason).strip(), user
     payout.save(update_fields=["reversed_at", "reverse_reason", "reversed_by"])
-    _log("KYAMA_PAYOUT_REVERSED", payout, user, amount=payout.amount, reason=payout.reverse_reason)
+    _log("CHAMA_PAYOUT_REVERSED", payout, user, amount=payout.amount, reason=payout.reverse_reason)
     return payout

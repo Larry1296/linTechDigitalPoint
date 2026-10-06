@@ -7,10 +7,10 @@ import { ErrorState, Loading } from "../../components/States";
 import { BackLink } from "../../components/navigation/BackLink";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import "./platform.css";
-import { KyamaSetupFields, emptyKyama, kyamaPayload, kyamaProblem } from "../kyama/KyamaSetupFields";
+import { ChamaSetupFields, emptyChama, chamaPayload, chamaProblem } from "../chama/ChamaSetupFields";
 import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleProblem, searchSectors, timeZones, toggleModule, useBusinessProfiles } from "./businessSetupData";
 
-const STEP_LABELS = { business: "Your business", kind: "Kind of business", tools: "Tools & starter list", kyama: "Your kyama",
+const STEP_LABELS = { business: "Your business", kind: "Kind of business", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Opening money", review: "Review" };
 const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item" };
 
@@ -55,7 +55,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [details, setDetails] = useState(draft.details ?? { branch_name: "Main branch", phone: user.phone || "", email: user.email || "", address: "", country: "KE", currency: "KES", timezone: "Africa/Nairobi" });
   const [money, setMoney] = useState(draft.money ?? { opening_cash: "", opening_bank: "" });
   const [plan, setPlan] = useState(draft.plan ?? "BASIC");
-  const [kyama, setKyama] = useState(() => draft.kyama ?? emptyKyama(user));
+  const [chama, setChama] = useState(() => draft.chama ?? emptyChama(user));
   const [plans, setPlans] = useState(null);
   useEffect(() => { api("/api/v1/tenancy/plans/").then((data) => setPlans(data.plans)).catch(() => setPlans([])); }, []);
   const [error, setError] = useState(null);
@@ -63,12 +63,12 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [created, setCreated] = useState(null);
   const zones = useMemo(() => timeZones(), []);
   useEffect(() => {
-    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan, kyama });
-  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan, kyama]);
+    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan, chama });
+  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan, chama]);
   if (created) return <LogoStep business={created} onUploaded={refresh} onDone={() => navigate("/admin/dashboard", { replace: true })} />;
 
-  // The kyama step appears only when kyama management is one of the chosen tools.
-  const steps = ["business", "kind", "tools", ...(modules.has("kyama") ? ["kyama"] : []), "place", "money", "review"];
+  // The chama step appears only when chama management is one of the chosen tools.
+  const steps = ["business", "kind", "tools", ...(modules.has("chama") ? ["chama"] : []), "place", "money", "review"];
   const current = steps[Math.min(step, steps.length - 1)];
   const goTo = (id) => setStep(steps.indexOf(id));
   const sector = sectorId ? findSector(catalogue, sectorId) : null;
@@ -112,7 +112,7 @@ function SetupWizard({ catalogue, user, refresh }) {
     kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Describe what your business does." : "",
     tools: () => moduleProblem(catalogue, model, modules)
       || (services.some((service) => service.selling_price !== "" && Number(service.selling_price) < 0) ? "Service prices cannot be negative." : ""),
-    kyama: () => kyamaProblem(kyama),
+    chama: () => chamaProblem(chama),
     place: () => !details.branch_name.trim() ? "Enter the name of your first branch or shop." : "",
     money: () => [money.opening_cash, money.opening_bank].some((value) => value !== "" && Number(value) < 0) ? "Opening amounts cannot be negative." : "",
     review: () => "",
@@ -133,7 +133,7 @@ function SetupWizard({ catalogue, user, refresh }) {
         starter_services: modules.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
           ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
-        kyama: modules.has("kyama") ? kyamaPayload(kyama) : null,
+        chama: modules.has("chama") ? chamaPayload(chama) : null,
       }) });
       clearDraft(user);
       // Load the new business into the session before the logo step, so leaving it opens that business's dashboard.
@@ -245,9 +245,9 @@ function SetupWizard({ catalogue, user, refresh }) {
       </fieldset>}
     </section>}
 
-    {current === "kyama" && <section className="setupPanel">
-      <p className="muted">Set up the kyama you run. You can add members, change leaders and turns, and set up more kyamas later from the dashboard.</p>
-      <KyamaSetupFields value={kyama} onChange={setKyama} />
+    {current === "chama" && <section className="setupPanel">
+      <p className="muted">Set up the chama you run. You can add members, change leaders and turns, and set up more chamas later from the dashboard.</p>
+      <ChamaSetupFields value={chama} onChange={setChama} />
     </section>}
 
     {current === "place" && <section className="setupPanel setupGrid">
@@ -284,7 +284,7 @@ function SetupWizard({ catalogue, user, refresh }) {
         <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => modules.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
         {modules.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
         {modules.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
-        {modules.has("kyama") && <div><dt>Kyama</dt><dd>{kyama.name} · {details.currency} {Number(kyama.contribution_amount || 0).toLocaleString()} each · {kyamaPayload(kyama).members.length} members · treasurer {kyama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("kyama")}>Change</button></div>}
+        {modules.has("chama") && <div><dt>Chama</dt><dd>{chama.name} · {details.currency} {Number(chama.contribution_amount || 0).toLocaleString()} each · {chamaPayload(chama).members.length} members · treasurer {chama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("chama")}>Change</button></div>}
         <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Country & money</dt><dd>{country?.name || details.country} · {details.currency} · {details.timezone.replaceAll("_", " ")}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>

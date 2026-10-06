@@ -7,11 +7,11 @@ from .models import Membership, BranchMembership
 
 # Authentication/account recovery and tenant selection do not read business records.
 ACCOUNT_PATHS = {"csrf", "login", "logout", "me", "refresh", "session", "unlock", "lock", "activity", "password/change", "password/reset", "password/reset/confirm"}
-MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "locations", "commerce": "pos", "cyber": "services", "mpesa": "mpesa", "accounting": "reports", "store": "inventory", "kyama": "kyama"}
+MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "locations", "commerce": "pos", "cyber": "services", "mpesa": "mpesa", "accounting": "reports", "store": "inventory", "chama": "chama"}
 
 def module_for_path(relative):
-    if relative in {"inventory/dashboard", "kyama/setup"}:
-        return None  # kyama/setup turns kyama management on, within the plan
+    if relative in {"inventory/dashboard", "chama/setup"}:
+        return None  # chama/setup turns chama management on, within the plan
     if relative.startswith("accounting/expenses") or relative.startswith("accounting/categories"):
         return "expenses"
     if relative == "accounting/administration/users":

@@ -33,7 +33,7 @@ import { CyberDashboardPage } from "../modules/cyber/CyberDashboardPage";
 import { CyberIncomePage, CyberServiceIncomePage } from "../modules/cyber/CyberIncomePage";
 import { MpesaDashboardPage } from "../modules/mpesa/MpesaDashboardPage";
 import { MpesaCommissionPage } from "../modules/mpesa/MpesaCommissionPage";
-import { KyamaDetailPage, KyamaHomePage, KyamaSetupPage } from "../modules/kyama/KyamaPages";
+import { ChamaDetailPage, ChamaHomePage, ChamaSetupPage } from "../modules/chama/ChamaPages";
 export function AppRoutes() {
   return (
     <Routes>
@@ -90,9 +90,9 @@ export function AppRoutes() {
         <Route path="mpesa/transactions" element={<MpesaDashboardPage />} />
         <Route path="mpesa/reconciliation" element={<MpesaDashboardPage />} />
         <Route path="mpesa/commission" element={<MpesaCommissionPage />} />
-        <Route path="kyama" element={<KyamaHomePage />} />
-        <Route path="kyama/setup" element={<KyamaSetupPage />} />
-        <Route path="kyama/:id" element={<KyamaDetailPage />} />
+        <Route path="chama" element={<ChamaHomePage />} />
+        <Route path="chama/setup" element={<ChamaSetupPage />} />
+        <Route path="chama/:id" element={<ChamaDetailPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

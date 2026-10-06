@@ -268,7 +268,7 @@ def create_business(request):
         address = serializers.CharField(max_length=500, allow_blank=True, default="")
         opening_cash = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0, default=0)
         opening_bank = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0, default=0)
-        kyama = serializers.DictField(required=False, allow_null=True, default=None)  # the kyama to set up, when that tool is chosen
+        chama = serializers.DictField(required=False, allow_null=True, default=None)  # the chama to set up, when that tool is chosen
     form = SetupInput(data=request.data)
     form.is_valid(raise_exception=True)
     values = dict(form.validated_data)
@@ -276,7 +276,7 @@ def create_business(request):
     opening_cash, opening_bank = values.pop('opening_cash'), values.pop('opening_bank')
     starter_categories, starter_services = values.pop('starter_categories'), values.pop('starter_services')
     plan_code = values.pop('plan')
-    kyama = values.pop('kyama')
+    chama = values.pop('chama')
     from uuid import uuid4
     organization = Organization.objects.create(owner=request.user, slug=f"{slugify(form.validated_data['name'])[:35] or 'business'}-{uuid4().hex[:10]}", **values)
     Membership.objects.create(user=request.user, organization=organization, role="OWNER")
@@ -299,10 +299,10 @@ def create_business(request):
                 post_cash(unit='SHOP', method=method, amount=amount, kind='OPENING', reference='Starting money entered at setup',
                           key=f'opening:setup-{method.lower()}', user=request.user, branch=store)
         seed_starter_records(request.user, organization.enabled_modules, starter_categories, starter_services)
-        if kyama and "kyama" in organization.enabled_modules:
-            # Its own records only: a kyama's money never enters the shop's books.
-            from apps.kyama.api import create_from_setup
-            create_from_setup(request.user, kyama)
+        if chama and "chama" in organization.enabled_modules:
+            # Its own records only: a chama's money never enters the shop's books.
+            from apps.chama.api import create_from_setup
+            create_from_setup(request.user, chama)
         AuditLog.objects.create(action="BUSINESS_CREATED", object_type="Organization", object_id=str(organization.pk), user=request.user)
     request.session["organization_id"] = organization.pk
     request.session["branch_id"] = store.pk

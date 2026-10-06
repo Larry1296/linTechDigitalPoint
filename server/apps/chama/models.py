@@ -1,7 +1,7 @@
-"""A kyama (chama): a savings group the business owner runs, usually as its treasurer.
+"""A chama: a savings group the business owner runs, usually as its treasurer.
 
-The kyama's money belongs to its members, not to the shop. Nothing here posts to the shop's cash book or
-ledger, so the shop's sales, profit, money check and net worth never include it; the kyama keeps its own
+The chama's money belongs to its members, not to the shop. Nothing here posts to the shop's cash book or
+ledger, so the shop's sales, profit, money check and net worth never include it; the chama keeps its own
 records below. Contributions are owed per period (every day, week or month); a contribution not fully paid by
 its deadline (the period date plus the grace days, or the date promised in an excuse) is fined once. Records
 are never edited away: a payment or payout made by mistake is reversed, and a fine is waived with a reason.
@@ -22,7 +22,7 @@ LEADERSHIP = [role for role, _ in ROLES if role != "MEMBER"]
 METHODS = [("CASH", "Cash"), ("MPESA", "M-Pesa"), ("BANK", "Bank"), ("OTHER", "Other")]
 
 
-class Kyama(TenantModel):
+class Chama(TenantModel):
     name = models.CharField(max_length=120)
     contribution_amount = models.DecimalField(max_digits=12, decimal_places=2)
     frequency = models.CharField(max_length=10, choices=FREQUENCIES)
@@ -33,7 +33,7 @@ class Kyama(TenantModel):
     periods_per_round = models.PositiveSmallIntegerField(default=1)  # contributions collected before one member receives
     turn_choice = models.CharField(max_length=10, choices=TURN_CHOICES, default="ORDER")
     # The member the members agreed receives the next turn; cleared once that turn is given out.
-    next_receiver = models.ForeignKey("KyamaMember", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    next_receiver = models.ForeignKey("ChamaMember", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     next_receiver_note = models.CharField(max_length=500, blank=True)
     next_receiver_set_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
@@ -44,9 +44,9 @@ class Kyama(TenantModel):
 
     class Meta:
         ordering = ["name", "pk"]
-        constraints = [models.CheckConstraint(condition=Q(contribution_amount__gt=0), name="kyama_positive_contribution"),
-                       models.CheckConstraint(condition=Q(fine_amount__gte=0), name="kyama_fine_not_negative"),
-                       models.CheckConstraint(condition=Q(periods_per_round__gte=1), name="kyama_round_has_periods")]
+        constraints = [models.CheckConstraint(condition=Q(contribution_amount__gt=0), name="chama_positive_contribution"),
+                       models.CheckConstraint(condition=Q(fine_amount__gte=0), name="chama_fine_not_negative"),
+                       models.CheckConstraint(condition=Q(periods_per_round__gte=1), name="chama_round_has_periods")]
         base_manager_name = "objects"
         default_manager_name = "objects"
 
@@ -54,8 +54,8 @@ class Kyama(TenantModel):
         return self.name
 
 
-class KyamaMember(TenantModel):
-    kyama = models.ForeignKey(Kyama, related_name="members", on_delete=models.PROTECT)
+class ChamaMember(TenantModel):
+    chama = models.ForeignKey(Chama, related_name="members", on_delete=models.PROTECT)
     full_name = models.CharField(max_length=120)
     id_number = models.CharField(max_length=20)
     phone = models.CharField(max_length=20)
@@ -68,9 +68,9 @@ class KyamaMember(TenantModel):
 
     class Meta:
         ordering = ["turn_position", "pk"]
-        constraints = [models.UniqueConstraint(fields=["kyama", "id_number"], name="kyama_member_unique_id"),
-                       models.UniqueConstraint(fields=["kyama", "role"], condition=~Q(role="MEMBER") & Q(left_on__isnull=True),
-                                               name="kyama_one_holder_per_office")]
+        constraints = [models.UniqueConstraint(fields=["chama", "id_number"], name="chama_member_unique_id"),
+                       models.UniqueConstraint(fields=["chama", "role"], condition=~Q(role="MEMBER") & Q(left_on__isnull=True),
+                                               name="chama_one_holder_per_office")]
         base_manager_name = "objects"
         default_manager_name = "objects"
 
@@ -78,10 +78,10 @@ class KyamaMember(TenantModel):
         return self.full_name
 
 
-class KyamaDue(TenantModel):
+class ChamaDue(TenantModel):
     """One member's contribution for one period, and the fine if it was not paid in time."""
-    kyama = models.ForeignKey(Kyama, related_name="dues", on_delete=models.PROTECT)
-    member = models.ForeignKey(KyamaMember, related_name="dues", on_delete=models.PROTECT)
+    chama = models.ForeignKey(Chama, related_name="dues", on_delete=models.PROTECT)
+    member = models.ForeignKey(ChamaMember, related_name="dues", on_delete=models.PROTECT)
     period_date = models.DateField()
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     deadline = models.DateField()  # period date plus the grace days at the time
@@ -98,7 +98,7 @@ class KyamaDue(TenantModel):
 
     class Meta:
         ordering = ["period_date", "member__turn_position", "pk"]
-        constraints = [models.UniqueConstraint(fields=["member", "period_date"], name="kyama_one_due_per_period")]
+        constraints = [models.UniqueConstraint(fields=["member", "period_date"], name="chama_one_due_per_period")]
         base_manager_name = "objects"
         default_manager_name = "objects"
 
@@ -107,10 +107,10 @@ class KyamaDue(TenantModel):
         return self.excused_until or self.deadline
 
 
-class KyamaPayment(TenantModel):
+class ChamaPayment(TenantModel):
     """Money a member handed to the treasurer: shared out to their oldest contributions, then fines, then ahead."""
-    kyama = models.ForeignKey(Kyama, related_name="payments", on_delete=models.PROTECT)
-    member = models.ForeignKey(KyamaMember, related_name="payments", on_delete=models.PROTECT)
+    chama = models.ForeignKey(Chama, related_name="payments", on_delete=models.PROTECT)
+    member = models.ForeignKey(ChamaMember, related_name="payments", on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_on = models.DateField()
     method = models.CharField(max_length=10, choices=METHODS)
@@ -124,30 +124,30 @@ class KyamaPayment(TenantModel):
 
     class Meta:
         ordering = ["-paid_on", "-pk"]
-        constraints = [models.UniqueConstraint(fields=["organization", "idempotency_key"], name="kyama_payment_idempotency"),
-                       models.CheckConstraint(condition=Q(amount__gt=0), name="kyama_payment_positive")]
+        constraints = [models.UniqueConstraint(fields=["organization", "idempotency_key"], name="chama_payment_idempotency"),
+                       models.CheckConstraint(condition=Q(amount__gt=0), name="chama_payment_positive")]
         base_manager_name = "objects"
         default_manager_name = "objects"
 
 
-class KyamaAllocation(TenantModel):
+class ChamaAllocation(TenantModel):
     PARTS = [("CONTRIBUTION", "Contribution"), ("FINE", "Fine")]
-    payment = models.ForeignKey(KyamaPayment, related_name="allocations", on_delete=models.PROTECT)
-    due = models.ForeignKey(KyamaDue, related_name="allocations", on_delete=models.PROTECT)
+    payment = models.ForeignKey(ChamaPayment, related_name="allocations", on_delete=models.PROTECT)
+    due = models.ForeignKey(ChamaDue, related_name="allocations", on_delete=models.PROTECT)
     part = models.CharField(max_length=12, choices=PARTS)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
         ordering = ["due__period_date", "pk"]
-        constraints = [models.CheckConstraint(condition=Q(amount__gt=0), name="kyama_allocation_positive")]
+        constraints = [models.CheckConstraint(condition=Q(amount__gt=0), name="chama_allocation_positive")]
         base_manager_name = "objects"
         default_manager_name = "objects"
 
 
-class KyamaPayout(TenantModel):
-    """Money the treasurer gave out: a member's turn (round) in a rotating kyama, or a share-out from savings."""
-    kyama = models.ForeignKey(Kyama, related_name="payouts", on_delete=models.PROTECT)
-    member = models.ForeignKey(KyamaMember, related_name="payouts", on_delete=models.PROTECT)
+class ChamaPayout(TenantModel):
+    """Money the treasurer gave out: a member's turn (round) in a rotating chama, or a share-out from savings."""
+    chama = models.ForeignKey(Chama, related_name="payouts", on_delete=models.PROTECT)
+    member = models.ForeignKey(ChamaMember, related_name="payouts", on_delete=models.PROTECT)
     round_number = models.PositiveIntegerField(null=True, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     paid_on = models.DateField()
@@ -163,9 +163,9 @@ class KyamaPayout(TenantModel):
 
     class Meta:
         ordering = ["-paid_on", "-pk"]
-        constraints = [models.UniqueConstraint(fields=["organization", "idempotency_key"], name="kyama_payout_idempotency"),
-                       models.UniqueConstraint(fields=["kyama", "round_number"], condition=Q(reversed_at__isnull=True, round_number__isnull=False),
-                                               name="kyama_one_payout_per_round"),
-                       models.CheckConstraint(condition=Q(amount__gt=0), name="kyama_payout_positive")]
+        constraints = [models.UniqueConstraint(fields=["organization", "idempotency_key"], name="chama_payout_idempotency"),
+                       models.UniqueConstraint(fields=["chama", "round_number"], condition=Q(reversed_at__isnull=True, round_number__isnull=False),
+                                               name="chama_one_payout_per_round"),
+                       models.CheckConstraint(condition=Q(amount__gt=0), name="chama_payout_positive")]
         base_manager_name = "objects"
         default_manager_name = "objects"

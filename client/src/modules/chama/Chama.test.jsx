@@ -4,12 +4,12 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { BusinessSetupPage } from "../platform/BusinessSetup";
 import profiles from "../platform/businessProfiles.fixture.json";
 import { api } from "../../core/api/client";
-import { emptyKyama, kyamaPayload, kyamaProblem } from "./KyamaSetupFields";
-import { KyamaDashboardCard } from "./KyamaDashboardCard";
+import { emptyChama, chamaPayload, chamaProblem } from "./ChamaSetupFields";
+import { ChamaDashboardCard } from "./ChamaDashboardCard";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 const refresh = vi.fn(async () => {});
-const user = { id: 1, first_name: "Larry", last_name: "Musau", phone: "0712345678", memberships: [], permissions: ["kyama.view_kyama", "kyama.add_kyama"] };
+const user = { id: 1, first_name: "Larry", last_name: "Musau", phone: "0712345678", memberships: [], permissions: ["chama.view_chama", "chama.add_chama"] };
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user, loading: false, refresh }) }));
 const PLANS = { trial_days: 30, plans: [
   { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa"] },
@@ -22,21 +22,21 @@ beforeEach(() => {
 });
 const next = () => fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-it("checks a kyama the way the server does", () => {
-  const kyama = emptyKyama(user);
-  expect(kyama.members[0]).toMatchObject({ full_name: "Larry Musau", phone: "0712345678", role: "TREASURER" });
-  expect(kyamaProblem(kyama)).toBe("Enter the kyama's name.");
-  const filled = { ...kyama, name: "Umoja", contribution_amount: "500",
-    members: [{ ...kyama.members[0], id_number: "12345678" }, { full_name: "Mary Achieng", id_number: "23456789", phone: "0722 000 111", role: "MEMBER" },
+it("checks a chama the way the server does", () => {
+  const chama = emptyChama(user);
+  expect(chama.members[0]).toMatchObject({ full_name: "Larry Musau", phone: "0712345678", role: "TREASURER" });
+  expect(chamaProblem(chama)).toBe("Enter the chama's name.");
+  const filled = { ...chama, name: "Umoja", contribution_amount: "500",
+    members: [{ ...chama.members[0], id_number: "12345678" }, { full_name: "Mary Achieng", id_number: "23456789", phone: "0722 000 111", role: "MEMBER" },
       { full_name: "", id_number: "", phone: "", role: "MEMBER" }] };
-  expect(kyamaProblem(filled)).toBe("");
-  expect(kyamaPayload(filled).members).toHaveLength(2);  // the blank row is left out
-  expect(kyamaProblem({ ...filled, members: filled.members.map((m) => ({ ...m, role: "MEMBER" })) })).toBe("Choose the kyama's treasurer.");
-  expect(kyamaProblem({ ...filled, members: [filled.members[0], { ...filled.members[1], id_number: "12345678" }] })).toBe("Two members have the same ID number.");
-  expect(kyamaProblem({ ...filled, members: [filled.members[0], { ...filled.members[1], full_name: "Mary" }] })).toMatch(/full name/);
+  expect(chamaProblem(filled)).toBe("");
+  expect(chamaPayload(filled).members).toHaveLength(2);  // the blank row is left out
+  expect(chamaProblem({ ...filled, members: filled.members.map((m) => ({ ...m, role: "MEMBER" })) })).toBe("Choose the chama's treasurer.");
+  expect(chamaProblem({ ...filled, members: [filled.members[0], { ...filled.members[1], id_number: "12345678" }] })).toBe("Two members have the same ID number.");
+  expect(chamaProblem({ ...filled, members: [filled.members[0], { ...filled.members[1], full_name: "Mary" }] })).toMatch(/full name/);
 });
 
-it("adds a kyama step to registration when kyama management is chosen", async () => {
+it("adds a chama step to registration when chama management is chosen", async () => {
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
   await screen.findByRole("heading", { name: "Your business" });
   fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Mama Duka" } });
@@ -44,17 +44,17 @@ it("adds a kyama step to registration when kyama management is chosen", async ()
   next();
   fireEvent.click(screen.getByRole("button", { name: /Duka \/ general shop/ }));
   next();
-  expect(screen.queryByRole("heading", { name: "Your kyama" })).not.toBeInTheDocument();
-  const tool = screen.getByRole("button", { name: /^Kyama \(chama\) management/ });
+  expect(screen.queryByRole("heading", { name: "Your chama" })).not.toBeInTheDocument();
+  const tool = screen.getByRole("button", { name: /^Chama management/ });
   expect(within(tool).getByText("Pro plan")).toBeInTheDocument();
   fireEvent.click(tool);
   next();
 
-  expect(screen.getByRole("heading", { name: "Your kyama" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Your chama" })).toBeInTheDocument();
   expect(screen.getByText(/kept completely apart from your shop/)).toBeInTheDocument();
   next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Enter the kyama's name.");
-  fireEvent.change(screen.getByLabelText("Kyama name"), { target: { value: "Wamama Chama" } });
+  expect(screen.getByRole("alert")).toHaveTextContent("Enter the chama's name.");
+  fireEvent.change(screen.getByLabelText("Chama name"), { target: { value: "Wamama Chama" } });
   fireEvent.change(screen.getByLabelText(/Each member contributes/), { target: { value: "300" } });
   fireEvent.change(screen.getByLabelText(/Fine for paying late/), { target: { value: "50" } });
   const ids = screen.getAllByLabelText("ID number");
@@ -83,25 +83,25 @@ it("adds a kyama step to registration when kyama management is chosen", async ()
   fireEvent.click(await screen.findByRole("button", { name: /Pro · KES 1,000/ }));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
-  expect(body.enabled_modules).toContain("kyama");
-  expect(body.kyama).toMatchObject({ name: "Wamama Chama", contribution_amount: "300", fine_amount: "50", payout_mode: "ROTATION",
+  expect(body.enabled_modules).toContain("chama");
+  expect(body.chama).toMatchObject({ name: "Wamama Chama", contribution_amount: "300", fine_amount: "50", payout_mode: "ROTATION",
     frequency: "DAILY", periods_per_round: 7, turn_choice: "AGREED", first_receiver: 0,
     members: [{ full_name: "Larry Musau", id_number: "12345678", role: "MEMBER" }, { full_name: "Mary Achieng", role: "TREASURER" }] });
 }, 20000);  // a whole multi-step set-up: slow when every test file runs at once
 
-it("offers the owner a kyama on the dashboard, or shows each kyama at a glance", async () => {
-  api.mockImplementation(async (path) => (path === "/api/v1/kyama/setup/" ? { enabled: false, plan_allows: true, can_manage: true, can_turn_on: true, kyamas: 0 } : {}));
-  const { unmount } = render(<MemoryRouter><KyamaDashboardCard /></MemoryRouter>);
-  expect(await screen.findByRole("heading", { name: "Are you the treasurer of a kyama?" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Set up a kyama" })).toHaveAttribute("href", "/admin/kyama/setup");
+it("offers the owner a chama on the dashboard, or shows each chama at a glance", async () => {
+  api.mockImplementation(async (path) => (path === "/api/v1/chama/setup/" ? { enabled: false, plan_allows: true, can_manage: true, can_turn_on: true, chamas: 0 } : {}));
+  const { unmount } = render(<MemoryRouter><ChamaDashboardCard /></MemoryRouter>);
+  expect(await screen.findByRole("heading", { name: "Are you the treasurer of a chama?" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Set up a chama" })).toHaveAttribute("href", "/admin/chama/setup");
   unmount();
-  api.mockImplementation(async (path) => (path === "/api/v1/kyama/setup/" ? { enabled: true, plan_allows: true, can_manage: true, can_turn_on: true, kyamas: 1 }
-    : path === "/api/v1/kyama/" ? { kyamas: [{ id: 3, name: "Umoja", contribution_amount: "500", frequency: "WEEKLY", members: 3, held: "1000",
+  api.mockImplementation(async (path) => (path === "/api/v1/chama/setup/" ? { enabled: true, plan_allows: true, can_manage: true, can_turn_on: true, chamas: 1 }
+    : path === "/api/v1/chama/" ? { chamas: [{ id: 3, name: "Umoja", contribution_amount: "500", frequency: "WEEKLY", members: 3, held: "1000",
       current_period: "2026-10-06", next_period: "2026-10-13", paid_count: 2, due_count: 3, late_count: 1, collected: "1000", expected: "1500",
       next_turn: { member: "Mary Achieng", date: "2026-10-06", round: 1 } }] } : {}));
-  render(<MemoryRouter><KyamaDashboardCard /></MemoryRouter>);
+  render(<MemoryRouter><ChamaDashboardCard /></MemoryRouter>);
   const card = await screen.findByRole("link", { name: /Umoja/ });
-  expect(card).toHaveAttribute("href", "/admin/kyama/3");
+  expect(card).toHaveAttribute("href", "/admin/chama/3");
   expect(card).toHaveTextContent("2 of 3 paid");
   expect(card).toHaveTextContent("1 late");
   expect(card).toHaveTextContent("Next turn: Mary Achieng");
@@ -131,11 +131,11 @@ const DETAIL = {
 };
 
 it("shows who has paid, fines, excuses and whose turn it is", async () => {
-  const { KyamaDetailPage } = await import("./KyamaPages");
+  const { ChamaDetailPage } = await import("./ChamaPages");
   const { Route, Routes } = await import("react-router-dom");
-  user.permissions = ["kyama.view_kyama", "kyama.change_kyama", "kyama.add_kyamapayment", "kyama.add_kyamapayout"];
-  api.mockImplementation(async (path) => (path === "/api/v1/kyama/3/" ? DETAIL : {}));
-  render(<MemoryRouter initialEntries={["/admin/kyama/3"]}><Routes><Route path="/admin/kyama/:id" element={<KyamaDetailPage />} /></Routes></MemoryRouter>);
+  user.permissions = ["chama.view_chama", "chama.change_chama", "chama.add_chamapayment", "chama.add_chamapayout"];
+  api.mockImplementation(async (path) => (path === "/api/v1/chama/3/" ? DETAIL : {}));
+  render(<MemoryRouter initialEntries={["/admin/chama/3"]}><Routes><Route path="/admin/chama/:id" element={<ChamaDetailPage />} /></Routes></MemoryRouter>);
   expect(await screen.findByRole("heading", { name: "Umoja" })).toBeInTheDocument();
   expect(screen.getByText(/kept apart from the shop's money/)).toBeInTheDocument();
   expect(screen.getByText("1 of 3 members have paid this week. The next contribution is on", { exact: false })).toBeInTheDocument();
@@ -149,14 +149,14 @@ it("shows who has paid, fines, excuses and whose turn it is", async () => {
   expect(screen.getByText(/Not agreed yet. Record the member/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /their money/ })).not.toBeInTheDocument();  // not until the members agree
   expect(screen.getByText(/collected KSh 500 of KSh 1,500/)).toBeInTheDocument();
-  api.mockImplementation(async (path) => (path === "/api/v1/kyama/3/next-receiver/" ? { ...DETAIL,
+  api.mockImplementation(async (path) => (path === "/api/v1/chama/3/next-receiver/" ? { ...DETAIL,
     next_receiver: { id: 2, full_name: "Mary Achieng", note: "Agreed on Sunday" },
     turns: [{ ...DETAIL.turns[0], member_id: 2, member: "Mary Achieng", agreed: true }, DETAIL.turns[1]] } : DETAIL));
   fireEvent.click(screen.getByRole("button", { name: "Record who the members agreed" }));
   fireEvent.change(screen.getByLabelText("The members agreed"), { target: { value: "2" } });
   fireEvent.change(screen.getByLabelText(/Note/), { target: { value: "Agreed on Sunday" } });
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save who receives next" })); });
-  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/kyama/3/next-receiver/")[1].body)).toEqual({ member: "2", note: "Agreed on Sunday" });
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/chama/3/next-receiver/")[1].body)).toEqual({ member: "2", note: "Agreed on Sunday" });
   expect(screen.getByRole("button", { name: "Give Mary Achieng their money" })).toBeInTheDocument();
   expect(screen.getAllByText("To be agreed")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Fines & excuses" }));
