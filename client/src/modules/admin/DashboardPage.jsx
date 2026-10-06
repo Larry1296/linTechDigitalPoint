@@ -8,6 +8,7 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InvestmentReminder } from "../investments/InvestmentReminder";
 import { CommissionReminder } from "../mpesa/CommissionReminder";
 import { RecordsSummary } from "./RecordsSummary";
+import { OwnerSummary } from "./OwnerSummary";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -71,6 +72,7 @@ export function DashboardPage() {
       <button className="button secondary" onClick={() => refresh.current()}>Refresh now</button>
     </div></section>
     {error && <ErrorState message={error} retry={() => refresh.current()} />}
+    <OwnerSummary summary={data.owner_summary} money={money} />
     <nav className="accountingQuickActions" aria-label="Quick actions">
       {(data.enabled_modules || []).includes("inventory") && user?.permissions?.includes("catalog.view_product") && <a href="/admin/product-lookup">Product lookup</a>}
       {(data.enabled_modules || []).includes("inventory") && user?.permissions?.includes("inventory.add_stockreceipt") && <a href="/admin/quick-receive">Receive stock</a>}

@@ -1148,6 +1148,19 @@ label:where(:has(> input[type="radio"])) {
 .recordsGroup dd { margin:0; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
 .recordsSummary .formNotice ul { margin:6px 0 0; padding-left:18px; }
 @media(max-width:760px) { .recordsSummary { padding:16px; } }
+.ownerSummary { padding:20px; border:2px solid var(--line); border-radius:16px; background:var(--surface); }
+.ownerSummary > h2 { margin:0 0 6px; }
+.ownerSummary .ownerSummaryTotal th, .ownerSummary .ownerSummaryTotal td { font-weight:800; }
+.ownerSummaryMoney { margin-top:16px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; }
+.ownerSummaryMoney h3 { margin:0; font-size:15px; }
+.ownerSummaryHeld strong { font-size:28px; font-variant-numeric:tabular-nums; }
+.ownerSummaryMoney dl { margin:8px 0; display:grid; gap:6px; max-width:520px; }
+.ownerSummaryMoney dl > div { display:flex; justify-content:space-between; gap:12px; font-size:14px; }
+.ownerSummaryMoney dt { color:var(--muted); }
+.ownerSummaryMoney dd { margin:0; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+.ownerSummaryMoney dl > .ownerSummaryTotal { border-top:1px solid var(--line); padding-top:6px; }
+.ownerSummaryMoney dl > .ownerSummaryTotal dt { color:var(--text); font-weight:800; }
+@media(max-width:760px) { .ownerSummary { padding:16px; } }
 .businessDashboard .trendTable th:first-child { text-align:left; }
 .businessDashboard .trendTable caption { text-align:left; padding:12px; color:var(--muted); }
 

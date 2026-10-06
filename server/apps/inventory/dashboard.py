@@ -248,4 +248,6 @@ def dashboard_snapshot(request):
     from .dashboard_records import records_summary
     data['records'] = records_summary(enabled=enabled, visible_units=visible_units, channels=channels,
                                       profit_visible=profit_visible, permits=permits)
+    from .dashboard_summary import owner_summary
+    data['owner_summary'] = owner_summary(visible_units=visible_units, profit_visible=profit_visible, permits=permits)
     return data
