@@ -14,6 +14,7 @@ from pathlib import Path
 from django.conf import settings
 
 KNOWLEDGE_DIR = Path(__file__).resolve().parent / "knowledge"
+ADMIN_KNOWLEDGE_DIR = Path(__file__).resolve().parent / "knowledge_admin"  # the platform administrator's articles only
 STOPWORDS = set("""a an and are as at be by can could do does for from has have how i if in into is it its
 me my of on or our so that the their them there these this to was we what when where which who why will
 with would you your yours about any just not no yes get got""".split())
@@ -88,10 +89,12 @@ def load_passages(directory=KNOWLEDGE_DIR):
     passages = []
     for path in sorted(directory.glob("*.md")):
         content = _fill(path.read_text(encoding="utf-8"))
-        title = re.search(r"^# (.+)$", content, re.M).group(1).strip()
-        for section in re.split(r"^## ", content, flags=re.M)[1:]:
-            heading, _, body = section.partition("\n")
-            passages.append(Passage(article=title, heading=heading.strip(), text=body.strip()))
+        # An article may hold several "# Title" parts; each "## Question" belongs to the title above it.
+        for part in re.split(r"^# ", content, flags=re.M)[1:]:
+            title, _, rest = part.partition("\n")
+            for section in re.split(r"^## ", rest, flags=re.M)[1:]:
+                heading, _, body = section.partition("\n")
+                passages.append(Passage(article=title.strip(), heading=heading.strip(), text=body.strip()))
     return passages
 
 
@@ -130,6 +133,11 @@ class Index:
 @lru_cache(maxsize=1)
 def index():
     return Index(load_passages())
+
+
+@lru_cache(maxsize=1)
+def admin_index():
+    return Index(load_passages(ADMIN_KNOWLEDGE_DIR))
 
 
 def retrieve(question, previous="", limit=5):

@@ -181,6 +181,21 @@ def _businesses():
             .order_by("-created_at"))
 
 
+def platform_summary(rows):
+    """Totals across all businesses (``rows`` from business_row): subscriptions by state and plan, and revenue."""
+    month_start = timezone.localtime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    paid = SubscriptionPayment.objects.filter(status="PAID")
+    count = lambda test: sum(1 for row in rows if test(row["subscription"]))
+    return {"businesses": len(rows), "trial": count(lambda s: s["status"] == "TRIAL"),
+            "paying": count(lambda s: s["status"] == "ACTIVE" and s["plan"] and not s["complimentary"] and not s["ended"]),
+            "ended": count(lambda s: s["ended"]), "expiring_soon": count(lambda s: s.get("expiring_soon")),
+            "complimentary": count(lambda s: s["complimentary"]),
+            "by_plan": {p.code: count(lambda s, code=p.code: s["plan"] == code and not s["ended"]) for p in plans()},
+            "revenue_this_month": str(paid.filter(paid_at__gte=month_start).aggregate(v=Sum("amount"))["v"] or Decimal("0")),
+            "revenue_total": str(paid.aggregate(v=Sum("amount"))["v"] or Decimal("0")),
+            "currency": "KES", "mpesa_mode": billing.mpesa_mode(), "mpesa_ready": billing.mpesa_configured()}
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def platform_overview(request):
@@ -188,17 +203,7 @@ def platform_overview(request):
     if denied:
         return denied
     rows = [business_row(org) for org in _businesses()]
-    month_start = timezone.localtime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    paid = SubscriptionPayment.objects.filter(status="PAID")
-    count = lambda test: sum(1 for row in rows if test(row["subscription"]))
-    summary = {"businesses": len(rows), "trial": count(lambda s: s["status"] == "TRIAL"),
-               "paying": count(lambda s: s["status"] == "ACTIVE" and s["plan"] and not s["complimentary"] and not s["ended"]),
-               "ended": count(lambda s: s["ended"]), "expiring_soon": count(lambda s: s.get("expiring_soon")),
-               "complimentary": count(lambda s: s["complimentary"]),
-               "by_plan": {p.code: count(lambda s, code=p.code: s["plan"] == code and not s["ended"]) for p in plans()},
-               "revenue_this_month": str(paid.filter(paid_at__gte=month_start).aggregate(v=Sum("amount"))["v"] or Decimal("0")),
-               "revenue_total": str(paid.aggregate(v=Sum("amount"))["v"] or Decimal("0")),
-               "currency": "KES", "mpesa_mode": billing.mpesa_mode(), "mpesa_ready": billing.mpesa_configured()}
+    summary = platform_summary(rows)
     recent = SubscriptionPayment.objects.select_related("plan", "organization")[:15]
     return Response({"summary": summary, "businesses": rows,
                      "recent_payments": [{**payment_data(p), "business": p.organization.name, "business_id": p.organization_id} for p in recent],

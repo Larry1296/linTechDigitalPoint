@@ -36,7 +36,14 @@ class Context:
         self.modules = set(effective_modules(organization))
         self.membership = membership_for(user)
 
+    @property
+    def platform_admin(self):
+        return bool(self.user and self.user.is_active and self.user.is_superuser)
+
     def can(self, permission):
+        from .platform_tools import PLATFORM
+        if permission == PLATFORM:
+            return self.platform_admin
         return permission is None or has_business_permission(self.user, permission)
 
     @property
@@ -745,6 +752,24 @@ TOOLS = {
     "platform_help": (platform_help, "How to do something in the software itself (steps, pages, settings). Search the help centre.",
                       _schema({"question": {"type": "string"}}, ["question"]), None, None),
 }
+
+from . import platform_tools  # noqa: E402  (registered after the business tools)
+
+TOOLS.update({
+    "platform_overview": (platform_tools.platform_overview, "Platform administrator only: totals across every registered business "
+                          "(on trial, paying, ended, expiring soon, complimentary, by plan), platform revenue, sign-ups by month and "
+                          "recent subscription payments.", _schema(), platform_tools.PLATFORM, None),
+    "platform_businesses": (platform_tools.platform_businesses, "Platform administrator only: the registered businesses with owner "
+                            "and contact, plan, subscription status and days left, payments to the platform, staff, branches, tools "
+                            "enabled and how active each is (last activity, actions and sales count in 30 days). Filter by status or "
+                            "search by name, type, owner, phone or email.",
+                            _schema({"status": {"type": "string", "enum": ["all", "trial", "paying", "ended", "expiring_soon", "complimentary",
+                                                                         "inactive"]}, "query": {"type": "string"}, **LIMIT}),
+                            platform_tools.PLATFORM, None),
+    "platform_admin_help": (platform_tools.platform_admin_help, "Platform administrator only: how to run the platform (plans, trials, "
+                            "changing or extending subscriptions, manual payments, M-Pesa billing settings, AI assistant setup).",
+                            _schema({"question": {"type": "string"}}, ["question"]), platform_tools.PLATFORM, None),
+})
 
 
 def available(ctx):

@@ -117,7 +117,8 @@ def test_abc_classes_follow_the_pareto_cut_offs():
 def test_every_tool_answers_from_the_business_records(shop):
     ctx = context(shop)
     tools = offered(ctx)
-    assert tools == set(business_tools.TOOLS)  # an owner gets every tool for the enabled modules
+    platform = {"platform_overview", "platform_businesses", "platform_admin_help"}
+    assert tools == set(business_tools.TOOLS) - platform  # an owner gets every business tool, not the platform administrator's
     for name in tools:
         args = {"find_products": {"query": "charger"}, "platform_help": {"question": "How do I import products?"},
                 "find_sales": {"customer": "nobody"}}.get(name, {})
@@ -161,6 +162,29 @@ def test_the_assistant_sees_money_owed_where_it_is_and_single_sales_since_the_st
     tools = offered(context(shop, cashier))
     assert {"find_sales", "top_customers"} <= tools
     assert {"money_position", "money_owed_to_business", "money_business_owes", "activity_log", "investments"}.isdisjoint(tools)
+
+
+def test_the_platform_administrator_also_sees_every_business_in_general_terms_only(shop):
+    other = make_business("Rival", "RIVAL-1")
+    sold = other.client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": other.charger.pk, "quantity": 1}]}, format="json")
+    assert sold.status_code == 201, sold.content
+    shop.owner.is_superuser = True
+    shop.owner.save(update_fields=["is_superuser"])
+    ctx = context(shop)
+    assert {"platform_overview", "platform_businesses", "platform_admin_help"} <= offered(ctx)
+    overview, failed = call(ctx, "platform_overview")
+    assert not failed and overview["summary"]["businesses"] == Organization.objects.count()
+    listed, _ = call(ctx, "platform_businesses", {"query": "rival"})
+    rival = listed["businesses"][0]
+    assert listed["matching"] == 1 and rival["business"] == "Rival" and rival["sales_last_30_days"] == 1
+    assert not {"sales_value", "revenue", "customers", "stock"} & set(rival)  # activity counts, never the business's money
+    guide, _ = call(ctx, "platform_admin_help", {"question": "How do I record a payment received outside the app?"})
+    assert guide["passages"][0]["section"] == "How do I record a payment received outside the app?"
+    with business_chat._scope(ctx):
+        assert "platform administrator" in business_chat.business_prompt(ctx)
+    # The public help chat never gets the administrator's articles.
+    from apps.assistant.retrieval import index
+    assert not any(p.article == "Running the platform" for p in index().passages)
 
 
 def test_bad_tool_input_is_reported_back_to_the_model(shop):
@@ -241,7 +265,7 @@ def test_claude_looks_up_the_data_then_answers(shop):
     assert result["tool_use_id"] == "call-1" and '"sales_value": 600.0' in result["content"] and "is_error" not in result
     first = fake.beta.messages.stream.call_args_list[0].kwargs
     assert first["model"] == "claude-opus-5-5" and first["thinking"] == {"type": "adaptive"} and first["fallbacks"] == "default"
-    assert "Duka" in first["system"][0]["text"] and {t["name"] for t in first["tools"]} == set(business_tools.TOOLS)
+    assert "Duka" in first["system"][0]["text"] and {t["name"] for t in first["tools"]} == set(business_tools.TOOLS) - {"platform_overview", "platform_businesses", "platform_admin_help"}
 
 
 def test_claude_refusal_is_shown_and_no_tools_run(shop):
