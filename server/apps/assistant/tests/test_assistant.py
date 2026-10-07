@@ -47,12 +47,14 @@ def fake_client(stream):
     return fake
 
 
+@pytest.mark.django_db
 def test_every_customer_question_finds_its_help_section():
     for question, heading in CASES:
         headings = [p.heading.lower() for p in retrieve(question)[:5]]
         assert any(heading.lower() in h for h in headings), (question, headings)
 
 
+@pytest.mark.django_db
 def test_knowledge_base_fills_in_the_platform_name_and_has_no_placeholders(settings):
     settings.PLATFORM_NAME = "DukaFlow"
     passages = load_passages()
@@ -60,6 +62,7 @@ def test_knowledge_base_fills_in_the_platform_name_and_has_no_placeholders(setti
     assert not any("{platform}" in p.text or "{contact}" in p.text or "{platform}" in p.heading for p in passages)
 
 
+@pytest.mark.django_db
 def test_system_prompt_is_stable_and_questions_carry_their_passages():
     assert system_prompt() == system_prompt()
     turn = question_turn("How much is it?", retrieve("How much is it?"))
@@ -90,7 +93,7 @@ def test_says_unavailable_without_an_api_key(settings, monkeypatch):
 @pytest.mark.django_db
 def test_streams_an_answer_to_an_anonymous_visitor_with_cached_instructions(settings):
     settings.ANTHROPIC_API_KEY = "test-key"
-    settings.ASSISTANT_MODEL = "claude-opus-5"
+    settings.ASSISTANT_MODEL = "claude-opus-5-5"
     fake = fake_client(FakeStream(["Create an ", "account first."]))
     with mock.patch.object(claude, "client", return_value=fake):
         response = APIClient().post(URL, {"messages": [
@@ -103,7 +106,7 @@ def test_streams_an_answer_to_an_anonymous_visitor_with_cached_instructions(sett
     assert "".join(e["text"] for e in stream if e["type"] == "text") == "Create an account first."
     assert stream[-1] == {"type": "done"} and "Getting started" in stream[-2]["items"]
     kwargs = fake.beta.messages.stream.call_args.kwargs
-    assert kwargs["model"] == "claude-opus-5" and kwargs["fallbacks"] == "default"
+    assert kwargs["model"] == "claude-opus-5-5" and kwargs["fallbacks"] == "default"
     assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
     # History is passed through; only the new question carries retrieved passages.
     assert kwargs["messages"][0] == {"role": "user", "content": "What is DukaFlow?"}

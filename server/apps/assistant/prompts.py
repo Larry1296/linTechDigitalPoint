@@ -1,6 +1,4 @@
 """The assistant's instructions. Kept byte-stable per deployment so Claude can cache it."""
-from functools import lru_cache
-
 from django.conf import settings
 
 from .retrieval import outline
@@ -32,10 +30,17 @@ The help centre covers these topics:
 {outline}"""
 
 
-@lru_cache(maxsize=1)
+_cached = {}
+
+
 def system_prompt():
-    contact = settings.PLATFORM_CONTACT_EMAIL or "via the contact details on the website"
-    return SYSTEM.format(platform=settings.PLATFORM_NAME, contact=contact, outline=outline())
+    """Rebuilt only when the platform owner changes the articles, so it stays byte-stable (and cached by Claude)."""
+    from .retrieval import version
+    key = version("PUBLIC")
+    if _cached.get("key") != key:
+        contact = settings.PLATFORM_CONTACT_EMAIL or "via the contact details on the website"
+        _cached.update(key=key, text=SYSTEM.format(platform=settings.PLATFORM_NAME, contact=contact, outline=outline()))
+    return _cached["text"]
 
 
 def question_turn(question, passages):

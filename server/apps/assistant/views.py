@@ -58,10 +58,34 @@ def chat(request):
         return Response({"detail": problem}, status=400)
     if not configured():
         return Response({"detail": "The help assistant isn't available right now. Please contact the team instead."}, status=503)
+    from .models import PublicChatSettings, PublicQuestion
+    if not PublicChatSettings.current().enabled:
+        return Response({"detail": "The help assistant is switched off right now. Please contact the team instead."}, status=503)
     history, question = conversation
     previous = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     passages = retrieve(question, previous)
+    # Only the question is kept, with the articles it was answered from, so the owner can see what is missing.
+    PublicQuestion.objects.create(question=question, articles=sorted({p.article for p in passages}), answered=bool(passages))
     response = StreamingHttpResponse(stream_answer(history, question, passages), content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"  # let nginx pass each chunk straight through
     return response
+
+
+DEFAULT_GREETING = ("Hi! I can answer questions about {platform}: how to get started, what it can do for your business, "
+                    "pricing and more. What would you like to know?")
+DEFAULT_SUGGESTIONS = ["How do I get started?", "How much does it cost?", "Can I import my products from Excel?",
+                       "Does it work with M-Pesa?", "Can my staff use it?", "Is my business data safe?"]
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([permissions.AllowAny])
+def public_config(request):
+    """What the website's chat shows: whether it is on, its greeting and suggested questions (set by the platform owner)."""
+    from django.conf import settings
+    from .models import PublicChatSettings
+    current = PublicChatSettings.current()
+    return Response({"enabled": current.enabled and configured(),
+                     "greeting": current.greeting or DEFAULT_GREETING.format(platform=settings.PLATFORM_NAME),
+                     "suggestions": current.suggestions or DEFAULT_SUGGESTIONS})

@@ -8,7 +8,6 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from django.conf import settings
@@ -85,17 +84,60 @@ def _fill(text):
                          else "A public support email has not been published yet; please use the contact details on the website."))
 
 
+def _parse(content):
+    """Passages from Markdown: each "# Title" starts an article, each "## Question" under it is one passage."""
+    passages = []
+    for part in re.split(r"^# ", content, flags=re.M)[1:]:
+        title, _, rest = part.partition("\n")
+        for section in re.split(r"^## ", rest, flags=re.M)[1:]:
+            heading, _, body = section.partition("\n")
+            passages.append(Passage(article=title.strip(), heading=heading.strip(), text=body.strip()))
+    return passages
+
+
 def load_passages(directory=KNOWLEDGE_DIR):
     passages = []
     for path in sorted(directory.glob("*.md")):
-        content = _fill(path.read_text(encoding="utf-8"))
-        # An article may hold several "# Title" parts; each "## Question" belongs to the title above it.
-        for part in re.split(r"^# ", content, flags=re.M)[1:]:
-            title, _, rest = part.partition("\n")
-            for section in re.split(r"^## ", rest, flags=re.M)[1:]:
-                heading, _, body = section.partition("\n")
-                passages.append(Passage(article=title.strip(), heading=heading.strip(), text=body.strip()))
+        passages += _parse(_fill(path.read_text(encoding="utf-8")))
     return passages
+
+
+DIRECTORIES = {"PUBLIC": KNOWLEDGE_DIR, "ADMIN": ADMIN_KNOWLEDGE_DIR}
+
+
+def built_in(audience):
+    """{slug: (title, body)} for the articles shipped with the code; slug is the file name without .md."""
+    result = {}
+    for path in sorted(DIRECTORIES[audience].glob("*.md")):
+        content = path.read_text(encoding="utf-8")
+        first = re.search(r"^# (.+)$", content, re.M)
+        result[path.stem] = (first.group(1).strip(), content[first.end():].strip())
+    return result
+
+
+def articles(audience="PUBLIC"):
+    """Every article for the audience: built in, edited or added by the platform owner (edits win), hidden ones marked."""
+    from .models import HelpArticle
+    files = built_in(audience)
+    edited = {a.slug: a for a in HelpArticle.objects.filter(audience=audience)}
+    rows = []
+    for slug in sorted(set(files) | set(edited)):
+        original = files.get(slug)
+        mine = edited.get(slug)
+        title, body = (mine.title, mine.body) if mine else original
+        rows.append({"slug": slug, "title": title, "body": body, "active": mine.active if mine else True,
+                     "source": "added" if not original else "edited" if mine else "built-in",
+                     "original": {"title": original[0], "body": original[1]} if original else None,
+                     "updated_at": mine.updated_at if mine else None})
+    return rows
+
+
+def version(audience="PUBLIC"):
+    """Changes whenever the platform owner edits, hides or restores an article, so indexes and prompts rebuild."""
+    from django.db.models import Count, Max
+    from .models import HelpArticle
+    row = HelpArticle.objects.filter(audience=audience).aggregate(n=Count("pk"), last=Max("updated_at"))
+    return (row["n"], row["last"])
 
 
 class Index:
@@ -130,14 +172,24 @@ class Index:
         return [passage for _, passage in scored[:limit]]
 
 
-@lru_cache(maxsize=1)
+_indexes = {}
+
+
+def _index(audience):
+    key = version(audience)
+    cached = _indexes.get(audience)
+    if cached is None or cached[0] != key:
+        content = "\n\n".join(f"# {a['title']}\n{a['body']}" for a in articles(audience) if a["active"])
+        cached = _indexes[audience] = (key, Index(_parse(_fill(content))))
+    return cached[1]
+
+
 def index():
-    return Index(load_passages())
+    return _index("PUBLIC")
 
 
-@lru_cache(maxsize=1)
 def admin_index():
-    return Index(load_passages(ADMIN_KNOWLEDGE_DIR))
+    return _index("ADMIN")
 
 
 def retrieve(question, previous="", limit=5):
