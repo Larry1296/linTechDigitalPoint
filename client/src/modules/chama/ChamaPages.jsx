@@ -575,7 +575,9 @@ function Rules({ chama, setChama, can }) {
     <h2>Rules</h2>
     <fieldset disabled={busy || !editable} className="loanFields">
       <FormField label="Chama name" name="name" required maxLength={120} defaultValue={chama.name} />
-      <FormField label={`Each member contributes (${businessCurrency()})`} name="contribution_amount" type="number" min="0.01" step="0.01" required defaultValue={Number(chama.contribution_amount)} />
+      <FormField label={`${{ DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" }[chama.frequency] || "Each"} contribution per member (${businessCurrency()})`}
+        name="contribution_amount" type="number" min="0.01" step="0.01" required defaultValue={Number(chama.contribution_amount)} />
+      <p className="muted">A new amount applies from the next contribution; contributions already due keep their amount.</p>
       <FormField label="Days allowed to pay after it" name="grace_days" type="number" min="0" max="60" step="1" defaultValue={chama.grace_days} />
       <FormField label={`Fine for paying late (${businessCurrency()})`} name="fine_amount" type="number" min="0" step="0.01" defaultValue={Number(chama.fine_amount)} />
       <FormField label="How often"><select name="frequency" defaultValue={chama.frequency} disabled={chama.schedule_locked}>{FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></FormField>

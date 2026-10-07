@@ -403,3 +403,17 @@ def test_members_are_added_removed_by_mistake_leave_and_rejoin(on):
     assert "treasurer" in str(client.post(f"{url}{larry.pk}/remove/", {"reason": "x"}, format="json").json())
     client.post(f"{url}{mary.pk}/leave/", {"reason": "Moved again"}, format="json")
     assert "at least two members" in str(client.post(f"{url}{john.pk}/remove/", {"reason": "x"}, format="json").json())
+
+
+def test_a_new_contribution_amount_applies_from_the_next_contribution(on):
+    org, owner, client = business(modules=["chama"])
+    chama = make(org, owner, frequency="DAILY", periods_per_round=7)
+    board(org, chama)  # today's contribution is owed at the old amount
+    saved = client.patch(f"/api/v1/chama/{chama.pk}/", {"contribution_amount": "200"}, format="json")
+    assert saved.status_code == 200, saved.content
+    on(TODAY + timedelta(days=1))
+    seen, data = board(org, chama)
+    with organization_context(org):
+        amounts = dict(ChamaDue.objects.filter(member__full_name="Mary Achieng").values_list("period_date", "amount"))
+    assert amounts[TODAY] == Decimal("500") and amounts[TODAY + timedelta(days=1)] == Decimal("200")
+    assert Decimal(data["contribution_amount"]) == Decimal("200")
