@@ -158,7 +158,7 @@ PLATFORM_NAME = config("PLATFORM_NAME", default="DukaFlow")
 PLATFORM_CONTACT_EMAIL = config("PLATFORM_CONTACT_EMAIL", default="")
 # Website help assistant (Claude). Without a key the chat endpoint answers 503 and the widget shows contact details.
 ANTHROPIC_API_KEY = config("ANTHROPIC_API_KEY", default="")
-ASSISTANT_MODEL = config("ASSISTANT_MODEL", default="claude-opus-5")
+ASSISTANT_MODEL = config("ASSISTANT_MODEL", default="claude-opus-5-5")
 # Each business's own assistant in the workspace (answers from that business's records). It can use Claude
 # (ANTHROPIC_API_KEY) or OpenAI (OPENAI_API_KEY); owners choose per business, and this is the default.
 OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
