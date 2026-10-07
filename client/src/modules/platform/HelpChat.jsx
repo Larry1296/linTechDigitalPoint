@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
+import { usePromptHistory } from "../assistant/promptHistory";
 import "./helpChat.css";
 
 const STORAGE_KEY = "help-chat";
@@ -96,6 +97,7 @@ export function HelpChat() {
   const abort = useRef(null);
   const list = useRef(null);
   const input = useRef(null);
+  const asked = usePromptHistory("help-chat-questions", draft, setDraft);
   useEffect(() => save(messages), [messages]);
   useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [messages, open]);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
@@ -121,6 +123,7 @@ export function HelpChat() {
     if (!text || busy) return;
     const history = [...messages.filter((m) => !m.error && m.text), { role: "user", text }];
     setMessages([...messages, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    asked.remember(text);
     setDraft("");
     setBusy(true);
     abort.current = new AbortController();
@@ -187,7 +190,10 @@ export function HelpChat() {
             <label className="srOnly" htmlFor="help-chat-input">Your question</label>
             <textarea id="help-chat-input" ref={input} rows={1} value={draft} maxLength={MAX_QUESTION} placeholder="Ask a question…"
               onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(draft); } }} />
+              onKeyDown={(event) => {
+                if (asked.onKeyDown(event)) return;
+                if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(draft); }
+              }} />
             <button type="submit" disabled={busy || !draft.trim()} aria-label="Send question"><Send size={18} /></button>
           </form>
           <p className="helpChatNote">AI answers can be wrong. For account-specific help, contact the team.</p>

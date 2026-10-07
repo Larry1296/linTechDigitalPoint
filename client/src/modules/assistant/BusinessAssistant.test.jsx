@@ -16,7 +16,7 @@ const DUKA = { id: 7, name: "Duka" };
 const show = (organization = DUKA) => render(<MemoryRouter><BusinessAssistant organization={organization} /></MemoryRouter>);
 const openPanel = () => { fireEvent.click(screen.getByRole("button", { name: /Ask your assistant/ })); return screen.getByRole("dialog", { name: "Duka assistant" }); };
 
-beforeEach(() => { sessionStorage.clear(); api.mockResolvedValue(SETTINGS); });
+beforeEach(() => { sessionStorage.clear(); localStorage.clear(); api.mockResolvedValue(SETTINGS); });
 afterEach(() => vi.clearAllMocks());
 
 it("asks a suggested question and streams an answer that looked up the business's records", async () => {
@@ -70,4 +70,35 @@ it("hides the provider choice from staff and explains errors", async () => {
   fireEvent.change(within(panel).getByLabelText("Your question"), { target: { value: "Hello?" } });
   fireEvent.click(within(panel).getByRole("button", { name: "Send question" }));
   expect(await within(panel).findByText(/isn't set up on this platform yet/)).toBeInTheDocument();
+});
+
+
+it("brings back earlier questions with the up and down arrows, then what was being typed", async () => {
+  apiStream.mockImplementation(async () => streamed([{ type: "text", text: "Done." }, { type: "done" }]));
+  show();
+  const panel = openPanel();
+  const box = within(panel).getByLabelText("Your question");
+  for (const question of ["What is in stock?", "Who owes me?"]) {
+    fireEvent.change(box, { target: { value: question } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(within(panel).getAllByText("Done.").length).toBeGreaterThan(0));
+    await waitFor(() => expect(within(panel).getByRole("button", { name: "Send question" })).toBeDisabled());
+  }
+  fireEvent.change(box, { target: { value: "half typed" } });
+  box.setSelectionRange(0, 0);
+  fireEvent.keyDown(box, { key: "ArrowUp" });
+  expect(box).toHaveValue("Who owes me?");
+  fireEvent.keyDown(box, { key: "ArrowUp" });
+  expect(box).toHaveValue("What is in stock?");
+  fireEvent.keyDown(box, { key: "ArrowUp" });
+  expect(box).toHaveValue("What is in stock?");  // the oldest stays
+  fireEvent.keyDown(box, { key: "ArrowDown" });
+  expect(box).toHaveValue("Who owes me?");
+  fireEvent.keyDown(box, { key: "ArrowDown" });
+  expect(box).toHaveValue("half typed");
+  // A new conversation keeps the history.
+  fireEvent.click(within(panel).getByRole("button", { name: "Start a new conversation" }));
+  fireEvent.change(box, { target: { value: "" } });
+  fireEvent.keyDown(box, { key: "ArrowUp" });
+  expect(box).toHaveValue("Who owes me?");
 });

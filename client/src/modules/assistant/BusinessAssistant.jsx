@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrainCircuit, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { api, apiStream } from "../../core/api/client";
 import { Answer, readEvents } from "../platform/HelpChat";
+import { usePromptHistory } from "./promptHistory";
 import "../platform/helpChat.css";
 import "./businessAssistant.css";
 
@@ -49,6 +50,7 @@ export function BusinessAssistant({ organization }) {
   const abort = useRef(null);
   const list = useRef(null);
   const input = useRef(null);
+  const asked = usePromptHistory(`business-assistant-questions:${organization.id}`, draft, setDraft);
   useEffect(() => save(organization, messages), [organization, messages]);
   useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [messages, open]);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
@@ -73,6 +75,7 @@ export function BusinessAssistant({ organization }) {
     if (!text || busy) return;
     const history = [...messages.filter((m) => !m.error && m.text), { role: "user", text }];
     setMessages([...messages, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    asked.remember(text);
     setDraft("");
     setBusy(true);
     abort.current = new AbortController();
@@ -128,7 +131,10 @@ export function BusinessAssistant({ organization }) {
             <label className="srOnly" htmlFor="business-assistant-input">Your question</label>
             <textarea id="business-assistant-input" ref={input} rows={1} value={draft} maxLength={MAX_QUESTION} placeholder="Ask about your business…"
               onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(draft); } }} />
+              onKeyDown={(event) => {
+                if (asked.onKeyDown(event)) return;
+                if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(draft); }
+              }} />
             <button type="submit" disabled={busy || !draft.trim()} aria-label="Send question"><Send size={18} /></button>
           </form>
           <p className="helpChatNote">Answers come from your records, but AI can make mistakes. Check important figures in Reports.</p>
