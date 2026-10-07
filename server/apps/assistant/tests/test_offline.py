@@ -63,3 +63,22 @@ def test_stock_and_single_product_questions_get_the_records_not_a_help_article(s
     assert "couldn't find a product" in text
     text, used = ask(ctx, "How do I receive stock from a supplier?")
     assert used == ["platform_help"]
+
+
+def test_the_stock_list_is_grouped_by_category_and_subcategory(shop):  # noqa: F811
+    from apps.catalog.models import Category, Product, ProductVariant
+    from apps.tenancy.context import organization_context
+    with organization_context(shop.org):
+        phones = Category.objects.create(name="Phone accessories", slug="phone-accessories")
+        cables = Category.objects.create(name="Cables", slug="cables", parent=phones)
+        Category.objects.filter(slug="chargers").update(parent=phones)
+        cable = ProductVariant.objects.create(product=Product.objects.create(name="USB cable", slug="usb-cable", category=cables),
+                                              name="Standard", sku="USB-1", selling_price=200)
+        from apps.inventory.services import complete_stock_receipt
+        complete_stock_receipt(supplier_name="Supplier", external_reference="INV-2", received_at=timezone.now(),
+                               lines=[{"variant_id": cable.pk, "received_quantity": "4", "unit_cost": "80"}], user=shop.owner)
+    text, _ = ask(context(shop), "what are the items in stock")
+    assert text.index("**Phone accessories** (2 items)") < text.index("Cables:") < text.index("- USB cable: 4 available")
+    assert text.index("Chargers:") < text.index("- Duka charger: 8 available")
+    only, _ = ask(context(shop), "which items are in stock in cables")
+    assert "USB cable" in only and "Duka charger" not in only and "1 of 1 item is in stock" in only

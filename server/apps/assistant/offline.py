@@ -341,26 +341,38 @@ def stock_value(w, text):
 
 
 def stock_list(w, text):
+    """What is in stock, grouped by category and subcategory, items in alphabetical order within each."""
     category = ""
-    match = re.search(r"\b(?:in|under|from) (?:the )?(?:category )?([a-z0-9 &-]+?)(?: category)?\??$", text)
-    if match and match.group(1).strip() not in {"stock", "my stock", "the shop", "store", "shop"}:
+    # The last "in/under/from X" names the category: "which items are in stock in cables" -> cables.
+    match = re.search(r".*\b(?:in|under|from) (?:the )?(?:category )?([a-z0-9 &()-]+?)(?: category)?[?.!]*$", text)
+    if match and match.group(1).strip() not in {"stock", "my stock", "the shop", "store", "shop", "the store"}:
         category = match.group(1).strip()
     data = w.call("stock_levels", {"view": "all", "limit": 200, **({"category": category} if category else {})})
     if data is None:
         return w.problem
-    have = sorted((i for i in data["items"] if (i["available"] or 0) > 0), key=lambda i: i["product"].lower())
     s = data["summary"]
+    have = [i for i in data["items"] if (i["available"] or 0) > 0]
+    where = f" in {category}" if category else ""
+    if not data["items"]:
+        return f"No stock items found{where}. Check the category name on the Categories page."
     if not have:
-        return f"Nothing is in stock{' in ' + category if category else ''} right now ({s['stock_items']} stock items, all at zero)."
+        return f"Nothing is in stock{where} right now ({s['stock_items']} stock items, all at zero)."
     value = f", worth {w.money(s['stock_value_at_cost'])} at cost" if s.get("stock_value_at_cost") is not None else ""
-    lines = [f"**{len(have)} of {s['stock_items']} items are in stock**{' in ' + category if category else ''} "
-             f"({s['units_on_hand']:g} units{value}).", ""]
-    for item in have[:60]:
-        low = " (low)" if item["minimum_stock"] and item["available"] <= item["minimum_stock"] else ""
-        lines.append(f"- {item['product']}: {item['available']:g} available{low}")
-    if len(have) > 60:
-        lines.append(f"- …and {len(have) - 60} more. Ask about a category, e.g. \"which items are in stock in cables\".")
-    out = [i["product"] for i in data["items"] if (i["available"] or 0) <= 0]
+    lines = [f"**{len(have)} of {s['stock_items']} item{'s are' if s['stock_items'] != 1 else ' is'} in stock**{where} ({s['units_on_hand']:g} units{value}), by category:"]
+    groups = {}
+    for item in have:
+        path = (item.get("category_path") or item["category"]).split(" › ")
+        groups.setdefault(path[0], {}).setdefault(" › ".join(path[1:]), []).append(item)
+    for top in sorted(groups, key=str.lower):
+        count = sum(len(items) for items in groups[top].values())
+        lines += ["", f"**{top}** ({count} item{'s' if count != 1 else ''})"]
+        for sub in sorted(groups[top], key=lambda name: (name != "", name.lower())):  # items directly in the category first
+            if sub:
+                lines += ["", f"{sub}:"]
+            for item in sorted(groups[top][sub], key=lambda i: i["product"].lower()):
+                low = " (low)" if item["minimum_stock"] and item["available"] <= item["minimum_stock"] else ""
+                lines.append(f"- {item['product']}: {item['available']:g} available{low}")
+    out = sorted(i["product"] for i in data["items"] if (i["available"] or 0) <= 0)
     if out:
         lines += ["", f"Out of stock: {', '.join(out[:15])}{' …' if len(out) > 15 else ''}"]
     return "\n".join(lines)

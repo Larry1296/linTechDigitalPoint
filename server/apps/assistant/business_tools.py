@@ -127,6 +127,21 @@ def _sold_by_variant(start, end):
     return result
 
 
+def _category_paths():
+    """{category_id: [top-level name, ..., own name]}: where each category sits in the category tree."""
+    from apps.catalog.models import Category
+    parents = {c["pk"]: (c["name"], c["parent_id"]) for c in Category.objects.values("pk", "name", "parent_id")}
+    paths = {}
+    for pk in parents:
+        path, current, seen = [], pk, set()
+        while current in parents and current not in seen:
+            seen.add(current)
+            name, current = parents[current]
+            path.insert(0, name)
+        paths[pk] = path
+    return paths
+
+
 def _variant_label(variant):
     name = variant.product.name
     return name if variant.name in ("", "Standard") else f"{name} ({variant.name})"
@@ -191,8 +206,11 @@ def stock_levels(ctx, args):
         raise ToolError("view must be one of low, out, all, overstock.")
     category = " ".join(str(args.get("category", "")).split())
     variants = ProductVariant.objects.filter(active=True, product__active=True, product__product_type="STOCK_ITEM").select_related("product__category")
+    paths = _category_paths()
     if category:
-        variants = variants.filter(Q(product__category__name__icontains=category) | Q(product__category__parent__name__icontains=category))
+        # A category at any level: "cables" also finds items in its subcategories.
+        wanted = [pk for pk, path in paths.items() if any(category.lower() in name.lower() for name in path)]
+        variants = variants.filter(product__category_id__in=wanted)
     stock = _stock_by_variant()
     rows, totals = [], {"items": 0, "units": ZERO, "value": ZERO, "out_of_stock": 0, "low": 0}
     for v in variants:
@@ -206,7 +224,8 @@ def stock_levels(ctx, args):
         totals["low"] += low and not out
         over = v.target_stock > 0 and on_hand > v.target_stock * Decimal("1.5")
         if (view == "low" and (low or out)) or (view == "out" and out) or (view == "overstock" and over) or view == "all":
-            row = {"product": _variant_label(v), "sku": v.sku, "category": v.product.category.name, "on_hand": _qty(on_hand),
+            row = {"product": _variant_label(v), "sku": v.sku, "category": v.product.category.name,
+                   "category_path": " › ".join(paths.get(v.product.category_id, [v.product.category.name])), "on_hand": _qty(on_hand),
                    "available": _qty(available), "minimum_stock": _qty(v.minimum_stock), "target_stock": _qty(v.target_stock),
                    "suggested_reorder": _qty(max(v.target_stock - available, ZERO)) if v.target_stock else None}
             if ctx.sees_profit:
