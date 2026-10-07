@@ -698,7 +698,16 @@ def chama_members(ctx, args):
                 "next_turn": str(m["next_turn"]["date"]) if m.get("next_turn") else None,
                 "this_period": m["this_period"]["status"] if m.get("this_period") else None} for m in detail["members"]]
     money = {k: _money(v) for k, v in detail["money"].items()}
+    # Whose turn it is, on which day and how much they receive: the full amount the turn collects, and what is in so far.
+    full_turn = detail["contribution_amount"] * detail["periods_per_round"] * sum(1 for m in detail["members"] if m["active"])
+    turns = [{"turn": t["round"], "date": str(t["date"]), "weekday": t["date"].strftime("%A"), "member": t["member"] or "to be agreed",
+              "status": t["status"].lower(), "receives": _money(t.get("expected") if t.get("expected") is not None else full_turn),
+              "collected_so_far": _money(t.get("collected")) if t.get("collected") is not None else None}
+             for t in detail["turns"] if t["status"] != "GIVEN"][:4]
+    given = [{"turn": t["round"], "member": t["member"], "received": _money(t["amount"]), "on": str(t["paid_on"])}
+             for t in detail["turns"] if t["status"] == "GIVEN"][-4:]
     return {"chama": detail["name"], "contribution": _money(detail["contribution_amount"]), "frequency": detail["frequency"],
+            "contributions_per_turn": detail["periods_per_round"], "next_turns": turns, "turns_given": given,
             "payout_mode": detail["payout_mode"], "current_period": str(detail["current_period"]) if detail["current_period"] else None,
             "next_receiver": detail["next_receiver"]["full_name"] if detail.get("next_receiver") else None,
             "money": money, "members": members, "note": "ID numbers and phone numbers are kept on the Chama page, not shown here."}

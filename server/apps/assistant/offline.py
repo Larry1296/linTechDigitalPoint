@@ -452,7 +452,7 @@ def chamas(w, text):
     if not data["chamas"]:
         return "No chama is registered in this business yet. Open **Chama → My chama** to set one up."
     named = next((c for c in data["chamas"] if c["name"].lower() in text), None)
-    if named or len(data["chamas"]) == 1 and re.search(r"\b(members?|who|paid|owe|late|turn|receive|fines?)\b", text):
+    if named or len(data["chamas"]) == 1 and re.search(r"\b(members?|who|whose|paid|owe|late|turns?|receive|receives|fines?|next)\b", text):
         return chama_members(w, text, (named or data["chamas"][0])["name"])
     lines = [f"**{len(data['chamas'])} chama{'s' if len(data['chamas']) != 1 else ''} registered:**", ""]
     for c in data["chamas"]:
@@ -484,10 +484,18 @@ def chama_members(w, text, name=None):
             if m["unpaid"]:
                 extra.append(f"owes {w.money(m['unpaid'])}")
             if m["next_turn"]:
-                extra.append(f"next turn {m['next_turn']}")
+                extra.append(f"next turn {timezone.datetime.fromisoformat(m['next_turn']).strftime('%a %d %b %Y')}")
             lines.append(f"- {m['name']}: {', '.join(extra)}")
-    if data.get("next_receiver"):
-        lines += ["", f"Agreed to receive next: {data['next_receiver']}."]
+    if data.get("next_turns"):
+        per = data["contributions_per_turn"]
+        lines += ["", f"**Turns** (each turn is {per} {data['frequency'].lower()} contribution{'s' if per != 1 else ''}):"]
+        for t in data["next_turns"]:
+            day = timezone.datetime.fromisoformat(t["date"]).strftime("%d %b %Y")
+            so_far = f", {w.money(t['collected_so_far'])} collected so far" if t.get("collected_so_far") is not None else ""
+            lines.append(f"- Turn {t['turn']}: **{t['member']}** on {t['weekday']} {day}, receives {w.money(t['receives'])}{so_far}")
+    if data.get("turns_given"):
+        last = data["turns_given"][-1]
+        lines.append(f"- Last given: turn {last['turn']} to {last['member']}, {w.money(last['received'])} on {last['on']}")
     return "\n".join(lines)
 
 
@@ -655,7 +663,7 @@ INTENTS = [
     (r"\b(commission|m-?pesa|float|agency|agent)\b", agency),
     (r"\b(top|best[- ]selling|best sellers?|most (revenue|sales|money)|bring in|popular)\b.*\b(products?|items?|sellers?|revenue)?", top_products),
     (r"\b(customers?|clients?|buyers?)\b", customers),
-    (r"\b(chamas?|savings group|merry[- ]go[- ]round|umoja|contributions?|table banking)\b", chamas),
+    (r"\b(chamas?|savings group|merry[- ]go[- ]round|umoja|contributions?|table banking|whose turn|receives? next)\b", chamas),
     (r"\b(businesses (are )?registered|registered businesses|all businesses|how many businesses|subscribers|platform revenue)\b", platform),
     (r"\b(investments?|mmf|money market|unit trust)\b", investments),
     (r"\b(service jobs?|jobs|repairs?|printing jobs|job cards?)\b", service_jobs),

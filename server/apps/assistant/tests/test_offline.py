@@ -113,6 +113,9 @@ def test_chamas_and_their_members_are_answered(shop):  # noqa: F811
     text, used = ask(ctx, "who are the members of Umoja Group?")
     assert used[-1] == "chama_members" and "- John Kamau: paid in KES 0" in text and "- Mary Achieng: Treasurer" in text
     assert "20000001" not in text and "0712345601" not in text  # ID and phone numbers stay on the Chama page
+    # Whose turn, on which day, and how much: 1 weekly contribution of KES 500 from 2 members.
+    text, _ = ask(ctx, "whose turn is next?")
+    assert "each turn is 1 weekly contribution" in text and "receives KES 1,000" in text and "Turn 1: **Mary Achieng** on" in text
     text, _ = ask(ctx, "who in umoja group has not paid?")
     assert "owes KES 500" in text
 
