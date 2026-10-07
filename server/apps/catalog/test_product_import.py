@@ -90,10 +90,23 @@ def test_template_has_exactly_the_documented_headings_and_this_shops_lists(clien
     book = load_workbook(io.BytesIO(response.content))
     assert book.sheetnames[0] == "Products"
     assert [c.value for c in book["Products"][1]] == COLUMNS == [
-        "name", "category", "brand", "description", "product_type", "variant_name", "sku", "barcode", "selling_price", "minimum_price",
-        "minimum_stock", "target_stock", "opening_quantity", "opening_unit_cost", "preferred_shelf"]
+        "name", "category", "brand", "description", "product_type", "variant_name", "pack_size", "piece_name", "sku", "barcode",
+        "selling_price", "minimum_price", "service_cost", "minimum_stock", "target_stock", "opening_quantity", "opening_unit_cost",
+        "preferred_shelf"]
     assert "Mobile Accessories" in [c.value for c in book["Lists"]["B"]] and "AL1C1S1" in [c.value for c in book["Lists"]["D"]]
     assert book["Products"].max_row >= 1 and book["Products"]["A2"].value is None
+    # An Excel table, so rows added under the last one keep the dropdowns and formats.
+    assert list(book["Products"].tables) == ["Products"]
+
+
+def test_a_shop_without_shelves_gets_no_shelf_column(client, shop):
+    from apps.tenancy.context import organization_id
+    from apps.tenancy.models import Organization
+    organization = Organization.objects.get(pk=organization_id())
+    organization.enabled_modules = [m for m in organization.enabled_modules if m != "locations"]
+    organization.save()
+    book = load_workbook(io.BytesIO(client.get("/api/v1/catalog/products/import-template/").content))
+    assert [c.value for c in book["Products"][1]] == [c for c in COLUMNS if c != "preferred_shelf"]
 
 
 def test_filled_template_imports(client, shop):
@@ -161,11 +174,26 @@ def test_normal_product_entry_still_defaults_to_online(client, shop):
     assert Product.objects.get(name="Earbuds").ecommerce_visible is True
 
 
-def test_opening_stock_needs_a_cost_and_a_shelf_and_no_negative_values(client, shop):
+def test_opening_stock_without_a_price_or_shelf_is_kept_as_the_form_keeps_it(client, shop):
+    """As in the Add Product form: no buying price marks the stock cost pending (never valued at 0); no shelf keeps it unplaced."""
     rows = [
         {**CABLE, "sku": "A", "barcode": None, "opening_unit_cost": None},
         {**CABLE, "sku": "B", "barcode": None, "opening_unit_cost": 0},
         {**CABLE, "sku": "C", "barcode": None, "preferred_shelf": None},
+    ]
+    preview = post(client, workbook(*rows)).json()
+    assert not errors(preview)
+    assert any("cost pending" in note for note in preview["rows"][0]["notes"])
+    assert any("not yet placed" in note for note in preview["rows"][2]["notes"])
+    assert post(client, workbook(*rows), commit=True).json()["committed"] is True
+    assert StockLot.objects.get(variant__sku="A").cost_status == StockLot.UNCOSTED
+    assert StockLot.objects.get(variant__sku="B").cost_status == StockLot.UNCOSTED
+    assert StockLot.objects.get(variant__sku="C").unit_cost == 180
+    assert StockBalance.objects.get(lot__variant__sku="C").shelf.is_virtual
+
+
+def test_opening_stock_and_prices_reject_negative_and_wrong_values(client, shop):
+    rows = [
         {**CABLE, "sku": "D", "barcode": None, "opening_quantity": -2},
         {**CABLE, "sku": "E", "barcode": None, "opening_unit_cost": -5},
         {**CABLE, "sku": "F", "barcode": None, "selling_price": None, "minimum_stock": 5, "target_stock": 2},
@@ -176,16 +204,13 @@ def test_opening_stock_needs_a_cost_and_a_shelf_and_no_negative_values(client, s
     body = post(client, workbook(*rows), commit=True).json()
     assert body["committed"] is False
     found = errors(body)
-    assert ("opening_unit_cost", "is required for opening stock of 10: enter the buying cost of one unit.") in found[2]
-    assert ("opening_unit_cost", "must be more than 0 for opening stock: enter the buying cost of one unit.") in found[3]
-    assert ("preferred_shelf", "is required for opening stock of 10: name the compartment where it is kept.") in found[4]
-    assert ("opening_quantity", "cannot be negative.") in found[5]
-    assert ("opening_unit_cost", "cannot be negative.") in found[6]
-    assert ("selling_price", "selling_price is required.") in found[7]
-    assert ("target_stock", "(2) cannot be lower than minimum_stock (5).") in found[7]
-    assert ("opening_quantity", "'ten' is not a number.") in found[8] and ("selling_price", "use at most 2 decimal places.") in found[8]
-    assert ("minimum_price", "(301) cannot be higher than selling_price (300).") in found[9]
-    assert ("minimum_price", "cannot be negative.") in found[10]
+    assert ("opening_quantity", "cannot be negative.") in found[2]
+    assert ("opening_unit_cost", "cannot be negative.") in found[3]
+    assert ("selling_price", "selling_price is required.") in found[4]
+    assert ("target_stock", "(2) cannot be lower than minimum_stock (5).") in found[4]
+    assert ("opening_quantity", "'ten' is not a number.") in found[5] and ("selling_price", "use at most 2 decimal places.") in found[5]
+    assert ("minimum_price", "(301) cannot be higher than selling_price (300).") in found[6]
+    assert ("minimum_price", "cannot be negative.") in found[7]
     assert nothing_written()
 
 
@@ -475,9 +500,81 @@ def test_import_needs_product_creation_permission(shop):
 
 
 def test_csv_with_the_same_headings_still_works(client, shop):
-    text = ",".join(COLUMNS) + "\nPen,Mobile Accessories,,,,,PEN-1,,20,,,,,\n"
+    row = {"name": "Pen", "category": "Mobile Accessories", "sku": "PEN-1", "selling_price": "20"}
+    text = ",".join(COLUMNS) + "\n" + ",".join(row.get(c, "") for c in COLUMNS) + "\n"
     response = client.post(URL, {"file": SimpleUploadedFile("p.csv", text.encode()), "commit": "true"}, format="multipart")
     assert response.status_code == 201, response.json()
+
+
+def test_files_filled_from_the_earlier_template_still_import(client, shop):
+    earlier = [c for c in COLUMNS if c not in {"pack_size", "piece_name", "service_cost"}]
+    body = post(client, workbook(CABLE, headings=earlier), commit=True).json()
+    assert body["committed"] is True, errors(body)
+    assert post(client, workbook(CABLE, headings=earlier)).json()["rows"][0]["action"] == "skip"
+
+
+# Saved exactly as the Add Product form saves it
+
+def test_packs_are_priced_per_pack_and_opening_stock_is_counted_in_pieces(client, shop):
+    clips = {"name": "Cable clips", "category": "Mobile Accessories > Cable Organisers", "pack_size": 10, "piece_name": "clips",
+             "selling_price": 20, "minimum_stock": 5, "opening_quantity": 205, "opening_unit_cost": 1.5, "preferred_shelf": "AL1C1S1"}
+    body = post(client, workbook(clips), commit=True).json()
+    assert body["committed"] is True, errors(body)
+    variant = ProductVariant.objects.get(product__name="Cable clips")
+    # The form names a default variant after the pack and suggests the SKU from the name and variant.
+    assert (variant.name, variant.sku, variant.pack_size, variant.piece_name) == ("Pack of 10 clips", "CC-PACK-OF-10", 10, "clips")
+    lot = StockLot.objects.get(variant=variant)
+    assert (lot.received_quantity, lot.unit_cost) == (Decimal("20.500"), Decimal("15.00"))
+    assert Category.objects.get(name="Cable Organisers").parent == shop["root"]
+
+
+def test_pack_and_service_columns_are_checked_like_the_form(client, shop):
+    rows = [
+        {**CABLE, "sku": "P1", "barcode": None, "pack_size": 2.5},
+        {**CABLE, "sku": "P2", "barcode": None, "piece_name": "sheet"},
+        {**SERVICE, "sku": "S1", "pack_size": 4},
+        {**SERVICE, "sku": "S2", "barcode": "123"},
+        {**CABLE, "sku": "P3", "barcode": None, "service_cost": 40},
+    ]
+    found = errors(post(client, workbook(*rows)).json())
+    assert found[2][0][0] == "pack_size" and "whole number" in found[2][0][1]
+    assert found[3] == [("piece_name", "is only used with a pack_size of 2 or more.")]
+    assert found[4][0][0] == "pack_size"
+    assert found[5][0][0] == "barcode"
+    assert found[6] == [("service_cost", "is only for SERVICE rows. Leave it empty for stock items.")]
+
+
+def test_service_cost_is_saved_on_a_service(client, shop, branch):
+    ShelfStackCategory.objects.create(stack=shop["rack"], category=Category.objects.create(name="Services", slug="services"))
+    service = {"name": "Windows installation", "category": "Services", "product_type": "SERVICE", "selling_price": 1500, "service_cost": 200}
+    body = post(client, workbook(service), commit=True).json()
+    assert body["committed"] is True, errors(body)
+    variant = ProductVariant.objects.get(product__name="Windows installation")
+    assert (variant.service_cost, variant.sku, variant.name) == (Decimal("200.00"), "WI-SERVICE", "Standard")
+
+
+def test_an_empty_sku_is_the_one_the_form_suggests_and_a_reupload_skips_it(client, shop):
+    from apps.catalog.product_import import suggested_sku
+    assert suggested_sku("Oraimo Type-C cable", "Oraimo", "1m") == "ORAIMO-TCC-1M"
+    assert suggested_sku("Original Normal Full Charger", "Oraimo") == "ORAIMO-ONFC"
+    assert suggested_sku("Power Bank 20000", "") == "PB-20000"
+    assert suggested_sku("C-C HEAD(45W)", "") == "CCH-45W"
+    assert suggested_sku("EVERADY 2AA", "Everady", "EVERADY-2AA") == "EVERADY-2AA"
+    assert suggested_sku("Wall charger", "", "Black") == "WC-BLACK"
+    assert suggested_sku("Photocopy", "", "Standard", "SERVICE") == "PHOTOCOPY-SERVICE"
+    # The same cases as the form's own tests (client/src/modules/products/sku.test.jsx), so both always agree.
+    assert suggested_sku("Oraimo Original Normal Full Charger", "Oraimo") == "ORAIMO-ONFC"
+    assert suggested_sku("Power Bank 20000", "Oraimo", "Black") == "ORAIMO-PB-20000-BLACK"
+    assert suggested_sku("Smartphone Cover", "", "Samsung A15 / Black") == "SC-SAMSUNG-A15-BLACK"
+    assert suggested_sku("  Café & cable! ") == "CC"
+    assert suggested_sku("Router", "TP-Link") == "TP-LINK-ROUTER"
+    assert suggested_sku("") == ""
+    long = suggested_sku("Very long name " * 20, "A brand with a very long name indeed", "Blue with extra long variant description")
+    assert len(long) <= 64 and long.startswith("A-BRAND-WITH")
+    row = {**CABLE, "sku": None, "barcode": None}
+    assert post(client, workbook(row), commit=True).json()["committed"] is True
+    assert ProductVariant.objects.filter(sku="ORAIMO-TCC-1M").exists()
+    assert post(client, workbook(row)).json()["rows"][0]["action"] == "skip"
 
 
 def test_documented_sample_workbook_imports_cleanly(client, shop):
@@ -489,5 +586,5 @@ def test_documented_sample_workbook_imports_cleanly(client, shop):
     assert [issue["category"] for issue in preview["summary"]["rack_issues"]] == ["Services"]
     body = post(client, content, commit=True, racks={"Services": shop["rack"].pk}).json()
     assert body["committed"] is True, errors(body)
-    assert body["summary"]["create"] == 5 and body["summary"]["services"] == 1 and body["summary"]["opening_value"] == "3880.00"
+    assert body["summary"]["create"] == 5 and body["summary"]["services"] == 1 and body["summary"]["opening_value"] == "4180.00"
     assert not Product.objects.filter(ecommerce_visible=True).exists()

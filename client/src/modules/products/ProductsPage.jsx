@@ -12,11 +12,11 @@ import { ProductImage } from "../storefront/components/ProductImage";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { api } from "../../core/api/client";
 import { ProductForm } from "./ProductForm";
-import { ProductImport } from "./ProductImport";
+import { ProductImport, downloadTemplate } from "./ProductImport";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
-import { Trash2 } from "lucide-react";
+import { FileSpreadsheet, Trash2 } from "lucide-react";
 import { DeleteProductsDialog, ProductSelection, useProductSelection } from "./DeleteProducts";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const count = (value) => Number(value || 0).toLocaleString();
@@ -317,6 +317,7 @@ export function ProductsPage() {
   const [categories, setCategories] = useState([]);
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [templateError, setTemplateError] = useState("");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   // Deleting: ticked products, the ones being asked about, and what happened.
@@ -458,12 +459,24 @@ export function ProductsPage() {
           <div className="actionRow">
             {canDelete && !deleteMode && <button type="button" className="secondary" onClick={() => setChoosing(true)}>Delete products</button>}
             {hasPermission(user, "catalog.add_product") && <>
+              <button type="button" className="secondary" title="An Excel sheet laid out like the Add Product form: fill a row per product, keep adding, then import it"
+                onClick={() => downloadTemplate().catch((e) => setTemplateError(e.message))}>
+                <FileSpreadsheet size={17} aria-hidden="true" /> Download Excel template</button>
               <button type="button" className="secondary" onClick={() => setImporting(true)}>Import spreadsheet</button>
               <button onClick={() => setAdding(category ? categoryDefaults(openCategory, rows || []) : true)}>Add Product</button>
             </>}
           </div>
         )}
       </div>
+      {hasPermission(user, "catalog.add_product") && !category && (
+        <p className="templateHint">
+          <FileSpreadsheet size={18} aria-hidden="true" />
+          <span>Adding many products? Download the sample Excel template in the expected format: one row per product, laid out like the
+            Add Product form, with your categories and brands to pick from. Keep adding rows to the same file, then use Import spreadsheet.</span>
+          <button type="button" className="linkButton" onClick={() => downloadTemplate().catch((e) => setTemplateError(e.message))}>Download template</button>
+        </p>
+      )}
+      <FormError title="Could not download the template." message={templateError} />
       <ProductSearch
         value={query}
         onChange={setQuery}

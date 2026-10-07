@@ -2698,3 +2698,10 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 [data-theme="dark"] .commissionBar.costs i { background: #c2700a; }
 .commissionMonths .negative, strong.negative { color: var(--danger, #b42318); }
 
+/* Products page: tells people a sample Excel template exists before they try to import. */
+.templateHint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 16px; padding: 10px 14px;
+  border-radius: 12px; background: var(--primary2); color: var(--text); font-size: 14px; }
+.templateHint svg { flex: 0 0 auto; color: var(--primary); }
+.templateHint span { flex: 1 1 260px; min-width: 0; }
+.templateHint .linkButton { font-weight: 700; white-space: nowrap; }
+.actionRow button svg { vertical-align: -3px; margin-right: 4px; }

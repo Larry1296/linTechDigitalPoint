@@ -7,9 +7,13 @@ committed import is all-or-nothing. Rules (see docs/product-import.md):
 * Categories are matched by name ignoring case and spacing; missing ones in a path such as
   "Mobile Accessories > Chargers" are created parent first. Where racks are in use, a category with no
   rack is reported for review and assigned only to a rack the person chooses.
-* preferred_shelf must name one existing exact compartment. Shelves are never created from text.
-* opening_quantity and opening_unit_cost are per sellable unit. Positive opening stock needs a shelf and a
-  buying cost, and is created through the inventory service (lot, balance, movement, journal, audit).
+* Each row is checked and saved exactly as the Add Product form would save it: the same defaults (variant
+  "Standard", SKU suggested from brand, name and variant when left empty), the same packs (pack_size pieces sold
+  as one unit, opening stock counted in pieces) and the same service cost.
+* preferred_shelf, when given, must name one existing exact compartment. Shelves are never created from text.
+* Opening stock goes through the inventory service (lot, balance, movement, journal, audit). As in the form, a
+  missing buying price marks the stock cost pending (never valued at zero) and stock with no shelf is kept as not
+  yet placed.
 * The SKU identifies a row. A row whose SKU or barcode is already in the system is skipped and changes nothing,
   so a file can be uploaded again, even after the products were edited or added by hand.
 """
@@ -19,7 +23,7 @@ import io
 import json
 import re
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -35,9 +39,12 @@ from .models import Brand, Category, ProductImport, ProductImportRow, ProductVar
 MAX_ROWS = 5000
 MAX_BYTES = 5 * 1024 * 1024
 # The template's headings, in order. Documented in docs/product-import.md.
-COLUMNS = ["name", "category", "brand", "description", "product_type", "variant_name", "sku", "barcode", "selling_price", "minimum_price",
-           "minimum_stock", "target_stock", "opening_quantity", "opening_unit_cost", "preferred_shelf"]
-REQUIRED = ["name", "category", "sku", "selling_price"]
+COLUMNS = ["name", "category", "brand", "description", "product_type", "variant_name", "pack_size", "piece_name", "sku", "barcode",
+           "selling_price", "minimum_price", "service_cost", "minimum_stock", "target_stock", "opening_quantity", "opening_unit_cost",
+           "preferred_shelf"]
+REQUIRED = ["name", "category", "selling_price"]
+# Columns added after the first template: left out of a row's fingerprint while empty, so files imported before still match.
+LATER_COLUMNS = {"pack_size", "piece_name", "service_cost"}
 ONLINE_COLUMNS = {"ecommerce_visible", "online_orderable"}
 TYPES = {"": "STOCK_ITEM", "stock_item": "STOCK_ITEM", "stock item": "STOCK_ITEM", "service": "SERVICE"}
 MONEY_PLACES, QUANTITY_PLACES = 2, 3
@@ -51,6 +58,44 @@ def _key(text):
 
 def _path_key(path):
     return " > ".join(_key(p) for p in str(path).split(">"))
+
+
+_PLAIN_VARIANTS = {"STANDARD", "DEFAULT", "NORMAL"}
+
+
+def _sku_words(value):
+    import unicodedata
+    text = "".join(c for c in unicodedata.normalize("NFKD", str(value or "")) if not unicodedata.combining(c)).upper()
+    return [w for w in re.sub(r"[^A-Z0-9]+", "-", text).split("-") if w]
+
+
+def _initials(name, brand):
+    words, brand_words = _sku_words(name), _sku_words(brand)
+    if brand_words and len(words) > len(brand_words) and words[:len(brand_words)] == brand_words:
+        words = words[len(brand_words):]
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0][:10]
+    letters = "".join(w[0] for w in words if not re.search(r"\d", w))
+    return "-".join(p for p in [letters, *[w for w in words if re.search(r"\d", w)]] if p)
+
+
+def suggested_sku(name, brand="", variant="Standard", product_type="STOCK_ITEM"):
+    """The SKU the Add Product form suggests (client/src/modules/products/sku.js), e.g. Oraimo · Type-C cable · 1m → ORAIMO-TCC-1M."""
+    code = _initials(name, brand)
+    if not code:
+        return ""
+    brand_words = _sku_words(brand)
+    used = {*brand_words, *_sku_words(name), *code.split("-")}
+    extra = [w for w in _sku_words(variant) if w not in _PLAIN_VARIANTS and w not in used]
+    parts = [*brand_words, *code.split("-"), *extra, *(["SERVICE"] if product_type == "SERVICE" else [])]
+    parts = [w for i, w in enumerate(parts) if i == 0 or w != parts[i - 1]]
+    result = "-".join(parts)
+    while len(result) > 64 and len(parts) > 1:
+        del parts[len(parts) - (2 if product_type == "SERVICE" else 1)]
+        result = "-".join(parts)
+    return result[:64].rstrip("-")
 
 
 def _heading(value):
@@ -150,6 +195,8 @@ def _fingerprint(data):
                 pass
         if column == "variant_name" and text in ("", "standard"):
             text = ""
+        if column in LATER_COLUMNS and not text:
+            continue
         normal[column] = text
     return hashlib.sha256(json.dumps(normal, sort_keys=True).encode()).hexdigest()
 
@@ -349,12 +396,19 @@ class _Check:
 
     def check(self, row):
         name, sku = row.text("name"), row.text("sku")
-        row.sku, row.name, row.barcode = sku, name, row.text("barcode")
         row.fingerprint = _fingerprint(row.data)
+        kind = TYPES.get(row.text("product_type").casefold().replace("-", "_"))
+        packs = self.packs(row, kind)
+        if not sku and name:
+            # Left empty, the SKU is the one the Add Product form suggests for the same brand, name and variant.
+            sku = suggested_sku(name, row.text("brand"), row.text("variant_name") or packs or "Standard", kind or "STOCK_ITEM")
+            if sku:
+                row.notes.append(f"SKU {sku} was made from the brand, name and variant, as the Add Product form suggests.")
+        row.sku, row.name, row.barcode = sku, name, row.text("barcode")
         existing = self.variants.get(sku.casefold()) if sku else None
         if existing:
             # An import never changes existing products: a SKU already in the system is skipped, not an error.
-            row.action, row.variant = "skip", existing
+            row.action, row.variant, row.errors = "skip", existing, []
             earlier = [r for r in self.imported.get(existing.pk, []) if r.fingerprint == row.fingerprint]
             if earlier:
                 row.notes.append(f"Already imported in {earlier[0].batch.reference} (row {earlier[0].row_number}): skipped, nothing changes.")
@@ -364,7 +418,7 @@ class _Check:
             return
         taken = self.barcodes.get(row.barcode) if row.barcode else None
         if taken:
-            row.action, row.variant = "skip", taken
+            row.action, row.variant, row.errors = "skip", taken, []
             row.notes.append(f"Barcode {row.barcode} already belongs to {taken.product.name} (SKU {taken.sku}): skipped, nothing changes.")
             return
         if not name:
@@ -372,18 +426,17 @@ class _Check:
         elif len(name) > 180:
             row.error("name", "is longer than 180 characters.")
         if not sku:
-            row.error("sku", "sku is required.")
+            row.error("sku", "write a sku: none could be made from this name.")
         elif len(sku) > 64:
             row.error("sku", "is longer than 64 characters.")
         barcode = row.barcode
         if len(barcode) > 64:
             row.error("barcode", "is longer than 64 characters.")
-        kind = TYPES.get(row.text("product_type").casefold().replace("-", "_"))
         if kind is None:
             row.error("product_type", f"'{row.data['product_type']}' is not a product type. Write STOCK_ITEM or SERVICE, or leave it empty.")
             kind = "STOCK_ITEM"
         row.product_type = kind
-        row.variant_name = row.text("variant_name") or "Standard"
+        row.variant_name = row.text("variant_name") or packs or "Standard"
         if len(row.variant_name) > 120:
             row.error("variant_name", "is longer than 120 characters.")
         brand = row.text("brand")
@@ -396,6 +449,7 @@ class _Check:
         row.minimum_price = row.number_in("minimum_price", MONEY_PLACES) or Decimal("0")
         if row.selling_price and row.minimum_price > row.selling_price:
             row.error("minimum_price", f"({row.minimum_price}) cannot be higher than selling_price ({row.selling_price}).")
+        row.service_cost = row.number_in("service_cost", MONEY_PLACES) or Decimal("0")
         minimum = row.number_in("minimum_stock", QUANTITY_PLACES) or Decimal("0")
         target = row.number_in("target_stock", QUANTITY_PLACES) or Decimal("0")
         if target and target < minimum:
@@ -410,27 +464,63 @@ class _Check:
         else:
             row.category = self.categories.resolve(category, row)
         if kind == "SERVICE":
-            # A service is sold, never stocked: no opening stock, cost or shelf.
+            # A service is sold, never stocked: no opening stock, cost, shelf or barcode, as in the form.
             for column, value in (("opening_quantity", quantity), ("opening_unit_cost", cost)):
                 if value:
                     row.error(column, "must be empty for a SERVICE: services have no stock.")
             if shelf_text:
                 row.error("preferred_shelf", "must be empty for a SERVICE: services are not kept on a shelf.")
+            if row.barcode:
+                row.error("barcode", "must be empty for a SERVICE: services have no barcode.")
         else:
+            if row.service_cost:
+                row.error("service_cost", "is only for SERVICE rows. Leave it empty for stock items.")
             if shelf_text:
                 row.shelf = self.shelves.find(shelf_text, row)
             if quantity:
-                row.quantity = quantity
-                if not shelf_text:
-                    row.error("preferred_shelf", f"is required for opening stock of {quantity}: name the compartment where it is kept.")
-                if cost is None and not any(e["column"] == "opening_unit_cost" for e in row.errors):
-                    row.error("opening_unit_cost", f"is required for opening stock of {quantity}: enter the buying cost of one unit.")
-                elif cost == 0:
-                    row.error("opening_unit_cost", "must be more than 0 for opening stock: enter the buying cost of one unit.")
-                elif cost:
-                    row.unit_cost = cost
+                size = row.pack_size
+                if size > 1:
+                    # As in the form: stock is counted in pieces and bought per piece, and kept as packs.
+                    row.quantity = (quantity / size).quantize(Decimal("0.001"), ROUND_HALF_UP)
+                    row.unit_cost = ((cost or Decimal("0")) * size).quantize(Decimal("0.01"), ROUND_HALF_UP)
+                    row.notes.append(f"{quantity} {row.pieces} = {row.quantity} packs of {size}"
+                                     + (f", bought at {row.unit_cost} a pack." if cost else "."))
+                else:
+                    row.quantity, row.unit_cost = quantity, cost or Decimal("0")
+                if not row.unit_cost and not any(e["column"] == "opening_unit_cost" for e in row.errors):
+                    row.notes.append("No buying price: the stock is marked cost pending and not valued until you add the price, "
+                                     "as when it is left 0 in the Add Product form.")
+                if not shelf_text and self.racks_required:
+                    row.notes.append("No shelf: the stock is kept as not yet placed until you move it to a compartment.")
             elif cost:
                 row.notes.append("opening_unit_cost is ignored because opening_quantity is empty.")
+
+    def packs(self, row, kind):
+        """pack_size and piece_name as the form's "How is it sold?": returns the pack's variant name ("Pack of 10 clips"), or ""."""
+        row.pack_size, row.piece_name, row.pieces = 1, "", "pieces"
+        text = row.text("pack_size").replace(",", "")
+        piece = row.text("piece_name")
+        if not text or text == "1":
+            if piece:
+                row.error("piece_name", "is only used with a pack_size of 2 or more.")
+            return ""
+        if kind == "SERVICE":
+            row.error("pack_size", "must be empty for a SERVICE: only stock items are sold in packs.")
+            return ""
+        try:
+            size = Decimal(text)
+        except InvalidOperation:
+            size = None
+        if size is None or not size.is_finite() or size != size.to_integral_value() or not 2 <= size <= 100000:
+            row.error("pack_size", f"'{row.data['pack_size']}' is not a whole number of pieces from 2 to 100,000 (empty or 1 means sold one at a time).")
+            return ""
+        if len(piece) > 40:
+            row.error("piece_name", "is longer than 40 characters.")
+            piece = piece[:40]
+        row.pack_size, row.piece_name = int(size), piece or "piece"
+        singular = re.sub(r"s$", "", row.piece_name, flags=re.IGNORECASE)
+        row.pieces = f"{singular}s"
+        return f"Pack of {row.pack_size} {singular}s"
 
     def duplicates(self):
         """The same new SKU or barcode twice in the file is an error on every row using it. Skipped rows change nothing."""
@@ -581,7 +671,8 @@ def _save(check, user, upload, digest):
                 product_data={"name": row.name, "category": category, "brand": brand, "product_type": row.product_type,
                               "description": row.description, "ecommerce_visible": False, "online_orderable": False},
                 variant_data={"name": row.variant_name, "sku": row.sku, "barcode": row.barcode or None, "selling_price": row.selling_price, "minimum_price": row.minimum_price,
-                              "minimum_stock": row.minimum_stock, "target_stock": row.target_stock},
+                              "service_cost": row.service_cost, "minimum_stock": row.minimum_stock, "target_stock": row.target_stock,
+                              "pack_size": row.pack_size, "piece_name": row.piece_name},
                 preferred_shelf=row.shelf, opening_quantity=row.quantity, opening_unit_cost=row.unit_cost, opening_reference=reference)
         except (ValidationError, DjangoValidationError, IntegrityError) as exc:
             detail = getattr(exc, "detail", None) or getattr(exc, "messages", None) or str(exc)

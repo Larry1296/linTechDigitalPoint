@@ -9,7 +9,7 @@ const plural = (n, one, many) => `${count(n)} ${Number(n) === 1 ? one : many}`;
 const ACTIONS = { create: "New", skip: "Already in system" };
 
 // The Excel template comes from the server so its dropdowns list this business's categories, brands and shelves.
-async function downloadTemplate() {
+export async function downloadTemplate() {
   save(await apiBlob("/api/v1/catalog/products/import-template/"), "products-template.xlsx");
 }
 
@@ -152,8 +152,9 @@ export function ProductImport({ onClose, onImported }) {
       <button type="button" className="pageBackLink" onClick={onClose}>← Back</button>
       <h2>Import products from Excel</h2>
       <p>
-        Download the template, fill one row per sellable product or variant, then upload it here. Required columns:
-        {" "}<code>name</code>, <code>category</code>, <code>sku</code> and <code>selling_price</code>.
+        Download the template, fill one row per sellable product or variant, then upload it here. Each row is saved exactly as
+        the Add Product form would save it. Required columns: <code>name</code>, <code>category</code> and <code>selling_price</code>.
+        Keep the file and add new rows at the bottom next time: rows already imported are skipped.
       </p>
       <ul className="muted">
         <li>
@@ -161,8 +162,10 @@ export function ProductImport({ onClose, onImported }) {
           {" "}<code>Parent &gt; Child &gt; Grandchild</code> (any number of levels), e.g. <code>Mobile Accessories &gt; Chargers &gt; Car Chargers</code>.
           Existing levels are reused (case and spaces ignored); every missing level is created, parent first, exactly where you wrote it.
         </li>
-        <li><code>opening_quantity</code> and <code>opening_unit_cost</code> are per sellable unit. Opening stock needs a buying cost and an existing shelf compartment in <code>preferred_shelf</code>.</li>
-        <li><code>SERVICE</code> rows have no stock and no shelf.</li>
+        <li>Leave <code>sku</code> empty to use the code the form would suggest from the brand, name and variant.</li>
+        <li>Sold in packs? Put the pieces in one pack in <code>pack_size</code> and what a piece is called in <code>piece_name</code>. The price is for one pack, and opening stock is counted in pieces at the buying price of one piece.</li>
+        <li>Opening stock without a buying price is marked cost pending until you add the price; without a <code>preferred_shelf</code> it is kept as not yet placed.</li>
+        <li><code>SERVICE</code> rows have no stock, shelf or barcode, and may have a <code>service_cost</code>.</li>
         <li>Imported products stay offline (not visible or orderable online), so photos aren't needed.</li>
         <li>Nothing is saved until you confirm, and then every row is saved or none. Uploading the same file again never doubles products or stock.</li>
       </ul>

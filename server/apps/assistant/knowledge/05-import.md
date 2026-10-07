@@ -1,16 +1,22 @@
 # Importing products from a spreadsheet
 
 ## Can I import my products from Excel or CSV?
-Yes. On the **Products** page click **Import spreadsheet**, download the template, fill it in and upload it as .xlsx or .csv. {platform} checks every row first and shows what will happen before anything is saved, and a committed import is all-or-nothing. Files can be up to 5 MB and 5,000 rows.
+Yes. On the **Products** page click **Download Excel template**, fill in one row per product or variant on its **Products** sheet, then click **Import spreadsheet** and upload it as .xlsx (or a .csv with the same headings). {platform} checks every row first and shows what will happen before anything is saved, and a committed import is all-or-nothing. Files can be up to 5 MB and 5,000 rows. Keep the file: next time just add new rows at the bottom and upload it again.
 
 ## Which columns does the spreadsheet need?
-Required: **name**, **category**, **selling_price**. Optional: **quantity**, **buying_price**, **sku**, **barcode**, **brand**, **minimum_price** (lowest price) and **minimum_stock** (restock level). The first row must be the headings. Common headings such as "Product", "Price", "Qty", "Cost", "BP" or "SP" are recognised. Write sub-categories as `Phones > Chargers`; missing categories and brands are created for you.
+The template has one column for each field of the Add Product form, and each row is saved exactly as that form would save it. Required: **name**, **category**, **selling_price**. Optional: **brand**, **description**, **product_type** (STOCK_ITEM or SERVICE), **variant_name**, **pack_size** and **piece_name** (for items sold in packs), **sku**, **barcode**, **minimum_price** (bargaining guide), **service_cost** (services only), **minimum_stock**, **target_stock**, **opening_quantity**, **opening_unit_cost** and **preferred_shelf** (shops that use shelves). Hover over a heading in the template to see its note; the **How to fill** sheet explains every column and the **Example** sheet shows filled rows. Do not rename the headings in row 1.
+
+## How do I write categories and sub-categories?
+Write the full path from the top, each level separated by `>`: `Mobile Accessories > Chargers > Car Chargers`, with as many levels as you need. Levels that already exist are reused (capital letters and extra spaces are ignored). Every level that does not exist yet is created, parent first, exactly where you wrote it, just as if you had added it with **New category** in the form. New brands are created too. Shelves are never created by an import.
 
 ## What happens to products that already exist?
-Products already in the system are skipped and left unchanged, and so are rows that repeat an earlier row in the same file. A product counts as existing when its SKU, barcode or name matches (names match regardless of capital letters and extra spaces). This means you can import the same file again safely. Importing never changes the price or adds stock to an existing product; use Receive stock for that.
+A row whose SKU or barcode is already in the system is skipped and changes nothing, so uploading the same file again never doubles products or stock. Importing never changes the price or adds stock to an existing product: edit it on its product page, or use Receive stock.
 
-## What does the quantity column mean?
-The quantity is opening stock: stock your business already owns. It is valued against opening equity and is not recorded as a purchase from a supplier. Imported stock starts as "Not on a shelf yet"; move it onto real shelves with **Place on a shelf** on the product page. For new deliveries from a supplier, use **Receive stock** instead so the supplier and receipt are recorded.
+## What does the opening quantity mean?
+opening_quantity is stock your business already owns. It is valued against opening equity and is not recorded as a purchase or money owed to a supplier. Put opening_unit_cost as the buying price of one item. For items sold in packs, count the pieces and give the price of one piece, as in the form: 500 sheets sold 2 for a price become 250 packs. Without a preferred_shelf the stock is kept as "Not on a shelf yet"; move it with **Place on a shelf** on the product page. For new deliveries from a supplier, use **Receive stock** instead.
 
 ## What if a row has no buying price or no SKU?
-A blank SKU is generated automatically. A blank buying price is allowed, but that stock is flagged as uncosted until you enter one, because profit cannot be calculated without it.
+A blank SKU is made from the brand, name and variant, the same code the Add Product form suggests (Oraimo · Type-C cable · 1m becomes ORAIMO-TCC-1M). A blank buying price is allowed: that stock is marked cost pending until you enter the price, because profit cannot be worked out without it.
+
+## Are imported products shown in the online shop?
+No. Imported products are for stock management only and are not visible or orderable online, so no photos are needed. Add photos and publish a product from its product page if you want it online.
