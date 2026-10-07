@@ -49,3 +49,17 @@ def test_a_role_without_access_is_told_so_not_shown(shop):  # noqa: F811
     cashier, _ = staff(shop, "CASHIER", "till-offline")
     text, used = ask(context(shop, cashier), "Give me a profit and loss summary for this month.")
     assert "Your role does not include this information" in text and used == []
+
+
+def test_stock_and_single_product_questions_get_the_records_not_a_help_article(shop):  # noqa: F811
+    ctx = context(shop)
+    text, used = ask(ctx, "which items are in stock")
+    assert used == ["stock_levels"] and "Duka charger: 8 available" in text
+    text, used = ask(ctx, "Do I have duka charger?")
+    assert used[0] == "find_products" and "8 available" in text and "sells at KES 300" in text
+    text, used = ask(ctx, "how many chargers are left")
+    assert "Duka charger" in text
+    text, used = ask(ctx, "is the unicorn lamp in stock?")
+    assert "couldn't find a product" in text
+    text, used = ask(ctx, "How do I receive stock from a supplier?")
+    assert used == ["platform_help"]

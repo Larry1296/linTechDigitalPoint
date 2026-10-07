@@ -336,7 +336,79 @@ def stock_value(w, text):
     s = data["summary"]
     value = f", worth **{w.money(s['stock_value_at_cost'])}** at cost" if s.get("stock_value_at_cost") is not None else ""
     return (f"You have **{s['units_on_hand']:g} units** across {s['stock_items']} stock items{value}. "
-            f"{s['out_of_stock']} are out of stock and {s['low_stock']} are running low.")
+            f"{s['out_of_stock']} {'is' if s['out_of_stock'] == 1 else 'are'} out of stock and {s['low_stock']} "
+            f"{'is' if s['low_stock'] == 1 else 'are'} running low.")
+
+
+def stock_list(w, text):
+    category = ""
+    match = re.search(r"\b(?:in|under|from) (?:the )?(?:category )?([a-z0-9 &-]+?)(?: category)?\??$", text)
+    if match and match.group(1).strip() not in {"stock", "my stock", "the shop", "store", "shop"}:
+        category = match.group(1).strip()
+    data = w.call("stock_levels", {"view": "all", "limit": 200, **({"category": category} if category else {})})
+    if data is None:
+        return w.problem
+    have = sorted((i for i in data["items"] if (i["available"] or 0) > 0), key=lambda i: i["product"].lower())
+    s = data["summary"]
+    if not have:
+        return f"Nothing is in stock{' in ' + category if category else ''} right now ({s['stock_items']} stock items, all at zero)."
+    value = f", worth {w.money(s['stock_value_at_cost'])} at cost" if s.get("stock_value_at_cost") is not None else ""
+    lines = [f"**{len(have)} of {s['stock_items']} items are in stock**{' in ' + category if category else ''} "
+             f"({s['units_on_hand']:g} units{value}).", ""]
+    for item in have[:60]:
+        low = " (low)" if item["minimum_stock"] and item["available"] <= item["minimum_stock"] else ""
+        lines.append(f"- {item['product']}: {item['available']:g} available{low}")
+    if len(have) > 60:
+        lines.append(f"- …and {len(have) - 60} more. Ask about a category, e.g. \"which items are in stock in cables\".")
+    out = [i["product"] for i in data["items"] if (i["available"] or 0) <= 0]
+    if out:
+        lines += ["", f"Out of stock: {', '.join(out[:15])}{' …' if len(out) > 15 else ''}"]
+    return "\n".join(lines)
+
+
+PRODUCT_QUESTIONS = [r"\bdo (?:i|we) (?:have|stock|sell) (?:any )?(.+?)(?: in stock| left| available)?$",
+                     r"\bhow many (.+?) (?:do (?:i|we) have|are (?:left|there|in stock|available)|left|in stock)$",
+                     r"\bis (?:there )?(?:any )?(.+?) (?:in stock|available|left)$", r"\bare (?:there )?(?:any )?(.+?) (?:in stock|available|left)$",
+                     r"\b(?:price|cost|selling price) of (?:the |a |an )?(.+)$", r"\bhow much (?:is|does|do) (?:the |a |an )?(.+?)(?: cost| sell for| go for)?$",
+                     r"\b(?:find|look up|search for|check) (?:the )?(?:product )?(.+)$"]
+
+
+def product_name(text):
+    clean = text.rstrip(" ?.!")
+    for pattern in PRODUCT_QUESTIONS:
+        match = re.search(pattern, clean)
+        if match:
+            name = re.sub(r"^(?:the|a|an|any|some|my) ", "", match.group(1).strip())
+            if name and name not in {"stock", "items", "products", "money", "it", "that", "this"}:
+                return name
+    return None
+
+
+def product(w, text):
+    name = product_name(text)
+    data = w.call("find_products", {"query": name, "limit": 10})
+    if data is None:
+        return w.problem
+    if not data["products"]:
+        # Try the words one by one: "samsung remote" may be listed as "SUMSUNG SMART REMOTE".
+        for word in sorted(name.split(), key=len, reverse=True):
+            if len(word) > 2:
+                data = w.call("find_products", {"query": word, "limit": 10})
+                if data and data["products"]:
+                    break
+    if not data or not data["products"]:
+        return f"I couldn't find a product matching \"{name}\". Check the spelling, or search on the Products page."
+    lines = [f"**{len(data['products'])} match{'es' if len(data['products']) != 1 else ''} for \"{name}\":**", ""]
+    for p in data["products"]:
+        parts = [f"sells at {w.money(p['selling_price'])}"]
+        if p.get("available") is not None:
+            parts.insert(0, "**out of stock**" if p["available"] <= 0 else f"{p['available']:g} available"
+                         + (" (low)" if p.get("minimum_stock") and p["available"] <= p["minimum_stock"] else ""))
+        if p.get("average_unit_cost") is not None:
+            parts.append(f"costs {w.money(p['average_unit_cost'])}")
+        lines.append(f"- {p['product']}" + (f" [{p['sku']}]" if p.get("sku") else "") + ": " + ", ".join(parts)
+                     + ("" if p["active"] else " (inactive)"))
+    return "\n".join(lines)
 
 
 def customers(w, text):
@@ -365,7 +437,7 @@ def help_answer(w, text):
     return f"**{top['section']}**\n\n{top['text']}"
 
 
-FALLBACK = ("I can answer these without the AI assistant: sales today, this week or this month; how sales are trending; profit and "
+FALLBACK = ("I can answer these without the AI assistant: which items are in stock; a product's stock and price; sales today, this week or this month; how sales are trending; profit and "
             "loss; busiest days and hours; top products; what is running low; stock that has not sold; stock value; who owes you; "
             "what you owe; where your money is (net worth); expenses; top customers; M-Pesa agency and commission; and how to do "
             "something in the app. Try asking one of those.")
@@ -373,6 +445,9 @@ FALLBACK = ("I can answer these without the AI assistant: sales today, this week
 # (pattern, answer). The first match wins, so the more specific questions come first.
 INTENTS = [
     (r"^(how (do|can|should) i|how to|where (do|can) i|can i|is it possible|what is the way)\b", help_answer),
+    (r"\b(which|what) (items|products|goods|stock)\b.*\b(in stock|available|do i have|have i got|are there|left)\b"
+     r"|\b(items|products|goods|everything|what is|what's) (in stock|available)\b|\b(list|show)( me)? (my |all |the )?(stock|items|products|inventory)\b"
+     r"|\bstock list\b|\bwhat do (i|we) have\b", stock_list),
     (r"\b(trend|trending|forecast|grow|growing|growth|predict|going up|going down|declin)", sales_trend),
     (r"\b(busiest|busy|peak|quiet|which day|what day|best day|hours?)\b", busiest),
     (r"\b(profit|loss|p&l|p ?and ?l|income statement|margin|net income|making money)\b", profit_and_loss),
@@ -386,6 +461,8 @@ INTENTS = [
     (r"\b(top|best[- ]selling|best sellers?|most (revenue|sales|money)|bring in|popular)\b.*\b(products?|items?|sellers?|revenue)?", top_products),
     (r"\b(customers?|clients?|buyers?)\b", customers),
     (r"\b(stock value|value of (my )?stock|how much stock|stock on hand|inventory)\b", stock_value),
+    (r"\b(do (i|we) (have|stock|sell)|how many .+ (have|left|in stock|available)|(is|are) (there )?(any )?.+ (in stock|available|left)"
+     r"|price of|how much (is|does|do)|find|look up|search for|check)\b", product),
     (r"\b(sales|sold|revenue|turnover|sell|takings)\b", sales),
 ]
 
@@ -399,5 +476,7 @@ def answer(ctx, question):
             result = handler(w, text)
             if result:
                 return result + NOTE, w.used
+    if re.search(r"\b(stock|items?|products?|goods)\b", text):
+        return stock_list(w, text) + NOTE, w.used
     found = help_answer(w, text)
     return (found + NOTE if found else FALLBACK), w.used
