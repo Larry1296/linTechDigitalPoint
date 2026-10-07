@@ -445,6 +445,175 @@ def customers(w, text):
     return "\n".join(lines)
 
 
+def chamas(w, text):
+    data = w.call("chamas")
+    if data is None:
+        return w.problem
+    if not data["chamas"]:
+        return "No chama is registered in this business yet. Open **Chama → My chama** to set one up."
+    named = next((c for c in data["chamas"] if c["name"].lower() in text), None)
+    if named or len(data["chamas"]) == 1 and re.search(r"\b(members?|who|paid|owe|late|turn|receive|fines?)\b", text):
+        return chama_members(w, text, (named or data["chamas"][0])["name"])
+    lines = [f"**{len(data['chamas'])} chama{'s' if len(data['chamas']) != 1 else ''} registered:**", ""]
+    for c in data["chamas"]:
+        turn = f"; next to receive: {c['next_turn']['member']} on {c['next_turn']['date']}" if c.get("next_turn") else ""
+        lines.append(f"- **{c['name']}**: {c['members']} members, {w.money(c['contribution_amount'])} {c['frequency'].lower()}, "
+                     f"holding {w.money(c['held'])}; this period {c['paid_count']} of {c['due_count']} paid, {c['late_count']} late{turn}")
+    return "\n".join(lines)
+
+
+def chama_members(w, text, name=None):
+    data = w.call("chama_members", {"chama": name} if name else {})
+    if data is None:
+        return w.problem
+    if not data["chama"]:
+        return "No chama is registered in this business yet. Open **Chama → My chama** to set one up."
+    active = [m for m in data["members"] if m["active"]]
+    money = data["money"]
+    lines = [f"**{data['chama']}** has {len(active)} member{'s' if len(active) != 1 else ''} "
+             f"({w.money(data['contribution'])} {data['frequency'].lower()}). It holds {w.money(money['held'])}; "
+             f"members still owe {w.money(money['unpaid'])} ({w.money(money['late'])} late) and {w.money(money['fines_owed'])} in fines.", ""]
+    if re.search(r"\b(late|owe|owing|not paid|haven'?t paid|unpaid|defaulters?)\b", text):
+        behind = [m for m in active if (m["unpaid"] or 0) > 0 or (m["fines_owed"] or 0) > 0]
+        lines += [f"- {m['name']}: owes {w.money(m['unpaid'])}" + (f" ({w.money(m['late'])} late)" if m["late"] else "")
+                  + (f", fines {w.money(m['fines_owed'])}" if m["fines_owed"] else "") for m in behind] or ["Everyone is up to date."]
+    else:
+        for m in sorted(active, key=lambda m: m["name"].lower()):
+            extra = [m["role"]] if m["role"] and m["role"].lower() != "member" else []
+            extra.append(f"paid in {w.money(m['paid_in'])}")
+            if m["unpaid"]:
+                extra.append(f"owes {w.money(m['unpaid'])}")
+            if m["next_turn"]:
+                extra.append(f"next turn {m['next_turn']}")
+            lines.append(f"- {m['name']}: {', '.join(extra)}")
+    if data.get("next_receiver"):
+        lines += ["", f"Agreed to receive next: {data['next_receiver']}."]
+    return "\n".join(lines)
+
+
+def investments(w, text):
+    data = w.call("investments")
+    if data is None:
+        return w.problem
+    if not data["investments"]:
+        return "No investments are recorded. Add one on the **Investments** page."
+    lines = [f"**Investments are worth {w.money(data['total_value'])}** in total.", ""]
+    lines += [f"- {i['investment']}: {w.money(i['value_now'])} (put in {w.money(i.get('DEPOSIT'))}, taken out {w.money(i.get('WITHDRAWAL'))}, "
+              f"interest {w.money(i.get('INTEREST'))}, fees {w.money(i.get('FEE'))})" for i in data["investments"]]
+    return "\n".join(lines + ["", data["explained"]])
+
+
+def service_jobs(w, text):
+    start, end, words = period(text, 30)
+    data = w.call("service_jobs", {**_args(start, end), "limit": 10})
+    if data is None:
+        return w.problem
+    jobs = data["jobs_by_status"]
+    if not jobs:
+        return f"No service jobs in {words}."
+    lines = [f"**{sum(jobs.values())} service jobs** in {words}, completed value {w.money(data['completed_value'])}.", "",
+             "- By status: " + ", ".join(f"{k.replace('_', ' ').lower()} {v}" for k, v in jobs.items())]
+    if data.get("open_jobs_overdue_now"):
+        lines.append(f"- **{data['open_jobs_overdue_now']} open job(s) are overdue now**")
+    if data.get("top_services"):
+        lines += ["", "Top services:"] + [f"- {t['service']}: {t['jobs']} job{'s' if t['jobs'] != 1 else ''}, {w.money(t['value'])}" for t in data["top_services"]]
+    return "\n".join(lines)
+
+
+def purchases(w, text):
+    start, end, words = period(text, 30)
+    data = w.call("purchases_and_suppliers", {**_args(start, end), "limit": 10})
+    if data is None:
+        return w.problem
+    if not data["by_supplier"]:
+        return f"No stock was bought from suppliers in {words}."
+    lines = [f"**Bought {w.money(data['total_bought'])} of stock** in {words}.", ""]
+    lines += [f"- {r['supplier']}: {w.money(r['bought'])} over {r['purchases']} purchase(s)" + (f", still owed {w.money(r['still_owed'])}" if r["still_owed"] else "")
+              for r in data["by_supplier"]]
+    return "\n".join(lines)
+
+
+def staff_activity(w, text):
+    start, end, words = period(text, 7)
+    lines = []
+    sold = w.call("sales_summary", {**_args(start, end), "group_by": "staff"})
+    if sold and sold["rows"]:
+        lines += [f"**Sales by staff, {words}:**"] + [f"- {r['staff']}: {r['sales']} sales, {w.money(r['value'])}" for r in sold["rows"]] + [""]
+    log = w.call("activity_log", {**_args(start, end), "limit": 10})
+    if log:
+        lines += [f"**Activity, {words}:** {log['total_actions']} recorded actions."]
+        lines += [f"- {p['person']}: {p['actions']} action{'s' if p['actions'] != 1 else ''}" for p in log["by_person"]]
+        if log["latest"]:
+            lines += ["", "Latest:"] + [f"- {a['when']}: {a['who']}: {a['action'].replace('_', ' ').lower()}" for a in log["latest"][:8]]
+    return "\n".join(lines) or w.problem
+
+
+def stock_changes(w, text):
+    start, end, words = period(text, 30)
+    data = w.call("stock_movements", {**_args(start, end), "limit": 10})
+    if data is None:
+        return w.problem
+    lines = [f"**Stock adjustments** in {words}: {data['units_removed_by_adjustments']:g} units removed, {data['units_sold']:g} sold"
+             + (f" (shrinkage {data['shrinkage_rate_pct']}%)." if data.get("shrinkage_rate_pct") is not None else ".")]
+    if data["adjustments_by_reason"]:
+        lines += ["", "By reason:"] + [f"- {r['reason'].replace('_', ' ').lower()}: {r['count']} times, {r['units']:g} units" for r in data["adjustments_by_reason"]]
+    if data["recent_adjustments"]:
+        lines += ["", "Latest:"] + [f"- {a['when']}: {a['product']} {a['change']:+g} ({a['reason'].replace('_', ' ').lower()}, by {a['by']})"
+                                    for a in data["recent_adjustments"][:8]]
+    return "\n".join(lines)
+
+
+def sale_lookup(w, text):
+    number = re.search(r"\b((?:pos|cyb|onl|sal)-[a-z0-9-]+)\b", text)
+    customer = None if number else re.search(r"\b(?:customer|did|has|have)\s+([a-z][a-z .'-]{1,40}?)\s+(?:buy|bought|owe|purchase|spent)", text)
+    args = {"sale_number": number.group(1).upper()} if number else {"customer": customer.group(1).strip()} if customer else None
+    if not args:
+        return None
+    data = w.call("find_sales", {**args, "limit": 5})
+    if data is None:
+        return w.problem
+    if not data["sales"]:
+        return f"No sale found for {args.get('sale_number') or args.get('customer')}."
+    lines = []
+    history = data.get("customer_history")
+    if history:
+        lines += [f"**{data['sales'][0]['customer']}** has bought {history['completed_sales']} time{'s' if history['completed_sales'] != 1 else ''}, {w.money(history['total_spent'])} in total "
+                  f"since {history['first_purchase']}.", ""]
+    for sale in data["sales"]:
+        items = ", ".join(f"{i['product']} × {i['quantity']:g}" for i in sale["items"])
+        owed = f", **still owes {w.money(sale['still_owed'])}**" if sale["still_owed"] and sale["still_owed"] > 0 else ""
+        lines.append(f"- {sale['number']} on {sale['when']} by {sale['sold_by']}: {w.money(sale['total'])} ({items}){owed}")
+    return "\n".join(lines)
+
+
+def business_profile(w, text):
+    data = w.call("business_overview")
+    sub = data.get("subscription") or {}
+    lines = [f"**{data['business']}** ({data['business_type']}), {data['country']}, money in {data['currency']}. Records start {data['records_start']}.", "",
+             f"- Branches: {', '.join(data['branches']) or 'none'}", f"- Staff members: {data['staff_members']}",
+             f"- Plan: {sub.get('plan') or 'none'} ({(sub.get('status') or '').lower()}" + (f", until {sub['ends']}" if sub.get("ends") else "") + ")",
+             f"- Tools enabled: {', '.join(data['modules_enabled'])}"]
+    if data.get("catalog"):
+        c = data["catalog"]
+        lines.append(f"- Catalogue: {c['active_products']} products ({c['active_variants']} variants, {c['services']} services) in {c['categories']} categories")
+    return "\n".join(lines)
+
+
+def platform(w, text):
+    data = w.call("platform_overview")
+    if data is None:
+        return None  # not the platform administrator: treat it as an ordinary question
+    s = data["summary"]
+    lines = [f"**{s['businesses']} businesses are registered**: {s['trial']} on trial, {s['paying']} paying, {s['complimentary']} free, "
+             f"{s['ended']} ended, {s['expiring_soon']} expiring soon. Revenue this month {w.money(s['revenue_this_month'])}, "
+             f"{w.money(s['revenue_total'])} in total.", ""]
+    listed = w.call("platform_businesses", {"limit": 20}) or {"businesses": []}
+    lines += [f"- {b['business']} ({b['type'] or 'business'}), owner {b['owner']['name'] or b['owner']['username']}: {b['plan'] or 'no plan'}, "
+              f"{b['status'].lower()}" + (f", {b['days_left']} days left" if b.get("days_left") is not None else "")
+              + f"; last active {b['last_activity'] or 'never'}" for b in listed["businesses"]]
+    return "\n".join(lines)
+
+
 def help_answer(w, text):
     from .retrieval import tokens
     data = w.call("platform_help", {"question": text})
@@ -459,7 +628,9 @@ def help_answer(w, text):
     return f"**{top['section']}**\n\n{top['text']}"
 
 
-FALLBACK = ("I can answer these without the AI assistant: which items are in stock; a product's stock and price; sales today, this week or this month; how sales are trending; profit and "
+FALLBACK = ("I can answer these without the AI assistant: which items are in stock; a product's stock and price; chamas and their "
+            "members; investments and loans; service jobs; purchases from suppliers; staff activity; stock adjustments; a sale by its "
+            "number or what a customer bought; your business profile; sales today, this week or this month; how sales are trending; profit and "
             "loss; busiest days and hours; top products; what is running low; stock that has not sold; stock value; who owes you; "
             "what you owe; where your money is (net worth); expenses; top customers; M-Pesa agency and commission; and how to do "
             "something in the app. Try asking one of those.")
@@ -476,12 +647,21 @@ INTENTS = [
     (r"\b(not sold|haven'?t sold|has not sold|hasn'?t sold|dead stock|slow[- ]moving|not selling|unsold)\b", dead_stock),
     (r"\b(running low|low stock|reorder|re-order|restock|out of stock|running out|need to buy|order more)\b", reorder),
     (r"\b(owes? me|owe us|who owes|debtors?|credit sales|unpaid sales|receivables?|lent|loans?)\b", owed_to_me),
+    (r"\b(buy|bought|purchases?|purchased|stock received|received stock)\b.*\b(suppliers?|stock|this|last|today|week|month)\b"
+     r"|\b(purchases?|purchased|stock received|received stock)\b", purchases),
     (r"\b(i owe|we owe|do i owe|suppliers?|payables?|bills?|creditors?)\b", i_owe),
     (r"\b(net worth|worth|where is (my|the) money|how much money|cash|bank|balances?|assets?)\b", money_position),
     (r"\b(expenses?|spent|spending|running costs?|costs?)\b", expenses),
     (r"\b(commission|m-?pesa|float|agency|agent)\b", agency),
     (r"\b(top|best[- ]selling|best sellers?|most (revenue|sales|money)|bring in|popular)\b.*\b(products?|items?|sellers?|revenue)?", top_products),
     (r"\b(customers?|clients?|buyers?)\b", customers),
+    (r"\b(chamas?|savings group|merry[- ]go[- ]round|umoja|contributions?|table banking)\b", chamas),
+    (r"\b(businesses (are )?registered|registered businesses|all businesses|how many businesses|subscribers|platform revenue)\b", platform),
+    (r"\b(investments?|mmf|money market|unit trust)\b", investments),
+    (r"\b(service jobs?|jobs|repairs?|printing jobs|job cards?)\b", service_jobs),
+    (r"\b(staff|employees?|workers?|cashiers?|who sold|who did|activity|audit)\b", staff_activity),
+    (r"\b(adjust(ed|ments?)?|damaged|lost|stolen|shrinkage|stock movements?)\b", stock_changes),
+    (r"\b(my business|business profile|about (my|the) business|branches|subscription|my plan)\b", business_profile),
     (r"\b(stock value|value of (my )?stock|how much stock|stock on hand|inventory)\b", stock_value),
     (r"\b(do (i|we) (have|stock|sell)|how many .+ (have|left|in stock|available)|(is|are) (there )?(any )?.+ (in stock|available|left)"
      r"|price of|how much (is|does|do)|find|look up|search for|check)\b", product),
@@ -493,6 +673,9 @@ def answer(ctx, question):
     """(markdown answer, tools used). Runs inside the business's scope."""
     text = " ".join(question.lower().split())
     w = Writer(ctx)
+    looked_up = sale_lookup(w, text)
+    if looked_up:
+        return looked_up + NOTE, w.used
     for pattern, handler in INTENTS:
         if re.search(pattern, text):
             result = handler(w, text)

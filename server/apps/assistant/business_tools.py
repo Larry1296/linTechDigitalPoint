@@ -678,6 +678,32 @@ def chamas(ctx, args):
             "note": "Members' ID numbers and phone numbers are never shown here."}
 
 
+def chama_members(ctx, args):
+    """One chama's members: role, when they joined, what they paid, owe, are late with, fines, and their next turn."""
+    from apps.chama.api import chama_detail
+    from apps.chama.models import Chama
+    name = " ".join(str(args.get("chama", "")).split())
+    chamas = Chama.objects.all()
+    chosen = chamas.filter(name__icontains=name).first() if name else (chamas.first() if chamas.count() == 1 else None)
+    if not chosen:
+        names = list(chamas.values_list("name", flat=True))
+        if not names:
+            return {"chama": None, "members": [], "note": "No chama is registered in this business."}
+        raise ToolError(f"No chama called {name!r}. Chamas here: {', '.join(names)}." if name
+                        else f"Say which chama: {', '.join(names)}.")
+    detail = chama_detail(chosen, timezone.localdate())
+    members = [{"name": m["full_name"], "role": m["role_label"], "active": m["active"], "joined": str(m["joined_on"]),
+                "left": str(m["left_on"]) if m["left_on"] else None, "paid_in": _money(m["paid_in"]), "unpaid": _money(m["unpaid"]),
+                "late": _money(m["late"]), "fines_owed": _money(m["fines_owed"]), "received": _money(m["received"]),
+                "next_turn": str(m["next_turn"]["date"]) if m.get("next_turn") else None,
+                "this_period": m["this_period"]["status"] if m.get("this_period") else None} for m in detail["members"]]
+    money = {k: _money(v) for k, v in detail["money"].items()}
+    return {"chama": detail["name"], "contribution": _money(detail["contribution_amount"]), "frequency": detail["frequency"],
+            "payout_mode": detail["payout_mode"], "current_period": str(detail["current_period"]) if detail["current_period"] else None,
+            "next_receiver": detail["next_receiver"]["full_name"] if detail.get("next_receiver") else None,
+            "money": money, "members": members, "note": "ID numbers and phone numbers are kept on the Chama page, not shown here."}
+
+
 def activity_log(ctx, args):
     from apps.core.models import AuditLog
     start, end = _period(args, default_days=7)
@@ -776,6 +802,9 @@ TOOLS = {
                     _schema(), "accounting.view_investment", None),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),
+    "chama_members": (chama_members, "One chama's members (by chama name; optional when there is only one): role, joined, paid in, "
+                      "unpaid, late, fines owed, money received, next turn and this period's status, plus the chama's money and "
+                      "who receives next.", _schema({"chama": {"type": "string"}}), "chama.view_chama", "chama"),
     "activity_log": (activity_log, "Who did what and when (the audit trail): actions by type and person, and the latest actions. "
                      "Filter by person or action word (e.g. SALE, REVERSE, ADJUST). Default: last 7 days.",
                      _schema({**PERIOD, "person": {"type": "string"}, "action": {"type": "string"}, **LIMIT}), "core.view_auditlog", None),

@@ -30,7 +30,7 @@ LABELS = {"business_overview": "Reading the business profile", "find_products": 
           "agency_commission": "Checking agency commission", "money_position": "Working out where the money is",
           "money_owed_to_business": "Checking who owes you", "money_business_owes": "Checking what you owe",
           "purchases_and_suppliers": "Checking purchases", "find_sales": "Looking up sales", "top_customers": "Checking customers",
-          "investments": "Checking investments", "chamas": "Checking the chamas", "activity_log": "Reading the activity log",
+          "investments": "Checking investments", "chamas": "Checking the chamas", "chama_members": "Checking chama members", "activity_log": "Reading the activity log",
           "platform_overview": "Reading the platform summary", "platform_businesses": "Checking registered businesses",
           "platform_admin_help": "Searching the admin guide"}
 _clients = {}

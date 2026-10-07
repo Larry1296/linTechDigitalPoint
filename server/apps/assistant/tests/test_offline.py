@@ -92,3 +92,34 @@ def test_a_product_answer_shows_the_price_range_it_can_be_sold_in(shop):  # noqa
     text, _ = ask(context(shop), "how many chargers are available")
     assert "**8 chargers available** across 1 of 1 product" in text
     assert "Duka charger [CHG-1]: 8 available, sell for KES 250–KES 300, costs KES 160" in text
+
+
+def test_chamas_and_their_members_are_answered(shop):  # noqa: F811
+    from apps.chama import services
+    from apps.chama.api import ChamaInput
+    from apps.tenancy.context import organization_context
+    ctx = context(shop)
+    text, _ = ask(ctx, "which chama is registered here")
+    assert "No chama is registered" in text
+    form = ChamaInput(data={"name": "Umoja Group", "contribution_amount": "500", "frequency": "WEEKLY", "start_date": str(timezone.localdate()),
+                            "members": [{"full_name": "Mary Achieng", "id_number": "20000001", "phone": "0712345601", "role": "TREASURER"},
+                                        {"full_name": "John Kamau", "id_number": "20000002", "phone": "0712345602"}]})
+    form.is_valid(raise_exception=True)
+    with organization_context(shop.org):
+        services.create_chama(user=shop.owner, data=form.validated_data)
+    ctx = context(shop)  # the chama module is now in use
+    text, used = ask(ctx, "which chama is registered here")
+    assert "**Umoja Group**: 2 members" in text
+    text, used = ask(ctx, "who are the members of Umoja Group?")
+    assert used[-1] == "chama_members" and "- John Kamau: paid in KES 0" in text and "- Mary Achieng: Treasurer" in text
+    assert "20000001" not in text and "0712345601" not in text  # ID and phone numbers stay on the Chama page
+    text, _ = ask(ctx, "who in umoja group has not paid?")
+    assert "owes KES 500" in text
+
+
+def test_purchases_and_suppliers_are_told_apart(shop):  # noqa: F811
+    ctx = context(shop)
+    text, used = ask(ctx, "what did I buy from suppliers this month")
+    assert used == ["purchases_and_suppliers"] and "Bought KES 1,600 of stock" in text
+    text, used = ask(ctx, "what do I owe suppliers?")
+    assert used == ["money_business_owes"]
