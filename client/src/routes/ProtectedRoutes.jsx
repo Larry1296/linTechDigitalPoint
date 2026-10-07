@@ -23,11 +23,20 @@ export function StaffProtectedRoute({ children }) {
         replace
       />
     );
+  if (!user.organization && !user.memberships?.length && user.switched_off_businesses?.length) return <SwitchedOff names={user.switched_off_businesses} />;
   if (!user.organization) return <Navigate to={user.memberships?.length ? "/select-business" : "/onboarding"} replace />;
   const area = location.pathname.split("/")[2];
   const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", reports:"reports", analytics:"reports"};
   if (modules[area] && !user.organization.enabled_modules.includes(modules[area])) return <p role="alert">This module is not enabled for your business.</p>;
   return children;
+}
+// The platform switched the person's business off: say so, instead of offering to set up a new business.
+function SwitchedOff({ names }) {
+  return <section className="state" role="alert">
+    <h1>{names.join(", ")} is switched off</h1>
+    <p>The platform has switched this business off, so it cannot be opened for now. Nothing has been deleted.</p>
+    <p>Contact linTech support to have it switched back on.</p>
+  </section>;
 }
 export function PermissionProtectedRoute({ permission, children }) {
   const { user } = useAuth();

@@ -94,3 +94,9 @@
 .panel form[aria-label="Public chat settings"] { display:grid; gap:10px; max-width:640px; }
 .panel form[aria-label="Public chat settings"] label { display:grid; gap:6px; }
 .panel textarea { width:100%; font-family:inherit; }
+.platformDanger { display:flex; flex-wrap:wrap; gap:10px; }
+.platformDanger button { margin:0 !important; min-height:42px; }
+.platformDanger .danger { color:#fff; }
+.statusPill + .statusPill { margin-left:6px; }
+.subscriptionCountdown { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.subscriptionEnds { color:var(--muted); font-size:13px; }

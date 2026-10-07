@@ -60,6 +60,8 @@ def identity(user, request=None):
         "organization": organization_data(organization) if organization else None,
         "branch": current_branch, "branches": branches,
         "memberships": [{"organization": organization_data(m.organization), "role": m.role} for m in memberships],
+        # Businesses the platform switched off: the person is told, instead of being asked to set up a new business.
+        "switched_off_businesses": list(Membership.objects.filter(user=user, status="ACTIVE", organization__active=False).values_list("organization__name", flat=True)),
         "customer_profile": {"phone": profile.phone} if profile else None}
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])

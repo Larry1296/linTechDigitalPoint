@@ -190,6 +190,7 @@ def platform_summary(rows):
             "paying": count(lambda s: s["status"] == "ACTIVE" and s["plan"] and not s["complimentary"] and not s["ended"]),
             "ended": count(lambda s: s["ended"]), "expiring_soon": count(lambda s: s.get("expiring_soon")),
             "complimentary": count(lambda s: s["complimentary"]),
+            "switched_off": sum(1 for row in rows if not row["active"]),
             "by_plan": {p.code: count(lambda s, code=p.code: s["plan"] == code and not s["ended"]) for p in plans()},
             "revenue_this_month": str(paid.filter(paid_at__gte=month_start).aggregate(v=Sum("amount"))["v"] or Decimal("0")),
             "revenue_total": str(paid.aggregate(v=Sum("amount"))["v"] or Decimal("0")),
@@ -216,6 +217,7 @@ class BusinessSubscriptionInput(serializers.Serializer):
     ends_at = serializers.DateTimeField(required=False, allow_null=True)
     extend_days = serializers.IntegerField(required=False, min_value=1, max_value=3650)
     complimentary = serializers.BooleanField(required=False)
+    active = serializers.BooleanField(required=False)
     note = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
 
@@ -238,10 +240,11 @@ def _plain(view):
     return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in view.items()}
 
 
-@api_view(["GET", "PATCH", "POST"])
+@api_view(["GET", "PATCH", "POST", "DELETE"])
 @permission_classes([permissions.IsAuthenticated])
 def platform_business(request, pk):
-    """GET the business's subscription and payments; PATCH to change plan, status or dates; POST to record a manual payment."""
+    """GET the business's subscription and payments; PATCH to change plan, status, dates or switch the business off and on;
+    POST to record a manual payment; DELETE (with the business name typed again) to remove a switched-off business for good."""
     denied = _platform_admin(request)
     if denied:
         return denied
@@ -251,6 +254,8 @@ def platform_business(request, pk):
     if request.method == "GET":
         payments = SubscriptionPayment.objects.filter(organization=organization).select_related("plan")
         return Response({**business_row(organization), "payments": [payment_data(p) for p in payments]})
+    if request.method == "DELETE":
+        return _delete_business(request, organization)
     before = _plain(billing.state(organization))
     if request.method == "POST":
         form = ManualPaymentInput(data=request.data)
@@ -268,6 +273,7 @@ def platform_business(request, pk):
     form = BusinessSubscriptionInput(data=request.data)
     form.is_valid(raise_exception=True)
     values = form.validated_data
+    was_active = organization.active
     with transaction.atomic():
         subscription = OrganizationSubscription.objects.select_for_update().get(organization=organization)
         if "plan" in values:
@@ -280,6 +286,10 @@ def platform_business(request, pk):
                 setattr(subscription, field, values[field])
         if "ends_at" in values:
             subscription.ends_at = values["ends_at"]
+        if "active" in values and values["active"] != organization.active:
+            if not values["active"] and Membership.objects.filter(organization=organization, user=request.user).exists():
+                return Response({"detail": "You work in this business, so you cannot switch it off from here."}, status=400)
+            Organization.objects.filter(pk=organization.pk).update(active=values["active"])
         if values.get("extend_days"):
             base = max(subscription.ends_at or timezone.now(), timezone.now())
             subscription.ends_at = base + timedelta(days=values["extend_days"])
@@ -287,8 +297,24 @@ def platform_business(request, pk):
                 subscription.status = "ACTIVE"
         subscription.save()
     organization = _businesses().get(pk=pk)
-    _audit(organization, request.user, "SUBSCRIPTION_CHANGED", {**before, "note": values.get("note", "")}, _plain(billing.state(organization)))
+    if organization.active != was_active:
+        _audit(organization, request.user, "BUSINESS_ACTIVATED" if values["active"] else "BUSINESS_DEACTIVATED",
+               {"active": was_active, "note": values.get("note", "")}, {"active": organization.active})
+    if set(values) - {"active", "note"}:
+        _audit(organization, request.user, "SUBSCRIPTION_CHANGED", {**before, "note": values.get("note", "")}, _plain(billing.state(organization)))
     return Response(business_row(organization))
+
+
+def _delete_business(request, organization):
+    from .removal import delete_business
+    if organization.active:
+        return Response({"detail": "Switch the business off first. Only a switched-off business can be deleted."}, status=400)
+    if Membership.objects.filter(organization=organization, user=request.user).exists():
+        return Response({"detail": "You work in this business, so you cannot delete it from here."}, status=400)
+    if (request.data.get("confirm_name") or "").strip() != organization.name.strip():
+        return Response({"confirm_name": ["Type the business name exactly as shown to confirm."]}, status=400)
+    removed = delete_business(organization)
+    return Response({"deleted": organization.name, "records": sum(removed.values())})
 
 
 class PlanInput(serializers.Serializer):

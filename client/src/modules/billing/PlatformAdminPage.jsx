@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
-import { confirmAction, showError, showSuccess } from "../../core/ui/alerts";
+import { askForm, confirmAction, showError, showSuccess } from "../../core/ui/alerts";
 import { ErrorState, Loading } from "../../components/States";
 import "./billing.css";
 
@@ -33,7 +33,7 @@ export function PlatformAdminPage() {
   const rows = useMemo(() => (data?.businesses || []).filter((row) => {
     const text = `${row.name} ${row.business_type} ${row.owner.name} ${row.owner.username} ${row.owner.email} ${row.owner.phone} ${row.phone}`.toLowerCase();
     return (!query.trim() || text.includes(query.trim().toLowerCase()))
-      && (status === "all" || statusOf(row.subscription).key === status || (status === "expiring" && row.subscription.expiring_soon))
+      && (status === "all" || (status === "off" ? !row.active : statusOf(row.subscription).key === status) || (status === "expiring" && row.subscription.expiring_soon))
       && (plan === "all" || row.subscription.plan === plan);
   }), [data, query, status, plan]);
   if (!user?.platform_admin) return <Navigate to="/admin/dashboard" replace />;
@@ -51,6 +51,7 @@ export function PlatformAdminPage() {
       <div><strong>{summary.paying}</strong><span>Paying</span></div>
       <div><strong>{summary.expiring_soon}</strong><span>Ending within 5 days</span></div>
       <div><strong>{summary.ended}</strong><span>Ended or suspended</span></div>
+      <div><strong>{summary.switched_off}</strong><span>Switched off</span></div>
       {Object.entries(summary.by_plan).map(([code, count]) => <div key={code}><strong>{count}</strong><span>On {code === "PRO" ? "Pro" : "Basic"}</span></div>)}
       <div><strong>{money(summary.revenue_this_month, summary.currency)}</strong><span>Paid this month</span></div>
       <div><strong>{money(summary.revenue_total, summary.currency)}</strong><span>Paid in total</span></div>
@@ -61,6 +62,7 @@ export function PlatformAdminPage() {
       <label>Status<select value={status} onChange={(e) => setStatus(e.target.value)}>
         <option value="all">All</option><option value="trial">Free month</option><option value="active">Paid</option>
         <option value="expiring">Ending within 5 days</option><option value="ended">Ended or suspended</option><option value="complimentary">Free (platform)</option>
+        <option value="off">Switched off</option>
       </select></label>
       <label>Plan<select value={plan} onChange={(e) => setPlan(e.target.value)}>
         <option value="all">All</option>{data.plans.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
@@ -76,7 +78,7 @@ export function PlatformAdminPage() {
             <td><button type="button" className="linkButton" onClick={() => setSelected(row.id)}>{row.name}</button><small>{row.business_type || "—"}</small></td>
             <td>{row.owner.name || row.owner.username}<small>{[row.owner.phone, row.owner.email].filter(Boolean).join(" · ")}</small></td>
             <td>{row.subscription.plan_name || "—"}</td>
-            <td><span className={`statusPill ${view.tone}`}>{view.label}</span></td>
+            <td><span className={`statusPill ${view.tone}`}>{view.label}</span>{!row.active && <span className="statusPill ended">Switched off</span>}</td>
             <td>{row.subscription.complimentary ? "Never" : dateText(row.subscription.ends_at)}{!row.subscription.ended && row.subscription.days_left != null && <small>{row.subscription.days_left} days left</small>}</td>
             <td>{money(row.total_paid)}{row.last_paid_at && <small>last {dateText(row.last_paid_at)}</small>}</td>
             <td>{dateText(row.created_at)}</td>
@@ -86,7 +88,8 @@ export function PlatformAdminPage() {
       {!rows.length && <p className="muted" style={{ padding: 16 }}>No businesses match.</p>}
     </div>
 
-    {selected && <BusinessDetail key={selected} id={selected} plans={data.plans} onChanged={load} onClose={() => setSelected(null)} />}
+    {selected && <BusinessDetail key={selected} id={selected} plans={data.plans} onChanged={load} onClose={() => setSelected(null)}
+      onDeleted={() => { setSelected(null); void load(); }} />}
 
     <h2>Recent payments</h2>
     {data.recent_payments.length ? <div className="platformTableWrap"><table className="platformTable">
@@ -103,7 +106,7 @@ export function PlatformAdminPage() {
   </section>;
 }
 
-function BusinessDetail({ id, plans, onChanged, onClose }) {
+function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
   const [row, setRow] = useState();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -125,10 +128,26 @@ function BusinessDetail({ id, plans, onChanged, onClose }) {
       setBusy(false);
     }
   };
+  const remove = async () => {
+    const values = await askForm({ title: `Delete ${row.name} for good?`, confirmButtonText: "Delete for good",
+      text: "Every product, sale, expense, journal and staff link in this business is removed and cannot be brought back. People keep their sign-in accounts. Type the business name to confirm.",
+      fields: [{ name: "confirm_name", label: "Business name", required: true, placeholder: row.name }] });
+    if (!values) return;
+    if (values.confirm_name !== row.name.trim()) { await showError("The name does not match", `Type ${row.name} exactly as shown.`); return; }
+    setBusy(true);
+    try {
+      await api(path, { method: "DELETE", body: JSON.stringify(values) });
+      await showSuccess("Business deleted", `${row.name} and all its records were removed.`);
+      onDeleted();
+    } catch (e) {
+      await showError("Could not delete the business", e.message);
+      setBusy(false);
+    }
+  };
   const submit = (handler) => (event) => { event.preventDefault(); void handler(Object.fromEntries(new FormData(event.currentTarget))); };
   const view = statusOf(row.subscription);
   return <article className="platformDetail" aria-label={`${row.name} subscription`}>
-    <header><div><h2>{row.name}</h2><span className={`statusPill ${view.tone}`}>{view.label}</span></div>
+    <header><div><h2>{row.name}</h2><span className={`statusPill ${view.tone}`}>{view.label}</span>{!row.active && <span className="statusPill ended">Switched off</span>}</div>
       <button type="button" className="secondary" onClick={onClose}>Close</button></header>
     <dl>
       <div><dt>Owner</dt><dd>{row.owner.name || row.owner.username}</dd></div>
@@ -166,6 +185,17 @@ function BusinessDetail({ id, plans, onChanged, onClose }) {
       <label>Receipt / reference<input name="receipt_number" maxLength={40} placeholder="M-Pesa code or cash receipt" /></label>
       <button disabled={busy}>Record payment</button>
     </form>
+
+    <h3>Switch off or delete the business</h3>
+    <p className="muted">{row.active
+      ? "Switching off stops everyone in the business from opening it, straight away. Nothing is deleted and you can switch it back on at any time."
+      : "The business is switched off: its people cannot open it. Switch it back on to restore access, or delete it for good."}</p>
+    <div className="platformDanger">
+      <button type="button" className={row.active ? "danger" : undefined} disabled={busy} onClick={() => void change(row.active ? "Switch this business off?" : "Switch this business back on?", "PATCH",
+        { active: !row.active }, row.active ? "The business is switched off. Its people can no longer open it." : "The business is back on. Its people can open it again.")}>
+        {row.active ? "Switch off business" : "Switch business back on"}</button>
+      {!row.active && <button type="button" className="danger" disabled={busy} onClick={() => void remove()}>Delete business for good</button>}
+    </div>
 
     <h3>Payments</h3>
     {row.payments.length ? <table className="platformTable"><thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Receipt</th><th>Paid until</th></tr></thead>
