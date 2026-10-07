@@ -1,5 +1,5 @@
 /* The business assistant reuses the help chat's panel (helpChat.css); analyses need a little more width. */
-.businessAssistant .helpChatPanel { width: min(460px, calc(100vw - 32px)); height: min(680px, calc(100vh - 120px)); }
+.businessAssistant .helpChatPanel { width: min(520px, calc(100vw - 32px)); height: min(680px, calc(100vh - 120px)); }
 .businessAssistant .helpChatMessage.assistant { max-width: 94%; }
 .businessAssistantStatus { display: block; color: var(--muted); font-size: 12px; font-style: italic; }
 .businessAssistantProvider select {

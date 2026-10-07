@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from . import business_tools
 
-NOTE = "\n\n_(Answered directly from your records. The AI assistant is not connected, so only common questions are understood.)_"
+NOTE = "\n\n_Answered directly from your records, without the AI assistant, so only common questions are understood._"
 
 
 # Periods ---------------------------------------------------------------------------------------
@@ -93,6 +93,13 @@ class Writer:
         return json.loads(text)
 
 
+def table(head, rows):
+    """A Markdown table: the chat shows it as a real table."""
+    out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    out += ["| " + " | ".join(str(cell).replace("|", "/") for cell in row) + " |" for row in rows]
+    return out
+
+
 def _args(start, end):
     return {"start_date": start if start == "beginning" else start.isoformat(), "end_date": end.isoformat()}
 
@@ -121,13 +128,11 @@ def sales_trend(w, text):
     lines += [] if lines else [f"**Sales {('are ' + t['direction']) if t['direction'] != 'flat' else 'are flat'}** over {_span(data)} "
              f"({s['days']} days), but the trend is **{t['strength']}** (R² {t['r_squared']}), so treat it with care."
              if t["strength"] != "strong" else f"**Sales are clearly {t['direction']}** over {_span(data)} ({s['days']} days, R² {t['r_squared']}).", ""]
-    lines += [f"- Total sales: **{w.money(s['total'])}**",
+    lines += ["### The figures", f"- Total sales: **{w.money(s['total'])}**",
               f"- Average per day: {w.money(s['mean_per_day'])} (median {w.money(s['median_per_day'])})",
               *([f"- Trend: about {w.money(abs(t['slope_per_day']))} a day {'more' if t['slope_per_day'] >= 0 else 'less'} each day"]
                 if t["strength"] != "too few days to tell" else []),
               f"- Days with no sales: {s['days_without_activity']} of {s['days']}"]
-    if data.get("records_start"):
-        lines.append(f"- Your records start on {data['records_start']}, so the period begins there.")
     if data.get("change_vs_previous_period_pct") is not None:
         lines.append(f"- Compared with the same length of time before: {data['change_vs_previous_period_pct']:+.1f}%")
     best = sorted(((v, d) for d, v in (s.get("average_by_weekday") or {}).items() if v), reverse=True)
@@ -135,8 +140,10 @@ def sales_trend(w, text):
         lines.append(f"- Best weekday on average: {best[0][1]} ({w.money(best[0][0])})")
     for day in (s.get("unusual_days") or [])[:3]:
         lines.append(f"- {day['date']} was {day['kind']}: {w.money(day['value'])}")
+    if data.get("records_start"):
+        lines += ["", f"> Your records start on {data['records_start']}, so the period begins there."]
     if 14 <= s["days"] < 28:
-        lines += ["", "With under four weeks of sales the trend is not reliable yet; it will firm up as more days are recorded."]
+        lines += ["", "> With under four weeks of sales the trend is not reliable yet; it will firm up as more days are recorded."]
     return "\n".join(lines)
 
 
@@ -148,32 +155,51 @@ def profit_and_loss(w, text):
     t = data["totals"]
     net = float(t["net_profit"])
     lines = [f"**{'Profit' if net >= 0 else 'Loss'} of {w.money(abs(net))}** for {words}, from the posted books (accrual basis).", "",
-             f"- Revenue: **{w.money(t['revenue'])}**", f"- Cost of goods sold: {w.money(t['cogs'])}",
+             "### The figures", f"- Revenue: **{w.money(t['revenue'])}**", f"- Cost of goods sold: {w.money(t['cogs'])}",
              f"- Gross profit: {w.money(t['gross_profit'])}" + (f" ({float(t['gross_profit']) / float(t['revenue']) * 100:.1f}% margin)" if float(t["revenue"]) else ""),
              f"- Running costs (expenses): {w.money(t['expenses'])}"]
     if float(t.get("stock_corrections") or 0):
         lines.append(f"- Stock corrections: {w.money(t['stock_corrections'])}")
     lines.append(f"- Net profit: **{w.money(t['net_profit'])}**")
-    lines.append(f"- Money actually received: {w.money(t['money_received'])} (not the same as revenue: credit sales are not yet paid)")
     units = [u for u in data.get("units", []) if float(u["revenue"]) or float(u["expenses"])]
     if len(units) > 1:
-        lines += ["", "By part of the business:"]
-        lines += [f"- {u['business_unit'].title()}: revenue {w.money(u['revenue'])}, net {w.money(u['net_profit'])}" for u in units]
+        lines += ["", "### By business unit"]
+        lines += table(["Unit", "Revenue", "Costs", "Net"], [[u["business_unit"].title(), w.money(u["revenue"]),
+                                                             w.money(float(u["cogs"]) + float(u["expenses"])), w.money(u["net_profit"])] for u in units])
+    received, revenue = float(t["money_received"]), float(t["revenue"])
+    if abs(received - revenue) > 0.5:
+        lines += ["", f"> Money actually received is {w.money(received)}. Revenue counts sales when made, so credit sales not yet "
+                      "paid are in revenue but not in the money received."]
+    if not float(t["expenses"]):
+        lines += ["", "> No running costs (rent, power, wages) are recorded for this period, so the real profit is lower."]
     return "\n".join(lines)
 
 
+def _category_named(text):
+    """A category from the catalogue named in the question ("which remotes are low" -> REMOTES), else ""."""
+    from apps.catalog.models import Category
+    words = set(re.findall(r"[a-z0-9]+", text))
+    for name in sorted(Category.objects.values_list("name", flat=True), key=len, reverse=True):
+        key = re.sub(r"[^a-z0-9 ]", " ", name.lower()).split()
+        if key and all(k in words or k.rstrip("s") in words or k + "s" in words for k in key):
+            return name
+    return ""
+
+
 def reorder(w, text):
-    data = w.call("stock_levels", {"view": "low", "limit": 15})
+    category = _category_named(text)
+    data = w.call("stock_levels", {"view": "low", "limit": 15, **({"category": category} if category else {})})
     if data is None:
         return w.problem
     s = data["summary"]
     if not data["items"]:
-        return f"Nothing is running low: none of your {s['stock_items']} stock items is at or below its minimum."
-    lines = [f"**{s['out_of_stock']} out of stock and {s['low_stock']} running low** (of {s['stock_items']} stock items).", ""]
-    for item in data["items"]:
-        reorder_qty = f", reorder about **{item['suggested_reorder']:g}**" if item.get("suggested_reorder") else ""
-        lines.append(f"- {item['product']}: {item['available']:g} available (minimum {item['minimum_stock']:g}){reorder_qty}")
-    lines += ["", "Suggested quantities bring each item back up to its target stock. Items without a target show none."]
+        return f"Nothing is running low{' in ' + category if category else ''}: none of your {s['stock_items']} stock items is at or below its minimum."
+    lines = [f"**{s['out_of_stock']} out of stock and {s['low_stock']} running low** (of {s['stock_items']} stock items"
+             f"{' in ' + category if category else ''}).", ""]
+    lines += table(["Product", "Left", "Min", "Reorder"], [[item["product"], "**0**" if item["available"] <= 0 else f"{item['available']:g}",
+                                                           f"{item['minimum_stock']:g}", f"{item['suggested_reorder']:g}" if item.get("suggested_reorder") else "—"]
+                                                          for item in data["items"]])
+    lines += ["", "> Reorder quantities bring each item back up to its target stock; items without a target show —."]
     return "\n".join(lines)
 
 
@@ -205,9 +231,9 @@ def top_products(w, text):
     total = sum(r["value"] or 0 for r in data["rows"]) or 1
     lines = [f"**{rows[0]['product']}** brought in the most in {words}: {w.money(rows[0]['value'])} "
              f"({(rows[0]['value'] or 0) / total * 100:.0f}% of product sales).", ""]
-    for row in rows:
-        profit = f", gross profit {w.money(row['gross_profit'])}" if row.get("gross_profit") is not None else ""
-        lines.append(f"- {row['product']}: {w.money(row['value'])} from {row['units_sold']:g} sold{profit}")
+    profit = rows[0].get("gross_profit") is not None
+    lines += table(["Product", "Sold", "Revenue"] + (["Profit"] if profit else []),
+                   [[r["product"], f"{r['units_sold']:g}", w.money(r["value"])] + ([w.money(r["gross_profit"])] if profit else []) for r in rows])
     return "\n".join(lines)
 
 
@@ -286,13 +312,18 @@ def money_position(w, text):
     data = w.call("money_position")
     if data is None:
         return w.problem
-    lines = [f"**Net worth: {w.money(data['net_worth'])}**: the business owns {w.money(data['owns'])} and owes {w.money(data['owes'])}.", ""]
-    for group in data["groups"]:
-        if group["amount"]:
-            lines.append(f"- {group['label']}: {w.money(group['amount'])}")
+    lines = [f"**Net worth: {w.money(data['net_worth'])}**: the business owns {w.money(data['owns'])} and owes {w.money(data['owes'])}."]
+    for side, title in [("OWNS", "What you own"), ("OWES", "What you owe")]:
+        groups = [g for g in data["groups"] if g.get("side") == side and g["amount"]]
+        if groups:
+            lines += ["", f"### {title}"]
+        for group in groups:
+            lines.append(f"- {group['label']}: **{w.money(group['amount'])}**")
             for item in group.get("items") or []:
                 if item.get("amount"):
                     lines.append(f"  - {item['label']}: {w.money(item['amount'])}")
+    if not any(g.get("side") == "OWES" and g["amount"] for g in data["groups"]):
+        lines += ["", "### What you owe", "- Nothing right now."]
     if data.get("left_out"):
         lines += ["", "Not included (your role cannot see it): " + ", ".join(data["left_out"])]
     return "\n".join(lines)
@@ -365,16 +396,16 @@ def stock_list(w, text):
         groups.setdefault(path[0], {}).setdefault(" › ".join(path[1:]), []).append(item)
     for top in sorted(groups, key=str.lower):
         count = sum(len(items) for items in groups[top].values())
-        lines += ["", f"**{top}** ({count} item{'s' if count != 1 else ''})"]
+        lines += ["", f"### {top} ({count})"]
         for sub in sorted(groups[top], key=lambda name: (name != "", name.lower())):  # items directly in the category first
             if sub:
-                lines += ["", f"{sub}:"]
+                lines += [f"**{sub}**"]
             for item in sorted(groups[top][sub], key=lambda i: i["product"].lower()):
                 low = " (low)" if item["minimum_stock"] and item["available"] <= item["minimum_stock"] else ""
                 lines.append(f"- {item['product']}: {item['available']:g} available{low}")
     out = sorted(i["product"] for i in data["items"] if (i["available"] or 0) <= 0)
     if out:
-        lines += ["", f"Out of stock: {', '.join(out[:15])}{' …' if len(out) > 15 else ''}"]
+        lines += ["", f"> **Out of stock:** {', '.join(out[:15])}{' …' if len(out) > 15 else ''}"]
     return "\n".join(lines)
 
 
@@ -418,18 +449,21 @@ def product(w, text):
         lines = [f"**{units:g} {name} available** across {in_stock} of {len(found)} product{'s' if len(found) != 1 else ''}:", ""]
     else:
         lines = [f"**{len(found)} match{'es' if len(found) != 1 else ''} for \"{name}\":**", ""]
+    show_stock = any(p.get("available") is not None for p in found)
+    show_cost = any(p.get("average_unit_cost") is not None for p in found)
+    rows = []
     for p in found:
         low_price = p.get("lowest_price_allowed")
         # The range a sale can be made in: down to the lowest price allowed, up to the selling price.
-        parts = [f"sell for {w.money(low_price)}–{w.money(p['selling_price'])}" if low_price and low_price < (p["selling_price"] or 0)
-                 else f"sells at {w.money(p['selling_price'])}"]
-        if p.get("available") is not None:
-            parts.insert(0, "**out of stock**" if p["available"] <= 0 else f"{p['available']:g} available"
-                         + (" (low)" if p.get("minimum_stock") and p["available"] <= p["minimum_stock"] else ""))
-        if p.get("average_unit_cost") is not None:
-            parts.append(f"costs {w.money(p['average_unit_cost'])}")
-        lines.append(f"- {p['product']}" + (f" [{p['sku']}]" if p.get("sku") else "") + ": " + ", ".join(parts)
-                     + ("" if p["active"] else " (inactive)"))
+        price = (f"{w.money(low_price)}–{(p['selling_price'] or 0):,.0f}" if low_price and low_price < (p["selling_price"] or 0)
+                 else w.money(p["selling_price"]))
+        stock = ("**out**" if p["available"] <= 0 else f"{p['available']:g}" + (" low" if p.get("minimum_stock") and p["available"] <= p["minimum_stock"] else "")
+                 ) if p.get("available") is not None else "—"
+        rows.append([p["product"] + ("" if p["active"] else " (inactive)")] + ([stock] if show_stock else []) + [price]
+                    + ([w.money(p["average_unit_cost"]) if p.get("average_unit_cost") is not None else "—"] if show_cost else []))
+    lines += table(["Product"] + (["Left"] if show_stock else []) + ["Sell for"] + (["Cost"] if show_cost else []), rows)
+    if any(p.get("lowest_price_allowed") for p in found):
+        lines += ["", "> **Sell for** is the range you can sell in: from the lowest price allowed up to the normal selling price."]
     return "\n".join(lines)
 
 
@@ -471,8 +505,8 @@ def chama_members(w, text, name=None):
     active = [m for m in data["members"] if m["active"]]
     money = data["money"]
     lines = [f"**{data['chama']}** has {len(active)} member{'s' if len(active) != 1 else ''} "
-             f"({w.money(data['contribution'])} {data['frequency'].lower()}). It holds {w.money(money['held'])}; "
-             f"members still owe {w.money(money['unpaid'])} ({w.money(money['late'])} late) and {w.money(money['fines_owed'])} in fines.", ""]
+             f"({w.money(data['contribution'])} {data['frequency'].lower()}). It holds **{w.money(money['held'])}**; "
+             f"members still owe {w.money(money['unpaid'])} ({w.money(money['late'])} late) and {w.money(money['fines_owed'])} in fines.", "", "### Members"]
     if re.search(r"\b(late|owe|owing|not paid|haven'?t paid|unpaid|defaulters?)\b", text):
         behind = [m for m in active if (m["unpaid"] or 0) > 0 or (m["fines_owed"] or 0) > 0]
         lines += [f"- {m['name']}: owes {w.money(m['unpaid'])}" + (f" ({w.money(m['late'])} late)" if m["late"] else "")
@@ -489,11 +523,12 @@ def chama_members(w, text, name=None):
             lines.append(f"- {m['name']}: {', '.join(extra)}")
     if data.get("next_turns"):
         per = data["contributions_per_turn"]
-        lines += ["", f"**Turns** (each turn is {per} {data['frequency'].lower()} contribution{'s' if per != 1 else ''}):"]
-        for t in data["next_turns"]:
-            day = timezone.datetime.fromisoformat(t["date"]).strftime("%d %b %Y")
-            so_far = f", {w.money(t['collected_so_far'])} collected so far" if t.get("collected_so_far") is not None else ""
-            lines.append(f"- Turn {t['turn']}: **{t['member']}** on {t['weekday']} {day}, receives {w.money(t['receives'])}{so_far}")
+        lines += ["", f"### Turns ({per} {data['frequency'].lower()} contribution{'s' if per != 1 else ''} each)"]
+        lines += table(["Turn", "Member", "Date", "Receives"], [[t["turn"], t["member"], timezone.datetime.fromisoformat(t["date"]).strftime("%a %d %b"),
+                                                               w.money(t["receives"])] for t in data["next_turns"]])
+        first = data["next_turns"][0]
+        if first.get("collected_so_far") is not None:
+            lines += ["", f"Collected so far for turn {first['turn']}: **{w.money(first['collected_so_far'])}** of {w.money(first['receives'])}."]
     if data.get("turns_given"):
         last = data["turns_given"][-1]
         lines.append(f"- Last given: turn {last['turn']} to {last['member']}, {w.money(last['received'])} on {last['on']}")

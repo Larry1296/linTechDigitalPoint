@@ -56,7 +56,7 @@ def provider_for(organization):
 def _anthropic():
     if "anthropic" not in _clients:
         import anthropic
-        options = {"max_retries": 2, "timeout": anthropic.Timeout(120.0, connect=5.0)}
+        options = {"max_retries": 2, "timeout": anthropic.Timeout(120.0, connect=15.0)}
         if settings.ANTHROPIC_API_KEY:
             options["api_key"] = settings.ANTHROPIC_API_KEY
         _clients["anthropic"] = anthropic.Anthropic(**options)

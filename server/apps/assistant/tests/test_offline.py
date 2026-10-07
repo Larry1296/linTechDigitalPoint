@@ -56,7 +56,7 @@ def test_stock_and_single_product_questions_get_the_records_not_a_help_article(s
     text, used = ask(ctx, "which items are in stock")
     assert used == ["stock_levels"] and "Duka charger: 8 available" in text
     text, used = ask(ctx, "Do I have duka charger?")
-    assert used[0] == "find_products" and "8 available" in text and "sells at KES 300" in text
+    assert used[0] == "find_products" and "| Duka charger | 8 | KES 300 | KES 160 |" in text
     text, used = ask(ctx, "how many chargers are left")
     assert "Duka charger" in text
     text, used = ask(ctx, "is the unicorn lamp in stock?")
@@ -78,8 +78,8 @@ def test_the_stock_list_is_grouped_by_category_and_subcategory(shop):  # noqa: F
         complete_stock_receipt(supplier_name="Supplier", external_reference="INV-2", received_at=timezone.now(),
                                lines=[{"variant_id": cable.pk, "received_quantity": "4", "unit_cost": "80"}], user=shop.owner)
     text, _ = ask(context(shop), "what are the items in stock")
-    assert text.index("**Phone accessories** (2 items)") < text.index("Cables:") < text.index("- USB cable: 4 available")
-    assert text.index("Chargers:") < text.index("- Duka charger: 8 available")
+    assert text.index("### Phone accessories (2)") < text.index("**Cables**") < text.index("- USB cable: 4 available")
+    assert text.index("**Chargers**") < text.index("- Duka charger: 8 available")
     only, _ = ask(context(shop), "which items are in stock in cables")
     assert "USB cable" in only and "Duka charger" not in only and "1 of 1 item is in stock" in only
 
@@ -91,7 +91,7 @@ def test_a_product_answer_shows_the_price_range_it_can_be_sold_in(shop):  # noqa
         ProductVariant.objects.filter(pk=shop.charger.pk).update(minimum_price=250)
     text, _ = ask(context(shop), "how many chargers are available")
     assert "**8 chargers available** across 1 of 1 product" in text
-    assert "Duka charger [CHG-1]: 8 available, sell for KES 250–KES 300, costs KES 160" in text
+    assert "| Duka charger | 8 | KES 250–300 | KES 160 |" in text and "range you can sell in" in text
 
 
 def test_chamas_and_their_members_are_answered(shop):  # noqa: F811
@@ -115,7 +115,7 @@ def test_chamas_and_their_members_are_answered(shop):  # noqa: F811
     assert "20000001" not in text and "0712345601" not in text  # ID and phone numbers stay on the Chama page
     # Whose turn, on which day, and how much: 1 weekly contribution of KES 500 from 2 members.
     text, _ = ask(ctx, "whose turn is next?")
-    assert "each turn is 1 weekly contribution" in text and "receives KES 1,000" in text and "Turn 1: **Mary Achieng** on" in text
+    assert "### Turns (1 weekly contribution each)" in text and "| 1 | Mary Achieng |" in text and "| KES 1,000 |" in text
     text, _ = ask(ctx, "who in umoja group has not paid?")
     assert "owes KES 500" in text
 
@@ -126,3 +126,8 @@ def test_purchases_and_suppliers_are_told_apart(shop):  # noqa: F811
     assert used == ["purchases_and_suppliers"] and "Bought KES 1,600 of stock" in text
     text, used = ask(ctx, "what do I owe suppliers?")
     assert used == ["money_business_owes"]
+
+
+def test_a_category_named_in_a_stock_question_narrows_the_answer(shop):  # noqa: F811
+    text, _ = ask(context(shop), "Which chargers are running low?")
+    assert "in Chargers" in text

@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
 import { useCloseOnOutsideClick, usePromptHistory } from "../assistant/promptHistory";
+import { Answer } from "./answerFormat";
 import "./helpChat.css";
 
 const STORAGE_KEY = "help-chat";
@@ -23,38 +23,7 @@ function save(messages) {
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.filter((m) => !m.pending))); } catch { /* private mode: the chat still works */ }
 }
 
-// Bold text and links in an answer. Only relative links (our own pages) and https links are made clickable.
-function inline(text) {
-  return text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)\s]+\))/g).map((part, index) => {
-    const bold = part.match(/^\*\*([^*]+)\*\*$/);
-    if (bold) return <strong key={index}>{bold[1]}</strong>;
-    const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
-    if (link && link[2].startsWith("/") && !link[2].startsWith("//")) return <Link key={index} to={link[2]}>{link[1]}</Link>;
-    if (link && link[2].startsWith("https://")) return <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
-    if (link) return <Fragment key={index}>{link[1]}</Fragment>;
-    return <Fragment key={index}>{part.replace(/_\((.+)\)_/g, "($1)")}</Fragment>;
-  });
-}
-
-// A small, safe Markdown subset: paragraphs, numbered and bulleted lists, bold and links.
-export function Answer({ text }) {
-  const blocks = [];
-  for (const line of text.split("\n")) {
-    const item = line.match(/^\s*(\d+[.)]|[-*•])\s+(.*)$/);
-    const kind = item ? (/\d/.test(item[1]) ? "ol" : "ul") : "p";
-    const last = blocks.at(-1);
-    if (!line.trim()) { blocks.push({ kind: "gap" }); continue; }
-    if (item && last?.kind === kind) last.items.push(item[2]);
-    else if (item) blocks.push({ kind, items: [item[2]] });
-    else if (last?.kind === "p") last.items.push(line.trim());
-    else blocks.push({ kind: "p", items: [line.trim()] });
-  }
-  return blocks.filter((block) => block.kind !== "gap").map((block, index) => {
-    if (block.kind === "p") return <p key={index}>{inline(block.items.join(" "))}</p>;
-    const List = block.kind;
-    return <List key={index}>{block.items.map((entry, position) => <li key={position}>{inline(entry)}</li>)}</List>;
-  });
-}
+export { Answer };
 
 // Reads the server-sent events from the chat endpoint as they arrive.
 export async function* readEvents(response) {

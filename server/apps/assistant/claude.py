@@ -19,7 +19,7 @@ def configured():
 def client():
     global _client
     if _client is None:
-        options = {"max_retries": 2, "timeout": anthropic.Timeout(60.0, connect=5.0)}
+        options = {"max_retries": 2, "timeout": anthropic.Timeout(60.0, connect=15.0)}
         if settings.ANTHROPIC_API_KEY:
             options["api_key"] = settings.ANTHROPIC_API_KEY
         _client = anthropic.Anthropic(**options)
