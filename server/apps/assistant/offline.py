@@ -410,9 +410,19 @@ def product(w, text):
                     break
     if not data or not data["products"]:
         return f"I couldn't find a product matching \"{name}\". Check the spelling, or search on the Products page."
-    lines = [f"**{len(data['products'])} match{'es' if len(data['products']) != 1 else ''} for \"{name}\":**", ""]
-    for p in data["products"]:
-        parts = [f"sells at {w.money(p['selling_price'])}"]
+    found = data["products"]
+    counted = [p for p in found if p.get("available") is not None]
+    if counted and re.search(r"\b(how many|how much stock|available|left|in stock|do (i|we) have)\b", text):
+        units = sum(max(p["available"], 0) for p in counted)
+        in_stock = sum(1 for p in counted if p["available"] > 0)
+        lines = [f"**{units:g} {name} available** across {in_stock} of {len(found)} product{'s' if len(found) != 1 else ''}:", ""]
+    else:
+        lines = [f"**{len(found)} match{'es' if len(found) != 1 else ''} for \"{name}\":**", ""]
+    for p in found:
+        low_price = p.get("lowest_price_allowed")
+        # The range a sale can be made in: down to the lowest price allowed, up to the selling price.
+        parts = [f"sell for {w.money(low_price)}–{w.money(p['selling_price'])}" if low_price and low_price < (p["selling_price"] or 0)
+                 else f"sells at {w.money(p['selling_price'])}"]
         if p.get("available") is not None:
             parts.insert(0, "**out of stock**" if p["available"] <= 0 else f"{p['available']:g} available"
                          + (" (low)" if p.get("minimum_stock") and p["available"] <= p["minimum_stock"] else ""))

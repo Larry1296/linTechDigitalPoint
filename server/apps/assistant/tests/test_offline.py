@@ -82,3 +82,13 @@ def test_the_stock_list_is_grouped_by_category_and_subcategory(shop):  # noqa: F
     assert text.index("Chargers:") < text.index("- Duka charger: 8 available")
     only, _ = ask(context(shop), "which items are in stock in cables")
     assert "USB cable" in only and "Duka charger" not in only and "1 of 1 item is in stock" in only
+
+
+def test_a_product_answer_shows_the_price_range_it_can_be_sold_in(shop):  # noqa: F811
+    from apps.catalog.models import ProductVariant
+    from apps.tenancy.context import organization_context
+    with organization_context(shop.org):
+        ProductVariant.objects.filter(pk=shop.charger.pk).update(minimum_price=250)
+    text, _ = ask(context(shop), "how many chargers are available")
+    assert "**8 chargers available** across 1 of 1 product" in text
+    assert "Duka charger [CHG-1]: 8 available, sell for KES 250–KES 300, costs KES 160" in text
