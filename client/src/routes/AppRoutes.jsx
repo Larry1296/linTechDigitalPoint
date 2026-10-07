@@ -12,6 +12,7 @@ import { InvestmentsPage } from "../modules/investments/InvestmentsPage";
 import { MoneyCheckPage } from "../modules/accounting/MoneyCheckPage";
 import { StockCheckPage } from "../modules/inventory/StockCheckPage";
 import { PlatformAdminPage } from "../modules/billing/PlatformAdminPage";
+import { AssistantAdminPage } from "../modules/billing/AssistantAdminPage";
 import { SettingsPage } from "../modules/settings/SettingsPage";
 import { ReceiptHistoryPage } from "../modules/inventory/ReceiptHistoryPage";
 import { StockAdjustmentPage } from "../modules/inventory/StockAdjustmentPage";
@@ -62,6 +63,7 @@ export function AppRoutes() {
         <Route path="money-check" element={<MoneyCheckPage />} />
         <Route path="stock-check" element={<StockCheckPage />} />
         <Route path="platform" element={<PlatformAdminPage />} />
+        <Route path="platform/assistants" element={<AssistantAdminPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="product-lookup" element={<ProductLookupPage />} />
         <Route path="products" element={<ProductsPage />} />

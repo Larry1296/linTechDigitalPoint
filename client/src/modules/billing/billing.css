@@ -85,3 +85,12 @@
 .platformPlans .checkList label { display:flex; gap:6px; font-weight:400; }
 .platformPlans label.inline { display:flex; flex-direction:row; align-items:center; gap:8px; font-weight:600; }
 .platformPlans label.inline input { width:auto; }
+
+/* AI assistants (platform owner) */
+.assistantProviders { margin:0 0 6px; padding-left:18px; }
+.segmented { display:inline-flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:10px; margin:6px 0; flex-wrap:wrap; }
+.segmented button { background:transparent; color:var(--text); border:0; padding:6px 12px; border-radius:7px; }
+.segmented button.active { background:var(--primary); color:#fff; }
+.panel form[aria-label="Public chat settings"] { display:grid; gap:10px; max-width:640px; }
+.panel form[aria-label="Public chat settings"] label { display:grid; gap:6px; }
+.panel textarea { width:100%; font-family:inherit; }

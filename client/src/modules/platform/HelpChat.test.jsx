@@ -14,7 +14,16 @@ function streamed(events) {
 }
 const show = () => render(<MemoryRouter><HelpChat /></MemoryRouter>);
 
-beforeEach(() => { sessionStorage.clear(); globalThis.fetch = vi.fn(); });
+// The chat's settings come from /config/; every other request is the chat itself (``chat``).
+let chat;
+let chatConfig;
+beforeEach(() => {
+  sessionStorage.clear();
+  chat = vi.fn();
+  chatConfig = { enabled: true, greeting: "", suggestions: [] };
+  globalThis.fetch = vi.fn((url, options) => (String(url).includes("/assistant/config/")
+    ? Promise.resolve({ ok: true, json: async () => chatConfig }) : chat(url, options)));
+});
 afterEach(() => vi.restoreAllMocks());
 
 it("renders answers as safe Markdown: lists, bold and only trusted links", () => {
@@ -27,7 +36,7 @@ it("renders answers as safe Markdown: lists, bold and only trusted links", () =>
 });
 
 it("opens from the launcher, asks a suggested question and streams the answer with its sources", async () => {
-  fetch.mockResolvedValue(streamed([
+  chat.mockResolvedValue(streamed([
     { type: "text", text: "Go to [Create an account](/register) " }, { type: "text", text: "and follow the steps." },
     { type: "sources", items: ["Getting started"] }, { type: "done" },
   ]));
@@ -38,13 +47,13 @@ it("opens from the launcher, asks a suggested question and streams the answer wi
   expect(await within(panel).findByText(/and follow the steps\./)).toBeInTheDocument();
   expect(within(panel).getByRole("link", { name: "Create an account" })).toHaveAttribute("href", "/register");
   expect(within(panel).getByText("From: Getting started")).toBeInTheDocument();
-  const [url, options] = fetch.mock.calls[0];
+  const [url, options] = chat.mock.calls[0];
   expect(url).toBe("/api/v1/assistant/chat/");
   expect(JSON.parse(options.body)).toEqual({ messages: [{ role: "user", content: "How do I get started?" }] });
 });
 
 it("sends the earlier conversation with a follow-up question typed by the visitor", async () => {
-  fetch.mockResolvedValueOnce(streamed([{ type: "text", text: "It is a business platform." }, { type: "done" }]))
+  chat.mockResolvedValueOnce(streamed([{ type: "text", text: "It is a business platform." }, { type: "done" }]))
     .mockResolvedValueOnce(streamed([{ type: "text", text: "Pricing is not published yet." }, { type: "done" }]));
   show();
   fireEvent.click(screen.getByRole("button", { name: /Ask us anything/ }));
@@ -55,13 +64,13 @@ it("sends the earlier conversation with a follow-up question typed by the visito
   fireEvent.change(box, { target: { value: "How much?" } });
   fireEvent.click(screen.getByRole("button", { name: "Send question" }));
   await screen.findByText("Pricing is not published yet.");
-  expect(JSON.parse(fetch.mock.calls[1][1].body).messages).toEqual([
+  expect(JSON.parse(chat.mock.calls[1][1].body).messages).toEqual([
     { role: "user", content: "What is it?" }, { role: "assistant", content: "It is a business platform." }, { role: "user", content: "How much?" },
   ]);
 });
 
 it("explains when the assistant is unavailable or busy", async () => {
-  fetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: "The help assistant isn't available right now. Please contact the team instead." }) })
+  chat.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: "The help assistant isn't available right now. Please contact the team instead." }) })
     .mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
   show();
   fireEvent.click(screen.getByRole("button", { name: /Ask us anything/ }));
@@ -72,16 +81,28 @@ it("explains when the assistant is unavailable or busy", async () => {
   fireEvent.keyDown(box, { key: "Enter" });
   expect(await screen.findByText(/sending questions quickly/)).toBeInTheDocument();
   // Failed answers are not sent back as conversation history.
-  await waitFor(() => expect(JSON.parse(fetch.mock.calls[1][1].body).messages).toEqual([
+  await waitFor(() => expect(JSON.parse(chat.mock.calls[1][1].body).messages).toEqual([
     { role: "user", content: "Does it work with M-Pesa?" }, { role: "user", content: "Hello?" },
   ]));
 });
 
 it("opens from a link elsewhere on the page and can ask a question straight away", async () => {
-  fetch.mockResolvedValue(streamed([{ type: "text", text: "Yes, with manual M-Pesa payments." }, { type: "done" }]));
+  chat.mockResolvedValue(streamed([{ type: "text", text: "Yes, with manual M-Pesa payments." }, { type: "done" }]));
   show();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   act(() => openHelpChat("Does it work with M-Pesa?"));
   expect(await screen.findByText("Yes, with manual M-Pesa payments.")).toBeInTheDocument();
   expect(screen.getByRole("dialog", { name: "DukaFlow assistant" })).toBeInTheDocument();
+});
+
+it("follows the platform owner's settings: greeting, suggestions, or switched off", async () => {
+  chatConfig = { enabled: true, greeting: "Karibu! Ask me anything.", suggestions: ["Do you work in Uganda?"] };
+  const { unmount } = render(<MemoryRouter><HelpChat /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /Ask us anything/ }));
+  expect(await screen.findByText("Karibu! Ask me anything.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Do you work in Uganda?" })).toBeInTheDocument();
+  unmount();
+  chatConfig = { enabled: false, greeting: "", suggestions: [] };
+  render(<MemoryRouter><HelpChat /></MemoryRouter>);
+  await waitFor(() => expect(screen.queryByRole("button", { name: /Ask us anything/ })).toBeNull());
 });

@@ -82,6 +82,13 @@ export function openHelpChat(question) {
 
 export function HelpChat() {
   const platform = usePlatform();
+  // The platform owner can switch the chat off and set its greeting and suggestions (AI assistants page).
+  const [config, setConfig] = useState(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/v1/assistant/config/").then((r) => (r.ok ? r.json() : null)).then((data) => { if (live && data) setConfig(data); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState(load);
   const [draft, setDraft] = useState("");
@@ -145,6 +152,9 @@ export function HelpChat() {
   }
 
   const reset = () => { abort.current?.abort(); setMessages([]); setBusy(false); input.current?.focus(); };
+  if (config && !config.enabled) return null;
+  const greeting = config?.greeting || `Hi! I can answer questions about ${platform.name}: how to get started, what it can do for your business, pricing and more. What would you like to know?`;
+  const suggestions = config?.suggestions?.length ? config.suggestions : SUGGESTIONS;
 
   return (
     <div className="helpChat">
@@ -158,10 +168,10 @@ export function HelpChat() {
             <button type="button" className="helpChatIcon" onClick={() => setOpen(false)} aria-label="Close chat"><X size={19} /></button>
           </header>
           <div className="helpChatMessages" ref={list} aria-live="polite">
-            <div className="helpChatMessage assistant"><p>Hi! I can answer questions about {platform.name}: how to get started, what it can do for your business, pricing and more. What would you like to know?</p></div>
+            <div className="helpChatMessage assistant"><p>{greeting}</p></div>
             {messages.length === 0 && (
               <div className="helpChatSuggestions" aria-label="Suggested questions">
-                {SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => ask(suggestion)}>{suggestion}</button>)}
+                {suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => ask(suggestion)}>{suggestion}</button>)}
               </div>
             )}
             {messages.map((message, index) => (
