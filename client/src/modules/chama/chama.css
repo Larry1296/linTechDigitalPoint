@@ -69,3 +69,8 @@
 .chamaNextReceiver { display: grid; gap: 6px; margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--primary); border-radius: 15px; background: var(--primary2); }
 .chamaNextReceiver h3, .chamaNextReceiver p { margin: 0; }
 .chamaNextReceiver .actionRow button { margin: 0; }
+/* Member names carry their actions underneath; the column gets room for them. */
+.chamaMembersTable .chamaMemberCell { width: 30%; text-align: left; }
+.chamaMembersTable .chamaMemberCell > span { display: block; font-weight: 700; }
+.chamaMemberActions { margin-top: 6px; flex-wrap: wrap; gap: 6px; }
+.chamaMemberActions button { margin: 0; padding: 4px 10px; font-size: 13px; }

@@ -365,20 +365,24 @@ function Members({ chama, setChama, can, reload }) {
     {editing === "new" && <MemberForm chama={chama} setChama={setChama} onDone={() => setEditing(null)} />}
     <FormError title="Could not change the member." message={error} />
     <div className="trendTable"><table className="chamaMembersTable">
-      <thead><tr><th>Member</th><th>ID number</th><th>Phone</th><th>Role</th><th>Paid in</th><th>Owes</th><th>Received</th><th>Next turn</th><th><span className="visuallyHidden">Actions</span></th></tr></thead>
+      <thead><tr><th className="chamaMemberCell">Member</th><th>ID number</th><th>Phone</th><th>Role</th><th>Paid in</th><th>Owes</th><th>Received</th><th>Next turn</th></tr></thead>
       <tbody>{chama.members.map((m) => <tr key={m.id} className={m.active ? undefined : "muted"}>
-        <th scope="row">{m.full_name}{!m.active && <small> · left {date(m.left_on)}</small>}</th>
+        <th scope="row" className="chamaMemberCell">
+          <span>{m.full_name}{!m.active && <small> · left {date(m.left_on)}</small>}</span>
+          {/* The actions sit under the name, so a wide table never pushes them out of sight. */}
+          <div className="actionRow chamaMemberActions">
+            <button type="button" className="secondary" onClick={() => setStatement(statement === m.id ? null : m.id)}>{statement === m.id ? "Hide statement" : "Statement"}</button>
+            {can("chama.change_chama") && m.active && <button type="button" className="secondary" onClick={() => setEditing(m.id)}>Change</button>}
+            {can("chama.change_chama") && m.active && (m.role === "TREASURER"
+              ? <button type="button" className="secondary" disabled title="Make another member treasurer first">Remove</button>
+              : <button type="button" className="danger" onClick={() => void remove(m)} aria-label={`Remove ${m.full_name}`}>Remove</button>)}
+            {can("chama.change_chama") && !m.active && <button type="button" className="secondary" onClick={() => void rejoin(m)}>Rejoins</button>}
+          </div>
+          {can("chama.change_chama") && m.active && m.role === "TREASURER" && <small className="muted">To remove the treasurer, make another member treasurer first (Change).</small>}
+        </th>
         <td>{m.id_number}</td><td>{m.phone}</td><td>{m.role_label}</td><td>{money(m.paid_in)}</td>
         <td className={Number(m.late) > 0 || Number(m.fines_owed) > 0 ? "loanLate" : undefined}>{money(Number(m.unpaid) + Number(m.fines_owed))}</td>
         <td>{money(m.received)}</td><td>{m.next_turn ? date(m.next_turn.date) : "—"}</td>
-        <td><div className="actionRow">
-          <button type="button" className="secondary" onClick={() => setStatement(statement === m.id ? null : m.id)}>{statement === m.id ? "Hide statement" : "Statement"}</button>
-          {can("chama.change_chama") && m.active && <button type="button" className="secondary" onClick={() => setEditing(m.id)}>Change</button>}
-          {can("chama.change_chama") && m.active && (m.role === "TREASURER"
-            ? <button type="button" className="secondary" disabled title="Make another member treasurer first">Remove</button>
-            : <button type="button" className="secondary" onClick={() => void remove(m)}>Remove</button>)}
-          {can("chama.change_chama") && !m.active && <button type="button" className="secondary" onClick={() => void rejoin(m)}>Rejoins</button>}
-        </div></td>
       </tr>)}</tbody>
     </table></div>
     {typeof editing === "number" && <MemberForm chama={chama} member={chama.members.find((m) => m.id === editing)} setChama={setChama} onDone={() => setEditing(null)} />}

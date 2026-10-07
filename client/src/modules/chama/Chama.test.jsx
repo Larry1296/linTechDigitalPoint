@@ -184,15 +184,15 @@ it("removes a member who left or was added by mistake, and lets a member rejoin"
   await screen.findByRole("heading", { name: "Umoja" });
   fireEvent.click(screen.getByRole("button", { name: "Members" }));
   const row = (name) => screen.getByRole("row", { name: new RegExp(name) });
-  expect(within(row("Larry Musau")).getByRole("button", { name: "Remove" })).toBeDisabled();  // the treasurer
+  expect(within(row("Larry Musau")).getByRole("button", { name: /^Remove/ })).toBeDisabled();  // the treasurer
   // No money history: the owner may delete a member added by mistake.
   askForm.mockResolvedValueOnce({ how: "MISTAKE", reason: "Wrong chama" });
-  await act(async () => { fireEvent.click(within(row("John Kamau")).getByRole("button", { name: "Remove" })); });
+  await act(async () => { fireEvent.click(within(row("John Kamau")).getByRole("button", { name: /^Remove/ })); });
   expect(askForm.mock.calls[0][0].fields.map((f) => f.name)).toEqual(["how", "reason"]);
   expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/3/remove/", expect.objectContaining({ method: "POST", body: JSON.stringify({ reason: "Wrong chama" }) }));
   // With payments on record, the only way out is leaving.
   askForm.mockResolvedValueOnce({ reason: "Moved away" });
-  await act(async () => { fireEvent.click(within(row("Mary Achieng")).getByRole("button", { name: "Remove" })); });
+  await act(async () => { fireEvent.click(within(row("Mary Achieng")).getByRole("button", { name: /^Remove/ })); });
   expect(askForm.mock.calls[1][0].fields.map((f) => f.name)).toEqual(["reason"]);
   expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/2/leave/", expect.objectContaining({ body: JSON.stringify({ reason: "Moved away" }) }));
   await act(async () => { fireEvent.click(within(row("Peter Otieno")).getByRole("button", { name: "Rejoins" })); });
