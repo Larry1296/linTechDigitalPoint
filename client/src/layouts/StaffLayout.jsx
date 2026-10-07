@@ -119,7 +119,7 @@ const operations = [
   // A chama is not part of the shop: its own group, apart from the shop's money under Business.
   { title: "Chama", icon: Users, collapsible: true, links: [{ to: "/admin/chama", label: "My chama", icon: Users, permission: "chama.view_chama" }] },
   { title: "Business", icon: Briefcase, collapsible: true, links: businessLinks },
-  { title: "Platform", links: [{ to: "/admin/platform", label: "All businesses", icon: ShieldCheck, permission: null, platformAdmin: true },
+  { title: "Platform", links: [{ to: "/admin/platform", label: "All businesses", icon: ShieldCheck, permission: null, platformAdmin: true, end: true },
     { to: "/admin/platform/assistants", label: "AI assistants", icon: Sparkles, permission: null, platformAdmin: true }] },
 ];
 export function StaffLayout() {
