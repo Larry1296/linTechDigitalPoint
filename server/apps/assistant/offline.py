@@ -478,7 +478,8 @@ def chama_members(w, text, name=None):
         lines += [f"- {m['name']}: owes {w.money(m['unpaid'])}" + (f" ({w.money(m['late'])} late)" if m["late"] else "")
                   + (f", fines {w.money(m['fines_owed'])}" if m["fines_owed"] else "") for m in behind] or ["Everyone is up to date."]
     else:
-        for m in sorted(active, key=lambda m: m["name"].lower()):
+        # In turn order: whoever receives first is listed first.
+        for m in sorted(active, key=lambda m: (m["next_turn"] or "9999-12-31", m["name"].lower())):
             extra = [m["role"]] if m["role"] and m["role"].lower() != "member" else []
             extra.append(f"paid in {w.money(m['paid_in'])}")
             if m["unpaid"]:
