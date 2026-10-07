@@ -355,9 +355,37 @@ def agency(w, text):
     months = [m for m in data["months"] if m["commission_earned"] or m["agency_running_costs"]]
     head += ["", "**Commission by month:**"] + ([f"- {m['month']}: commission {w.money(m['commission_earned'])}, costs {w.money(m['agency_running_costs'])}, "
                                                 f"profit {w.money(m['profit'])}" for m in months] or ["- No commission recorded in the last 6 months."])
-    if data.get("commission_not_yet_recorded_for"):
-        head += ["", f"{data['commission_not_yet_recorded_for']}'s commission is not recorded yet."]
     return "\n".join(head)
+
+
+def _phone(number):
+    return "0" + number[3:] if number and number.startswith("254") else (number or "")
+
+
+def mpesa_shift(w, text):
+    start, end, words = period(text, 1)
+    data = w.call("mpesa_summary", {**_args(start, end), "limit": 10})
+    if data is None:
+        return w.problem
+    shift = next((s for s in data["shifts"] if s["status"] == "OPEN"), None)
+    if shift:
+        tx = shift["transactions"]
+        lines = [f"**Open shift** at {shift['outlet']}, opened {shift['opened']} by {shift['operator']}: "
+                 f"cash **{w.money(shift['cash_now'])}**, float **{w.money(shift['float_now'])}** now "
+                 f"(opened with {w.money(shift['opening_cash'])} cash and {w.money(shift['opening_float'])} float)."]
+        totals = shift["transactions_by_type"]
+    else:
+        tx = data["latest_transactions"]
+        lines = [f"No M-Pesa shift is open. **{data['transactions']} transactions** in {words}."]
+        totals = data["transactions_by_type"]
+    if totals:
+        lines += ["", "### By type", *table(["Type", "Count", "Amount"],
+                                            [[t["type"].replace("_", " ").title(), t["count"], w.money(t["amount"])] for t in totals])]
+    if tx:
+        lines += ["", "### Latest", *table(["Time", "Type", "Amount", "Customer"],
+                                          [[t["when"][11:], t["type"].replace("_", " ").title() + (" (reversed)" if t["reversed"] else ""),
+                                            w.money(t["amount"]), " ".join(x for x in (t["customer"], _phone(t["phone"])) if x) or "-"] for t in tx])]
+    return "\n".join(lines)
 
 
 def stock_value(w, text):
@@ -696,6 +724,7 @@ INTENTS = [
     (r"\b(i owe|we owe|do i owe|suppliers?|payables?|bills?|creditors?)\b", i_owe),
     (r"\b(net worth|worth|where is (my|the) money|how much money|cash|bank|balances?|assets?)\b", money_position),
     (r"\b(expenses?|spent|spending|running costs?|costs?)\b", expenses),
+    (r"\b(shift|deposits?|withdrawals?|withdraw|reversals?|reversed)\b|\bm-?pesa transactions?\b", mpesa_shift),
     (r"\b(commission|m-?pesa|float|agency|agent)\b", agency),
     (r"\b(top|best[- ]selling|best sellers?|most (revenue|sales|money)|bring in|popular)\b.*\b(products?|items?|sellers?|revenue)?", top_products),
     (r"\b(customers?|clients?|buyers?)\b", customers),

@@ -166,6 +166,48 @@ def test_the_assistant_sees_money_owed_where_it_is_and_single_sales_since_the_st
     assert {"money_position", "money_owed_to_business", "money_business_owes", "activity_log", "investments"}.isdisjoint(tools)
 
 
+def test_the_assistant_sees_each_mpesa_transaction_and_service_job_in_full(shop):
+    from apps.cyber.models import CyberServiceProfile
+    from apps.cyber.services import complete_job, create_job
+    from apps.mpesa.models import MpesaOutlet
+    from apps.mpesa.services import open_session, post_transaction, reverse_transaction
+    with organization_context(shop.org):
+        outlet = MpesaOutlet.objects.create(store=Store.objects.first(), display_name="Main M-Pesa")
+        session = open_session(outlet=outlet, operator=shop.owner, opening_cash="5000", opening_float="8000")
+        post_transaction(session=session, transaction_type="CUSTOMER_DEPOSIT", transaction_amount="1200", user=shop.owner, idempotency_key="d-1",
+                         provider_reference="QWE123RTY", customer_name="Jane Wanjiru", customer_phone="0712345678", customer_id_number="12345678")
+        wrong, _ = post_transaction(session=session, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount="700", user=shop.owner,
+                                    idempotency_key="w-1", provider_reference="ASD456FGH", customer_name="Ali Hassan",
+                                    customer_phone="0722000111", customer_id_number="87654321")
+        reverse_transaction(original=wrong, user=shop.owner, idempotency_key="r-1", reason="Wrong number")
+        lamination = ProductVariant.objects.create(product=Product.objects.create(name="Lamination", slug="lamination", product_type="SERVICE",
+                                                                                  category=Category.objects.first()), sku="LAM-1", selling_price=50)
+        CyberServiceProfile.objects.create(variant=lamination, billing_unit="FIXED")
+        job = create_job(user=shop.owner, lines=[{"variant_id": lamination.pk, "quantity": 1}], walk_in_customer_name="Peter", phone="0733000222")
+        complete_job(job=job, user=shop.owner, payment_method="CASH")
+    ctx = context(shop)
+    mpesa, failed = call(ctx, "mpesa_summary", {"start_date": timezone.localdate().isoformat()})
+    assert not failed, mpesa
+    shift = mpesa["shifts"][0]
+    assert shift["status"] == "OPEN" and shift["opening_cash"] == 5000 and shift["cash_now"] == 6200 and shift["float_now"] == 6800
+    latest = mpesa["latest_transactions"]
+    assert [t["type"] for t in latest] == ["REVERSAL", "CUSTOMER_WITHDRAWAL", "CUSTOMER_DEPOSIT"]
+    assert latest[1]["reversed"] and latest[0]["reverses"] == wrong.internal_reference
+    deposit = latest[2]
+    assert deposit["amount"] == 1200 and deposit["customer"] == "Jane Wanjiru" and deposit["phone"].endswith("712345678")
+    assert deposit["mpesa_code"] == "QWE123RTY" and "12345678" not in json.dumps(mpesa).replace("712345678", "")
+    jobs, failed = call(ctx, "service_jobs", {"start_date": timezone.localdate().isoformat()})
+    assert not failed, jobs
+    listed = jobs["jobs"][0]
+    assert listed["customer"] == "Peter" and listed["phone"] == "0733000222" and listed["total"] == 50
+    assert listed["services"][0]["service"].startswith("Lamination") and listed["paid_by"] == [{"method": "CASH", "amount": 50.0}]
+    assert listed["minutes_to_complete"] is not None and jobs["average_minutes_to_complete"] is not None
+    from apps.assistant import offline
+    with business_chat._scope(ctx):
+        text, _ = offline.answer(ctx, "is the last transaction in this shift a withdrawal or deposit")
+    assert "Open shift" in text and "KES 6,200" in text and "Jane Wanjiru 0712345678" in text and "Customer Withdrawal (reversed)" in text
+
+
 def test_the_platform_administrator_also_sees_every_business_in_general_terms_only(shop):
     other = make_business("Rival", "RIVAL-1")
     sold = other.client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": other.charger.pk, "quantity": 1}]}, format="json")

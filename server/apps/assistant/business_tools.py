@@ -434,36 +434,87 @@ def expense_analysis(ctx, args):
             "by_business_unit": {k: _money(v) for k, v in by_unit.items()}, "by_month": {k: _money(v) for k, v in sorted(by_month.items())}}
 
 
+def _minutes(start, finish):
+    return round((finish - start).total_seconds() / 60) if start and finish else None
+
+
 def service_jobs(ctx, args):
     from apps.cyber.models import CyberJob, CyberJobLine
     start, end = _period(args)
     jobs = CyberJob.objects.filter(created_at__date__range=(start, end)).exclude(sale__status="CANCELLED")
     by_status = {row["status"]: row["n"] for row in jobs.values("status").annotate(n=Count("id"))}
-    done = jobs.filter(status="COMPLETED", started_at__isnull=False, completed_at__isnull=False)
-    hours = [(j.completed_at - j.started_at).total_seconds() / 3600 for j in done.only("started_at", "completed_at")]
+    # A job completed at the counter is never "started": its time runs from when it was opened.
+    done = jobs.filter(status="COMPLETED", completed_at__isnull=False).only("created_at", "started_at", "completed_at")
+    minutes = [_minutes(j.started_at or j.created_at, j.completed_at) for j in done]
     top = [{"service": row["service_name"], "jobs": row["n"], "quantity": _qty(row["q"]), "value": _money(row["v"])}
            for row in CyberJobLine.objects.filter(job__in=jobs.filter(status="COMPLETED")).values("service_name")
            .annotate(n=Count("job", distinct=True), q=Sum("quantity"), v=Sum("line_total")).order_by("-v")[:_limit(args)]]
     overdue = CyberJob.objects.exclude(status__in=["COMPLETED", "CANCELLED"]).filter(due_at__lt=timezone.now()).count()
+    listed = []
+    for job in jobs.select_related("customer", "operator", "sale").prefetch_related("lines", "sale__payments").order_by("-created_at")[:_limit(args, 20, 100)]:
+        listed.append({
+            "number": job.number, "status": job.status, "opened": timezone.localtime(job.created_at).strftime("%Y-%m-%d %H:%M"),
+            "completed": timezone.localtime(job.completed_at).strftime("%Y-%m-%d %H:%M") if job.completed_at else None,
+            "minutes_to_complete": _minutes(job.started_at or job.created_at, job.completed_at),
+            "due": timezone.localtime(job.due_at).strftime("%Y-%m-%d %H:%M") if job.due_at else None,
+            "customer": _customer_name(job.customer) if job.customer_id else (job.walk_in_customer_name or "Walk-in"), "phone": job.phone,
+            "served_by": _customer_name(job.operator) if job.operator_id else None,
+            "services": [{"service": line.service_name, "quantity": _qty(line.quantity), "unit_price": _money(line.unit_price),
+                          "total": _money(line.line_total)} for line in job.lines.all()],
+            "discount": _money(job.discount), "total": _money(job.total),
+            "paid_by": [{"method": p.method, "amount": _money(p.amount)} for p in job.sale.payments.all()] if job.sale_id else [],
+            "notes": job.notes})
     return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "jobs_by_status": by_status,
             "completed_value": _money(jobs.filter(status="COMPLETED").aggregate(v=Sum("total"))["v"]),
-            "average_hours_to_complete": r(sum(hours) / len(hours)) if hours else None, "open_jobs_overdue_now": overdue, "top_services": top}
+            "average_minutes_to_complete": round(sum(minutes) / len(minutes)) if minutes else None, "open_jobs_overdue_now": overdue,
+            "top_services": top, "jobs": listed}
+
+
+def _mpesa_row(t):
+    return {"when": timezone.localtime(t.occurred_at).strftime("%Y-%m-%d %H:%M"), "type": t.transaction_type, "amount": _money(t.amount),
+            "customer": t.customer_name, "phone": t.customer_phone, "mpesa_code": t.provider_reference or "",
+            "reference": t.internal_reference, "paid_by": t.paid_by, "cash_change": _money(t.cash_delta), "float_change": _money(t.float_delta),
+            "by": _customer_name(t.performed_by), "reversed": hasattr(t, "reversal"),
+            "reverses": t.reversal_of.internal_reference if t.reversal_of_id else None, "notes": t.notes}
+
+
+def _shift(session, limit):
+    from apps.mpesa.services import session_balances
+    tx = session.transactions.filter(status="POSTED")
+    cash, electronic_float = session_balances(session)
+    shift = {"outlet": session.outlet.display_name, "operator": _customer_name(session.operator), "status": session.status,
+             "opened": timezone.localtime(session.opened_at).strftime("%Y-%m-%d %H:%M"),
+             "closed": timezone.localtime(session.closed_at).strftime("%Y-%m-%d %H:%M") if session.closed_at else None,
+             "opening_cash": _money(session.opening_cash), "opening_float": _money(session.opening_float),
+             "cash_now" if session.status == "OPEN" else "expected_cash_at_close": _money(cash),
+             "float_now" if session.status == "OPEN" else "expected_float_at_close": _money(electronic_float),
+             "transactions_by_type": [{"type": row["transaction_type"], "count": row["n"], "amount": _money(row["v"])}
+                                      for row in tx.values("transaction_type").annotate(n=Count("id"), v=Sum("amount")).order_by("-v")],
+             "transactions": [_mpesa_row(t) for t in tx.select_related("performed_by", "reversal_of", "reversal").order_by("-occurred_at", "-id")[:limit]]}
+    if session.status != "OPEN":
+        shift.update(counted_cash=_money(session.closing_cash_actual), counted_float=_money(session.closing_float_actual))
+    return shift
 
 
 def mpesa_summary(ctx, args):
     from apps.mpesa.models import MpesaCommissionEntry, MpesaReconciliation, MpesaSession, MpesaTransaction
     start, end = _period(args)
+    limit = _limit(args, 30, 200)
     tx = MpesaTransaction.objects.filter(occurred_at__date__range=(start, end), status="POSTED")
     by_type = [{"type": row["transaction_type"], "count": row["n"], "amount": _money(row["v"])}
                for row in tx.values("transaction_type").annotate(n=Count("id"), v=Sum("amount")).order_by("-v")]
     recs = MpesaReconciliation.objects.filter(created_at__date__range=(start, end))
+    sessions = MpesaSession.objects.select_related("outlet", "operator")
+    shifts = [_shift(s, limit) for s in sessions.filter(status="OPEN").order_by("-opened_at")]
+    shifts += [_shift(s, limit) for s in sessions.filter(status="CLOSED", opened_at__date__range=(start, end)).order_by("-opened_at")[:5]]
     return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "transactions_by_type": by_type,
             "transactions": tx.count(),
             "commission_earned_in_period": _money(MpesaCommissionEntry.objects.filter(period__range=(start.replace(day=1), end), reversed_at__isnull=True)
                                                   .aggregate(v=Sum("amount"))["v"]),
             "reconciliations": recs.count(), "cash_variance_total": _money(recs.aggregate(v=Sum("cash_variance"))["v"]),
             "float_variance_total": _money(recs.aggregate(v=Sum("float_variance"))["v"]),
-            "sessions_open_now": MpesaSession.objects.filter(status="OPEN").count()}
+            "sessions_open_now": len([s for s in shifts if s["status"] == "OPEN"]), "shifts": shifts,
+            "latest_transactions": [_mpesa_row(t) for t in tx.select_related("performed_by", "reversal_of", "reversal").order_by("-occurred_at", "-id")[:limit]]}
 
 
 def agency_commission(ctx, args):
@@ -785,10 +836,14 @@ TOOLS = {
                           _schema(PERIOD), "accounting.view_cashentry", "reports"),
     "expense_analysis": (expense_analysis, "Expenses in a period from the posted books: total, by category, by business unit, by month, "
                          "and as a share of revenue.", _schema(PERIOD), "accounting.view_expense", "expenses"),
-    "service_jobs": (service_jobs, "Service desk (jobs) in a period: jobs by status, value completed, average hours to complete, "
-                     "overdue jobs and the top services.", _schema({**PERIOD, **LIMIT}), "cyber.view_cyberjob", "services"),
+    "service_jobs": (service_jobs, "Service desk (jobs) in a period: jobs by status, value completed, average minutes to complete, "
+                     "overdue jobs, the top services, and each job (customer, phone, services, amounts, payment, who served, "
+                     "when opened and completed).", _schema({**PERIOD, **LIMIT}), "cyber.view_cyberjob", "services"),
     "mpesa_summary": (mpesa_summary, "M-Pesa agency in a period: transactions by type, commission, reconciliation cash and float "
-                      "variances, open sessions.", _schema(PERIOD), "mpesa.view_mpesasession", "mpesa"),
+                      "variances; each shift (open now, and closed ones in the period) with operator, opening and current cash and float, "
+                      "totals by type and its transactions; and the latest transactions, each with time, type, amount, customer name and "
+                      "phone, M-Pesa code, who posted it and whether it was reversed. Use this, not the activity log, for M-Pesa questions.",
+                      _schema({**PERIOD, **LIMIT}), "mpesa.view_mpesasession", "mpesa"),
     "agency_commission": (agency_commission, "M-Pesa agency month by month: Safaricom commission earned, agency running costs and profit; "
                           "a month whose commission is not recorded yet; each outlet's money in operation now; recent commission entries "
                           "(including undone ones and why).", _schema({"months": {"type": "integer"}, **LIMIT}), "mpesa.view_mpesacommissionentry", "mpesa"),
