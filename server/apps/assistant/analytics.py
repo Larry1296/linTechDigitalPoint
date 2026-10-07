@@ -7,6 +7,7 @@ import math
 from datetime import timedelta
 from decimal import Decimal
 
+MIN_TREND_DAYS = 14
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
@@ -96,7 +97,9 @@ def describe_series(series, forecast_days=7):
         "min": r(min(values)), "max": r(max(values)), "days_without_activity": zero_days,
         "trend": {"slope_per_day": r(trend["slope_per_day"]), "r_squared": r(trend["r_squared"], 3),
                   "direction": "rising" if trend["slope_per_day"] > 0 else "falling" if trend["slope_per_day"] < 0 else "flat",
-                  "strength": "strong" if trend["r_squared"] >= 0.5 else "moderate" if trend["r_squared"] >= 0.2 else "weak"},
+                  # A line through a handful of days fits easily: under two weeks there is no trend to speak of yet.
+                  "strength": "too few days to tell" if n < MIN_TREND_DAYS
+                  else "strong" if trend["r_squared"] >= 0.5 else "moderate" if trend["r_squared"] >= 0.2 else "weak"},
         "second_half_vs_first_half_pct": r((second - first) / first * 100) if first else None,
         "average_by_weekday": weekday_avg,
         "unusual_days": anomalies[:10],

@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 
-from .claude import configured, stream_answer
+from .claude import configured, event, stream_answer
 from .retrieval import retrieve
 
 MAX_QUESTION = 1000
@@ -48,6 +48,22 @@ def _conversation(data, max_question=MAX_QUESTION, max_answer=MAX_ANSWER, max_tu
     return (clean[:-1], clean[-1]["content"]), None
 
 
+def answer_from_articles(question, passages):
+    """The public chat without an AI key: the best-matching help section, as written, if it really matches."""
+    from django.conf import settings
+    from .retrieval import tokens
+    top = passages[0] if passages else None
+    asked = set(tokens(question))
+    if top and asked and len(asked & set(tokens(f"{top.heading} {top.text}"))) * 2 >= len(asked):
+        yield event("text", text=f"**{top.heading}**\n\n{top.text}")
+        yield event("sources", items=[top.article])
+    else:
+        contact = settings.PLATFORM_CONTACT_EMAIL
+        yield event("text", text="I couldn't find that in the help articles. Try asking in other words, or "
+                    + (f"email the team at {contact}." if contact else "contact the team using the details on this website."))
+    yield event("done")
+
+
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
@@ -56,8 +72,6 @@ def chat(request):
     conversation, problem = _conversation(request.data)
     if problem:
         return Response({"detail": problem}, status=400)
-    if not configured():
-        return Response({"detail": "The help assistant isn't available right now. Please contact the team instead."}, status=503)
     from .models import PublicChatSettings, PublicQuestion
     if not PublicChatSettings.current().enabled:
         return Response({"detail": "The help assistant is switched off right now. Please contact the team instead."}, status=503)
@@ -66,7 +80,9 @@ def chat(request):
     passages = retrieve(question, previous)
     # Only the question is kept, with the articles it was answered from, so the owner can see what is missing.
     PublicQuestion.objects.create(question=question, articles=sorted({p.article for p in passages}), answered=bool(passages))
-    response = StreamingHttpResponse(stream_answer(history, question, passages), content_type="text/event-stream")
+    # No AI key: answer with the help section that matches, as written, rather than nothing.
+    stream = stream_answer(history, question, passages) if configured() else answer_from_articles(question, passages)
+    response = StreamingHttpResponse(stream, content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"  # let nginx pass each chunk straight through
     return response
@@ -86,6 +102,6 @@ def public_config(request):
     from django.conf import settings
     from .models import PublicChatSettings
     current = PublicChatSettings.current()
-    return Response({"enabled": current.enabled and configured(),
+    return Response({"enabled": current.enabled,
                      "greeting": current.greeting or DEFAULT_GREETING.format(platform=settings.PLATFORM_NAME),
                      "suggestions": current.suggestions or DEFAULT_SUGGESTIONS})

@@ -12,7 +12,7 @@ from rest_framework.throttling import UserRateThrottle
 from apps.core.models import AuditLog
 from apps.core.permissions import IsInternalStaff
 
-from .business_chat import PROVIDERS, configured, provider_for, stream_business_answer
+from .business_chat import PROVIDERS, configured, provider_for, stream_business_answer, stream_offline_answer
 from .business_tools import Context
 from .views import _conversation
 
@@ -43,11 +43,11 @@ def chat(request):
     if problem:
         return Response({"detail": problem}, status=400)
     provider = provider_for(request.organization)
-    if provider is None:
-        return Response({"detail": "The business assistant isn't set up on this platform yet. Please contact the platform team."}, status=503)
     history, question = conversation
     ctx = Context(request.user, request.organization, request.store)
-    response = StreamingHttpResponse(stream_business_answer(ctx, history, question, provider), content_type="text/event-stream")
+    # Without an AI key the assistant still answers the common questions from the records (offline.py).
+    answer = stream_business_answer(ctx, history, question, provider) if provider else stream_offline_answer(ctx, question)
+    response = StreamingHttpResponse(answer, content_type="text/event-stream")
     response["Cache-Control"] = "no-cache, private"
     response["X-Accel-Buffering"] = "no"  # let nginx pass each chunk straight through
     return response

@@ -90,12 +90,33 @@ def _run_tool(ctx, name, args):
             return json.dumps({"error": "This lookup failed on the server. Try a different question or period."}), True
 
 
+def stream_offline_answer(ctx, question, reason=""):
+    """The answer without an AI model (no key, or the AI failed): see offline.py."""
+    from .offline import answer
+    with _scope(ctx):
+        text, used = answer(ctx, question)
+    for name in dict.fromkeys(used):
+        yield event("tool", name=name, label=LABELS.get(name, "Looking this up"))
+    if reason:
+        text = f"_{reason}_\n\n{text}"
+    yield event("text", text=text)
+    logger.info("Business assistant answered without AI (org %s): %s", ctx.organization.pk, ", ".join(used) or "no tool")
+    yield event("done")
+
+
 def stream_business_answer(ctx, history, question, provider):
     with _scope(ctx):
         system = business_prompt(ctx)
         tools = business_tools.available(ctx)
     stream = _stream_anthropic if provider == "anthropic" else _stream_openai
-    yield from stream(ctx, system, tools, history, question)
+    said = False
+    for item in stream(ctx, system, tools, history, question):
+        # The AI could not answer before saying anything (no credit, a bad key, an outage): answer from the records instead.
+        if not said and '"type": "error"' in item:
+            yield from stream_offline_answer(ctx, question, "The AI assistant could not be reached, so this is answered directly from your records.")
+            return
+        said = said or '"type": "text"' in item
+        yield item
     yield event("done")
 
 

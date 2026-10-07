@@ -284,6 +284,10 @@ def sales_summary(ctx, args):
 def sales_statistics(ctx, args):
     from apps.commerce.models import Sale
     start, end = _period(args, default_days=90)
+    # Days before the business existed are not "no sales": they would drag the averages and trend down.
+    beginning = _beginning()
+    clamped = start < beginning <= end
+    start = max(start, beginning) if beginning <= end else start
     metric = args.get("metric", "revenue")
     if metric not in {"revenue", "sales_count", "gross_profit"}:
         raise ToolError("metric must be revenue, sales_count or gross_profit.")
@@ -301,6 +305,7 @@ def sales_statistics(ctx, args):
     previous = (before.count() if metric == "sales_count" else before.aggregate(v=Sum("total" if metric == "revenue" else "gross_profit"))["v"] or ZERO)
     current = sum(v for _, v in series)
     return {"metric": metric, "period": {"start": start.isoformat(), "end": end.isoformat()}, "statistics": stats,
+            **({"records_start": beginning.isoformat()} if clamped else {}),
             "previous_period_total": r(previous), "change_vs_previous_period_pct": r((current - float(previous)) / float(previous) * 100) if previous else None,
             "method": "Least-squares trend over daily totals (days without sales count as 0); unusual days have |z| ≥ 2; "
                       "forecast = trend continued × weekday pattern (with 14+ days of history), range ≈ 95%."}
@@ -311,6 +316,12 @@ def inventory_analysis(ctx, args):
     days = _limit({"limit": args.get("days", 90)}, 90, MAX_DAYS)
     end = timezone.localdate()
     start = end - timedelta(days=days - 1)
+    # Averages per day count only the days the business has existed.
+    beginning = _beginning()
+    clamped = start < beginning
+    if clamped:
+        start = min(beginning, end)
+        days = (end - start).days + 1
     sold = _sold_by_variant(start, end)
     stock = _stock_by_variant()
     variants = ProductVariant.objects.filter(active=True, product__active=True, product__product_type="STOCK_ITEM").select_related("product__category")
@@ -335,7 +346,7 @@ def inventory_analysis(ctx, args):
     classes = {c: {"items": sum(1 for row in ranked if row["abc_class"] == c),
                    "revenue_share_pct": r(sum(row["share_pct"] for row in ranked if row["abc_class"] == c))} for c in "ABC"}
     limit = _limit(args, 25, 100)
-    result = {"period_days": days, "stock_items": len(ranked), "abc_summary": classes,
+    result = {"period_days": days, **({"records_start": beginning.isoformat()} if clamped else {}), "stock_items": len(ranked), "abc_summary": classes,
               "top_sellers": ranked[:limit], "running_out_within_14_days": at_risk[:limit],
               "dead_stock_no_sales_in_period": dead[:limit], "dead_stock_count": len(dead),
               "method": "ABC (Pareto) by revenue: A = first 80%, B = next 15%, C = last 5%. Days of cover = available ÷ average daily units sold. "

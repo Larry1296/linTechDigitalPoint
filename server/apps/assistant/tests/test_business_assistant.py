@@ -131,11 +131,13 @@ def test_every_tool_answers_from_the_business_records(shop):
     assert sales["rows"] == [{"product": "Duka charger", "value": 600.0, "units_sold": 2.0, "gross_profit": 280.0}]
     stock, _ = call(ctx, "inventory_analysis", {"days": 30})
     top = stock["top_sellers"][0]
-    assert top["abc_class"] == "A" and top["sell_through_pct"] == 20 and top["days_of_cover"] == 120
+    # The business was created today: averages per day count only the days it has existed.
+    assert top["abc_class"] == "A" and top["sell_through_pct"] == 20 and top["days_of_cover"] == 4 and stock["period_days"] == 1
     low, _ = call(ctx, "stock_levels", {"view": "all"})
     assert low["summary"]["units_on_hand"] == 8 and low["items"][0]["suggested_reorder"] == 12
     stats, _ = call(ctx, "sales_statistics", {"start_date": (timezone.localdate() - timedelta(days=13)).isoformat()})
-    assert stats["statistics"]["total"] == 600 and stats["statistics"]["days"] == 14
+    assert stats["statistics"]["total"] == 600 and stats["statistics"]["days"] == 1 and stats["records_start"]
+    assert stats["statistics"]["trend"]["strength"] == "too few days to tell"
 
 
 def test_the_assistant_sees_money_owed_where_it_is_and_single_sales_since_the_start(shop):
@@ -318,8 +320,12 @@ def test_chat_needs_a_business_member_and_a_configured_provider(shop, settings):
     assert APIClient().post(URL + "chat/", {"messages": [{"role": "user", "content": "hi"}]}, format="json").status_code == 403
     settings.ANTHROPIC_API_KEY = settings.OPENAI_API_KEY = ""
     with mock.patch.dict("os.environ", {}, clear=True):
-        response = shop.client.post(URL + "chat/", {"messages": [{"role": "user", "content": "hi"}]}, format="json")
-    assert response.status_code == 503
+        response = shop.client.post(URL + "chat/", {"messages": [{"role": "user", "content": "How much did I sell today?"}]}, format="json")
+        stream = events(response)
+    # Without any AI key the common questions are still answered, exactly, from the records.
+    assert response.status_code == 200 and {"type": "tool", "name": "sales_summary", "label": "Checking sales"} in stream
+    text = "".join(e["text"] for e in stream if e["type"] == "text")
+    assert "1 sale worth KES 600" in text and "Answered directly from your records" in text
 
 
 def test_owner_chooses_the_provider_and_staff_cannot(shop, settings):

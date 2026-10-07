@@ -82,12 +82,15 @@ def test_rejects_malformed_conversations(body, message):
 
 
 @pytest.mark.django_db
-def test_says_unavailable_without_an_api_key(settings, monkeypatch):
+def test_answers_from_the_help_articles_without_an_api_key(settings, monkeypatch):
     settings.ANTHROPIC_API_KEY = ""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
-    response = APIClient().post(URL, {"messages": [{"role": "user", "content": "How do I start?"}]}, format="json")
-    assert response.status_code == 503
+    response = APIClient().post(URL, {"messages": [{"role": "user", "content": "Can I import my products from Excel?"}]}, format="json")
+    stream = events(response)
+    assert response.status_code == 200 and "import" in stream[0]["text"].lower() and stream[-1] == {"type": "done"}
+    nonsense = events(APIClient().post(URL, {"messages": [{"role": "user", "content": "zzqx blorf wibble"}]}, format="json"))
+    assert "couldn't find that" in nonsense[0]["text"]
 
 
 @pytest.mark.django_db
