@@ -26,7 +26,11 @@ MAX_OUTPUT = 16000
 LABELS = {"business_overview": "Reading the business profile", "find_products": "Looking up products", "stock_levels": "Checking stock levels",
           "inventory_analysis": "Analysing stock", "sales_summary": "Checking sales", "sales_statistics": "Analysing sales trends",
           "stock_movements": "Checking stock movements", "financial_summary": "Reading the books", "expense_analysis": "Analysing expenses",
-          "service_jobs": "Checking service jobs", "mpesa_summary": "Checking M-Pesa", "platform_help": "Searching the help centre"}
+          "service_jobs": "Checking service jobs", "mpesa_summary": "Checking M-Pesa", "platform_help": "Searching the help centre",
+          "agency_commission": "Checking agency commission", "money_position": "Working out where the money is",
+          "money_owed_to_business": "Checking who owes you", "money_business_owes": "Checking what you owe",
+          "purchases_and_suppliers": "Checking purchases", "find_sales": "Looking up sales", "top_customers": "Checking customers",
+          "investments": "Checking investments", "chamas": "Checking the chamas", "activity_log": "Reading the activity log"}
 _clients = {}
 
 

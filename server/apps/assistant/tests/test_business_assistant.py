@@ -119,7 +119,8 @@ def test_every_tool_answers_from_the_business_records(shop):
     tools = offered(ctx)
     assert tools == set(business_tools.TOOLS)  # an owner gets every tool for the enabled modules
     for name in tools:
-        args = {"find_products": {"query": "charger"}, "platform_help": {"question": "How do I import products?"}}.get(name, {})
+        args = {"find_products": {"query": "charger"}, "platform_help": {"question": "How do I import products?"},
+                "find_sales": {"customer": "nobody"}}.get(name, {})
         result, failed = call(ctx, name, args)
         assert not failed, (name, result)
     products, _ = call(ctx, "find_products", {"query": "CHG-1"})
@@ -134,6 +135,32 @@ def test_every_tool_answers_from_the_business_records(shop):
     assert low["summary"]["units_on_hand"] == 8 and low["items"][0]["suggested_reorder"] == 12
     stats, _ = call(ctx, "sales_statistics", {"start_date": (timezone.localdate() - timedelta(days=13)).isoformat()})
     assert stats["statistics"]["total"] == 600 and stats["statistics"]["days"] == 14
+
+
+def test_the_assistant_sees_money_owed_where_it_is_and_single_sales_since_the_start(shop):
+    ctx = context(shop)
+    whole, _ = call(ctx, "sales_summary", {"start_date": "beginning"})
+    assert whole["period"]["start"] == timezone.localtime(shop.org.created_at).date().isoformat() and whole["totals"]["sales_count"] == 1
+    with organization_context(shop.org):
+        from apps.commerce.models import Sale
+        number = Sale.objects.get().number
+    found, _ = call(ctx, "find_sales", {"sale_number": number.lower()})
+    assert found["matches"] == 1 and found["sales"][0]["items"][0]["quantity"] == 2 and found["sales"][0]["gross_profit"] == 280
+    owes, _ = call(ctx, "money_business_owes")
+    bought, _ = call(ctx, "purchases_and_suppliers")
+    assert bought["total_bought"] == 1600 and bought["by_supplier"][0]["supplier"] == "Supplier"
+    assert owes["suppliers_total"] == bought["by_supplier"][0]["still_owed"]
+    money, _ = call(ctx, "money_position")
+    assert money["net_worth"] == money["owns"] - money["owes"] and "Stock on the shelves (at cost)" in [g["label"] for g in money["groups"]]
+    owed, _ = call(ctx, "money_owed_to_business")
+    assert owed["customers_owe_total"] == 0 and owed["money_lent_out"]["loans"] == []
+    log, _ = call(ctx, "activity_log", {"start_date": "beginning"})
+    assert log["total_actions"] > 0
+    # A cashier sees sales, not the books, what is owed or the audit trail.
+    cashier, _ = staff(shop, "CASHIER", "till-2")
+    tools = offered(context(shop, cashier))
+    assert {"find_sales", "top_customers"} <= tools
+    assert {"money_position", "money_owed_to_business", "money_business_owes", "activity_log", "investments"}.isdisjoint(tools)
 
 
 def test_bad_tool_input_is_reported_back_to_the_model(shop):

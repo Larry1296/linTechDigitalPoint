@@ -21,7 +21,7 @@ from .analytics import abc_classes, daily_series, describe_series, r, safe_div
 
 ZERO = Decimal("0")
 MAX_RESULT_CHARS = 24000  # keeps one tool result a reasonable share of the context
-MAX_DAYS = 730
+MAX_DAYS = 3660  # ten years: enough for "since the business started"
 
 
 class ToolError(Exception):
@@ -53,10 +53,21 @@ def _date(value, name):
         raise ToolError(f"{name} must be a date written YYYY-MM-DD, got {value!r}.")
 
 
+def _beginning():
+    """The day the business was created here: the first day it can have records."""
+    from apps.tenancy.context import organization_id
+    from apps.tenancy.models import Organization
+    created = Organization.objects.filter(pk=organization_id()).values_list("created_at", flat=True).first()
+    return timezone.localtime(created).date() if created else timezone.localdate()
+
+
 def _period(args, default_days=30):
     today = timezone.localdate()
     end = _date(args["end_date"], "end_date") if args.get("end_date") else today
-    start = _date(args["start_date"], "start_date") if args.get("start_date") else end - timedelta(days=default_days - 1)
+    if str(args.get("start_date", "")).lower() == "beginning":
+        start = min(_beginning(), end)
+    else:
+        start = _date(args["start_date"], "start_date") if args.get("start_date") else end - timedelta(days=default_days - 1)
     if start > end:
         raise ToolError("start_date must be on or before end_date.")
     if (end - start).days + 1 > MAX_DAYS:
@@ -132,6 +143,7 @@ def business_overview(ctx, args):
                          "ends": subscription.ends_at.date().isoformat() if subscription and subscription.ends_at else None} if subscription else None,
         "your_role": ctx.membership.role.replace("_", " ").title() if ctx.membership else None,
         "staff_members": Membership.objects.filter(organization=org, status="ACTIVE").count(),
+        "records_start": _beginning().isoformat(),
     }
     if ctx.can("catalog.view_product"):
         variants = ProductVariant.objects.filter(active=True, product__active=True)
@@ -409,10 +421,243 @@ def mpesa_summary(ctx, args):
                for row in tx.values("transaction_type").annotate(n=Count("id"), v=Sum("amount")).order_by("-v")]
     recs = MpesaReconciliation.objects.filter(created_at__date__range=(start, end))
     return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "transactions_by_type": by_type,
-            "transactions": tx.count(), "commission_recorded": _money(MpesaCommissionEntry.objects.filter(period__range=(start, end)).aggregate(v=Sum("amount"))["v"]),
+            "transactions": tx.count(),
+            "commission_earned_in_period": _money(MpesaCommissionEntry.objects.filter(period__range=(start.replace(day=1), end), reversed_at__isnull=True)
+                                                  .aggregate(v=Sum("amount"))["v"]),
             "reconciliations": recs.count(), "cash_variance_total": _money(recs.aggregate(v=Sum("cash_variance"))["v"]),
             "float_variance_total": _money(recs.aggregate(v=Sum("float_variance"))["v"]),
             "sessions_open_now": MpesaSession.objects.filter(status="OPEN").count()}
+
+
+def agency_commission(ctx, args):
+    from apps.mpesa.api import money_in_operation
+    from apps.mpesa.commission import due_month, monthly_profit
+    from apps.mpesa.models import MpesaCommissionEntry, MpesaOutlet
+    months = _limit({"limit": args.get("months", 12)}, 12, 60)
+    rows = monthly_profit(months)
+    entries = [{"month": e.period.strftime("%B %Y"), "amount": _money(e.amount), "paid_on": timezone.localtime(e.recognized_at).date().isoformat(),
+                "went_to": e.settlement_method, "undone": bool(e.reversed_at), "undo_reason": e.reverse_reason or None, "notes": e.notes or None}
+               for e in MpesaCommissionEntry.objects.order_by("-period", "-recognized_at")[:_limit(args, 24, 60)]]
+    due = due_month()
+    return {"months": [{"month": row["month"].strftime("%B %Y"), "commission_earned": _money(row["commission"]),
+                        "agency_running_costs": _money(row["expenses"]), "profit": _money(row["profit"])} for row in rows],
+            "commission_not_yet_recorded_for": due.strftime("%B %Y") if due else None,
+            "money_in_operation": [{"outlet": o.display_name, **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in money_in_operation(o).items()}}
+                                   for o in MpesaOutlet.objects.all()],
+            "entries": entries,
+            "explained": "Commission counts in the month it was earned. Undone entries do not count. Deposits, withdrawals and airtime "
+                         "principal are never income."}
+
+
+def money_position(ctx, args):
+    """Where the money is and what the business is worth now: owns, owes, net worth, and how it changed."""
+    from apps.accounting.net_worth import snapshot
+    from apps.accounting.statements import payables, receivables
+    stock = sum((value for _, _, value in _stock_by_variant().values()), ZERO) if ctx.can("inventory.view_stockbalance") else None
+    owed_to_us = sum((max(row["owed"], ZERO) for row in receivables()), ZERO)
+    owing = payables()
+    we_owe = sum((row["owed"] for row in owing["suppliers"]), ZERO)
+    data = snapshot(stock=stock, receivables=owed_to_us, payables=we_owe, save=False)
+
+    def clean(value):
+        if isinstance(value, Decimal):
+            return _money(value)
+        if isinstance(value, list):
+            return [clean(v) for v in value]
+        if isinstance(value, dict):
+            return {k: clean(v) for k, v in value.items() if k not in {"key"}}
+        return value
+    history = data.pop("history", None) or []
+    data = clean(data)
+    data["net_worth_history"] = clean(history[-30:]) if isinstance(history, list) else None
+    data["explained"] = ("Shop money is what the cash book says should be in each place (the last count is shown beside it). The agency is "
+                         "the money in operation now. Stock is at cost. Owes = suppliers for stock received and running costs not yet paid.")
+    return data
+
+
+def _ageing(days):
+    return "0-30 days" if days <= 30 else "31-60 days" if days <= 60 else "61-90 days" if days <= 90 else "over 90 days"
+
+
+def money_owed_to_business(ctx, args):
+    from apps.accounting.loans import outstanding, status
+    from apps.accounting.models import Loan
+    from apps.accounting.statements import receivables
+    today = timezone.localdate()
+    by_customer, ages = defaultdict(lambda: {"owed": ZERO, "sales": 0, "oldest": None, "overdue": ZERO}), defaultdict(lambda: ZERO)
+    refunds_due = ZERO
+    for row in receivables():
+        if row["owed"] < 0:
+            refunds_due += -row["owed"]
+            continue
+        sold_on = timezone.localtime(row["date"]).date()
+        entry = by_customer[row["customer"]]
+        entry["owed"] += row["owed"]
+        entry["sales"] += 1
+        entry["oldest"] = min(entry["oldest"] or sold_on, sold_on)
+        if row["due_date"] and row["due_date"] < today:
+            entry["overdue"] += row["owed"]
+        ages[_ageing((today - sold_on).days)] += row["owed"]
+    customers = sorted(({"customer": name, "owed": _money(v["owed"]), "unpaid_sales": v["sales"], "oldest_unpaid_sale": v["oldest"].isoformat(),
+                         "overdue": _money(v["overdue"])} for name, v in by_customer.items()), key=lambda row: row["owed"] or 0, reverse=True)
+    result = {"customers_owe_total": _money(sum((v["owed"] for v in by_customer.values()), ZERO)), "customers_owing": len(customers),
+              "by_age": {k: _money(ages[k]) for k in ["0-30 days", "31-60 days", "61-90 days", "over 90 days"] if ages[k]},
+              "customers": customers[:_limit(args, 30, 200)], "refunds_the_business_owes_customers": _money(refunds_due)}
+    if ctx.can("accounting.view_loan"):
+        loans = []
+        for loan in Loan.objects.filter(cancelled_at__isnull=True).prefetch_related("repayments"):
+            left = outstanding(loan)
+            if left > 0:
+                loans.append({"borrower": loan.borrower_name, "lent": _money(loan.amount), "lent_on": loan.lent_on.isoformat(), "due": loan.due_date.isoformat(),
+                              "still_owed": _money(left), "status": status(loan, today)})
+        result["money_lent_out"] = {"total_still_owed": _money(sum((Decimal(str(l["still_owed"])) for l in loans), ZERO)), "loans": loans}
+    return result
+
+
+def money_business_owes(ctx, args):
+    from apps.accounting.statements import payables
+    owing = payables()
+    today = timezone.localdate()
+    suppliers = defaultdict(lambda: {"owed": ZERO, "purchases": 0, "oldest": None})
+    for row in owing["suppliers"]:
+        received = timezone.localtime(row["date"]).date() if hasattr(row["date"], "tzinfo") and row["date"].tzinfo else row["date"]
+        entry = suppliers[row["name"]]
+        entry["owed"] += row["owed"]
+        entry["purchases"] += 1
+        entry["oldest"] = min(entry["oldest"] or received, received)
+    bills = [{"bill": row["name"], "description": row["reference"], "date": str(row["date"]), "due": str(row["due_date"]) if row["due_date"] else None,
+              "owed": _money(row["owed"]), "overdue": bool(row["due_date"] and row["due_date"] < today)} for row in owing["bills"]]
+    listed = sorted(({"supplier": name, "owed": _money(v["owed"]), "unpaid_purchases": v["purchases"], "oldest": str(v["oldest"])}
+                     for name, v in suppliers.items()), key=lambda row: row["owed"] or 0, reverse=True)
+    return {"suppliers_total": _money(sum((v["owed"] for v in suppliers.values()), ZERO)), "suppliers": listed[:_limit(args, 30, 200)],
+            "unpaid_bills_total": _money(sum((Decimal(str(b["owed"])) for b in bills), ZERO)), "unpaid_bills": bills[:_limit(args, 30, 200)]}
+
+
+def purchases_and_suppliers(ctx, args):
+    from apps.accounting.models import SupplierPurchase
+    from apps.accounting.services import purchase_outstanding
+    start, end = _period(args)
+    rows = SupplierPurchase.objects.filter(receipt__received_at__date__range=(start, end)).select_related("supplier", "receipt")
+    by_supplier = defaultdict(lambda: {"bought": ZERO, "unpaid": ZERO, "purchases": 0})
+    recent = []
+    for p in rows.order_by("-receipt__received_at"):
+        name = p.supplier.name if p.supplier_id else "Supplier not named"
+        left = purchase_outstanding(p)
+        by_supplier[name]["bought"] += p.amount
+        by_supplier[name]["unpaid"] += left
+        by_supplier[name]["purchases"] += 1
+        if len(recent) < _limit(args, 15, 60):
+            recent.append({"date": timezone.localtime(p.receipt.received_at).date().isoformat(), "supplier": name, "receipt": p.receipt.receipt_number,
+                           "amount": _money(p.amount), "still_owed": _money(left)})
+    return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "total_bought": _money(sum((v["bought"] for v in by_supplier.values()), ZERO)),
+            "by_supplier": sorted(({"supplier": k, "bought": _money(v["bought"]), "still_owed": _money(v["unpaid"]), "purchases": v["purchases"]}
+                                   for k, v in by_supplier.items()), key=lambda row: row["bought"] or 0, reverse=True),
+            "recent_purchases": recent}
+
+
+def _customer_name(user):
+    return (user.get_full_name() or user.username) if user else "Walk-in"
+
+
+def find_sales(ctx, args):
+    """One sale by its number, or a customer's sales and what they owe."""
+    from apps.accounts.models import CustomerProfile
+    from apps.commerce.models import Sale
+    from apps.commerce.returns import sale_balance
+    number = str(args.get("sale_number", "")).strip()
+    customer = " ".join(str(args.get("customer", "")).split())
+    if not number and not customer:
+        raise ToolError("Give a sale_number, or a customer name or phone.")
+    sales = Sale.objects.select_related("customer", "created_by").prefetch_related("items__variant__product", "payments")
+    if number:
+        sales = sales.filter(number__iexact=number)
+    else:
+        users = CustomerProfile.objects.filter(Q(phone__icontains=customer) | Q(user__first_name__icontains=customer)
+                                               | Q(user__last_name__icontains=customer) | Q(user__username__icontains=customer)).values("user")
+        sales = sales.filter(customer__in=users)
+    rows = []
+    for sale in sales.order_by("-created_at")[:_limit(args, 10, 50)]:
+        row = {"number": sale.number, "when": timezone.localtime(sale.created_at).strftime("%Y-%m-%d %H:%M"), "status": sale.status,
+               "channel": sale.channel, "customer": _customer_name(sale.customer), "sold_by": _customer_name(sale.created_by),
+               "total": _money(sale.total), "discount": _money(sale.discount), "still_owed": _money(sale_balance(sale)),
+               "due_date": sale.due_date.isoformat() if sale.due_date else None,
+               "items": [{"product": _variant_label(i.variant), "quantity": _qty(i.quantity), "returned": _qty(i.returned_quantity),
+                          "unit_price": _money(i.unit_price), "discount": _money(i.discount)} for i in sale.items.all()],
+               "payments": [{"method": p.method, "amount": _money(p.amount), "status": p.status} for p in sale.payments.all()]}
+        if ctx.sees_profit:
+            row["gross_profit"] = _money(sale.gross_profit)
+        rows.append(row)
+    result = {"matches": len(rows), "sales": rows}
+    if customer and rows:
+        everything = Sale.objects.filter(customer__in=CustomerProfile.objects.filter(Q(phone__icontains=customer) | Q(user__first_name__icontains=customer)
+                                         | Q(user__last_name__icontains=customer) | Q(user__username__icontains=customer)).values("user"), status="COMPLETED")
+        agg = everything.aggregate(n=Count("id"), v=Sum("total"))
+        first = everything.order_by("created_at").values_list("created_at", flat=True).first()
+        result["customer_history"] = {"completed_sales": agg["n"], "total_spent": _money(agg["v"]),
+                                      "first_purchase": timezone.localtime(first).date().isoformat() if first else None}
+    return result
+
+
+def top_customers(ctx, args):
+    from apps.commerce.models import Sale
+    start, end = _period(args, default_days=90)
+    sales = Sale.objects.filter(status="COMPLETED", created_at__date__range=(start, end))
+    named = sales.filter(customer__isnull=False)
+    earlier = set(Sale.objects.filter(status="COMPLETED", created_at__date__lt=start, customer__isnull=False).values_list("customer", flat=True))
+    rows = []
+    for row in named.values("customer", "customer__first_name", "customer__last_name", "customer__username").annotate(n=Count("id"), v=Sum("total")).order_by("-v"):
+        rows.append({"customer": f"{row['customer__first_name']} {row['customer__last_name']}".strip() or row["customer__username"],
+                     "sales": row["n"], "spent": _money(row["v"]), "new_in_period": row["customer"] not in earlier})
+    walk_in = sales.filter(customer__isnull=True).aggregate(n=Count("id"), v=Sum("total"))
+    return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "named_customers": len(rows),
+            "new_customers": sum(1 for row in rows if row["new_in_period"]), "returning_customers": sum(1 for row in rows if not row["new_in_period"]),
+            "walk_in_sales": walk_in["n"], "walk_in_value": _money(walk_in["v"]), "customers": rows[:_limit(args, 20, 100)]}
+
+
+def investments(ctx, args):
+    from apps.accounting.investments import totals, value
+    from apps.accounting.models import Investment
+    rows = []
+    for inv in Investment.objects.all():
+        t = totals(inv)
+        rows.append({"investment": inv.name, "value_now": _money(value(inv)),
+                     **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}})
+    return {"investments": rows, "total_value": _money(sum((Decimal(str(row["value_now"] or 0)) for row in rows), ZERO)),
+            "explained": "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted."}
+
+
+def chamas(ctx, args):
+    from apps.chama.api import chama_summary
+    from apps.chama.models import Chama
+    today = timezone.localdate()
+
+    def clean(value):
+        if isinstance(value, Decimal):
+            return _money(value)
+        if isinstance(value, dict):
+            return {k: clean(v) for k, v in value.items() if k != "id"}
+        return value
+    return {"chamas": [clean(chama_summary(chama, today)) for chama in Chama.objects.prefetch_related("members")],
+            "note": "Members' ID numbers and phone numbers are never shown here."}
+
+
+def activity_log(ctx, args):
+    from apps.core.models import AuditLog
+    start, end = _period(args, default_days=7)
+    rows = AuditLog.objects.filter(created_at__date__range=(start, end)).select_related("user")
+    person = " ".join(str(args.get("person", "")).split())
+    if person:
+        rows = rows.filter(Q(user__first_name__icontains=person) | Q(user__last_name__icontains=person) | Q(user__username__icontains=person))
+    action = str(args.get("action", "")).strip().upper()
+    if action:
+        rows = rows.filter(action__icontains=action)
+    by_action = [{"action": row["action"], "times": row["n"]} for row in rows.values("action").annotate(n=Count("id")).order_by("-n")[:30]]
+    by_person = [{"person": row["user__first_name"] or row["user__username"] or "System", "actions": row["n"]}
+                 for row in rows.values("user__first_name", "user__username").annotate(n=Count("id")).order_by("-n")]
+    latest = [{"when": timezone.localtime(a.created_at).strftime("%Y-%m-%d %H:%M"), "who": _customer_name(a.user) if a.user_id else "System",
+               "action": a.action, "record": a.object_type} for a in rows.order_by("-created_at")[:_limit(args, 25, 100)]]
+    return {"period": {"start": start.isoformat(), "end": end.isoformat()}, "total_actions": rows.count(), "by_action": by_action,
+            "by_person": by_person, "latest": latest}
 
 
 def platform_help(ctx, args):
@@ -429,7 +674,8 @@ def _schema(properties=None, required=()):
     return {"type": "object", "properties": properties or {}, "required": list(required), "additionalProperties": False}
 
 
-PERIOD = {"start_date": {"type": "string", "description": "First day, YYYY-MM-DD. Defaults to 30 days before end_date."},
+PERIOD = {"start_date": {"type": "string", "description": "First day, YYYY-MM-DD, or \"beginning\" for since the business started. "
+                                                          "Defaults to 30 days before end_date."},
           "end_date": {"type": "string", "description": "Last day, YYYY-MM-DD. Defaults to today."}}
 LIMIT = {"limit": {"type": "integer", "description": "Maximum rows to list."}}
 
@@ -471,6 +717,31 @@ TOOLS = {
                      "overdue jobs and the top services.", _schema({**PERIOD, **LIMIT}), "cyber.view_cyberjob", "services"),
     "mpesa_summary": (mpesa_summary, "M-Pesa agency in a period: transactions by type, commission, reconciliation cash and float "
                       "variances, open sessions.", _schema(PERIOD), "mpesa.view_mpesasession", "mpesa"),
+    "agency_commission": (agency_commission, "M-Pesa agency month by month: Safaricom commission earned, agency running costs and profit; "
+                          "a month whose commission is not recorded yet; each outlet's money in operation now; recent commission entries "
+                          "(including undone ones and why).", _schema({"months": {"type": "integer"}, **LIMIT}), "mpesa.view_mpesacommissionentry", "mpesa"),
+    "money_position": (money_position, "Where the money is right now and what the business is worth: shop drawer, till and bank, M-Pesa "
+                       "agency cash and float, investments, money lent out, commission owed, customers owing, stock at cost, minus "
+                       "suppliers and unpaid running costs; plus recent net worth history.", _schema(), "accounting.view_profit", "reports"),
+    "money_owed_to_business": (money_owed_to_business, "Who owes the business money now: customers with unpaid sales (by customer, "
+                               "by age, overdue), refunds owed to customers, and (if allowed) money lent out and loan status.",
+                               _schema(LIMIT), "accounting.view_cashentry", None),
+    "money_business_owes": (money_business_owes, "What the business owes now: suppliers for stock received and not paid, and unpaid "
+                            "running-cost bills with due dates.", _schema(LIMIT), "accounting.view_supplierpurchase", None),
+    "purchases_and_suppliers": (purchases_and_suppliers, "Stock bought from suppliers in a period: total, by supplier (bought and "
+                                "still owed) and the latest purchases.", _schema({**PERIOD, **LIMIT}), "accounting.view_supplierpurchase", None),
+    "find_sales": (find_sales, "Look up one sale by its number, or a customer's sales by name or phone: items, payments, who sold it, "
+                   "what is still owed, and the customer's history.",
+                   _schema({"sale_number": {"type": "string"}, "customer": {"type": "string"}, **LIMIT}), "commerce.view_sale", None),
+    "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
+                      _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
+    "investments": (investments, "Investments such as money market funds: value now, money put in and taken out, interest and fees.",
+                    _schema(), "accounting.view_investment", None),
+    "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
+               "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),
+    "activity_log": (activity_log, "Who did what and when (the audit trail): actions by type and person, and the latest actions. "
+                     "Filter by person or action word (e.g. SALE, REVERSE, ADJUST). Default: last 7 days.",
+                     _schema({**PERIOD, "person": {"type": "string"}, "action": {"type": "string"}, **LIMIT}), "core.view_auditlog", None),
     "platform_help": (platform_help, "How to do something in the software itself (steps, pages, settings). Search the help centre.",
                       _schema({"question": {"type": "string"}}, ["question"]), None, None),
 }
