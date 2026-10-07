@@ -105,6 +105,18 @@
 /* Desktop: the whole sidebar scrolls as one column so no menu item hides behind
    the account card, with a visible scrollbar whenever there is more to see. */
 @media (min-width: 761px) {
+  /* The sidebar runs from under the top bar to the bottom edge of the window,
+     and the footer starts at its right edge instead of running underneath it. */
+  .workspaceTopbar ~ .admin > aside {
+    position: fixed;
+    top: var(--workspace-topbar-height);
+    bottom: 0;
+    left: 0;
+    width: 240px;
+    height: auto;
+  }
+  .workspaceTopbar ~ .admin > main { grid-column: 2; }
+  .workspaceTopbar ~ .appFooter { margin-left: 240px; }
   .admin > aside {
     padding-top: 20px;
     overflow-y: auto;
