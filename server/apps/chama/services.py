@@ -406,6 +406,52 @@ def member_leaves(*, member, user, reason):
 
 
 @transaction.atomic
+def remove_member(*, member, user, reason):
+    """A member added by mistake: deleted completely, with what they were said to owe. Only while they have no money
+    history (no payment in or out, even undone): anyone with money history leaves instead, so the record stays."""
+    sync(member.chama)
+    member = ChamaMember.objects.select_for_update().get(pk=member.pk)
+    if not str(reason or "").strip():
+        raise ValidationError("Explain why the member is being removed.")
+    if member.payments.exists() or member.payouts.exists():
+        raise ValidationError(f"{member.full_name} has payments on record, so they cannot be deleted. "
+                              "Use \"Leaves the chama\" instead: they stop owing and their record is kept.")
+    if member.role == "TREASURER":
+        raise ValidationError(f"{member.full_name} is the treasurer. Make another member treasurer first.")
+    chama = member.chama
+    if chama.members.filter(left_on__isnull=True).exclude(pk=member.pk).count() < 2:
+        raise ValidationError("A chama needs at least two members. Add the right member before removing this one.")
+    Chama.objects.filter(pk=chama.pk, next_receiver=member).update(next_receiver=None, next_receiver_note="", next_receiver_set_at=None)
+    ChamaDue.objects.filter(member=member).delete()
+    _log("CHAMA_MEMBER_REMOVED", member, user, chama=chama.name, name=member.full_name, id_number=member.id_number,
+         reason=str(reason).strip())
+    member.delete()
+
+
+@transaction.atomic
+def member_rejoins(*, member, user):
+    """A member who left comes back: they owe from today again (no fines for the days they were away) and take the
+    last turn."""
+    chama = sync(member.chama)
+    member = ChamaMember.objects.select_for_update().get(pk=member.pk)
+    if member.left_on is None:
+        return member
+    if chama.members.filter(left_on__isnull=True, id_number=member.id_number).exclude(pk=member.pk).exists():
+        raise ValidationError(f"A member with ID number {member.id_number} is already in this chama.")
+    today = timezone.localdate()
+    away_from = member.left_on
+    member.left_on = None
+    member.leave_reason = ""
+    member.turn_position = (chama.members.aggregate(v=Max("turn_position"))["v"] or 0) + 1
+    member.save(update_fields=["left_on", "leave_reason", "turn_position"])
+    if chama.dues_through:
+        # Owes again from today; the contributions while away are not owed.
+        _create_dues(chama, [member], max(today, away_from) - timedelta(days=1), chama.dues_through, fines=False)
+    _log("CHAMA_MEMBER_REJOINED", member, user, chama=chama.name, name=member.full_name, rejoined_on=today)
+    return member
+
+
+@transaction.atomic
 def set_turn_order(*, chama, user, member_ids):
     chama = sync(chama)
     active = list(chama.members.filter(left_on__isnull=True).values_list("pk", flat=True))

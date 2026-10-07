@@ -332,12 +332,29 @@ function Members({ chama, setChama, can, reload }) {
   const [editing, setEditing] = useState(null);  // member id, "new" or null
   const [statement, setStatement] = useState(null);
   const [error, setError] = useState("");
-  const leave = async (member) => {
-    const values = await askForm({ title: `${member.full_name} leaves the chama?`, text: "They owe nothing from tomorrow. What they owe already stays owed, and their turn is removed.",
-      confirmButtonText: "Confirm", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. moved away" }] });
-    if (!values) return;
-    try { setChama(await api(`/api/v1/chama/${chama.id}/members/${member.id}/leave/`, { method: "POST", body: JSON.stringify(values) })); setError(""); }
+  const change = async (path, body) => {
+    try { setChama(await api(`/api/v1/chama/${chama.id}/members/${path}`, { method: "POST", body: JSON.stringify(body || {}) })); setError(""); }
     catch (err) { setError(err.message); await reload(); }
+  };
+  // Removing a member: either they left (their record and anything they owe stay), or they were added by mistake and,
+  // with no money paid in or out, are deleted completely.
+  const remove = async (member) => {
+    const mistake = !member.has_money_history;
+    const values = await askForm({ title: `Remove ${member.full_name}?`,
+      text: mistake ? "If they left, they owe nothing from tomorrow and their record stays. If they were added by mistake, they are deleted completely."
+        : "They owe nothing from tomorrow. What they owe already stays owed, their payments stay on record, and their turn is removed.",
+      confirmButtonText: "Remove", fields: [
+        ...(mistake ? [{ name: "how", label: "Why are they going?", type: "select", value: "LEFT",
+          options: [["LEFT", "They left the chama (keep their record)"], ["MISTAKE", "Added by mistake (delete completely)"]] }] : []),
+        { name: "reason", label: "Reason", required: true, placeholder: "e.g. moved away" }] });
+    if (!values) return;
+    if (values.how === "MISTAKE") await change(`${member.id}/remove/`, { reason: values.reason });
+    else await change(`${member.id}/leave/`, { reason: values.reason });
+  };
+  const rejoin = async (member) => {
+    if (!(await confirmAction({ title: `${member.full_name} rejoins the chama?`, text: "They owe contributions again from today (nothing for the time they were away) and take the last turn.",
+      confirmButtonText: "Rejoin" }))) return;
+    await change(`${member.id}/rejoin/`);
   };
   const leaders = chama.members.filter((m) => m.active && m.role !== "MEMBER");
   return <section aria-labelledby="members-heading">
@@ -357,7 +374,10 @@ function Members({ chama, setChama, can, reload }) {
         <td><div className="actionRow">
           <button type="button" className="secondary" onClick={() => setStatement(statement === m.id ? null : m.id)}>{statement === m.id ? "Hide statement" : "Statement"}</button>
           {can("chama.change_chama") && m.active && <button type="button" className="secondary" onClick={() => setEditing(m.id)}>Change</button>}
-          {can("chama.change_chama") && m.active && m.role !== "TREASURER" && <button type="button" className="secondary" onClick={() => void leave(m)}>Leaves</button>}
+          {can("chama.change_chama") && m.active && (m.role === "TREASURER"
+            ? <button type="button" className="secondary" disabled title="Make another member treasurer first">Remove</button>
+            : <button type="button" className="secondary" onClick={() => void remove(m)}>Remove</button>)}
+          {can("chama.change_chama") && !m.active && <button type="button" className="secondary" onClick={() => void rejoin(m)}>Rejoins</button>}
         </div></td>
       </tr>)}</tbody>
     </table></div>

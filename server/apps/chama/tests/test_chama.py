@@ -362,3 +362,44 @@ def test_an_agreed_receiver_jumps_the_listed_order(on):
     data = client.post(f"/api/v1/chama/{chama.pk}/next-receiver/", {"member": john.pk, "note": "Hospital bill"}, format="json").json()
     assert [t["member"] for t in data["turns"]] == ["John Kamau", "Larry Musau", "Mary Achieng"]
     assert data["turn_choice"] == "ORDER"
+
+
+# --- Adding and removing members ----------------------------------------------------------------------------------
+
+def test_members_are_added_removed_by_mistake_leave_and_rejoin(on):
+    org, owner, client = business(modules=["chama"])
+    chama = make(org, owner)
+    url = f"/api/v1/chama/{chama.pk}/members/"
+    added = client.post(url, {"full_name": "Peter Otieno", "id_number": "30000001", "phone": "0712345699"}, format="json")
+    assert added.status_code == 201, added.content
+    peter = next(m for m in added.json()["members"] if m["full_name"] == "Peter Otieno")
+    assert peter["active"] and not peter["has_money_history"]
+    # Added by mistake, with no money paid: deleted completely, with what he was said to owe.
+    assert client.post(f"{url}{peter['id']}/remove/", {"reason": ""}, format="json").status_code == 400
+    removed = client.post(f"{url}{peter['id']}/remove/", {"reason": "Wrong chama"}, format="json").json()
+    assert "Peter Otieno" not in [m["full_name"] for m in removed["members"]]
+    with organization_context(org):
+        assert not ChamaMember.objects.filter(id_number="30000001").exists()
+        mary = ChamaMember.objects.get(full_name="Mary Achieng")
+        services.record_payment(chama=chama, member_id=mary.pk, amount="500", paid_on=TODAY, method="CASH", key="m1", user=owner)
+    # Someone who paid in cannot be deleted: she leaves, and her record stays.
+    refused = client.post(f"{url}{mary.pk}/remove/", {"reason": "Mistake"}, format="json")
+    assert refused.status_code == 400 and "Leaves the chama" in str(refused.json())
+    left = client.post(f"{url}{mary.pk}/leave/", {"reason": "Moved away"}, format="json").json()
+    gone = next(m for m in left["members"] if m["full_name"] == "Mary Achieng")
+    assert not gone["active"] and gone["has_money_history"]
+    # She comes back: owes again from today, takes the last turn.
+    on(TODAY + timedelta(days=14))
+    back = client.post(f"{url}{mary.pk}/rejoin/", {}, format="json").json()
+    mary_now = next(m for m in back["members"] if m["full_name"] == "Mary Achieng")
+    assert mary_now["active"] and mary_now["turn_position"] == max(m["turn_position"] for m in back["members"])
+    with organization_context(org):
+        owed = list(ChamaDue.objects.filter(member=mary).values_list("period_date", flat=True))
+    assert TODAY + timedelta(days=7) not in owed and TODAY + timedelta(days=14) in owed  # nothing while away
+    # The treasurer cannot be deleted, and a chama keeps at least two members.
+    with organization_context(org):
+        larry = ChamaMember.objects.get(full_name="Larry Musau")
+        john = ChamaMember.objects.get(full_name="John Kamau")
+    assert "treasurer" in str(client.post(f"{url}{larry.pk}/remove/", {"reason": "x"}, format="json").json())
+    client.post(f"{url}{mary.pk}/leave/", {"reason": "Moved again"}, format="json")
+    assert "at least two members" in str(client.post(f"{url}{john.pk}/remove/", {"reason": "x"}, format="json").json())

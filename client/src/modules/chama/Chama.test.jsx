@@ -4,10 +4,12 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { BusinessSetupPage } from "../platform/BusinessSetup";
 import profiles from "../platform/businessProfiles.fixture.json";
 import { api } from "../../core/api/client";
+import { askForm } from "../../core/ui/alerts";
 import { emptyChama, chamaPayload, chamaProblem } from "./ChamaSetupFields";
 import { ChamaDashboardCard } from "./ChamaDashboardCard";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/ui/alerts", async (original) => ({ ...(await original()), askForm: vi.fn(), confirmAction: vi.fn(async () => true) }));
 const refresh = vi.fn(async () => {});
 const user = { id: 1, first_name: "Larry", last_name: "Musau", phone: "0712345678", memberships: [], permissions: ["chama.view_chama", "chama.add_chama"] };
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user, loading: false, refresh }) }));
@@ -168,4 +170,31 @@ it("shows who has paid, fines, excuses and whose turn it is", async () => {
   expect(screen.getByText("M-Pesa · SK1")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Rules" }));
   expect(screen.getByLabelText("How often")).toBeDisabled();
+});
+
+
+it("removes a member who left or was added by mistake, and lets a member rejoin", async () => {
+  const { ChamaDetailPage } = await import("./ChamaPages");
+  const { Route, Routes } = await import("react-router-dom");
+  user.permissions = ["chama.view_chama", "chama.change_chama"];
+  const detail = { ...DETAIL, members: [DETAIL.members[0], { ...DETAIL.members[1], has_money_history: true }, { ...DETAIL.members[2], has_money_history: false },
+    member(4, "Peter Otieno", "MEMBER", { active: false, left_on: "2026-10-08", has_money_history: false })] };
+  api.mockImplementation(async () => detail);
+  render(<MemoryRouter initialEntries={["/admin/chama/3"]}><Routes><Route path="/admin/chama/:id" element={<ChamaDetailPage />} /></Routes></MemoryRouter>);
+  await screen.findByRole("heading", { name: "Umoja" });
+  fireEvent.click(screen.getByRole("button", { name: "Members" }));
+  const row = (name) => screen.getByRole("row", { name: new RegExp(name) });
+  expect(within(row("Larry Musau")).getByRole("button", { name: "Remove" })).toBeDisabled();  // the treasurer
+  // No money history: the owner may delete a member added by mistake.
+  askForm.mockResolvedValueOnce({ how: "MISTAKE", reason: "Wrong chama" });
+  await act(async () => { fireEvent.click(within(row("John Kamau")).getByRole("button", { name: "Remove" })); });
+  expect(askForm.mock.calls[0][0].fields.map((f) => f.name)).toEqual(["how", "reason"]);
+  expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/3/remove/", expect.objectContaining({ method: "POST", body: JSON.stringify({ reason: "Wrong chama" }) }));
+  // With payments on record, the only way out is leaving.
+  askForm.mockResolvedValueOnce({ reason: "Moved away" });
+  await act(async () => { fireEvent.click(within(row("Mary Achieng")).getByRole("button", { name: "Remove" })); });
+  expect(askForm.mock.calls[1][0].fields.map((f) => f.name)).toEqual(["reason"]);
+  expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/2/leave/", expect.objectContaining({ body: JSON.stringify({ reason: "Moved away" }) }));
+  await act(async () => { fireEvent.click(within(row("Peter Otieno")).getByRole("button", { name: "Rejoins" })); });
+  expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/4/rejoin/", expect.objectContaining({ method: "POST" }));
 });

@@ -125,6 +125,8 @@ def chama_detail(chama, today):
     fines = with_totals(ChamaDue.objects.filter(chama=chama, fine_amount__gt=0)).order_by("-period_date", "member__turn_position")[:300]
     excuses = with_totals(ChamaDue.objects.filter(chama=chama, excused_until__isnull=False)).order_by("-period_date")[:200]
     names = {m.pk: m.full_name for m in members}
+    with_money = set(ChamaPayment.objects.filter(chama=chama).values_list("member_id", flat=True)) | set(
+        ChamaPayout.objects.filter(chama=chama).values_list("member_id", flat=True))
     in_money = ChamaPayment.objects.filter(chama=chama, reversed_at__isnull=True)
     fines_in = ChamaAllocation.objects.filter(due__chama=chama, part="FINE", payment__reversed_at__isnull=True)
     fines_total = sum((a.amount for a in fines_in), ZERO)
@@ -146,7 +148,7 @@ def chama_detail(chama, today):
                   "fines_owed": sum((t["fines"] for t in totals.values()), ZERO)},
         "members": [{"id": m.pk, "full_name": m.full_name, "id_number": m.id_number, "phone": m.phone, "role": m.role,
                      "role_label": ROLE_LABELS[m.role], "turn_position": m.turn_position, "joined_on": m.joined_on, "left_on": m.left_on,
-                     "leave_reason": m.leave_reason, "active": m.left_on is None,
+                     "leave_reason": m.leave_reason, "active": m.left_on is None, "has_money_history": m.pk in with_money,
                      "unpaid": totals[m.pk]["unpaid"], "late": totals[m.pk]["late"], "fines_owed": totals[m.pk]["fines"],
                      "paid_in": totals[m.pk]["paid"], "received": received[m.pk], "next_turn": next_turns.get(m.pk),
                      "this_period": _due_row(board[m.pk], today) if m.pk in board else None} for m in members],
@@ -318,6 +320,28 @@ class MemberLeaveView(APIView):
         chama = get_object_or_404(Chama, pk=pk)
         services.member_leaves(member=get_object_or_404(ChamaMember, chama=chama, pk=member_pk), user=request.user,
                                reason=str(request.data.get("reason") or ""))
+        return Response(chama_detail(chama, timezone.localdate()))
+
+
+class MemberRemoveView(APIView):
+    """A member added by mistake (no money history) is deleted completely."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "chama.change_chama"
+
+    def post(self, request, pk, member_pk):
+        chama = get_object_or_404(Chama, pk=pk)
+        services.remove_member(member=get_object_or_404(ChamaMember, chama=chama, pk=member_pk), user=request.user,
+                               reason=str(request.data.get("reason") or ""))
+        return Response(chama_detail(chama, timezone.localdate()))
+
+
+class MemberRejoinView(APIView):
+    permission_classes = [HasLinTechPermission]
+    permission_required = "chama.change_chama"
+
+    def post(self, request, pk, member_pk):
+        chama = get_object_or_404(Chama, pk=pk)
+        services.member_rejoins(member=get_object_or_404(ChamaMember, chama=chama, pk=member_pk), user=request.user)
         return Response(chama_detail(chama, timezone.localdate()))
 
 
