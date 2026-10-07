@@ -75,16 +75,38 @@ def session_balances(session):
 
 
 @transaction.atomic
-def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cash_count=None):
+def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cash_count=None, difference_reason="", commission=None):
+    """A new shift, opened with the cash and float counted now. They should match what the previous shift closed with;
+    any difference needs a reason, except commission Safaricom paid into the float in between, which is recorded as
+    commission (``commission``: {"period": month, "amount": ...}) so it counts as income."""
     if MpesaSession.objects.select_for_update().filter(outlet=outlet, status=MpesaSession.OPEN).exists():
         raise ValidationError("This outlet already has an open M-Pesa session.")
     cash, count = counted_cash(opening_cash, cash_count)
     electronic_float = Decimal(str(opening_float))
     if cash < 0 or electronic_float < 0:
         raise ValidationError("Opening balances cannot be negative.")
+    from .commission import previous_close
+    last = previous_close(outlet)
+    carried_cash, carried_float = (last.closing_cash_actual, last.closing_float_actual) if last else (None, None)
+    earned = amount(commission.get("amount")) if commission else Decimal("0")
+    if last and earned > electronic_float - carried_float:
+        raise ValidationError(f"The float is {max(electronic_float - carried_float, Decimal('0')):,.2f} more than the last shift closed with "
+                              f"({carried_float:,.2f}), so at most that much of it can be Safaricom's commission.")
+    difference_reason = str(difference_reason or "").strip()
+    if last and (cash != carried_cash or electronic_float - earned != carried_float) and not difference_reason:
+        raise ValidationError(f"The last shift closed with cash {carried_cash:,.2f} and float {carried_float:,.2f}, but you counted cash "
+                              f"{cash:,.2f} and float {electronic_float:,.2f}. Say why they differ (for example money taken out or "
+                              "brought in overnight), or record commission Safaricom paid into the float.")
     session = MpesaSession.objects.create(outlet=outlet, operator=operator, opening_cash=cash, opening_float=electronic_float, opened_at=timezone.now(), notes=notes,
-                                     opening_cash_count=count)
-    audit("MPESA_SESSION_OPENED", session, operator, after={"cash": str(cash), "float": str(electronic_float)})
+                                     opening_cash_count=count, carried_cash=carried_cash, carried_float=carried_float,
+                                     opening_difference_reason=difference_reason)
+    audit("MPESA_SESSION_OPENED", session, operator, after={"cash": str(cash), "float": str(electronic_float), "carried_cash": str(carried_cash),
+                                                           "carried_float": str(carried_float), "reason": difference_reason})
+    if commission:
+        from .commission import record
+        record(outlet=outlet, user=operator, period=commission.get("period"), amount=earned, reference=commission.get("reference", ""),
+               settlement="OPENING_FLOAT", key=commission.get("idempotency_key") or f"opening-commission:{session.pk}",
+               notes=commission.get("notes", ""), session_id=session.pk)
     return session
 
 

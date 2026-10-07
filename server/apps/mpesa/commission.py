@@ -6,6 +6,15 @@ Safaricom", 1160). When that month's books are already closed it is counted on t
 entry says so. Money paid into the agency float or cash goes through the open shift, so the shift's balances and its
 reconciliation show it; money paid anywhere else (your own M-Pesa, bank, cash) goes into the cash book. Nothing is
 edited or deleted: a mistake is undone with a reason and recorded again.
+
+Where the money went, during a shift:
+- AGENCY_FLOAT: kept in the float, which goes up by the commission.
+- AGENCY_FLOAT_TO_OWNER: paid into the float, and the owner took the same amount out of the drawer as cash, like a
+  withdrawal: the float goes up, the drawer goes down, and the cash is the business's, kept outside the agency.
+- AGENCY_CASH: put into the agency drawer as cash.
+Between shifts (OPENING_FLOAT): Safaricom paid it after one shift closed and the next shift's opening float already
+counted it. Nothing in the float changes; the commission is recorded against that shift, and only up to how much more
+float it opened with than the previous shift closed with, so the same money is never counted as commission twice.
 """
 import calendar
 from datetime import date, datetime, time, timedelta
@@ -19,10 +28,14 @@ from apps.accounting.ledger import cash_code, money, paired, post_journal, rever
 from apps.tenancy.transactions import lock_business
 from .models import MpesaCommissionEntry, MpesaOutlet, MpesaSession
 
-AGENCY = {"AGENCY_FLOAT", "AGENCY_CASH"}
+AGENCY = {"AGENCY_FLOAT", "AGENCY_FLOAT_TO_OWNER", "AGENCY_CASH"}
+OPENING = "OPENING_FLOAT"
 OUTSIDE = {"MPESA", "BANK", "CASH", "OTHER"}
 LEGACY = {"FLOAT": "AGENCY_FLOAT"}
-PLACES = [("AGENCY_FLOAT", "Agency float (moved into the working account)"), ("AGENCY_CASH", "Agency cash drawer (withdrawn as cash)"),
+PLACES = [("AGENCY_FLOAT", "Kept in the agency float (the float goes up)"),
+          ("AGENCY_FLOAT_TO_OWNER", "Paid into the float, owner took it from the drawer as cash"),
+          ("AGENCY_CASH", "Put into the agency cash drawer"),
+          (OPENING, "Already in the float when a shift opened"),
           ("MPESA", "Your own M-Pesa"), ("BANK", "Bank"), ("CASH", "Cash kept outside the agency"), ("OTHER", "Other")]
 
 
@@ -63,6 +76,32 @@ def _open_shift(outlet, session_id=None):
     return shift
 
 
+def previous_close(outlet, before=None):
+    """The outlet's last closed shift (before ``before``, a moment), whose counted cash and float the next shift opens with."""
+    shifts = MpesaSession.objects.filter(outlet=outlet, status=MpesaSession.CLOSED, closing_float_actual__isnull=False)
+    if before:
+        shifts = shifts.filter(closed_at__lte=before)
+    return shifts.order_by("-closed_at", "-pk").first()
+
+
+def opening_room(shift):
+    """How much of ``shift``'s opening float can still be commission: what it opened with above the previous shift's
+    closing float (all of it for the first shift), less commission already recorded against it."""
+    carried = shift.carried_float
+    if carried is None:
+        last = previous_close(shift.outlet_id, shift.opened_at)
+        carried = last.closing_float_actual if last else Decimal("0")
+    taken = MpesaCommissionEntry.objects.filter(opening_session=shift, reversed_at__isnull=True).aggregate(v=Sum("amount"))["v"] or 0
+    return max(Decimal("0"), shift.opening_float - carried - taken)
+
+
+def _opening_shift(outlet, session_id):
+    shift = MpesaSession.objects.filter(pk=session_id, outlet=outlet).first() if session_id else None
+    if not shift:
+        raise ValidationError("Choose the shift whose opening float already had the commission in it.")
+    return shift
+
+
 @transaction.atomic
 def record(*, outlet, user, period, amount, reference, settlement, key=None, paid_on=None, notes="", session_id=None):
     """Commission Safaricom paid for the month ``period`` falls in, received on ``paid_on`` (today if not given)."""
@@ -79,6 +118,12 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
     if value <= 0:
         raise ValidationError("Enter the commission Safaricom paid, above zero.")
     today = timezone.localdate()
+    settlement = LEGACY.get(str(settlement or "").upper(), str(settlement or "").upper())
+    if settlement not in AGENCY | OUTSIDE | {OPENING}:
+        raise ValidationError("Choose where Safaricom's money went: agency float, agency cash, your own M-Pesa, bank or cash.")
+    opening = _opening_shift(outlet, session_id) if settlement == OPENING else None
+    if opening:
+        paid_on = timezone.localtime(opening.opened_at).date()  # it was in the float when that shift opened
     period, paid = _day(period), _day(paid_on) or today
     if not period:
         raise ValidationError("Choose the month the commission was earned in.")
@@ -91,9 +136,11 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
         raise ValidationError("It cannot have been paid before the month it was earned in began.")
     if reference and MpesaCommissionEntry.objects.filter(reference=reference).exists():
         raise ValidationError(f"Commission with the reference {reference} is already recorded.")
-    settlement = LEGACY.get(str(settlement or "").upper(), str(settlement or "").upper())
-    if settlement not in AGENCY | OUTSIDE:
-        raise ValidationError("Choose where Safaricom's money went: agency float, agency cash, your own M-Pesa, bank or cash.")
+    if opening:
+        room = opening_room(opening)
+        if value > room:
+            raise ValidationError(f"That shift opened with {room:,.2f} more float than the shift before it closed with (after commission "
+                                  "already recorded against it), so at most that much of it can be commission.")
     if settlement in AGENCY and paid != today:
         raise ValidationError("Commission moved into the agency float or cash is recorded on the day it arrives, through the open shift.")
     # The month's income: on its last day, unless those books are closed (then on the day it was paid, and said so).
@@ -103,20 +150,27 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
     notes = str(notes or "").strip()
     if earned_on != earned_end and earned_on == paid and paid > earned_end:
         notes = (notes + " " if notes else "") + f"Counted on {paid:%d %b %Y} because {period:%B %Y}'s books were closed."
+    if opening:
+        notes = (notes + " " if notes else "") + f"Already in the float when the shift of {paid:%d %b %Y} opened."
     agency = None
     if settlement in AGENCY:
         from .services import post_transaction
         shift = _open_shift(outlet, session_id)
+        to_owner = settlement == "AGENCY_FLOAT_TO_OWNER"
+        cash_delta = value if settlement == "AGENCY_CASH" else -value if to_owner else 0
         agency, _ = post_transaction(session=shift, transaction_type="COMMISSION", transaction_amount=value, user=user,
                                      idempotency_key=f"commission:{key}", provider_reference=reference or None,
-                                     notes=f"Safaricom commission for {period:%B %Y}",
-                                     cash_delta=value if settlement == "AGENCY_CASH" else 0, float_delta=value if settlement == "AGENCY_FLOAT" else 0)
+                                     notes=f"Safaricom commission for {period:%B %Y}" + (", taken from the drawer as cash" if to_owner else ""),
+                                     cash_delta=cash_delta, float_delta=0 if settlement == "AGENCY_CASH" else value)
     entry = MpesaCommissionEntry.objects.create(outlet=outlet, period=period, amount=value, reference=reference, settlement_method=settlement,
                                                 recognized_at=paid_at, earned_on=earned_on, agency_transaction=agency, idempotency_key=key,
-                                                recorded_by=user, notes=notes)
+                                                recorded_by=user, notes=notes, opening_session=opening)
     branch = outlet.store_id
-    # The shift already posted the float or cash against owner capital (3000); the commission replaces that.
-    received = "3000" if agency else cash_code(settlement)
+    # The shift posted the float or cash against owner capital (3000), as the books do with the money in a shift's
+    # opening counts; the commission is where that money came from. Taken from the drawer as cash, the shift's float
+    # and cash cancel out and the money is the business's cash outside the agency.
+    outside = "CASH" if settlement == "AGENCY_FLOAT_TO_OWNER" else settlement if settlement in OUTSIDE else None
+    received = cash_code(outside) if outside else "3000"
     words = f"Safaricom commission for {period:%B %Y}" + (f" ({reference})" if reference else "")
     if earned_on < paid:
         post_journal(key=f"commission-earned:{entry.pk}", description=f"{words}, earned", branch=branch, date=earned_on, user=user,
@@ -125,14 +179,14 @@ def record(*, outlet, user, period, amount, reference, settlement, key=None, pai
                      lines=paired(received, "1160", value))
     else:
         post_journal(key=f"commission:{entry.pk}", description=words, branch=branch, date=paid, user=user, lines=paired(received, "4010", value))
-    if not agency:
+    if outside:
         from apps.accounting.services import post
-        post(unit="MPESA", method=settlement, amount=value, kind="INCOME", reference=reference or f"Commission {period:%b %Y}", key=f"commission:{entry.pk}", user=user,
+        post(unit="MPESA", method=outside, amount=value, kind="INCOME", reference=reference or f"Commission {period:%b %Y}", key=f"commission:{entry.pk}", user=user,
              occurred_at=paid_at, branch=outlet.store, journal=False)
     from apps.core.models import AuditLog
     AuditLog.objects.create(action="MPESA_COMMISSION_RECORDED", object_type="MpesaCommissionEntry", object_id=str(entry.pk), user=user,
                             after={"amount": str(value), "reference": reference, "period": str(period), "earned_on": str(earned_on),
-                                   "paid_on": str(paid), "settlement": settlement})
+                                   "paid_on": str(paid), "settlement": settlement, "opening_session": opening.pk if opening else None})
     return entry
 
 
@@ -153,17 +207,14 @@ def undo(*, entry, user, reason):
                                   "If the amount was wrong, record the difference with the next commission.")
         reverse_transaction(original=entry.agency_transaction, user=user, idempotency_key=f"commission-undo:{entry.pk}", reason=reason,
                             allow_commission=True)
+    from apps.accounting.models import CashEntry
+    from apps.accounting.services import reverse
+    cash = CashEntry.objects.filter(source_key=f"commission:{entry.pk}").first()
+    if cash and not CashEntry.objects.filter(reversal_of=cash).exists():
+        reverse(entry=cash, user=user, reason=reason)  # reverses the journals and marks the entry undone
+    else:
         _reverse_journals(entry, user, reason)
         mark_undone(entry, reason)
-    else:
-        from apps.accounting.models import CashEntry
-        from apps.accounting.services import reverse
-        cash = CashEntry.objects.filter(source_key=f"commission:{entry.pk}").first()
-        if cash and not CashEntry.objects.filter(reversal_of=cash).exists():
-            reverse(entry=cash, user=user, reason=reason)  # reverses the journals and marks the entry undone
-        else:
-            _reverse_journals(entry, user, reason)
-            mark_undone(entry, reason)
     entry.refresh_from_db()
     return entry
 

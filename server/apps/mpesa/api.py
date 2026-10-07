@@ -120,7 +120,10 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_business_permission(request.user, "mpesa.add_mpesasession"):
             return Response({"detail": "M-Pesa session permission required."}, status=403)
         outlet = MpesaOutlet.objects.get(pk=request.data.get("outlet"), active=True)
-        result = open_session(outlet=outlet, operator=request.user, opening_cash=request.data.get("opening_cash"), opening_float=request.data.get("opening_float"), notes=request.data.get("notes", ""), cash_count=request.data.get("cash_count"))
+        if request.data.get("commission") and not has_business_permission(request.user, "mpesa.add_mpesacommissionentry"):
+            return Response({"detail": "Commission recording permission required."}, status=403)
+        result = open_session(outlet=outlet, operator=request.user, opening_cash=request.data.get("opening_cash"), opening_float=request.data.get("opening_float"), notes=request.data.get("notes", ""), cash_count=request.data.get("cash_count"),
+                              difference_reason=request.data.get("difference_reason", ""), commission=request.data.get("commission") or None)
         return Response(self.get_serializer(result).data, status=201)
 
     @action(detail=True, methods=["post"])
@@ -221,6 +224,17 @@ def commission_row(entry):
             "reversed_at": entry.reversed_at, "reverse_reason": entry.reverse_reason}
 
 
+def opening_shifts(outlet, opening_room):
+    """Recent shifts that opened with more float than the shift before closed with: commission paid in between can be recorded against them."""
+    rows = []
+    for shift in outlet.sessions.order_by("-opened_at", "-pk")[:10]:
+        room = opening_room(shift)
+        if room > 0:
+            rows.append({"id": shift.pk, "opened_on": timezone.localtime(shift.opened_at).date(), "opening_float": shift.opening_float,
+                         "carried_float": shift.carried_float, "room": room})
+    return rows
+
+
 class CommissionInput(serializers.Serializer):
     outlet = serializers.IntegerField()
     period = serializers.DateField()
@@ -240,15 +254,15 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MpesaCommissionEntry.objects.select_related("outlet", "recorded_by").order_by("-period", "-recognized_at", "-pk")
 
     def list(self, request):
-        from .commission import PLACES, due_month, monthly_profit
+        from .commission import PLACES, due_month, monthly_profit, opening_room
         due = due_month()
         rows = monthly_profit()
         return Response({"entries": [commission_row(e) for e in self.get_queryset()[:60]],
                          "months": [{**row, "label": row["month"].strftime("%B %Y")} for row in rows],
                          "totals": {key: sum((row[key] for row in rows), Decimal("0")) for key in ["commission", "expenses", "profit"]},
                          "due_month": due, "due_label": due.strftime("%B %Y") if due else None, "places": PLACES,
-                         "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first()}
-                                     for o in MpesaOutlet.objects.all()]})
+                         "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first(),
+                                      "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()]})
 
     def retrieve(self, request, pk=None):
         return Response(commission_row(self.get_object()))

@@ -207,3 +207,94 @@ def test_commission_undone_on_the_wrong_day_before_the_fix_is_repaired(agency):
     assert _books(org, last_month, _month_end(last_month))[1]["revenue"] == 0
     assert _books(org, today.replace(day=1), today)[1]["revenue"] == 0
     assert _books(org)[0]["1160"]["balance"] == 0
+
+
+def _close(org, owner, session, cash, electronic_float):
+    with organization_context(org):
+        from apps.mpesa.services import reconcile_session
+        return reconcile_session(session=session, user=owner, actual_cash=cash, actual_float=electronic_float, reason="counted")
+
+
+def test_commission_already_in_the_opening_float_counts_as_income_without_moving_the_float(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.services import open_session, session_balances
+        first = open_session(outlet=outlet, operator=owner, opening_cash="5000", opening_float="11045")
+    # The first shift ever: all of its opening float could be commission, but not more.
+    too_much = _record(client, outlet, last_month, "12000", "", "OPENING_FLOAT", key="o1", session_id=first.pk)
+    assert too_much.status_code == 400 and "at most" in str(too_much.json())
+    made = _record(client, outlet, last_month, "1020", "", "OPENING_FLOAT", key="o2", session_id=first.pk)
+    assert made.status_code == 201, made.content
+    row = made.json()
+    assert row["paid_on"] == str(today) and "Already in the float" in row["notes"]
+    with organization_context(org):
+        assert session_balances(first) == (D("5000.00"), D("11045.00"))  # the float does not change
+    accounts, last_pl, checks = _books(org, last_month, _month_end(last_month))
+    assert last_pl["revenue"] == D("1020")  # September's income
+    accounts, _, checks = _books(org)
+    assert accounts["4010"]["balance"] == D("-1020") and accounts["1160"]["balance"] == 0
+    assert checks["agency_float"]["reconciled"] and checks["agency_cash"]["reconciled"]
+    month = next(m for m in client.get("/api/v1/mpesa/commission/").json()["months"] if m["month"] == str(last_month))
+    assert D(str(month["commission"])) == D("1020")
+    # Undone, the income comes back out and the float is still untouched.
+    undone = client.post(f"/api/v1/mpesa/commission/{row['id']}/undo/", {"reason": "wrong month"}, format="json")
+    assert undone.status_code == 200 and undone.json()["reversed_at"]
+    accounts, pl, _ = _books(org)
+    assert accounts["4010"]["balance"] == 0 and pl["revenue"] == 0
+
+
+def test_a_shift_opens_with_what_the_last_one_closed_with_or_says_why(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.services import open_session
+        from apps.mpesa.commission import opening_room
+        first = open_session(outlet=outlet, operator=owner, opening_cash="5000", opening_float="10000")
+    _close(org, owner, first, "4000", "11000")
+    with organization_context(org):
+        from rest_framework.exceptions import ValidationError
+        with pytest.raises(ValidationError, match="closed with cash 4,000.00 and float 11,000.00"):
+            open_session(outlet=outlet, operator=owner, opening_cash="4000", opening_float="12000")
+        # More float than the commission explains is refused; the commission alone explains the difference.
+        with pytest.raises(ValidationError, match="at most"):
+            open_session(outlet=outlet, operator=owner, opening_cash="4000", opening_float="12000",
+                         commission={"period": str(last_month), "amount": "1500"})
+        second = open_session(outlet=outlet, operator=owner, opening_cash="4000", opening_float="12000",
+                              commission={"period": str(last_month), "amount": "1000"})
+        assert (second.carried_cash, second.carried_float, second.opening_difference_reason) == (D("4000.00"), D("11000.00"), "")
+        assert second.opening_commissions.get().amount == D("1000.00") and opening_room(second) == 0
+    accounts, _, checks = _books(org)
+    assert accounts["4010"]["balance"] == D("-1000") and checks["agency_float"]["reconciled"]
+    # Nothing more of that opening float can be commission.
+    again = _record(client, outlet, last_month, "1", "", "OPENING_FLOAT", key="o3", session_id=second.pk)
+    assert again.status_code == 400
+    _close(org, owner, second, "4000", "12000")
+    with organization_context(org):
+        third = open_session(outlet=outlet, operator=owner, opening_cash="0", opening_float="12000", difference_reason="Owner banked the cash")
+        assert third.opening_difference_reason == "Owner banked the cash"
+    # Through the API: a difference without a reason is refused with the numbers.
+    _close(org, owner, third, "0", "12000")
+    refused = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "50", "opening_float": "12000"}, format="json")
+    assert refused.status_code == 400 and "Say why they differ" in str(refused.json())
+
+
+def test_commission_paid_into_the_float_and_taken_from_the_drawer_works_like_a_withdrawal(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.services import open_session, session_balances
+        session = open_session(outlet=outlet, operator=owner, opening_cash="10000", opening_float="20000")
+    made = _record(client, outlet, last_month, "3000", "", "AGENCY_FLOAT_TO_OWNER", key="w1", session_id=session.pk)
+    assert made.status_code == 201, made.content
+    with organization_context(org):
+        assert session_balances(session) == (D("7000.00"), D("23000.00"))
+    accounts, last_pl, _ = _books(org, last_month, _month_end(last_month))
+    assert last_pl["revenue"] == D("3000")
+    accounts, _, checks = _books(org)
+    assert accounts["1000"]["balance"] == D("3000") and accounts["4010"]["balance"] == D("-3000")
+    assert checks["agency_float"]["reconciled"] and checks["agency_cash"]["reconciled"]
+    undone = client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": "test"}, format="json")
+    assert undone.status_code == 200, undone.content
+    with organization_context(org):
+        assert session_balances(session) == (D("10000.00"), D("20000.00"))
+    accounts, pl, checks = _books(org)
+    assert accounts["1000"]["balance"] == 0 and accounts["4010"]["balance"] == 0 and pl["revenue"] == 0
+    assert checks["agency_float"]["reconciled"] and checks["agency_cash"]["reconciled"]

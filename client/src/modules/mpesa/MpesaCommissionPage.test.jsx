@@ -7,9 +7,10 @@ import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
 import { MpesaCommissionPage } from "./MpesaCommissionPage";
 
-const places = [["AGENCY_FLOAT", "Agency float (moved into the working account)"], ["AGENCY_CASH", "Agency cash drawer (withdrawn as cash)"],
-  ["MPESA", "Your own M-Pesa"], ["BANK", "Bank"], ["CASH", "Cash kept outside the agency"], ["OTHER", "Other"]];
-const listing = (extra = {}) => ({ places, due_month: "2026-09-01", due_label: "September 2026", outlets: [{ id: 2, name: "Agent till", open_session: 9 }],
+const places = [["AGENCY_FLOAT", "Kept in the agency float (the float goes up)"], ["AGENCY_FLOAT_TO_OWNER", "Paid into the float, owner took it from the drawer as cash"],
+  ["AGENCY_CASH", "Put into the agency cash drawer"], ["OPENING_FLOAT", "Already in the float when a shift opened"], ["MPESA", "Your own M-Pesa"], ["BANK", "Bank"], ["CASH", "Cash kept outside the agency"], ["OTHER", "Other"]];
+const listing = (extra = {}) => ({ places, due_month: "2026-09-01", due_label: "September 2026", outlets: [{ id: 2, name: "Agent till", open_session: 9,
+  opening_shifts: [{ id: 4, opened_on: "2026-10-05", opening_float: "11045", carried_float: null, room: "11045" }] }],
   totals: { commission: "4200", expenses: "1000", profit: "3200" },
   months: [{ month: "2026-08-01", label: "August 2026", commission: "0", expenses: "1500", profit: "-1500" },
     { month: "2026-09-01", label: "September 2026", commission: "4200", expenses: "1000", profit: "3200" }],
@@ -59,4 +60,18 @@ it("will not record into the agency with no shift open", async () => {
   const form = screen.getByRole("form", { name: "Record commission" });
   expect(within(form).getByText(/Open Agent till's shift first/)).toBeInTheDocument();
   expect(within(form).getByRole("button", { name: "Record commission" })).toBeDisabled();
+});
+
+it("records commission that was already in a shift's opening float against that shift", async () => {
+  render(<MpesaCommissionPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Record it" }));
+  const form = screen.getByRole("form", { name: "Record commission" });
+  fireEvent.change(within(form).getByLabelText("Where the money went"), { target: { value: "OPENING_FLOAT" } });
+  expect(within(form).queryByLabelText("Date it was paid")).toBeNull();  // the day that shift opened
+  expect(within(form).getByLabelText("Shift whose opening float had it")).toHaveTextContent("opened with float KSh 11,045");
+  expect(form).toHaveTextContent("The float does not change");
+  fireEvent.change(within(form).getByLabelText(/Amount Safaricom paid/), { target: { value: "1020" } });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record commission" })); });
+  const body = JSON.parse(api.mock.calls.find(([p, o]) => p === "/api/v1/mpesa/commission/" && o?.method === "POST")[1].body);
+  expect(body).toEqual(expect.objectContaining({ amount: "1020", settlement_method: "OPENING_FLOAT", session_id: 4, paid_on: "2026-10-05" }));
 });

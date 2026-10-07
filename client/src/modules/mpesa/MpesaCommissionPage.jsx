@@ -15,6 +15,15 @@ const monthValue = (value) => String(value || "").slice(0, 7);
 const lastMonth = () => { const d = new Date(); d.setDate(0); return d.toLocaleDateString("en-CA").slice(0, 7); };
 const monthName = (value) => new Date(`${monthValue(value)}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
+// What each place does to the agency's money, shown under the choice.
+const EFFECT = {
+  AGENCY_FLOAT: "the shift's float goes up by this amount.",
+  AGENCY_FLOAT_TO_OWNER: "the float goes up and the drawer goes down by this amount, like a withdrawal. The cash is the business's, kept outside the agency.",
+  AGENCY_CASH: "the shift's cash goes up by this amount.",
+};
+const GROUPS = [["During the open shift", (p) => p.startsWith("AGENCY_")], ["Between shifts", (p) => p === "OPENING_FLOAT"],
+  ["Outside the agency", (p) => !p.startsWith("AGENCY_") && p !== "OPENING_FLOAT"]];
+
 // Commission Safaricom paid: for which month, how much, when and where the money went (Safaricom gives no M-Pesa code for it).
 function RecordForm({ data, onSaved, onCancel }) {
   const [outlet, setOutlet] = useState(String(data.outlets[0]?.id ?? ""));
@@ -23,22 +32,28 @@ function RecordForm({ data, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const shop = data.outlets.find((o) => String(o.id) === outlet);
+  const shifts = shop?.opening_shifts || [];
+  const [shift, setShift] = useState("");
+  const chosenShift = shifts.find((s) => String(s.id) === shift) || shifts[0];
   const agency = place.startsWith("AGENCY_");
+  const opening = place === "OPENING_FLOAT";
   const placeName = Object.fromEntries(data.places)[place];
+  const blocked = (agency && !shop?.open_session) || (opening && !chosenShift);
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    const paidOn = agency ? today() : values.paid_on;
+    const paidOn = agency ? today() : opening ? String(chosenShift.opened_on) : values.paid_on;
     const later = paidOn.slice(0, 7) > month;
     if (!(await confirmAction({ title: `Record ${money(values.amount)} commission for ${monthName(month)}?`,
-      text: `${later ? `It counts as ${monthName(month)}'s income (owed by Safaricom until ${date(paidOn)}). ` : ""}The money went to: ${placeName.toLowerCase()}.`,
+      text: `${later ? `It counts as ${monthName(month)}'s income (owed by Safaricom until ${date(paidOn)}). ` : ""}The money went to: ${placeName.toLowerCase()}${opening ? ` (the shift of ${date(paidOn)})` : ""}.`,
       confirmButtonText: "Record commission" }))) return;
     setBusy(true);
     setError("");
     try {
       await api("/api/v1/mpesa/commission/", { method: "POST", body: JSON.stringify({ outlet: Number(outlet), period: `${month}-01`, amount: values.amount,
         settlement_method: place, paid_on: paidOn, notes: values.notes,
-        ...(agency && shop?.open_session ? { session_id: shop.open_session } : {}), idempotency_key: crypto.randomUUID() }) });
+        ...(agency && shop?.open_session ? { session_id: shop.open_session } : {}), ...(opening ? { session_id: chosenShift.id } : {}),
+        idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -50,26 +65,38 @@ function RecordForm({ data, onSaved, onCancel }) {
       <h2>Record Safaricom commission</h2>
       <fieldset disabled={busy} className="loanFields">
         {data.outlets.length > 1 && <FormField label="Agency outlet">
-          <select value={outlet} onChange={(event) => setOutlet(event.target.value)}>
+          <select value={outlet} onChange={(event) => { setOutlet(event.target.value); setShift(""); }}>
             {data.outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </FormField>}
         <FormField label="Month it was earned" name="month" type="month" required max={today().slice(0, 7)} value={month} onChange={(event) => setMonth(event.target.value)} />
-        <FormField label={`Amount Safaricom paid (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01" required />
+        <FormField label={`Amount Safaricom paid (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01" required
+          max={opening && chosenShift ? chosenShift.room : undefined} />
         <FormField label="Where the money went">
           <select value={place} onChange={(event) => setPlace(event.target.value)}>
-            {data.places.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {GROUPS.map(([label, belongs]) => <optgroup key={label} label={label}>
+              {data.places.filter(([value]) => belongs(value)).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            </optgroup>)}
           </select>
         </FormField>
-        {agency
-          ? <p className="muted">{shop?.open_session ? `It goes into ${shop.name}'s open shift today, so the shift's ${place === "AGENCY_FLOAT" ? "float" : "cash"} shows it.`
-            : `Open ${shop?.name || "the agency"}'s shift first, or choose where else the money went.`}</p>
-          : <FormField label="Date it was paid" name="paid_on" type="date" required max={today()} defaultValue={today()} />}
-        <FormField label="Note (optional)" name="notes" maxLength={500} autoComplete="off" />
+        {agency && <p className="muted">{shop?.open_session ? `It is recorded in ${shop.name}'s open shift today: ${EFFECT[place]}`
+          : `Open ${shop?.name || "the agency"}'s shift first, or choose where else the money went.`}</p>}
+        {opening && (shifts.length ? <>
+          <FormField label="Shift whose opening float had it">
+            <select value={String(chosenShift.id)} onChange={(event) => setShift(event.target.value)}>
+              {shifts.map((s) => <option key={s.id} value={s.id}>{date(s.opened_on)}: opened with float {money(s.opening_float)}</option>)}
+            </select>
+          </FormField>
+          <p className="muted">Safaricom paid it after the previous shift closed, so it was already counted in this shift's opening float.
+            The float does not change; up to {money(chosenShift.room)} of that shift's opening float can be commission
+            {chosenShift.carried_float != null ? ` (it opened with more than the ${money(chosenShift.carried_float)} the shift before closed with)` : ""}.</p>
+        </> : <p className="muted">No recent shift opened with more float than the shift before it closed with, so no commission can be in an opening float.</p>)}
+        {!agency && !opening && <FormField label="Date it was paid" name="paid_on" type="date" required max={today()} defaultValue={today()} />}
+      <FormField label="Note (optional)" name="notes" maxLength={500} autoComplete="off" />
       </fieldset>
       <p className="muted">Commission counts as income in the month it was earned, even when Safaricom pays it the next month. Include the commission on airtime you sold; if Safaricom pays it separately, record it as its own entry with a note such as “Airtime commission”.</p>
       <div className="actionRow">
-        <button disabled={busy || (agency && !shop?.open_session)}>Record commission</button>
+        <button disabled={busy || blocked}>Record commission</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not record the commission." message={error} />

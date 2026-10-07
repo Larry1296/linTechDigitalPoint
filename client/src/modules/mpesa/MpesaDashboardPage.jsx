@@ -27,6 +27,7 @@ import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
 import { CashCounter, countPayload, countTotal, emptyCount } from "./CashCounter";
+import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 
 const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -240,6 +241,10 @@ export function MpesaDashboardPage() {
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState("");
   const [openingCount, setOpeningCount] = useState(emptyCount);
+  const [openingOutlet, setOpeningOutlet] = useState("");
+  const [openingFloat, setOpeningFloat] = useState("");
+  const [opening, setOpening] = useState(emptyOpening);
+  const canRecordCommission = Boolean(user?.permissions?.includes("mpesa.add_mpesacommissionentry"));
   const [closing, setClosing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const canCorrect = Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
@@ -275,29 +280,38 @@ export function MpesaDashboardPage() {
     setAddingOutlet(false);
     await load();
   };
+  const activeOutlets = outlets.filter((outlet) => outlet.active);
+  const openingAt = activeOutlets.find((outlet) => String(outlet.id) === openingOutlet) || activeOutlets[0];
+  const lastClose = openingAt?.money_in_operation;
   const open = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const gaps = openingGaps(lastClose, countTotal(openingCount), openingFloat, opening);
+    const commission = opening.commission && gaps.extraFloat > 0;
     if (
       !(await confirmAction({
         title: "Open this M-Pesa shift?",
-        text: "Opening balances will be recorded for this agency session.",
+        text: `Opening balances will be recorded for this agency session.${commission
+          ? ` ${businessCurrency()} ${Number(opening.commissionAmount).toLocaleString()} of the float is recorded as Safaricom commission.` : ""}`,
         confirmButtonText: "Open shift",
       }))
     )
       return;
     try {
       await openMpesaSession({
-        outlet: form.get("outlet"),
+        outlet: openingAt?.id,
         opening_cash: countTotal(openingCount).toFixed(2),
-        opening_float: form.get("opening_float"),
+        opening_float: openingFloat,
         cash_count: countPayload(openingCount),
+        difference_reason: gaps.cash || gaps.float ? opening.reason : "",
+        ...(commission ? { commission: { period: `${opening.month}-01`, amount: opening.commissionAmount, idempotency_key: crypto.randomUUID() } } : {}),
       });
     } catch (err) {
       await showError("Could not open the shift.", err.message);
       return;
     }
     setOpeningCount(emptyCount());
+    setOpeningFloat("");
+    setOpening(emptyOpening());
     await load();
   };
   const rebalance = async (type) => {
@@ -390,14 +404,13 @@ export function MpesaDashboardPage() {
           )}
           <label>
             Outlet
-            <select name="outlet" required>
-              {outlets
-                .filter((outlet) => outlet.active)
-                .map((outlet) => (
-                  <option key={outlet.id} value={outlet.id}>
-                    {outlet.display_name}
-                  </option>
-                ))}
+            <select name="outlet" required value={openingAt ? String(openingAt.id) : ""}
+              onChange={(event) => { setOpeningOutlet(event.target.value); setOpening(emptyOpening()); }}>
+              {activeOutlets.map((outlet) => (
+                <option key={outlet.id} value={outlet.id}>
+                  {outlet.display_name}
+                </option>
+              ))}
             </select>
           </label>
           <CashCounter count={openingCount} onChange={setOpeningCount} legend="Opening cash: count the drawer" />
@@ -408,7 +421,11 @@ export function MpesaDashboardPage() {
             min="0"
             step="0.01"
             required
+            value={openingFloat}
+            onChange={(event) => setOpeningFloat(event.target.value)}
           />
+          <OpeningCheck last={lastClose} cash={countTotal(openingCount)} electronicFloat={openingFloat} opening={opening}
+            onChange={setOpening} canRecordCommission={canRecordCommission} />
           <button disabled={!outlets.length}>Open shift</button>
         </form>
         </>

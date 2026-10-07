@@ -41,6 +41,11 @@ class MpesaSession(TimeStamped):
         settings.AUTH_USER_MODEL, null=True, blank=True, related_name="mpesa_sessions_closed", on_delete=models.PROTECT
     )
     notes = models.TextField(blank=True)
+    # What the outlet's previous shift closed with. The opening counts should match it; when they do not, the shift
+    # says why (and commission Safaricom paid in between is recorded against the shift, see commission.py).
+    carried_cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    carried_float = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    opening_difference_reason = models.TextField(blank=True)
 
     class Meta:
         constraints = [
@@ -120,11 +125,14 @@ class MpesaCommissionEntry(TimeStamped):
     period = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     reference = models.CharField(max_length=100, blank=True)  # optional: Safaricom often pays commission without an M-Pesa code
-    # Where Safaricom's money went: AGENCY_FLOAT or AGENCY_CASH (through the open shift), or MPESA, BANK, CASH, OTHER.
+    # Where Safaricom's money went: AGENCY_FLOAT, AGENCY_FLOAT_TO_OWNER or AGENCY_CASH (through the open shift),
+    # OPENING_FLOAT (already in a shift's opening float), or MPESA, BANK, CASH, OTHER.
     settlement_method = models.CharField(max_length=40)
     recognized_at = models.DateTimeField()
     earned_on = models.DateField(null=True, blank=True)
     agency_transaction = models.OneToOneField(MpesaTransaction, null=True, blank=True, related_name="commission", on_delete=models.PROTECT)
+    # OPENING_FLOAT: the shift whose opening float already held this commission (paid in between two shifts).
+    opening_session = models.ForeignKey(MpesaSession, null=True, blank=True, related_name="opening_commissions", on_delete=models.PROTECT)
     idempotency_key = models.CharField(max_length=100, blank=True, default="")
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     notes = models.TextField(blank=True)
