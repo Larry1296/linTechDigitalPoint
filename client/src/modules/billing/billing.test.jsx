@@ -57,16 +57,28 @@ it("does nothing when the owner cancels, and explains when M-Pesa is not set up"
 });
 
 it("counts down on every page and tells staff what an ended subscription means", () => {
-  const { rerender } = render(<MemoryRouter><SubscriptionBanner organization={{ subscription: trial }} canManage /></MemoryRouter>);
-  expect(screen.getByRole("status")).toHaveTextContent("Free month: 23 days left on Basic. Upgrade to Pro");
-  expect(screen.getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
-  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE", days_left: 3, expiring_soon: true } }} canManage /></MemoryRouter>);
-  expect(screen.getByRole("status")).toHaveTextContent("Pro: 3 days left. Renew before it ends");
-  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, status: "EXPIRED", ended: true, days_left: 0 } }} canManage={false} /></MemoryRouter>);
-  expect(screen.getByRole("alert")).toHaveTextContent("accounting, stock receiving and other tools are paused");
-  expect(screen.getByRole("alert")).toHaveTextContent("Ask the business owner to renew.");
-  rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, complimentary: true } }} canManage /></MemoryRouter>);
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-02T08:59:58Z"));
+  try {
+    const { rerender } = render(<MemoryRouter><SubscriptionBanner organization={{ subscription: trial }} canManage /></MemoryRouter>);
+    expect(screen.getByRole("status")).toHaveTextContent("Free month on Basic: 23 days 00h 00m 02s left");
+    expect(screen.getByRole("status")).toHaveTextContent("Upgrade to Pro");
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole("timer")).toHaveTextContent("23 days 00h 00m 01s");
+    expect(screen.getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE", days_left: 3, expiring_soon: true, ends_at: "2026-10-04T12:30:05Z" } }} canManage /></MemoryRouter>);
+    expect(screen.getByRole("status")).toHaveTextContent("Pro: 2 days 03h 30m 06s left");
+    expect(screen.getByRole("status")).toHaveTextContent("Renew before it ends");
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE" } }} canManage={false} /></MemoryRouter>);
+    expect(screen.getByRole("timer")).toHaveTextContent("23 days 00h 00m 01s");
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, status: "EXPIRED", ended: true, days_left: 0 } }} canManage={false} /></MemoryRouter>);
+    expect(screen.getByRole("alert")).toHaveTextContent("accounting, stock receiving and other tools are paused");
+    expect(screen.getByRole("alert")).toHaveTextContent("Ask the business owner to renew.");
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, complimentary: true } }} canManage /></MemoryRouter>);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 const overview = {
