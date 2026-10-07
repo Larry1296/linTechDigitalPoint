@@ -102,3 +102,12 @@ it("brings back earlier questions with the up and down arrows, then what was bei
   fireEvent.keyDown(box, { key: "ArrowUp" });
   expect(box).toHaveValue("Who owes me?");
 });
+
+it("closes when the person clicks outside it, not inside", () => {
+  show();
+  const panel = openPanel();
+  fireEvent.pointerDown(within(panel).getByLabelText("Your question"));
+  expect(screen.getByRole("dialog", { name: "Duka assistant" })).toBeInTheDocument();
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole("dialog", { name: "Duka assistant" })).toBeNull();
+});

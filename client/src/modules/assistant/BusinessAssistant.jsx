@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrainCircuit, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { api, apiStream } from "../../core/api/client";
 import { Answer, readEvents } from "../platform/HelpChat";
-import { usePromptHistory } from "./promptHistory";
+import { useCloseOnOutsideClick, usePromptHistory } from "./promptHistory";
 import "../platform/helpChat.css";
 import "./businessAssistant.css";
 
@@ -50,6 +50,9 @@ export function BusinessAssistant({ organization }) {
   const abort = useRef(null);
   const list = useRef(null);
   const input = useRef(null);
+  const container = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  useCloseOnOutsideClick(container, open, close);
   const asked = usePromptHistory(`business-assistant-questions:${organization.id}`, draft, setDraft);
   useEffect(() => save(organization, messages), [organization, messages]);
   useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [messages, open]);
@@ -100,7 +103,7 @@ export function BusinessAssistant({ organization }) {
   const reset = () => { abort.current?.abort(); setMessages([]); setBusy(false); input.current?.focus(); };
 
   return (
-    <div className="helpChat businessAssistant">
+    <div ref={container} className="helpChat businessAssistant">
       {open && (
         <section className="helpChatPanel" role="dialog" aria-label={`${organization.name} assistant`}
           onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>

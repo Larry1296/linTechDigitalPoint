@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const KEEP = 50;
 
@@ -66,4 +66,16 @@ export function usePromptHistory(storageKey, draft, setDraft) {
   };
 
   return { remember, onKeyDown };
+}
+
+// Closes a chat when the person presses or taps anywhere outside it (the panel and its launcher button).
+export function useCloseOnOutsideClick(container, open, close) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (container.current && !container.current.contains(event.target)) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [container, open, close]);
 }

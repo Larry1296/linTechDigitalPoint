@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
-import { usePromptHistory } from "../assistant/promptHistory";
+import { useCloseOnOutsideClick, usePromptHistory } from "../assistant/promptHistory";
 import "./helpChat.css";
 
 const STORAGE_KEY = "help-chat";
@@ -97,6 +97,9 @@ export function HelpChat() {
   const abort = useRef(null);
   const list = useRef(null);
   const input = useRef(null);
+  const container = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  useCloseOnOutsideClick(container, open, close);
   const asked = usePromptHistory("help-chat-questions", draft, setDraft);
   useEffect(() => save(messages), [messages]);
   useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [messages, open]);
@@ -160,7 +163,7 @@ export function HelpChat() {
   const suggestions = config?.suggestions?.length ? config.suggestions : SUGGESTIONS;
 
   return (
-    <div className="helpChat">
+    <div ref={container} className="helpChat">
       {open && (
         <section className="helpChatPanel" role="dialog" aria-label={`${platform.name} assistant`}
           onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
