@@ -1,6 +1,13 @@
 /* Landing-page treatments stay within the public site and inherit its theme. */
 .saasSite { --home-glow:#dcecff; background:var(--bg); }
 .saasSite .saasNav { color:var(--text); background:color-mix(in srgb,var(--surface) 94%,transparent); border-color:var(--line); box-shadow:0 4px 28px #1757b00a; backdrop-filter:blur(18px); }
+/* The home navbar floats as a rounded bar inset from the page edges. */
+.saasSite .saasNav { top:16px; left:50%; right:auto; width:min(100% - 32px,1320px); transform:translateX(-50%); min-height:72px; padding:12px 20px; border:1px solid var(--line); border-radius:22px; box-shadow:0 12px 36px #1757b01f; }
+.saasSite > main { padding-top:104px; }
+@media(max-width:600px) {
+  .saasSite .saasNav { top:10px; width:calc(100% - 20px); padding:12px 14px; border-radius:18px; }
+  .saasSite > main { padding-top:146px; }
+}
 .saasSite .saasNav nav a,.saasSite .saasNav .theme { color:var(--muted); }
 .saasSite .saasNav nav a:hover,.saasSite .saasBrand { color:var(--primary); }
 .saasSite .saasNav .theme select,.saasSite .saasMenu { color:var(--text); background:var(--surface); border-color:var(--line); }
