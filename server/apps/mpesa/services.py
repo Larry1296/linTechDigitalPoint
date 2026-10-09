@@ -117,6 +117,9 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
 # is outside the agency: the float goes down and that money is no longer counted here.
 AIRTIME_PAYMENTS = {"CASH": lambda value: (value, -value), "MPESA_FLOAT": lambda value: (Decimal("0"), Decimal("0")),
                     "MPESA_OTHER": lambda value: (Decimal("0"), -value)}
+# A float top-up is either cash from the agency drawer turned into float (cash down, float up), or new money from
+# outside the agency, such as the owner's own M-Pesa or bank, which adds to the float and leaves the drawer alone.
+TOPUP_SOURCES = {"DRAWER": lambda value: (-value, value), "OUTSIDE": lambda value: (Decimal("0"), value)}
 
 
 def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privileged=False, paid_by=""):
@@ -129,7 +132,9 @@ def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privil
     if transaction_type == "CUSTOMER_WITHDRAWAL":
         return -value, value
     if transaction_type == "FLOAT_TOPUP":
-        return -value, value
+        if paid_by not in TOPUP_SOURCES:
+            raise ValidationError("Say where the float money came from: cash from the agency drawer, or money from outside the agency.")
+        return TOPUP_SOURCES[paid_by](value)
     if transaction_type == "CASH_REBALANCE":
         return value, Decimal("0")
     if transaction_type in {"ADJUSTMENT", "INVESTMENT", "COMMISSION"} and privileged:
@@ -188,7 +193,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         raise ValidationError("Say why the money in operation is being corrected.")
     if transaction_type == "ADJUSTMENT" and (cash_delta is None or float_delta is None):
         raise ValidationError("Adjustments require explicit cash and float effects.")
-    paid_by = str(paid_by or "").upper() if transaction_type == "AIRTIME_SALE" else ""
+    paid_by = str(paid_by or "").upper() if transaction_type in {"AIRTIME_SALE", "FLOAT_TOPUP"} else ""
     cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged, paid_by=paid_by)
     current_cash, current_float = session_balances(session)
     if current_cash + cash_effect < 0:
@@ -309,7 +314,7 @@ def correct_transaction(*, original, user, key, reason, amount, customer_phone=N
                                                                 notes=(original.notes + f" [Transaction ID {code} moved to its correction]").strip())
     corrected, _ = post_transaction(session=original.session, transaction_type=original.transaction_type, transaction_amount=amount, user=user,
                                     idempotency_key=f"{key}-corrected", provider_reference=code, customer_name=original.customer_name,
-                                    customer_phone=phone, customer_id_number=id_number, paid_by=paid_by or original.paid_by,
+                                    customer_phone=phone, customer_id_number=id_number, paid_by=paid_by or original.paid_by or ("DRAWER" if original.transaction_type == "FLOAT_TOPUP" else ""),
                                     notes=f"Correction of {original.internal_reference}: {reason.strip()}")
     MpesaTransaction.objects.filter(pk=corrected.pk).update(corrects=original)
     corrected.refresh_from_db()

@@ -4,6 +4,7 @@ import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { correctMpesaTransaction } from "./api";
 import { AIRTIME_PAID_BY } from "./airtime";
+import { TOPUP_SOURCES } from "./topUp";
 
 const localPhone = (phone) => (phone && phone.startsWith("254") ? `0${phone.slice(3)}` : phone || "");
 const LABELS = { CUSTOMER_DEPOSIT: "deposit", CUSTOMER_WITHDRAWAL: "withdrawal", AIRTIME_SALE: "airtime sale", FLOAT_TOPUP: "float top-up", CASH_REBALANCE: "cash rebalance" };
@@ -16,6 +17,7 @@ export function CorrectTransaction({ entry, onDone }) {
   const [error, setError] = useState("");
   const deposit = entry.transaction_type === "CUSTOMER_DEPOSIT";
   const airtime = entry.transaction_type === "AIRTIME_SALE";
+  const topUp = entry.transaction_type === "FLOAT_TOPUP";
   if (!LABELS[entry.transaction_type]) return null;
   if (!open) return <button type="button" className="secondary" onClick={() => setOpen(true)}>Correct</button>;
   const submit = async (event) => {
@@ -44,6 +46,7 @@ export function CorrectTransaction({ entry, onDone }) {
         {deposit && <label>ID number (optional)<input name="customer_id_number" defaultValue={entry.customer_id_number} /></label>}
         {airtime && <label>Sent to (optional)<input name="customer_phone" type="tel" defaultValue={localPhone(entry.customer_phone)} /></label>}
         {airtime && <label>Paid by<select name="paid_by" defaultValue={entry.paid_by}>{AIRTIME_PAID_BY.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+        {topUp && <label>Money from<select name="paid_by" defaultValue={entry.paid_by || "DRAWER"}>{TOPUP_SOURCES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>}
         <label>Transaction ID<input name="provider_reference" defaultValue={entry.provider_reference || ""} placeholder="If known" /></label>
         <label className="correctReason">What was wrong?<input name="reason" required maxLength={240} placeholder="e.g. typed 700, customer deposited 500" /></label>
         <div className="actionRow"><button>Save correction</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Cancel</button></div>

@@ -384,3 +384,19 @@ def test_a_closed_shifts_records_can_be_opened_again_by_its_time(db):
     assert past[0]["closed_at"] and Decimal(past[0]["closing_cash"]) == Decimal("1500")
     records = client.get(f"/api/v1/mpesa/transactions/?session={first['id']}").json()
     assert [(row["session"], Decimal(row["amount"])) for row in records] == [(first["id"], Decimal("500"))]
+
+
+@pytest.mark.django_db
+def test_float_top_up_says_whether_the_money_came_from_the_drawer_or_from_outside(mpesa_shift):
+    operator, session = mpesa_shift
+    with pytest.raises(ValidationError, match="where the float money came from"):
+        post_transaction(session=session, transaction_type="FLOAT_TOPUP", transaction_amount="1000", user=operator, idempotency_key="topup-0")
+    # Cash from the drawer turned into float: the money in operation stays the same.
+    post_transaction(session=session, transaction_type="FLOAT_TOPUP", transaction_amount="1000", user=operator, idempotency_key="topup-1", paid_by="DRAWER")
+    assert session_balances(session) == (Decimal("19000.00"), Decimal("31000.00"))
+    # New money from outside the agency: only the float goes up.
+    outside, _ = post_transaction(session=session, transaction_type="FLOAT_TOPUP", transaction_amount="5000", user=operator, idempotency_key="topup-2", paid_by="OUTSIDE")
+    assert (outside.paid_by, outside.cash_delta, outside.float_delta) == ("OUTSIDE", Decimal("0.00"), Decimal("5000.00"))
+    assert session_balances(session) == (Decimal("19000.00"), Decimal("36000.00"))
+    reverse_transaction(original=outside, user=operator, idempotency_key="topup-2-undo", reason="entered twice")
+    assert session_balances(session) == (Decimal("19000.00"), Decimal("31000.00"))

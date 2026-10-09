@@ -29,6 +29,7 @@ import { businessDate, useNewBusinessDay } from "./businessDay";
 import { CashCounter, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { TOPUP_SOURCES } from "./topUp";
 
 const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Money in shows as +, money out as −, no change as —.
@@ -320,10 +321,12 @@ export function MpesaDashboardPage() {
     const values = await askForm({
       title: topUp ? "Record float top-up" : "Record cash rebalance",
       text: topUp
-        ? "Cash from the agency drawer used to buy electronic float. Cash goes down and float goes up by the same amount."
+        ? "Electronic float added to the agent line. Say where the money came from: cash from the drawer turned into float lowers the cash by the same amount; money from outside the agency only adds float."
         : "Cash brought into the agency drawer from outside (for example from the bank or the owner).",
       confirmButtonText: "Record transaction",
       fields: [
+        ...(topUp ? [{ name: "source", label: "Where the money came from", type: "select", required: true,
+          options: [["", "Choose…"], ...TOPUP_SOURCES] }] : []),
         { name: "amount", label: topUp ? "Float bought" : "Cash received", type: "number", required: true },
         { name: "reference", label: "Reference, e.g. the M-Pesa code" },
         { name: "notes", label: "Source or notes", placeholder: topUp ? "e.g. bought from the bank agent" : "e.g. from the owner" },
@@ -335,6 +338,7 @@ export function MpesaDashboardPage() {
         session: dashboard.session.id,
         transaction_type: type,
         amount: values.amount,
+        ...(topUp ? { paid_by: values.source } : {}),
         provider_reference: values.reference || undefined,
         notes: values.notes,
         idempotency_key: crypto.randomUUID(),

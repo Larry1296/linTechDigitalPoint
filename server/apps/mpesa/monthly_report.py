@@ -18,6 +18,7 @@ TYPE_LABELS = {"CUSTOMER_DEPOSIT": "Deposit", "CUSTOMER_WITHDRAWAL": "Withdrawal
                "CASH_REBALANCE": "Cash rebalance", "ADJUSTMENT": "Adjustment", "REVERSAL": "Reversal"}
 
 PAID_BY = {"CASH": "Cash", "MPESA_FLOAT": "M-Pesa (agent line)", "MPESA_OTHER": "M-Pesa (other number)"}
+TOPUP_SOURCE = {"DRAWER": "Agency drawer", "OUTSIDE": "Outside the agency"}
 
 
 def month_bounds(value):
@@ -213,9 +214,9 @@ def render_pdf(data, organization):
                             [[_time(t.occurred_at), _phone(t.customer_phone), _money(t.amount), PAID_BY.get(t.paid_by, ""),
                               t.provider_reference or "", note(t)] for t in airtime], [16, 30, 24, 30, 30, 24], numeric=(2,)))]
         story += [section(f"Float top-ups ({len(topups)}) — total {_money(total(topups))}",
-                  table([["Time", "Amount", "Reference", "Note"]] +
-                        [[_time(t.occurred_at), _money(t.amount), t.provider_reference or "", note(t)] for t in topups],
-                        [16, 26, 36, 24], numeric=(1,)) if topups else Paragraph("None.", small))]
+                  table([["Time", "Amount", "Money from", "Reference", "Note"]] +
+                        [[_time(t.occurred_at), _money(t.amount), TOPUP_SOURCE.get(t.paid_by or "DRAWER", ""), t.provider_reference or "", note(t)]
+                         for t in topups], [16, 26, 30, 36, 24], numeric=(1,)) if topups else Paragraph("None.", small))]
         if others:
             story += [section(f"Other entries ({len(others)})",
                       table([["Time", "Type", "Amount", "Cash effect", "Float effect", "Note"]] +
