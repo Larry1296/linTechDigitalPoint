@@ -22,6 +22,7 @@ from .models import MpesaTransaction
 EARNING = ("CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE")
 LABELS = {"CUSTOMER_DEPOSIT": "Deposits", "CUSTOMER_WITHDRAWAL": "Withdrawals", "AIRTIME_SALE": "Airtime"}
 HISTORY_DAYS = 400
+SUNDAY = 6  # the agency does not open on Sundays
 
 
 def _history(outlet_ids=None):
@@ -209,8 +210,9 @@ def forecast(as_of=None, learned=None):
     average = totals["earned"] / worked_out if worked_out else Decimal("0")
     so_far = totals["earned"] + average * totals["unknown"]
     began = min((timezone.localtime(r.done_at).date() for r in rows), default=today)
-    daily = so_far / ((today - began).days + 1)
-    days_left = (last - today).days
+    working = lambda start, end: sum(1 for n in range((end - start).days + 1) if (start + timedelta(days=n)).weekday() != SUNDAY)
+    daily = so_far / max(1, working(began, today))
+    days_left = working(today + timedelta(days=1), last) if today < last else 0
     cents = lambda value: value.quantize(Decimal("0.01"))
     return {"month": first, "label": first.strftime("%B %Y"), "as_of": as_of, "so_far": cents(so_far), "daily": cents(daily),
             "days_left": days_left, "forecast": cents(so_far + daily * days_left), "transactions": len(rows), "unknown": totals["unknown"]}

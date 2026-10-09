@@ -80,7 +80,7 @@ export function PastShifts() {
           {Number(shift.cash_variance) || Number(shift.float_variance)
             ? ` (cash ${signed(shift.cash_variance)}, float ${signed(shift.float_variance)} against what was expected).`
             : ", as expected."}
-          {shift.month_forecast && ` When it closed, ${shift.month_forecast.label}'s commission was heading for ${businessCurrency()} ${figure(shift.month_forecast.forecast)} (${businessCurrency()} ${figure(shift.month_forecast.so_far)} so far, ${shift.month_forecast.days_left} ${shift.month_forecast.days_left === 1 ? "day" : "days"} left).`}
+          {shift.month_forecast && ` When it closed, ${shift.month_forecast.label}'s commission was heading for ${businessCurrency()} ${figure(shift.month_forecast.forecast)} (${businessCurrency()} ${figure(shift.month_forecast.so_far)} so far, ${shift.month_forecast.days_left} ${shift.month_forecast.days_left === 1 ? "working day" : "working days"} left).`}
         </p>
       )}
       {shift && !records && !error && <p className="muted" role="status">Loading the shift's records…</p>}

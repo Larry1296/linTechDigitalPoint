@@ -388,7 +388,7 @@ export function MpesaDashboardPage() {
         </MetricCard>}
         {dashboard.commission_month && <MetricCard label={`${dashboard.commission_month.label} commission, expected`}>
           {amount(dashboard.commission_month.forecast)}
-          <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "day" : "days"} left</small>
+          <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "working day" : "working days"} left</small>
         </MetricCard>}
       </div>
       {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}

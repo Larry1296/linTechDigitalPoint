@@ -129,8 +129,8 @@ function Learned({ estimates, learned, forecast }) {
     <section className="panel">
       <h2>Commission worked out from your readings</h2>
       {forecast && <p className="commissionForecast"><b>{forecast.label}: expected {money(forecast.forecast)}</b>{" "}
-        <span className="muted">{money(forecast.so_far)} so far, about {money(forecast.daily)} a day, {forecast.days_left} {forecast.days_left === 1 ? "day" : "days"} until
-        the month closes. Worked out again after every transaction.</span></p>}
+        <span className="muted">{money(forecast.so_far)} so far, about {money(forecast.daily)} a working day, {forecast.days_left} working {forecast.days_left === 1 ? "day" : "days"} until
+        the month closes (Sundays closed). Worked out again after every transaction.</span></p>}
       <p className="muted">After each deposit, withdrawal or airtime sale, enter the commission balance on the agent line. The rise is what that
         transaction earned, and the app learns from it. Once an amount has earned the same twice, the box stops showing for it and its
         commission is worked out by itself. If Safaricom changes its rates, the month's figure here stops matching what Safaricom paid.</p>

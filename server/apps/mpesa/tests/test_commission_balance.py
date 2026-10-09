@@ -164,8 +164,31 @@ def test_the_month_forecast_runs_the_pace_so_far_to_the_month_end(shift):
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f3", "124")  # 12 each: learned
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f4")  # worked out: 12
     record(shift, "CUSTOMER_DEPOSIT", "500", "f5")  # not worked out: counted at the average, 12
+    from datetime import date
     today = timezone.localdate()
-    days_left = calendar.monthrange(today.year, today.month)[1] - today.day
+    days_left = sum(1 for d in range(today.day + 1, calendar.monthrange(today.year, today.month)[1] + 1)
+                    if date(today.year, today.month, d).weekday() != 6)  # closed on Sundays
     result = forecast()
-    assert (result["so_far"], result["daily"], result["days_left"], result["unknown"]) == (Decimal("60.00"), Decimal("60.00"), days_left, 1)
-    assert result["forecast"] == Decimal("60.00") * (1 + days_left)
+    assert (result["so_far"], result["days_left"], result["unknown"]) == (Decimal("60.00"), days_left, 1)
+    if today.weekday() != 6:
+        assert result["daily"] == Decimal("60.00") and result["forecast"] == Decimal("60.00") * (1 + days_left)
+
+
+def test_sundays_count_neither_in_the_pace_nor_in_the_days_left(shift):
+    import calendar
+    from datetime import date, datetime, time, timedelta
+    from django.utils import timezone
+    from apps.mpesa.commission_learning import forecast
+    from apps.mpesa.models import MpesaTransaction
+    first = (timezone.localdate().replace(day=1) - timedelta(days=1)).replace(day=1)  # last month: a whole week of it
+    monday = first + timedelta(days=(7 - first.weekday()) % 7)
+    saturday = monday + timedelta(days=5)
+    for n, reading in enumerate(["100", "112", "124", "136", "148", "160", "172"]):
+        record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"s{n}", reading)  # 12 each, 84 in all
+    MpesaTransaction.objects.update(occurred_at=timezone.make_aware(datetime.combine(monday, time(10))))
+    result = forecast(timezone.make_aware(datetime.combine(saturday, time(18))))
+    last = calendar.monthrange(first.year, first.month)[1]
+    left = sum(1 for d in range(saturday.day + 1, last + 1) if date(first.year, first.month, d).weekday() != 6)
+    assert result["so_far"] == Decimal("84.00")
+    assert result["daily"] == Decimal("14.00")  # 84 over Monday to Saturday: six working days
+    assert (result["days_left"], result["forecast"]) == (left, Decimal("84.00") + Decimal("14.00") * left)
