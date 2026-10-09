@@ -272,8 +272,12 @@ def test_one_business_never_sees_another(shop):
 # Chat endpoint -----------------------------------------------------------------------------------
 
 class FakeClaudeStream:
-    def __init__(self, message, texts):
-        self.message, self.text_stream = message, iter(texts)
+    def __init__(self, message, texts, events=None):
+        self.message = message
+        self.events = events if events is not None else [SimpleNamespace(type="text", text=text) for text in texts]
+
+    def __iter__(self):
+        return iter(self.events)
 
     def __enter__(self):
         return self
@@ -309,7 +313,35 @@ def test_claude_looks_up_the_data_then_answers(shop):
     assert result["tool_use_id"] == "call-1" and '"sales_value": 600.0' in result["content"] and "is_error" not in result
     first = fake.beta.messages.stream.call_args_list[0].kwargs
     assert first["model"] == "claude-opus-5-5" and first["thinking"] == {"type": "adaptive"} and first["fallbacks"] == "default"
-    assert "Duka" in first["system"][0]["text"] and {t["name"] for t in first["tools"]} == set(business_tools.TOOLS) - {"platform_overview", "platform_businesses", "platform_admin_help"}
+    assert "Duka" in first["system"][0]["text"] and {t["name"] for t in first["tools"]} == set(business_tools.TOOLS) - {"platform_overview", "platform_businesses", "platform_admin_help"} | {"web_search"}
+
+
+def test_claude_compares_prices_with_kenyan_shops_and_resumes_a_paused_search(shop):
+    search = SimpleNamespace(type="content_block_start", content_block=SimpleNamespace(type="server_tool_use", name="web_search"))
+    text = lambda value: SimpleNamespace(type="text", text=value)
+    paused = claude_message("pause_turn", SimpleNamespace(type="text", text="Checking."), SimpleNamespace(type="server_tool_use", name="web_search"))
+    fake = mock.MagicMock()
+    fake.beta.messages.stream.side_effect = [
+        FakeClaudeStream(paused, [], [text("Checking."), search]),
+        FakeClaudeStream(claude_message("end_turn", SimpleNamespace(type="text", text="Jiji sells it for KES 299.")), [], [text("Jiji sells it for KES 299.")]),
+    ]
+    with mock.patch.object(business_chat, "_anthropic", return_value=fake):
+        got = events(shop.client.post(URL + "chat/", {"messages": [{"role": "user", "content": "Are my extensions overpriced?"}]}, format="json"))
+    assert {"type": "tool", "name": "web_search", "label": "Checking other shops' prices"} in got
+    assert "".join(e.get("text", "") for e in got) == "Checking.\n\nJiji sells it for KES 299."
+    first, second = (call.kwargs for call in fake.beta.messages.stream.call_args_list)
+    web = next(t for t in first["tools"] if t["name"] == "web_search")
+    assert web["type"] == "web_search_20260209" and "jiji.co.ke" in web["allowed_domains"] and web["user_location"] == {"type": "approximate", "timezone": "Africa/Nairobi"}
+    assert "Other shops' prices" in first["system"][0]["text"]
+    # The paused turn is sent back as it was, with no extra message, so the search carries on.
+    assert second["messages"][-1] == {"role": "assistant", "content": paused.content}
+
+
+def test_market_search_can_be_turned_off_and_is_never_offered_to_chatgpt(shop, settings):
+    settings.BUSINESS_ASSISTANT_WEB_SEARCH = False
+    assert business_chat.web_search_on("anthropic") is False
+    settings.BUSINESS_ASSISTANT_WEB_SEARCH = True
+    assert business_chat.web_search_on("anthropic") is True and business_chat.web_search_on("openai") is False
 
 
 def test_claude_refusal_is_shown_and_no_tools_run(shop):

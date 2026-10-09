@@ -164,6 +164,9 @@ ASSISTANT_MODEL = config("ASSISTANT_MODEL", default="claude-opus-5-5")
 OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
 BUSINESS_ASSISTANT_PROVIDER = config("BUSINESS_ASSISTANT_PROVIDER", default="anthropic")
 BUSINESS_ASSISTANT_ANTHROPIC_MODEL = config("BUSINESS_ASSISTANT_ANTHROPIC_MODEL", default="claude-opus-5-5")
+# Lets the business assistant (Claude only) search Kenyan online shops to compare the business's prices with the market.
+# Each search is billed by Anthropic on top of tokens; set to False to turn it off.
+BUSINESS_ASSISTANT_WEB_SEARCH = config("BUSINESS_ASSISTANT_WEB_SEARCH", default=True, cast=bool)
 BUSINESS_ASSISTANT_OPENAI_MODEL = config("BUSINESS_ASSISTANT_OPENAI_MODEL", default="gpt-5.5")
 BUSINESS_ASSISTANT_EFFORT = config("BUSINESS_ASSISTANT_EFFORT", default="medium")  # low, medium or high
 # Public address of the web app, used in receipt links sent to customers (e.g. https://app.example.com).

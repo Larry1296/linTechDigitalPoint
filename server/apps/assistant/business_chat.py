@@ -32,7 +32,12 @@ LABELS = {"business_overview": "Reading the business profile", "find_products": 
           "purchases_and_suppliers": "Checking purchases", "find_sales": "Looking up sales", "top_customers": "Checking customers",
           "investments": "Checking investments", "chamas": "Checking the chamas", "chama_members": "Checking chama members", "activity_log": "Reading the activity log",
           "platform_overview": "Reading the platform summary", "platform_businesses": "Checking registered businesses",
-          "platform_admin_help": "Searching the admin guide"}
+          "platform_admin_help": "Searching the admin guide", "web_search": "Checking other shops' prices"}
+# Kenyan online shops and marketplaces the assistant may search for market prices (Claude's web search).
+MARKET_DOMAINS = ["jumia.co.ke", "kilimall.co.ke", "jiji.co.ke", "phoneplacekenya.com", "hotpoint.co.ke", "avechi.co.ke",
+                  "saruk.co.ke", "masoko.com", "carrefour.ke", "naivas.online", "quickmart.co.ke", "patabay.co.ke"]
+MAX_SEARCHES = 10  # web searches per question
+MAX_PAUSES = 3  # times a long server-side search may pause and be resumed
 _clients = {}
 
 
@@ -104,11 +109,17 @@ def stream_offline_answer(ctx, question, reason=""):
     yield event("done")
 
 
+def web_search_on(provider):
+    """Market price search runs on Anthropic's servers, so only the Claude assistant has it."""
+    return provider == "anthropic" and settings.BUSINESS_ASSISTANT_WEB_SEARCH
+
+
 def stream_business_answer(ctx, history, question, provider):
+    web = web_search_on(provider)
     with _scope(ctx):
-        system = business_prompt(ctx)
+        system = business_prompt(ctx, web=web)
         tools = business_tools.available(ctx)
-    stream = _stream_anthropic if provider == "anthropic" else _stream_openai
+    stream = (lambda *args: _stream_anthropic(*args, web=web)) if provider == "anthropic" else _stream_openai
     said = False
     for item in stream(ctx, system, tools, history, question):
         # The AI could not answer before saying anything (no credit, a bad key, an outage): answer from the records instead.
@@ -120,11 +131,21 @@ def stream_business_answer(ctx, history, question, provider):
     yield event("done")
 
 
-def _stream_anthropic(ctx, system, tools, history, question):
+def _web_search(ctx):
+    """Claude's own web search, limited to Kenyan shops. The location is only the business's time zone: web search does
+    not accept Kenya as a country (a 400), and the shop list already keeps results Kenyan."""
+    return {"type": "web_search_20260209", "name": "web_search", "max_uses": MAX_SEARCHES, "allowed_domains": MARKET_DOMAINS,
+            "user_location": {"type": "approximate", "timezone": ctx.organization.timezone or "Africa/Nairobi"}}
+
+
+def _stream_anthropic(ctx, system, tools, history, question, web=False):
     import anthropic
     messages = [*history, {"role": "user", "content": question}]
     specs = [{"name": name, "description": description, "input_schema": schema} for name, description, schema in tools]
+    if web:
+        specs.append(_web_search(ctx))
     usage = [0, 0, 0]
+    pauses = 0
     for round_number in range(MAX_ROUNDS):
         last = round_number == MAX_ROUNDS - 1
         try:
@@ -143,8 +164,16 @@ def _stream_anthropic(ctx, system, tools, history, question):
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
             ) as stream:
-                for text in stream.text_stream:
-                    yield event("text", text=text)
+                spoke = False
+                for chunk in stream:
+                    if chunk.type == "text":
+                        spoke = spoke or bool(chunk.text.strip())
+                        yield event("text", text=chunk.text)
+                    elif chunk.type == "content_block_start" and chunk.content_block.type == "server_tool_use":
+                        yield event("tool", name=chunk.content_block.name, label=LABELS.get(chunk.content_block.name, "Looking this up"))
+                        if spoke:  # what it says after searching starts on a new paragraph
+                            yield event("text", text="\n\n")
+                            spoke = False
                 final = stream.get_final_message()
         except anthropic.RateLimitError:
             logger.warning("Business assistant rate limited by the Claude API")
@@ -164,6 +193,11 @@ def _stream_anthropic(ctx, system, tools, history, question):
         if final.stop_reason == "refusal":
             yield event("refusal", message="Sorry, I can't help with that. Ask me about your business's stock, sales or accounts.")
             return
+        if final.stop_reason == "pause_turn" and pauses < MAX_PAUSES:
+            # A long web search paused on Anthropic's side: send the turn back as it is and it carries on.
+            pauses += 1
+            messages.append({"role": "assistant", "content": final.content})
+            continue
         calls = [block for block in final.content if block.type == "tool_use"]
         if final.stop_reason == "max_tokens":
             # A cut-off tool call may carry a partial input: never run it.
