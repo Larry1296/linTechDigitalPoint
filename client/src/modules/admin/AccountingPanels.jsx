@@ -1,37 +1,7 @@
-import { useState } from "react";
 import { profitText, stockText } from "./plainMoney";
 import { NetWorthPanel } from "./NetWorthPanel";
 
-const colors = { revenue: "#2563eb", expenses: "#d97706", profit: "#16a34a" };
-const labels = { revenue: "Sales", expenses: "Running costs", profit: "Profit (below 0 = loss)" };
 const KINDS = { INCOME: "Money in from a sale", EXPENSE: "Money spent", PURCHASE: "Paid a supplier", PRINCIPAL: "M-Pesa customer money", OPENING: "Starting balance", LOAN: "Money lent or repaid", INVESTMENT: "Moved to or from an investment" };
-
-export function AccountingChart({ points, fields, title, money, initialStyle = "line" }) {
-  const [style, setStyle] = useState(initialStyle);
-  const available = fields.filter(field => points.some(row => row[field] != null));
-  const values = points.flatMap(row => available.map(field => Number(row[field]) || 0));
-  const min = Math.min(0, ...values), max = Math.max(1, ...values);
-  const y = value => 170 - (Number(value) - min) / (max - min) * 150;
-  const x = index => 45 + (index + 0.5) / Math.max(points.length, 1) * 690;
-  return <section className="accountingPanel">
-    <div className="heading"><h2>{title}</h2><label>Chart type<select aria-label={`${title} graph style`} value={style} onChange={event => setStyle(event.target.value)}><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select></label></div>
-    {!available.length ? <p>You don't have access to these figures.</p> : <>
-      <p className="muted">{points[0]?.date} to {points.at(-1)?.date}</p>
-      <div className="accountingChart"><svg viewBox="0 0 780 215" role="img" aria-label={`${title}; exact amounts available in the data table`}>
-        <text x="5" y="14">{money(max)}</text><text x="5" y="195">{money(min)}</text>
-        <line x1="45" x2="745" y1={y(0)} y2={y(0)} stroke="currentColor" opacity="0.25" />
-        {available.map((field, seriesIndex) => <g key={field}>
-          {style === "area" && <polygon points={`${x(0)},${y(0)} ${points.map((row, i) => `${x(i)},${y(row[field])}`).join(" ")} ${x(points.length - 1)},${y(0)}`} fill={colors[field]} opacity="0.12" />}
-          {style !== "bar" && <polyline points={points.map((row, i) => `${x(i)},${y(row[field])}`).join(" ")} fill="none" stroke={colors[field]} strokeWidth="2" />}
-          {points.map((row, i) => style === "bar" ? <rect key={row.date} x={x(i) - 690 / points.length / 2 + seriesIndex * 690 / points.length / available.length} y={Math.min(y(0), y(row[field]))} width={Math.max(0.5, 690 / points.length / available.length - 2)} height={Math.max(0.5, Math.abs(y(row[field]) - y(0)))} fill={colors[field]}><title>{row.date} · {labels[field]}: {money(row[field])}</title></rect> : <circle key={row.date} cx={x(i)} cy={y(row[field])} r={points.length > 60 ? 1.5 : 3} fill={colors[field]}><title>{row.date} · {labels[field]}: {money(row[field])}</title></circle>)}
-        </g>)}
-        <text x="45" y="212">{points[0]?.date}</text><text x="745" y="212" textAnchor="end">{points.at(-1)?.date}</text>
-      </svg></div>
-      <div className="accountingLegend">{available.map(field => <span key={field}><i style={{ background: colors[field] }} />{labels[field]}</span>)}</div>
-      <details><summary>See the numbers</summary><div className="trendTable"><table><thead><tr><th>Date</th>{available.map(field => <th key={field}>{labels[field]}</th>)}</tr></thead><tbody>{points.map(row => <tr key={row.date}><th scope="row">{row.date}</th>{available.map(field => <td key={field}>{money(row[field])}</td>)}</tr>)}</tbody></table></div></details>
-    </>}
-  </section>;
-}
 
 function OutstandingPanel({ title, data, nameField, empty, note, money }) {
   return <section className="accountingPanel"><h2>{title}</h2>{data.restricted ? <p>You don't have access to this.</p> : <>
@@ -63,8 +33,6 @@ export function AccountingPanels({ data, money }) {
   const unitName = (key) => data.business_units?.find(unit => unit.key === key)?.name || key;
   return <>
     <div className="accountingGrid">
-      <AccountingChart title={data.performance.granularity === "day" ? "Sales each day" : "Sales each month"} points={data.performance.points} fields={["revenue"]} money={money} initialStyle="area" />
-      <AccountingChart title="Sales, running costs and profit" points={data.performance.points} fields={["revenue", "expenses", "profit"]} money={money} />
       <OutstandingPanel title="Customers owe you" data={receivables} nameField="customer" money={money} empty="Every sale has been paid for." note="Sales not yet fully paid, after any returns and price corrections. Online orders that were never paid are not counted." />
       <OutstandingPanel title="You owe suppliers" data={payables} nameField="supplier" money={money} empty="You don't owe any supplier for stock received." note="Stock received from suppliers that you haven't finished paying for. Stock you already had is not included." />
     </div>

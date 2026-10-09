@@ -219,6 +219,10 @@ def dashboard_snapshot(request):
     period['money_received'] = money_received(start, end) if visible_units else None
     period['basis'] = "accrual"
     data['period_summary'] = period
+    # Each part of the business over the same dates, for the dashboard's "where the sales came from".
+    data['unit_period'] = [{'key': key, 'name': name, **{field: value if profit_visible or field == 'revenue' else None
+                            for field, value in accrual_totals(period_rows, [key]).items()}}
+                           for key, name, _, _ in UNITS if key in visible_units]
     data['expense_breakdown'] = []
     if profit_visible and visible_units:
         grouped_expenses = {}

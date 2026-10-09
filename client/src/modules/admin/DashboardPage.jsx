@@ -10,6 +10,7 @@ import { CommissionReminder } from "../mpesa/CommissionReminder";
 import { RecordsSummary } from "./RecordsSummary";
 import { OwnerSummary } from "./OwnerSummary";
 import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
+import { BusinessAnalysis } from "./BusinessAnalysis";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -54,11 +55,6 @@ export function DashboardPage() {
   const count = (value) => value == null ? "Restricted" : Number(value).toLocaleString();
   const units = data.business_units.filter(unit => unit.enabled);
   const trend = data.financial_trend;
-  const profitVisible = trend.some(row => row.profit != null);
-  const values = trend.flatMap(row => [Number(row.sales), ...(row.profit == null ? [] : [Number(row.profit)])]);
-  const max = Math.max(...values, 1), min = Math.min(...values, 0);
-  const y = value => 96 - ((Number(value) - min) / (max - min)) * 88;
-  const points = key => trend.map((row, index) => `${(index / Math.max(trend.length - 1, 1)) * 100},${y(row[key])}`).join(" ");
   // Only when a month had stock found or missing, so every row still adds up to its profit.
   const stockColumn = trend.some(row => Number(row.stock_corrections || 0) !== 0);
   const monthName = (month) => new Date(`${month}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" });
@@ -124,6 +120,7 @@ export function DashboardPage() {
         {data.expense_breakdown?.length ? <div className="trendTable"><table><caption>Running costs by type</caption><thead><tr><th scope="col">Type</th><th scope="col">Part of the business</th><th scope="col">Amount</th></tr></thead><tbody>{data.expense_breakdown.map(row => <tr key={`${row.category}-${row.business_unit}`}><th scope="row">{row.category}</th><td>{data.business_units.find(unit => unit.key === row.business_unit)?.name || row.business_unit}</td><td>{money(row.amount)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan="2">Total</th><td>{money(period.expenses)}</td></tr></tfoot></table></div> : <p>No running costs recorded for these dates.</p>}
       </>}
     </section>}
+    <BusinessAnalysis data={data} money={money} />
     <AccountingPanels data={data} money={money} />
     <section aria-label="Today's business totals"><h2>Today</h2>
       <p>M-Pesa deposits and withdrawals are customers' money, so they are not counted as sales.</p>
@@ -140,14 +137,8 @@ export function DashboardPage() {
     </div></section>
     {!inventory.restricted && <section><h2>Stock on your shelves now</h2><p>The last figure is what you would make if every item sold at its full price. It is not profit until the items are actually sold.</p>{cards([["Products you stock", count(inventory.total_skus)], ["Items on the shelves", count(inventory.physical)], ["Items free to sell (not set aside for a customer)", count(inventory.available)], ["Products running low", count(inventory.low_stock)], ["Stock value (what you paid)", money(inventory.cost)], ["Stock value at selling price", money(inventory.retail)], ["Extra if it all sells at full price", money(inventory.potential_margin)]])}</section>}
     {!orders.restricted && <section><h2>Online orders needing attention</h2>{cards([["Waiting for payment", count(orders.awaiting_payment)], ["Paid, waiting to be packed or collected", count(orders.awaiting_fulfillment)]])}</section>}
-    <section className="financialTrend"><h2>Month by month</h2><p>The last 12 months, with this month so far. Corrections count in the month they were made.</p>
+    <section className="financialTrend"><h2>Month by month</h2><p>The last 12 months, with this month so far. Corrections count in the month they were made. The chart is under Analysis above.</p>
       {!trend.length ? <p>No financial reporting operations are available to your account.</p> : <>
-        <p className="chartScale">Chart range: {money(min)} to {money(max)}</p>
-        <div className="financialChart" role="img" aria-label={`Monthly revenue${profitVisible ? " and net profit" : ""}; exact values in the table below`}>
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1={y(0)} y2={y(0)} stroke="currentColor" strokeWidth="0.2" /><polyline className="trendSales" points={points("sales")} />{profitVisible && <polyline className="trendProfit" points={points("profit")} />}</svg>
-          <div className="trendLegend"><span className="salesKey">Sales</span>{profitVisible && <span className="profitKey">Profit (below the line = loss)</span>}</div>
-        </div>
-        <div className="chartDates"><span>{trend[0].month}</span><span>{trend[trend.length - 1].month}</span></div>
         <div className="trendTable"><table><caption>Each month ({organization.currency})</caption><thead><tr>{["Month", "Sales", "Stock bought", "What the sold items cost you", "Running costs", ...(stockColumn ? ["Stock found or missing"] : []), "Profit or loss"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{trend.map(row => <tr key={row.month}><th scope="row">{monthName(row.month)}</th>{[money(row.sales), money(row.purchases), money(row.cogs), money(row.expenses), ...(stockColumn ? [stockText(row.stock_corrections, money)] : []), profitText(row.profit, money)].map((value, index) => <td key={index}>{value}</td>)}</tr>)}</tbody></table></div>
       </>}
     </section>

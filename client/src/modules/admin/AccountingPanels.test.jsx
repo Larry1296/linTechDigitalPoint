@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { AccountingPanels, AccountingChart, PeriodComparison } from "./AccountingPanels";
+import { AccountingPanels, PeriodComparison } from "./AccountingPanels";
 afterEach(cleanup);
 const money = value => value == null ? "Restricted" : `KES ${Number(value).toFixed(2)}`;
 const data = {
@@ -20,14 +20,6 @@ it("renders debt, collection and top item panels from the snapshot", () => {
   expect(screen.getByRole("progressbar", { name: "Share of sales paid" })).toHaveAttribute("value", "25");
   expect(screen.getByRole("rowheader", { name: "Cable" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "What the business is worth" })).toBeNull();  // only shown with the net worth figures
-});
-it("changes chart style while keeping restricted profit out of charts and tables", () => {
-  render(<AccountingChart title="Performance" points={[{ date: "2026-09-21", revenue: 50, profit: null }]} fields={["revenue", "profit"]} money={money} />);
-  expect(document.querySelectorAll("polyline")).toHaveLength(1);
-  fireEvent.change(screen.getByRole("combobox"), { target: { value: "bar" } });
-  expect(document.querySelectorAll("polyline")).toHaveLength(0);
-  expect(document.querySelectorAll("rect")).toHaveLength(1);
-  expect(screen.queryByText("Profit / loss")).not.toBeInTheDocument();
 });
 it("does not invent a percentage when the prior period has no revenue", () => {
   render(<PeriodComparison data={data} money={money} />);

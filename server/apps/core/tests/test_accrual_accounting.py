@@ -482,6 +482,8 @@ def test_dashboard_collections_and_top_items_follow_credit_notes_and_returns(sho
     router = data["top_items"][0]
     assert (money(router["quantity"]), money(router["sales"])) == (D("2.000"), D("1700.00"))
     assert money(data["period_summary"]["revenue"]) == D("1700.00")  # same figure as the books
+    shop_part = next(unit for unit in data["unit_period"] if unit["key"] == "SHOP")  # the analysis' "where the sales came from"
+    assert money(shop_part["revenue"]) == D("1700.00") and money(shop_part["profit"]) == money(data["period_summary"]["profit"])
 
 
 def test_adding_a_product_whose_code_belongs_to_a_hidden_product_says_so_plainly(shop):
