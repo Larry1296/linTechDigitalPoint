@@ -96,6 +96,9 @@ class MpesaTransaction(TenantModel):
                                                                    ("MPESA_OTHER", "M-Pesa to another number"),
                                                                    ("DRAWER", "Cash from the agency drawer"),
                                                                    ("OUTSIDE", "Money from outside the agency")])
+    # Safaricom's commission balance on the agent line right after a deposit, withdrawal or airtime sale, as the
+    # operator read it. The rise from the previous reading is what the transaction earned. Optional: never blocks a customer.
+    commission_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=12, default=POSTED)
     reversal_of = models.OneToOneField(
         "self", null=True, blank=True, related_name="reversal", on_delete=models.PROTECT

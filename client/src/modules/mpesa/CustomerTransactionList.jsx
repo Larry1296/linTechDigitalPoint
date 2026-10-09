@@ -58,6 +58,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
             {airtime && <b role="columnheader">Sent to</b>}
             <b role="columnheader">Amount</b>
             {airtime && <b role="columnheader">Paid by</b>}
+            <b role="columnheader">Commission balance</b>
             <b role="columnheader">Transaction ID</b>
             {canCorrect && <b role="columnheader"><span className="visuallyHidden">Correct</span></b>}
           </div>
@@ -68,6 +69,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
               {airtime && <span role="cell">{localPhone(entry.customer_phone)}</span>}
               <span role="cell">{businessCurrency()} {Number(entry.amount).toLocaleString()}</span>
               {airtime && <span role="cell">{paidByLabel(entry.paid_by)}</span>}
+              <span role="cell">{entry.commission_balance == null ? "—" : Number(entry.commission_balance).toLocaleString()}</span>
               <span role="cell">{entry.provider_reference || (reversed.has(entry.id) ? "—" : <AddCode entry={entry} onSaved={onChanged} />)}</span>
               {canCorrect && <span role="cell">{!reversed.has(entry.id) && <CorrectTransaction entry={entry} onDone={onChanged} />}</span>}
             </div>

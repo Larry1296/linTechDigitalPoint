@@ -76,7 +76,7 @@ it("shows only the open shift's transactions, and none once no shift is open", a
   expect(await screen.findByRole("heading", { name: "Deposits this shift (1)" })).toBeInTheDocument();
   expect(screen.getByText("MPA-2")).toBeInTheDocument();
   expect(screen.queryByText("MPA-1")).not.toBeInTheDocument();
-  expect(screen.queryByText(/Commission/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Commission(?! balance)/)).not.toBeInTheDocument();
   unmount();
   api.getMpesaDashboard.mockResolvedValue(dashboard);
   render(<MpesaDashboardPage />);

@@ -17,7 +17,7 @@ it("opens with the current figures and sends the corrected ones with a reason", 
   fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
   await waitFor(() => expect(done).toHaveBeenCalled());
   expect(correctMpesaTransaction).toHaveBeenCalledWith(7, { amount: "500", customer_phone: "0712345678", customer_id_number: "12345678",
-    provider_reference: "SJK4ABC123", reason: "Typed 700, customer deposited 500" });
+    commission_balance: "", provider_reference: "SJK4ABC123", reason: "Typed 700, customer deposited 500" });
 });
 
 it("is not offered for a reversal entry", () => {

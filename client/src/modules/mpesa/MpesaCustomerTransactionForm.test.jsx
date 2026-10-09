@@ -103,3 +103,14 @@ it("works out the cash and float left after a withdrawal", () => {
   fill("Amount (KSh)", "12000");
   expect(screen.getByRole("alert")).toHaveTextContent("Not enough physical cash");
 });
+
+it("sends the commission balance read after a withdrawal, and clears it for the next one", async () => {
+  const posted = vi.fn();
+  render(<MpesaWithdrawalForm sessionId={4} onPosted={posted} />);
+  fill("Amount (KSh)", "1000");
+  fill("Commission balance after (KSh, optional)", "1268.50");
+  fireEvent.click(screen.getByRole("button", { name: "Record withdrawal" }));
+  await waitFor(() => expect(posted).toHaveBeenCalledOnce());
+  expect(postMpesaTransaction).toHaveBeenCalledWith(expect.objectContaining({ transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: "1268.50" }));
+  expect(screen.getByLabelText("Commission balance after (KSh, optional)")).toHaveValue(null);
+});

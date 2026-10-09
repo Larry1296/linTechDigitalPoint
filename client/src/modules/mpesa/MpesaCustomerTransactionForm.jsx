@@ -5,6 +5,7 @@ import { FormError } from "../../components/forms/FormNotice";
 import { lookupMpesaCustomer, postMpesaTransaction } from "./api";
 import { readMpesaMessage } from "./mpesaMessage";
 import { localPhone } from "./CustomerTransactionList";
+import { CommissionBalanceField } from "./commissionBalance";
 
 const transactionTypes = { CUSTOMER_DEPOSIT: { name: "deposit" }, CUSTOMER_WITHDRAWAL: { name: "withdrawal" } };
 
@@ -53,7 +54,7 @@ export function MpesaCustomerTransactionForm({
 }) {
   const transaction = transactionTypes[transactionType];
   const isDeposit = transactionType === "CUSTOMER_DEPOSIT";
-  const blank = { phone: "", idNumber: "", amount: "", code: "" };
+  const blank = { phone: "", idNumber: "", amount: "", code: "", commission: "" };
   const [fields, setFields] = useState(blank);
   const [known, setKnown] = useState(null);
   const [pasted, setPasted] = useState(null);
@@ -92,6 +93,7 @@ export function MpesaCustomerTransactionForm({
         // A deposit may carry the customer's number and ID (both optional); a withdrawal only its amount.
         ...(isDeposit ? { customer_phone: fields.phone, customer_id_number: fields.idNumber } : {}),
         ...(fields.code.trim() ? { provider_reference: fields.code.trim() } : {}),
+        ...(fields.commission.trim() ? { commission_balance: fields.commission.trim() } : {}),
         idempotency_key: crypto.randomUUID(),
       });
       const value = `${businessCurrency()} ${Number(entry.amount).toLocaleString()}`;
@@ -145,6 +147,7 @@ export function MpesaCustomerTransactionForm({
       />
       <FormField label="Transaction ID (optional)" name="provider_reference" autoComplete="off" placeholder="If already done"
         value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
+      <CommissionBalanceField value={fields.commission} onChange={(value) => set("commission", value)} />
       <BalancePreview deposit={isDeposit} cash={availableCash} float={availableFloat} amount={fields.amount} />
       <button disabled={busy}>Record {transaction.name}</button>
       <FormError title={`Could not record the ${transaction.name}.`} message={error} />

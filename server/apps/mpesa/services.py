@@ -20,6 +20,22 @@ def amount(value):
     return parsed
 
 
+COMMISSION_READ = {"CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE"}
+
+
+def commission_reading(transaction_type, value):
+    """The commission balance read off the agent line after a deposit, withdrawal or airtime sale; None if not given."""
+    if transaction_type not in COMMISSION_READ or value in (None, ""):
+        return None
+    try:
+        parsed = Decimal(str(value).replace(",", "").strip()).quantize(Decimal("0.01"))
+    except Exception:
+        raise ValidationError("Enter the commission balance as a number, e.g. 1250.50.")
+    if parsed < 0:
+        raise ValidationError("The commission balance cannot be below zero.")
+    return parsed
+
+
 def audit(action, obj, user, before=None, after=None):
     AuditLog.objects.create(action=action, object_type=obj.__class__.__name__, object_id=str(obj.pk), user=user, before=before or {}, after=after or {})
 
@@ -170,7 +186,7 @@ def customer_details(transaction_type, name, phone, id_number):
 
 @transaction.atomic
 def post_transaction(*, session, transaction_type, transaction_amount, user, idempotency_key, provider_reference=None, customer_reference="", notes="", cash_delta=None, float_delta=None,
-                     customer_name="", customer_phone="", customer_id_number="", paid_by=""):
+                     customer_name="", customer_phone="", customer_id_number="", paid_by="", commission_balance=None):
     lock_business()
     if not idempotency_key:
         raise ValidationError("An idempotency key is required.")
@@ -186,6 +202,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
     value = amount(transaction_amount)
     customer = customer_details(transaction_type, customer_name, customer_phone, customer_id_number)
     provider_reference = (provider_reference or "").strip().upper() or None
+    commission_balance = commission_reading(transaction_type, commission_balance)
     if transaction_type in ["FLOAT_TOPUP", "CASH_REBALANCE", "ADJUSTMENT", "INVESTMENT", "COMMISSION"] and not privileged:
         raise ValidationError("Manager or Owner permission is required for balance adjustments.")
     # A correction to the money in operation: the reason is required, a reference only if there is one.
@@ -218,6 +235,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
                 customer_phone=customer[1],
                 customer_id_number=customer[2],
                 paid_by=paid_by,
+                commission_balance=commission_balance,
                 performed_by=user,
                 occurred_at=timezone.now(),
                 notes=notes,
@@ -289,7 +307,8 @@ def reverse_transaction(*, original, user, idempotency_key, reason, allow_invest
 
 
 @transaction.atomic
-def correct_transaction(*, original, user, key, reason, amount, customer_phone=None, customer_id_number=None, provider_reference=None, paid_by=None):
+def correct_transaction(*, original, user, key, reason, amount, customer_phone=None, customer_id_number=None, provider_reference=None, paid_by=None,
+                        commission_balance=None):
     """Fixes a mistake in a recorded transaction (amount, customer details, transaction ID) in one step: the wrong
     entry is reversed and the right one recorded, linked to it. Nothing is overwritten, so cash, float, the books and
     the monthly report all show what happened and why. Managers and owners, while the shift is open."""
@@ -315,6 +334,7 @@ def correct_transaction(*, original, user, key, reason, amount, customer_phone=N
     corrected, _ = post_transaction(session=original.session, transaction_type=original.transaction_type, transaction_amount=amount, user=user,
                                     idempotency_key=f"{key}-corrected", provider_reference=code, customer_name=original.customer_name,
                                     customer_phone=phone, customer_id_number=id_number, paid_by=paid_by or original.paid_by or ("DRAWER" if original.transaction_type == "FLOAT_TOPUP" else ""),
+                                    commission_balance=original.commission_balance if commission_balance is None else commission_balance,
                                     notes=f"Correction of {original.internal_reference}: {reason.strip()}")
     MpesaTransaction.objects.filter(pk=corrected.pk).update(corrects=original)
     corrected.refresh_from_db()

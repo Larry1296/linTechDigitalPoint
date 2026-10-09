@@ -27,10 +27,10 @@ it("lists today's deposits with number and ID, and the transaction ID is added a
   expect(addMpesaReference).toHaveBeenCalledWith(2, "QWE123RTY");
 });
 
-it("lists withdrawals by time and amount only", () => {
+it("lists withdrawals by time, amount and the commission balance read after each", () => {
   render(<CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" onChanged={vi.fn()} transactions={[
     { ...deposit(4, ""), transaction_type: "CUSTOMER_WITHDRAWAL", customer_phone: "", customer_id_number: "" }]} />);
-  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Transaction ID"]);
+  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Commission balance", "Transaction ID"]);
 });
 
 it("shows numbers the way customers say them", () => {

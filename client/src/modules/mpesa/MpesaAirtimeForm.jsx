@@ -5,11 +5,12 @@ import { FormError } from "../../components/forms/FormNotice";
 import { postMpesaTransaction } from "./api";
 import { localPhone } from "./CustomerTransactionList";
 import { AIRTIME_PAID_BY, paidByLabel } from "./airtime";
+import { CommissionBalanceField } from "./commissionBalance";
 
 // Airtime (credit) for a customer. It is not a deposit or a withdrawal and not income: only the commission
 // Safaricom pays on it is, recorded on the Commission page.
 export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onPosted }) {
-  const blank = { phone: "", amount: "", code: "", paidBy: "CASH" };
+  const blank = { phone: "", amount: "", code: "", paidBy: "CASH", commission: "" };
   const [fields, setFields] = useState(blank);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -30,6 +31,7 @@ export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onP
       const entry = await postMpesaTransaction({
         session: sessionId, transaction_type: "AIRTIME_SALE", amount: fields.amount, paid_by: fields.paidBy,
         customer_phone: fields.phone, ...(fields.code.trim() ? { provider_reference: fields.code.trim() } : {}),
+        ...(fields.commission.trim() ? { commission_balance: fields.commission.trim() } : {}),
         idempotency_key: crypto.randomUUID(),
       });
       setMessage(`Recorded airtime of ${businessCurrency()} ${Number(entry.amount).toLocaleString()}${entry.customer_phone ? ` to ${localPhone(entry.customer_phone)}` : ""}, paid by ${paidByLabel(entry.paid_by).toLowerCase()}.`);
@@ -59,6 +61,7 @@ export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onP
       </fieldset>
       <FormField label={fields.paidBy === "CASH" ? "Transaction ID (optional)" : "Customer's M-Pesa code (optional)"} name="provider_reference" autoComplete="off"
         value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
+      <CommissionBalanceField value={fields.commission} onChange={(value) => set("commission", value)} />
       {availableCash != null && availableFloat != null && <div className="balancePreview" aria-live="polite">
         <table>
           <caption>Balances ({businessCurrency()})</caption>
