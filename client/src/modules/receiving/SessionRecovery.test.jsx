@@ -208,10 +208,10 @@ it("keeps unsaved edits behind the password unlock overlay", async () => {
   act(() => window.dispatchEvent(new CustomEvent("session-locked")));
   expect(await screen.findByRole("dialog")).toHaveTextContent(SESSION_EXPIRED_MESSAGE);
   expect(screen.queryByLabelText("Username or email")).not.toBeInTheDocument();
+  // Filled in one go (as a saved or pasted password is), so it unlocks by itself, without pressing Unlock.
   fireEvent.change(screen.getByLabelText("Password", { exact: true }), {
     target: { value: "password" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
   expect(await screen.findByLabelText("Supplier name")).toHaveValue(
     "Cable supplier",
   );
