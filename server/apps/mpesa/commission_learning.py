@@ -187,3 +187,30 @@ def for_month(start, end):
     results = earned(outlets, measured, rates)
     rows = [r for rows in outlets.values() for r in rows if r.standing and start <= r.done_at < end]
     return summary(rows, results)
+
+
+def forecast(as_of=None, learned=None):
+    """The commission the month of ``as_of`` (now if not given) should bring, as it stood at that moment.
+
+    So far: what the month's transactions earned up to then, measured or learned; any not worked out yet count at the
+    average commission of those that were. Then the rest of the month at the same pace: the daily rate since the
+    month's first transaction, times the days left until the month closes.
+    """
+    import calendar
+    as_of = as_of or timezone.now()
+    today = timezone.localtime(as_of).date()
+    first = today.replace(day=1)
+    last = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+    outlets, measured, rates = learned or learn()
+    results = earned(outlets, measured, rates)
+    rows = [r for rows in outlets.values() for r in rows if r.standing and first <= timezone.localtime(r.done_at).date() <= today and r.done_at <= as_of]
+    totals = summary(rows, results)
+    worked_out = totals["measured"] + totals["learned"]
+    average = totals["earned"] / worked_out if worked_out else Decimal("0")
+    so_far = totals["earned"] + average * totals["unknown"]
+    began = min((timezone.localtime(r.done_at).date() for r in rows), default=today)
+    daily = so_far / ((today - began).days + 1)
+    days_left = (last - today).days
+    cents = lambda value: value.quantize(Decimal("0.01"))
+    return {"month": first, "label": first.strftime("%B %Y"), "as_of": as_of, "so_far": cents(so_far), "daily": cents(daily),
+            "days_left": days_left, "forecast": cents(so_far + daily * days_left), "transactions": len(rows), "unknown": totals["unknown"]}

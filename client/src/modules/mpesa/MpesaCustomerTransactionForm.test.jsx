@@ -113,7 +113,7 @@ it("sends the commission balance read after a withdrawal, and clears it for the 
   fireEvent.click(screen.getByRole("button", { name: "Record withdrawal" }));
   await waitFor(() => expect(posted).toHaveBeenCalledOnce());
   expect(postMpesaTransaction).toHaveBeenCalledWith(expect.objectContaining({ transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: "1268.50" }));
-  expect(screen.queryByLabelText("Commission balance after (KSh, optional)")).not.toBeInTheDocument(); // the form starts afresh
+  await waitFor(() => expect(screen.queryByLabelText("Commission balance after (KSh, optional)")).not.toBeInTheDocument()); // the form starts afresh
 });
 
 it("drops the commission balance box once the app has learned the amount", async () => {

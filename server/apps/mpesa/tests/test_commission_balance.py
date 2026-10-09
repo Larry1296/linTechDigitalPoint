@@ -153,3 +153,19 @@ def test_the_advice_endpoint(shift):
     client.force_authenticate(operator)
     response = client.get(f"/api/v1/mpesa/transactions/commission-advice/?session={session.pk}&type=CUSTOMER_DEPOSIT&amount=500")
     assert response.status_code == 200 and response.json()["ask"] is True
+
+
+def test_the_month_forecast_runs_the_pace_so_far_to_the_month_end(shift):
+    import calendar
+    from django.utils import timezone
+    from apps.mpesa.commission_learning import forecast
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f1", "100")  # the first reading measures nothing, but 1,000 is learned: 12
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f3", "124")  # 12 each: learned
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "f4")  # worked out: 12
+    record(shift, "CUSTOMER_DEPOSIT", "500", "f5")  # not worked out: counted at the average, 12
+    today = timezone.localdate()
+    days_left = calendar.monthrange(today.year, today.month)[1] - today.day
+    result = forecast()
+    assert (result["so_far"], result["daily"], result["days_left"], result["unknown"]) == (Decimal("60.00"), Decimal("60.00"), days_left, 1)
+    assert result["forecast"] == Decimal("60.00") * (1 + days_left)

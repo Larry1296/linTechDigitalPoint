@@ -22,6 +22,7 @@ import { CustomerTransactionList } from "./CustomerTransactionList";
 import { CorrectTransaction } from "./CorrectTransaction";
 import { MonthlyReport } from "./MonthlyReport";
 import { PastShifts } from "./PastShifts";
+import { ShiftChart } from "./ShiftChart";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
@@ -385,7 +386,12 @@ export function MpesaDashboardPage() {
           {amount(dashboard.commission_shift.earned)}
           {dashboard.commission_shift.unknown > 0 && <small className="muted"> · {dashboard.commission_shift.unknown} not worked out yet</small>}
         </MetricCard>}
+        {dashboard.commission_month && <MetricCard label={`${dashboard.commission_month.label} commission, expected`}>
+          {amount(dashboard.commission_month.forecast)}
+          <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "day" : "days"} left</small>
+        </MetricCard>}
       </div>
+      {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
       <MonthlyReport />
       <PastShifts />
       <section className="outletSection" aria-labelledby="outlets-heading">

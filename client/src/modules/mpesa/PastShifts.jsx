@@ -4,6 +4,7 @@ import { FormError } from "../../components/forms/FormNotice";
 import { getMpesaShiftTransactions, getPastMpesaShifts } from "./api";
 import { CustomerTransactionList } from "./CustomerTransactionList";
 import { businessDate } from "./businessDay";
+import { ShiftChart } from "./ShiftChart";
 
 const day = (value) => new Date(value).toLocaleDateString([], { timeZone: businessTimeZone(), weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const clock = (value) => new Date(value).toLocaleTimeString([], { timeZone: businessTimeZone(), hour: "2-digit", minute: "2-digit" });
@@ -79,11 +80,13 @@ export function PastShifts() {
           {Number(shift.cash_variance) || Number(shift.float_variance)
             ? ` (cash ${signed(shift.cash_variance)}, float ${signed(shift.float_variance)} against what was expected).`
             : ", as expected."}
+          {shift.month_forecast && ` When it closed, ${shift.month_forecast.label}'s commission was heading for ${businessCurrency()} ${figure(shift.month_forecast.forecast)} (${businessCurrency()} ${figure(shift.month_forecast.so_far)} so far, ${shift.month_forecast.days_left} ${shift.month_forecast.days_left === 1 ? "day" : "days"} left).`}
         </p>
       )}
       {shift && !records && !error && <p className="muted" role="status">Loading the shift's records…</p>}
       {shift && records && (
         <div className="pastShiftRecords">
+          <ShiftChart transactions={records} openedAt={shift.opened_at} closedAt={shift.closed_at} />
           <CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" transactions={records} onChanged={reload} scope="in that shift" closed />
           <CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" transactions={records} onChanged={reload} scope="in that shift" closed />
           <CustomerTransactionList title="Airtime sold" type="AIRTIME_SALE" transactions={records} onChanged={reload} scope="in that shift" closed />

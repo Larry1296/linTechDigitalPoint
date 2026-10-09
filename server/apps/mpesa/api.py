@@ -139,7 +139,9 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         # Closed shifts that hold records, newest first, each named by when it ran, so a cleared desk's records can be opened again.
         rows = (self.get_queryset().filter(status=MpesaSession.CLOSED).annotate(records=Count("transactions")).filter(records__gt=0)
                 .prefetch_related(None).select_related("reconciliation").order_by("-opened_at", "-pk"))
-        return Response([{"id": s.pk, "outlet": s.outlet.display_name, "operator": s.operator.get_full_name() or s.operator.username,
+        from .commission_learning import forecast, learn
+        learned = learn() if rows else None
+        return Response([{"id": s.pk, "outlet": s.outlet.display_name, "month_forecast": forecast(s.closed_at, learned), "operator": s.operator.get_full_name() or s.operator.username,
                           "opened_at": s.opened_at, "closed_at": s.closed_at, "records": s.records,
                           "opening_cash": s.opening_cash, "opening_float": s.opening_float,
                           "closing_cash": s.closing_cash_actual, "closing_float": s.closing_float_actual,
@@ -296,7 +298,7 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request):
         from .commission import PLACES, due_month, monthly_profit, opening_room
-        from .commission_learning import learn
+        from .commission_learning import forecast, learn
         due = due_month()
         rows = monthly_profit()
         return Response({"entries": [commission_row(e) for e in self.get_queryset()[:60]],
@@ -305,7 +307,7 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
                          "due_month": due, "due_label": due.strftime("%B %Y") if due else None, "places": PLACES,
                          "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first(),
                                       "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()],
-                         "estimates": commission_estimates(), "learned": learn()[2].bands()})
+                         "estimates": commission_estimates(), "learned": learn()[2].bands(), "forecast": forecast()})
 
     def retrieve(self, request, pk=None):
         return Response(commission_row(self.get_object()))
@@ -354,8 +356,8 @@ def dashboard(request):
     # stays put; cash brought in (rebalance), manager adjustments and airtime paid to another number change it.
     in_operation = {"total": cash + electronic_float,
                     "opening": (session.opening_cash + session.opening_float) if session else 0}
-    from .commission_learning import for_shift
-    return Response({"commission_shift": for_shift(session) if session else None, "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    from .commission_learning import for_shift, forecast
+    return Response({"commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):
