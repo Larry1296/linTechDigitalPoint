@@ -271,6 +271,13 @@ def test_a_shift_opens_with_what_the_last_one_closed_with_or_says_why(agency):
     with organization_context(org):
         third = open_session(outlet=outlet, operator=owner, opening_cash="0", opening_float="12000", difference_reason="Owner banked the cash")
         assert third.opening_difference_reason == "Owner banked the cash"
+    # A float that went down cannot hold commission: one left ticked is ignored and the reason opens the shift.
+    _close(org, owner, third, "0", "12000")
+    with organization_context(org):
+        fourth = open_session(outlet=outlet, operator=owner, opening_cash="0", opening_float="11000", difference_reason="lent 1000",
+                              commission={"period": str(last_month), "amount": "500"})
+        assert fourth.opening_float == D("11000.00") and not fourth.opening_commissions.exists()
+    third = fourth
     # Through the API: a difference without a reason is refused with the numbers.
     _close(org, owner, third, "0", "12000")
     refused = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "50", "opening_float": "12000"}, format="json")

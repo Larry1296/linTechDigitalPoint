@@ -88,8 +88,10 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     from .commission import previous_close
     last = previous_close(outlet)
     carried_cash, carried_float = (last.closing_cash_actual, last.closing_float_actual) if last else (None, None)
+    if last and electronic_float <= carried_float:
+        commission = None  # the float did not go up, so none of it is commission: the difference reason covers the change
     earned = amount(commission.get("amount")) if commission else Decimal("0")
-    if last and earned > electronic_float - carried_float:
+    if last and earned > 0 and earned > electronic_float - carried_float:
         raise ValidationError(f"The float is {max(electronic_float - carried_float, Decimal('0')):,.2f} more than the last shift closed with "
                               f"({carried_float:,.2f}), so at most that much of it can be Safaricom's commission.")
     difference_reason = str(difference_reason or "").strip()
