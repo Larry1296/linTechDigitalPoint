@@ -223,9 +223,10 @@ export function AuthProvider({ children }) {
     };
   }, [user?.id, inWorkspace, lock, renew, updateAccess, refresh, clearIdentity, navigate]);
 
-  const unlock = async password => {
-    if (busy) return;
-    setBusy(true); setAuthState("unlocking"); setLockError("");
+  // quiet: an automatic try (see SessionLockOverlay); a wrong password then shows no error and returns false.
+  const unlock = async (password, { quiet = false } = {}) => {
+    if (busy) return false;
+    setBusy(true); setAuthState("unlocking"); if (!quiet) setLockError("");
     try {
       const previous = userRef.current;
       const data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ password, credential: previous?.username }) });
@@ -237,9 +238,11 @@ export function AuthProvider({ children }) {
       applyIdentity(data, true);
       lastRenewal.current = Date.now();
       broadcast("unlocked");
+      return true;
     } catch (error) {
       if (error.status === 401) { clearIdentity(); setAuthState('expired'); navigate('/login?reason=session-expired', { replace:true }); }
-      else { setAuthState('locked'); setLockError(error.message); }
+      else { setAuthState('locked'); if (!quiet || error.status !== 400) setLockError(error.message); }
+      return false;
     }
     finally { setBusy(false); }
   };
