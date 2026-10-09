@@ -45,3 +45,6 @@ export const correctMpesaTransaction = (id, body) =>
     body: JSON.stringify({ ...body, idempotency_key: crypto.randomUUID() }),
   });
 export const lookupMpesaCustomer = (phone) => api(`/api/v1/mpesa/customers/lookup/?phone=${encodeURIComponent(phone)}`);
+// Whether to ask for the commission balance after a transaction, or the commission the app has already learned for it.
+export const getCommissionAdvice = (session, type, amount) =>
+  api(`/api/v1/mpesa/transactions/commission-advice/?session=${encodeURIComponent(session)}&type=${encodeURIComponent(type)}&amount=${encodeURIComponent(amount)}`);

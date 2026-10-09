@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { CustomerTransactionList } from "./CustomerTransactionList";
 import { postMpesaTransaction } from "./api";
-vi.mock("./api", () => ({ postMpesaTransaction: vi.fn(), addMpesaReference: vi.fn(), correctMpesaTransaction: vi.fn() }));
+vi.mock("./api", () => ({ getCommissionAdvice: vi.fn(async () => ({ earned: null, ask: true, reason: "new" })), postMpesaTransaction: vi.fn(), addMpesaReference: vi.fn(), correctMpesaTransaction: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: [] } }) }));
 beforeEach(() => {
   vi.clearAllMocks();

@@ -61,7 +61,7 @@ export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onP
       </fieldset>
       <FormField label={fields.paidBy === "CASH" ? "Transaction ID (optional)" : "Customer's M-Pesa code (optional)"} name="provider_reference" autoComplete="off"
         value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
-      <CommissionBalanceField value={fields.commission} onChange={(value) => set("commission", value)} />
+      <CommissionBalanceField sessionId={sessionId} type="AIRTIME_SALE" amount={fields.amount} value={fields.commission} onChange={(value) => set("commission", value)} />
       {availableCash != null && availableFloat != null && <div className="balancePreview" aria-live="polite">
         <table>
           <caption>Balances ({businessCurrency()})</caption>

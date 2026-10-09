@@ -188,6 +188,19 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             commission_balance=request.data.get("commission_balance"))
         return Response(self.get_serializer(entry).data, status=201 if created else 200)
 
+    @action(detail=False, methods=["get"], url_path="commission-advice")
+    def commission_advice(self, request):
+        """Whether the form should ask for the commission balance after this transaction, or already knows its commission."""
+        from .commission_learning import advice
+        session = MpesaSession.objects.filter(pk=request.query_params.get("session") or 0).first()
+        try:
+            value = Decimal(str(request.query_params.get("amount") or "")).quantize(Decimal("0.01"))
+        except Exception:
+            value = None
+        if not session or value is None or value <= 0:
+            return Response({"earned": None, "ask": True, "reason": "new"})
+        return Response(advice(session.outlet_id, request.query_params.get("type", ""), value))
+
     @action(detail=True, methods=["post"])
     def reference(self, request, pk=None):
         if not has_business_permission(request.user, "mpesa.add_mpesatransaction"):

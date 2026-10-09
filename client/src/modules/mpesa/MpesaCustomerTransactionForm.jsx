@@ -147,7 +147,7 @@ export function MpesaCustomerTransactionForm({
       />
       <FormField label="Transaction ID (optional)" name="provider_reference" autoComplete="off" placeholder="If already done"
         value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
-      <CommissionBalanceField value={fields.commission} onChange={(value) => set("commission", value)} />
+      <CommissionBalanceField sessionId={sessionId} type={transactionType} amount={fields.amount} value={fields.commission} onChange={(value) => set("commission", value)} />
       <BalancePreview deposit={isDeposit} cash={availableCash} float={availableFloat} amount={fields.amount} />
       <button disabled={busy}>Record {transaction.name}</button>
       <FormError title={`Could not record the ${transaction.name}.`} message={error} />

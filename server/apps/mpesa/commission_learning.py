@@ -7,8 +7,9 @@ earns. A transaction with no reading of its own is then filled in ("learned") wh
 amounts on both sides of it that earned the same, so it must lie in their band. Anything else stays unknown rather than
 guessed. Newer measurements win, so a change in Safaricom's rates is picked up by itself.
 
-A reading lower than the one before (Safaricom paid the commission out) or with an unread transaction in between
-measures nothing; the next good pair carries on.
+Transactions in between without a reading are taken off at what the app already knows they earn, so it only needs
+to ask for a reading when an amount is new to it (and now and then as a check). A reading lower than the one before
+(Safaricom paid the commission out), or with a reversed or unknown transaction in between, measures nothing.
 """
 from collections import defaultdict
 from datetime import timedelta
@@ -48,18 +49,23 @@ def _history(outlet_ids=None):
     return outlets
 
 
-def measure(outlets):
-    """What each transaction earned, where its reading comes straight after the previous transaction's: {id: amount}."""
+def measure(outlets, rates=None):
+    """What each transaction earned, from the rise since the previous reading: {id: amount}. Transactions in between
+    without a reading are taken off at what ``rates`` says they earned; if any of them is not known, nothing is measured."""
     measured = {}
     for rows in outlets.values():
-        last, broken = None, True
+        last, between, broken = None, [], True
         for row in rows:
-            if not row.standing or row.commission_balance is None:
-                broken = True  # an unread or reversed transaction: the next rise is not one transaction's
+            if not row.standing:
+                broken = True  # a reversed transaction: what happened to its commission is not known
                 continue
-            if last is not None and not broken and row.commission_balance >= last:
-                measured[row.pk] = row.commission_balance - last
-            last, broken = row.commission_balance, False
+            if row.commission_balance is None:
+                between.append(rates.predict(row.transaction_type, row.amount) if rates else None)
+                continue
+            known = None not in between
+            if last is not None and not broken and known and row.commission_balance - last - sum(between) >= 0:
+                measured[row.pk] = row.commission_balance - last - sum(between)
+            last, between, broken = row.commission_balance, [], False
     return measured
 
 
@@ -102,14 +108,43 @@ class Rates:
         return rows
 
 
+def _learn(outlets):
+    """Two passes: readings straight after each other teach the first rates, which then let readings with known
+    transactions in between count too."""
+    first = measure(outlets)
+    measured = measure(outlets, Rates(outlets, first))
+    return measured, Rates(outlets, measured)
+
+
 def learn(outlet_ids=None):
     """The transactions, what was measured and the rates learned from all outlets' readings (the tariff is Safaricom's, the same everywhere)."""
     outlets = _history(outlet_ids)
-    measured = measure(outlets)
     if outlet_ids is None:
-        return outlets, measured, Rates(outlets, measured)
-    everywhere = _history()
-    return outlets, measured, Rates(everywhere, measure(everywhere))
+        return (outlets, *_learn(outlets))
+    measured, _ = _learn(outlets)
+    return outlets, measured, _learn(_history())[1]
+
+
+CHECK_EVERY = 20
+
+
+def advice(outlet_id, kind, value):
+    """Whether to ask for the commission balance after a ``kind`` transaction of ``value``: when the app has not
+    learned that amount yet, and now and then as a check that Safaricom's rates have not changed."""
+    outlets, _, rates = learn([outlet_id])
+    known = rates.predict(kind, value) if kind in EARNING else None
+    rows = [row for row in outlets.get(outlet_id, []) if row.standing]
+    unread = 0
+    for row in reversed(rows):
+        if row.commission_balance is not None:
+            break
+        unread += 1
+    reason = None
+    if kind in EARNING and known is None:
+        reason = "new"
+    elif kind in EARNING and unread >= CHECK_EVERY:
+        reason = "check"
+    return {"earned": known, "ask": reason is not None, "reason": reason}
 
 
 def earned(outlets, measured, rates):

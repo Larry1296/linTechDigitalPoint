@@ -2,13 +2,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MpesaDepositForm } from "./MpesaDepositForm";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
-import { lookupMpesaCustomer, postMpesaTransaction } from "./api";
+import { getCommissionAdvice, lookupMpesaCustomer, postMpesaTransaction } from "./api";
 import { confirmAction } from "../../core/ui/alerts";
-vi.mock("./api", () => ({ postMpesaTransaction: vi.fn(), lookupMpesaCustomer: vi.fn() }));
+vi.mock("./api", () => ({ postMpesaTransaction: vi.fn(), lookupMpesaCustomer: vi.fn(), getCommissionAdvice: vi.fn() }));
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn() }));
 beforeEach(() => {
   vi.clearAllMocks();
   lookupMpesaCustomer.mockResolvedValue({ found: false });
+  getCommissionAdvice.mockResolvedValue({ earned: null, ask: true, reason: "new" });
   postMpesaTransaction.mockResolvedValue({ internal_reference: "MP-1", customer_phone: "254712345678", amount: "100.00", provider_reference: null });
 });
 
@@ -113,4 +114,22 @@ it("sends the commission balance read after a withdrawal, and clears it for the 
   await waitFor(() => expect(posted).toHaveBeenCalledOnce());
   expect(postMpesaTransaction).toHaveBeenCalledWith(expect.objectContaining({ transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: "1268.50" }));
   expect(screen.getByLabelText("Commission balance after (KSh, optional)")).toHaveValue(null);
+});
+
+it("does not ask for the commission balance once the app has learned the amount, but lets it be entered anyway", async () => {
+  getCommissionAdvice.mockResolvedValue({ earned: "12.00", ask: false, reason: null });
+  render(<MpesaWithdrawalForm sessionId={4} onPosted={vi.fn()} />);
+  fill("Amount (KSh)", "1000");
+  expect(await screen.findByText(/learned from your earlier readings/)).toBeInTheDocument();
+  expect(getCommissionAdvice).toHaveBeenCalledWith(4, "CUSTOMER_WITHDRAWAL", "1000");
+  expect(screen.queryByLabelText("Commission balance after (KSh, optional)")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Enter it anyway" }));
+  expect(screen.getByLabelText("Commission balance after (KSh, optional)")).toBeInTheDocument();
+});
+
+it("asks for the commission balance when the amount is new to the app", async () => {
+  render(<MpesaDepositForm sessionId={4} onPosted={vi.fn()} />);
+  fill("Amount (KSh)", "700");
+  expect(await screen.findByText(/has not learned the commission on this amount yet/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Commission balance after (KSh, optional)")).toBeInTheDocument();
 });

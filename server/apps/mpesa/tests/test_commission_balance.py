@@ -108,3 +108,35 @@ def test_a_correction_stands_where_the_wrong_entry_was(shift):
     assert results[fixed.pk] == (Decimal("18.00"), "measured")
     assert results[later.pk] == (Decimal("18.00"), "measured")
     assert wrong.pk not in results
+
+
+def test_a_reading_counts_when_the_unread_transactions_before_it_are_already_known(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g2", "112")  # 1,000 earns 12
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g3")  # not read, but known: 12
+    new = record(shift, "CUSTOMER_WITHDRAWAL", "3000", "g4", "154")  # 154 - 112 - 12 = 30
+    assert learned(session)[new.pk] == (Decimal("30.00"), "measured")
+
+
+def test_the_form_asks_for_a_reading_only_for_amounts_the_app_has_not_learned(shift):
+    from apps.mpesa.commission_learning import CHECK_EVERY, advice
+    _, session = shift
+    outlet = session.outlet_id
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": None, "ask": True, "reason": "new"}
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q2", "112")
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("12.00"), "ask": False, "reason": None}
+    assert advice(outlet, "CUSTOMER_DEPOSIT", Decimal("1000"))["ask"] is True  # deposits not learned yet
+    for n in range(CHECK_EVERY):
+        record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"q-{n}")
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("12.00"), "ask": True, "reason": "check"}
+
+
+def test_the_advice_endpoint(shift):
+    from rest_framework.test import APIClient
+    operator, session = shift
+    client = APIClient()
+    client.force_authenticate(operator)
+    response = client.get(f"/api/v1/mpesa/transactions/commission-advice/?session={session.pk}&type=CUSTOMER_DEPOSIT&amount=500")
+    assert response.status_code == 200 and response.json()["ask"] is True
