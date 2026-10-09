@@ -48,3 +48,5 @@ export const lookupMpesaCustomer = (phone) => api(`/api/v1/mpesa/customers/looku
 // Whether to ask for the commission balance after a transaction, or the commission the app has already learned for it.
 export const getCommissionAdvice = (session, type, amount) =>
   api(`/api/v1/mpesa/transactions/commission-advice/?session=${encodeURIComponent(session)}&type=${encodeURIComponent(type)}&amount=${encodeURIComponent(amount)}`);
+// The agency's last working days, busiest hours, transaction sizes and commission by kind.
+export const getMpesaAnalysis = (days = 30) => api(`/api/v1/mpesa/analysis/?days=${encodeURIComponent(days)}`);

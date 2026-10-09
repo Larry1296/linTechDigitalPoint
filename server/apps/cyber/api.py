@@ -155,6 +155,18 @@ def public_services(request):
 
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])
+def analysis_view(request):
+    """The service desk's last days, best services, busiest hours and how long jobs take (analysis.py)."""
+    if not has_business_permission(request.user, "cyber.view_cyberjob"):
+        return Response({"detail": "Cyber access required."}, status=403)
+    from .analysis import analysis
+    days = request.query_params.get("days", "30")
+    return Response(analysis(days=min(366, max(7, int(days))) if days.isdigit() else 30,
+                             show_profit=has_business_permission(request.user, "accounting.view_profit")))
+
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
 def dashboard(request):
     if not has_business_permission(request.user, "cyber.view_cyberjob"):
         return Response({"detail": "Cyber access required."}, status=403)

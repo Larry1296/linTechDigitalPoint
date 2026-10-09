@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("./api", () => ({
   getCyberDashboard: vi.fn(async () => ({ today: { revenue: "0", jobs: 0, average: "0" }, active_jobs: 0, ready_jobs: 0 })),
-  getCyberJobs: vi.fn(async () => []),
+  getCyberJobs: vi.fn(async () => []), getCyberAnalysis: vi.fn(async () => ({ days: [], services: [], hours: [], waits: [] })),
   getCyberServices: vi.fn(async () => [{ id: 1, variant: 11, product: 5, name: "Typing", variant_name: "Standard", selling_price: "50.00", billing_unit: "PER_PAGE", requires_job: true, active: true }]),
   createCyberJob: vi.fn(), deleteCyberJob: vi.fn(async () => undefined), deleteCyberSale: vi.fn(async () => ({})),
   createCyberService: vi.fn(), updateCyberService: vi.fn(), completeCyberJob: vi.fn(), transitionCyberJob: vi.fn(),

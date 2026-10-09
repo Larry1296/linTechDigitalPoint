@@ -192,3 +192,28 @@ def test_sundays_count_neither_in_the_pace_nor_in_the_days_left(shift):
     assert result["so_far"] == Decimal("84.00")
     assert result["daily"] == Decimal("14.00")  # 84 over Monday to Saturday: six working days
     assert (result["days_left"], result["forecast"]) == (left, Decimal("84.00") + Decimal("14.00") * left)
+
+
+def test_the_agency_analysis_counts_working_days_hours_sizes_and_commission(shift):
+    from datetime import date
+    from rest_framework.test import APIClient
+    from apps.mpesa.analysis import working_days
+    operator, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "an1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "an2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "an3", "124")
+    record(shift, "CUSTOMER_DEPOSIT", "7000", "an4")
+    client = APIClient()
+    client.force_authenticate(operator)
+    data = client.get("/api/v1/mpesa/analysis/?days=12").json()
+    assert data["working_days"] == 12 and len(data["days"]) == 12
+    assert all(date.fromisoformat(day["date"]).weekday() != 6 for day in data["days"])  # never a Sunday
+    assert working_days(date(2026, 10, 12), 2) == [date(2026, 10, 10), date(2026, 10, 12)]  # Saturday, then Monday
+    from django.utils import timezone
+    if timezone.localdate().weekday() != 6:
+        today = data["days"][-1]
+        assert (today["count"], Decimal(str(today["withdrawals"])), Decimal(str(today["deposits"])), Decimal(str(today["commission"]))) == (4, Decimal("3000"), Decimal("7000"), Decimal("36"))
+        assert {row["label"]: row["count"] for row in data["sizes"]}["501 to 1,000"] == 3
+        assert sum(row["count"] for row in data["hours"]) == 4
+        assert data["unknown"] == 1  # the deposit: deposits not learned yet
+        assert {row["kind"]: Decimal(str(row["amount"])) for row in data["commission_by_kind"]}["withdrawals"] == Decimal("36")

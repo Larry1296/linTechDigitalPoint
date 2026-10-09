@@ -367,6 +367,17 @@ def _can_report(request):
 
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])
+def agency_analysis(request):
+    """The agency's last working days, busiest hours, transaction sizes and commission by kind (analysis.py)."""
+    if not has_business_permission(request.user, "mpesa.view_mpesasession"):
+        return Response({"detail": "M-Pesa agency access required."}, status=403)
+    from .analysis import analysis
+    days = request.query_params.get("days", "30")
+    return Response(analysis(days=min(120, max(7, int(days))) if days.isdigit() else 30))
+
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
 def report_months(request):
     """Ended months with agency activity; the newest is the one whose report is due."""
     from .monthly_report import completed_months

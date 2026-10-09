@@ -23,6 +23,7 @@ import { CorrectTransaction } from "./CorrectTransaction";
 import { MonthlyReport } from "./MonthlyReport";
 import { PastShifts } from "./PastShifts";
 import { ShiftChart } from "./ShiftChart";
+import { MpesaAnalysis } from "./MpesaAnalysis";
 import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
@@ -392,6 +393,7 @@ export function MpesaDashboardPage() {
         </MetricCard>}
       </div>
       {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
+      <MpesaAnalysis refreshKey={dashboard.transaction_count} />
       <MonthlyReport />
       <PastShifts />
       <section className="outletSection" aria-labelledby="outlets-heading">

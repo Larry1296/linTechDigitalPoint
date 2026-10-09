@@ -268,3 +268,17 @@ def test_a_sale_or_payment_recorded_wrongly_is_deleted_and_the_days_figures_are_
         balances, pl = statements.balances(None, None), statements.profit_and_loss(None, None)
         assert pl["revenue"] == 0 and balances.get("1000", {"balance": 0})["balance"] == 0 and balances.get("1100", {"balance": 0})["balance"] == 0
         assert Payment.objects.get(sale=second).status == "REFUNDED"
+
+
+def test_the_service_analysis_shows_days_services_hours_and_waits(cyber):
+    owner, till, org, printing, typing = cyber
+    _record(owner, printing.variant.product_id, printing.pk, "40", "a1")  # 400
+    _record(owner, typing.variant.product_id, typing.pk, "3", "a2")  # 150
+    data = owner.get("/api/v1/cyber/analysis/?days=7").json()
+    assert len(data["days"]) == 7
+    today = data["days"][-1]
+    assert (D(str(today["income"])), today["jobs"]) == (D("550"), 2) and today["profit"] is not None
+    assert [(s["name"], D(str(s["income"]))) for s in data["services"]] == [("Printing", D("400")), ("Typing", D("150"))]
+    assert sum(h["count"] for h in data["hours"]) == 2
+    assert {w["label"]: w["count"] for w in data["waits"]}["Under 15 minutes"] == 2  # recorded and completed in one step
+    assert till.get("/api/v1/cyber/analysis/").json()["days"][-1]["profit"] is None  # profit is not the till's to see

@@ -22,3 +22,5 @@ export const completeCyberJob = (id, body) =>
 // A paid service recorded wrongly: its whole sale is deleted (money out of that day's figures, off the desk and income).
 export const deleteCyberSale = (saleId, reason) =>
   api(`/api/v1/commerce/sales/${saleId}/delete/`, { method: "POST", body: JSON.stringify({ reason }) });
+// The service desk's last days, best services, busiest hours and how long jobs take.
+export const getCyberAnalysis = (days = 30) => api(`/api/v1/cyber/analysis/?days=${encodeURIComponent(days)}`);

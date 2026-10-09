@@ -17,6 +17,7 @@ import {
   transitionCyberJob,
 } from "./api";
 import { CyberJobForm } from "./CyberJobForm";
+import { CyberAnalysis } from "./CyberAnalysis";
 import { NewService, RecordIncome } from "./CyberIncomePage";
 import { api } from "../../core/api/client";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
@@ -294,6 +295,7 @@ export function CyberDashboardPage() {
         </div>
         {serviceError?.place === "list" && <FormError title={serviceError.title} message={serviceError.message} />}
       </section>
+      <CyberAnalysis refreshKey={dashboard.today.jobs} />
     </>
   );
 }
