@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const KEEP = 50;
 
@@ -78,4 +78,29 @@ export function useCloseOnOutsideClick(container, open, close) {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [container, open, close]);
+}
+
+// Keeps the newest question at the top of the chat with its answer appearing just below it, instead of jumping to the
+// end of every answer. Earlier questions and answers stay above, a scroll up away, so they never get mixed up with the
+// new one. Room is added below a short answer so the question can still reach the top.
+export function useQuestionAtTop(messages, open) {
+  const list = useRef(null);
+  const asked = useRef(0);
+  useLayoutEffect(() => {
+    const box = list.current;
+    if (!open || !box) { asked.current = 0; return; }
+    const questions = box.querySelectorAll(".helpChatMessage.user");
+    const question = questions[questions.length - 1];
+    const gap = parseFloat(getComputedStyle(box).paddingTop) || 0;
+    if (!question) { box.style.paddingBottom = ""; asked.current = 0; return; }
+    const top = Math.max(0, question.offsetTop - gap);
+    const extra = (parseFloat(box.style.paddingBottom) || gap) - gap;
+    const room = top - (box.scrollHeight - extra - box.clientHeight);
+    box.style.paddingBottom = `${gap + Math.max(0, room)}px`;
+    if (questions.length !== asked.current) {
+      box.scrollTo?.({ top, behavior: asked.current ? "smooth" : "auto" });
+      asked.current = questions.length;
+    }
+  }, [messages, open]);
+  return list;
 }

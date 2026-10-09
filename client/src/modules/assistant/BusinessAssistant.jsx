@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrainCircuit, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { api, apiStream } from "../../core/api/client";
 import { Answer, readEvents } from "../platform/HelpChat";
-import { useCloseOnOutsideClick, usePromptHistory } from "./promptHistory";
+import { useCloseOnOutsideClick, usePromptHistory, useQuestionAtTop } from "./promptHistory";
 import "../platform/helpChat.css";
 import "./businessAssistant.css";
 
@@ -48,14 +48,13 @@ export function BusinessAssistant({ organization }) {
   const [busy, setBusy] = useState(false);
   const [settings, setSettings] = useState(null);
   const abort = useRef(null);
-  const list = useRef(null);
   const input = useRef(null);
   const container = useRef(null);
   const close = useCallback(() => setOpen(false), []);
   useCloseOnOutsideClick(container, open, close);
   const asked = usePromptHistory(`business-assistant-questions:${organization.id}`, draft, setDraft);
   useEffect(() => save(organization, messages), [organization, messages]);
-  useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [messages, open]);
+  const list = useQuestionAtTop(messages, open);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
