@@ -10,3 +10,10 @@ export function CommissionBalanceField({ value, onChange }) {
       value={value} onChange={(event) => onChange(event.target.value)} />
   );
 }
+
+// What one transaction earned: measured from its reading, learned by the app ("≈"), or not known yet ("—").
+export function earnedLabel(entry) {
+  if (entry.commission_earned == null) return "—";
+  const value = Number(entry.commission_earned).toLocaleString();
+  return entry.commission_source === "learned" ? `≈ ${value}` : value;
+}

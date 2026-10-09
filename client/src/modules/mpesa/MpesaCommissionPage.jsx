@@ -122,6 +122,39 @@ function MonthlyProfit({ months }) {
   );
 }
 
+// What the app works out from the commission balance read after each transaction: the month so far, set against what
+// Safaricom paid, and the rates it has learned so they can be checked.
+function Learned({ estimates, learned }) {
+  return (
+    <section className="panel">
+      <h2>Commission worked out from your readings</h2>
+      <p className="muted">After each deposit, withdrawal or airtime sale, enter the commission balance on the agent line. The rise is what that
+        transaction earned, and the app learns from it: once it has seen an amount, it works out the commission on transactions without a reading.</p>
+      <div className="trendTable"><table className="loanRepayments">
+        <caption>By month</caption>
+        <thead><tr><th scope="col">Month</th><th scope="col">Worked out</th><th scope="col">Not worked out yet</th><th scope="col">Safaricom paid</th></tr></thead>
+        <tbody>{estimates.map((m) => (
+          <tr key={m.month}>
+            <th scope="row">{m.label}</th>
+            <td>{money(m.earned)}</td>
+            <td>{m.unknown ? `${m.unknown} transaction${m.unknown === 1 ? "" : "s"}` : "—"}</td>
+            <td>{m.paid == null ? "Not recorded yet" : money(m.paid)}</td>
+          </tr>))}</tbody>
+      </table></div>
+      {learned.length ? <div className="trendTable"><table className="loanRepayments">
+        <caption>What the app has learned</caption>
+        <thead><tr><th scope="col">Transaction</th><th scope="col">Amounts seen</th><th scope="col">Commission each</th></tr></thead>
+        <tbody>{learned.map((band) => (
+          <tr key={`${band.kind}-${band.from}`}>
+            <th scope="row">{band.label}</th>
+            <td>{band.from === band.to ? money(band.from) : `${money(band.from)} to ${money(band.to)}`}</td>
+            <td>{money(band.earned)}</td>
+          </tr>))}</tbody>
+      </table></div> : <p className="muted">Nothing learned yet: it starts with the first two readings in a row.</p>}
+    </section>
+  );
+}
+
 export function MpesaCommissionPage() {
   const { user } = useAuth();
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
@@ -175,6 +208,7 @@ export function MpesaCommissionPage() {
       </div>
       {adding && <RecordForm data={data} onCancel={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
       {data.outlets.length === 0 && <Empty>Add an M-Pesa agency outlet on the Agent desk first.</Empty>}
+      {data.estimates && <Learned estimates={data.estimates} learned={data.learned || []} />}
       <section className="panel"><MonthlyProfit months={data.months} /></section>
       <section className="panel">
         <h2>Commission recorded</h2>

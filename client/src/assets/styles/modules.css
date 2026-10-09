@@ -2274,15 +2274,15 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 
 /* M-Pesa deposits/withdrawals today: the Agency transactions grid with their own columns. */
 .customerLedger { margin-top: 10px; }
-.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); }
-.customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr); }
+.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
+.customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
 /* Airtime: how the customer paid, one choice per line with what it does to cash and float. */
 .airtimePaidBy { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .airtimePaidBy label { display: flex; gap: 8px; align-items: flex-start; margin: 0; }
 .airtimePaidBy small { display: block; }
 .operatorForm .airtimePaidBy input { flex: none; width: auto; min-height: 0; margin: 3px 0 0; }
 .airtimePaidBy label > span { min-width: 0; }
-.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); }
+.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
 .customerLedger > div { align-items: center; }
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
 .customerLedger .inlineForm input { flex: 1 1 8rem; min-width: 0; }
@@ -2293,9 +2293,9 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
   .table.ledgerTable { overflow-x: auto; }
   .table.ledgerTable > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; min-width: 620px; }
   .table.ledgerTable > div span:nth-last-child(-n + 2) { text-align: left; }
-  .customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); min-width: 660px; }
-  .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr); min-width: 660px; }
-  .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); min-width: 0; }
+  .customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 740px; }
+  .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 740px; }
+  .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 520px; }
 }
 
 /* M-Pesa monthly report: appears once a month has ended. */
@@ -2551,9 +2551,9 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .correctForm label { display: grid; gap: 4px; font-size: 13px; }
 .correctForm .correctReason { grid-column: 1 / -1; }
 .correctForm .actionRow { grid-column: 1 / -1; }
-.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; }
-.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; }
-.customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; }
+.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
+.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
+.customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
 /* An open correction form takes a full-width row under its transaction. */
 .table.ledgerTable > div > span:has(.correctForm) { grid-column: 1 / -1; }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 vi.mock("./api", () => ({ addMpesaReference: vi.fn(async () => ({})), correctMpesaTransaction: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: [] } }) }));
@@ -30,9 +30,18 @@ it("lists today's deposits with number and ID, and the transaction ID is added a
 it("lists withdrawals by time, amount and the commission balance read after each", () => {
   render(<CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" onChanged={vi.fn()} transactions={[
     { ...deposit(4, ""), transaction_type: "CUSTOMER_WITHDRAWAL", customer_phone: "", customer_id_number: "" }]} />);
-  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Commission balance", "Transaction ID"]);
+  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Commission balance", "Earned", "Transaction ID"]);
 });
 
 it("shows numbers the way customers say them", () => {
   expect(localPhone("254110000000")).toBe("0110 000 000");
+});
+
+it("shows what each transaction earned, marking what the app worked out itself", () => {
+  render(<CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" onChanged={vi.fn()} transactions={[
+    { ...deposit(5, "A1"), transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: "118.00", commission_earned: "18.00", commission_source: "measured" },
+    { ...deposit(6, "A2"), transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: null, commission_earned: "18.00", commission_source: "learned" },
+    { ...deposit(7, "A3"), transaction_type: "CUSTOMER_WITHDRAWAL", commission_balance: null, commission_earned: null, commission_source: null }]} />);
+  const earned = screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[2].textContent);
+  expect(earned).toEqual(["18", "≈ 18", "—"]);
 });

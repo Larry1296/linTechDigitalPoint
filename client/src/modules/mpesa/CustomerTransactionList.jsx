@@ -5,6 +5,7 @@ import { addMpesaReference } from "./api";
 import { CorrectTransaction } from "./CorrectTransaction";
 import { useAuth } from "../../core/auth/AuthContext";
 import { paidByLabel } from "./airtime";
+import { earnedLabel } from "./commissionBalance";
 
 // 254712345678 → 0712 345 678, the way customers say their number.
 export const localPhone = (phone) => (phone && phone.startsWith("254") ? `0${phone.slice(3, 6)} ${phone.slice(6, 9)} ${phone.slice(9)}` : phone || "—");
@@ -49,6 +50,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
       <h2 id={`${type}-heading${closed ? "-past" : ""}`}>{title} {scope} ({rows.length})</h2>
       {!rows.length ? <p className="muted">None recorded {scope}.</p> : <>
         <p className="muted">Total {businessCurrency()} {total.toLocaleString()}{reversed.size ? ", not counting reversed ones" : ""}.</p>
+        <p className="muted">Earned: the rise in the commission balance, or ≈ when the app worked it out from earlier readings.</p>
         {/* Same grid table as "Agency transactions", so the three read alike. */}
         <div className={`table ledgerTable customerLedger ${deposit ? "depositLedger" : airtime ? "airtimeLedger" : "withdrawalLedger"}`} role="table"
           aria-label={`${title} ${scope}`}>
@@ -59,6 +61,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
             <b role="columnheader">Amount</b>
             {airtime && <b role="columnheader">Paid by</b>}
             <b role="columnheader">Commission balance</b>
+            <b role="columnheader">Earned</b>
             <b role="columnheader">Transaction ID</b>
             {canCorrect && <b role="columnheader"><span className="visuallyHidden">Correct</span></b>}
           </div>
@@ -70,6 +73,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
               <span role="cell">{businessCurrency()} {Number(entry.amount).toLocaleString()}</span>
               {airtime && <span role="cell">{paidByLabel(entry.paid_by)}</span>}
               <span role="cell">{entry.commission_balance == null ? "—" : Number(entry.commission_balance).toLocaleString()}</span>
+              <span role="cell" title={entry.commission_source === "learned" ? "Worked out by the app from earlier readings" : undefined}>{earnedLabel(entry)}</span>
               <span role="cell">{entry.provider_reference || (reversed.has(entry.id) ? "—" : <AddCode entry={entry} onSaved={onChanged} />)}</span>
               {canCorrect && <span role="cell">{!reversed.has(entry.id) && <CorrectTransaction entry={entry} onDone={onChanged} />}</span>}
             </div>

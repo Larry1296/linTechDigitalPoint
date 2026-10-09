@@ -16,7 +16,7 @@ pytestmark = pytest.mark.django_db
 def shift(db):
     operator = User.objects.create_superuser("commission-operator", "commission@example.test", "test")
     outlet = MpesaOutlet.objects.create(store=Store.objects.create(name="LinTech"), display_name="Main M-Pesa")
-    return operator, open_session(outlet=outlet, operator=operator, opening_cash="5000", opening_float="5000")
+    return operator, open_session(outlet=outlet, operator=operator, opening_cash="50000", opening_float="50000")
 
 
 def post(shift, transaction_type, key, **extra):
@@ -46,3 +46,65 @@ def test_a_correction_keeps_the_balance_unless_a_new_one_is_given(shift):
     assert kept.commission_balance == Decimal("900.00")
     fixed = correct_transaction(original=kept, user=operator, key="c2", reason="balance misread", amount="600", commission_balance="912")
     assert fixed.commission_balance == Decimal("912.00")
+
+
+def learned(session):
+    from apps.mpesa.commission_learning import earned, learn
+    return earned(*learn([session.outlet_id]))
+
+
+def record(shift, transaction_type, amount, key, reading=None, **extra):
+    operator, session = shift
+    return post_transaction(session=session, transaction_type=transaction_type, transaction_amount=amount, user=operator, idempotency_key=key,
+                            commission_balance=reading, **extra)[0]
+
+
+def test_the_rise_between_readings_is_what_each_transaction_earned(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "m1", "100")
+    second = record(shift, "CUSTOMER_WITHDRAWAL", "1500", "m2", "118")
+    third = record(shift, "CUSTOMER_DEPOSIT", "700", "m3", "118")  # a deposit can earn nothing
+    results = learned(session)
+    assert results[second.pk] == (Decimal("18.00"), "measured")
+    assert results[third.pk] == (Decimal("0.00"), "measured")
+
+
+def test_the_app_fills_in_commission_it_has_learned_and_leaves_the_rest_unknown(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "l1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1200", "l2", "118")
+    record(shift, "CUSTOMER_WITHDRAWAL", "2000", "l3", "136")  # 1,200 and 2,000 both earned 18: one band
+    between = record(shift, "CUSTOMER_WITHDRAWAL", "1500", "l4")  # no reading: lies inside the learned band
+    same = record(shift, "CUSTOMER_WITHDRAWAL", "2000", "l5")  # no reading: an amount already measured
+    unseen = record(shift, "CUSTOMER_WITHDRAWAL", "9000", "l6")  # beyond anything seen
+    deposit = record(shift, "CUSTOMER_DEPOSIT", "1500", "l7")  # withdrawals teach nothing about deposits
+    results = learned(session)
+    assert results[between.pk] == (Decimal("18.00"), "learned")
+    assert results[same.pk] == (Decimal("18.00"), "learned")
+    assert results[unseen.pk] == (None, None)
+    assert results[deposit.pk] == (None, None)
+    from apps.mpesa.commission_learning import for_shift
+    assert for_shift(session) == {"earned": Decimal("72.00"), "measured": 2, "learned": 2, "unknown": 3}
+
+
+def test_an_unread_transaction_or_a_payout_in_between_measures_nothing(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "u1", "100")
+    record(shift, "CUSTOMER_DEPOSIT", "5000", "u2")  # not read: the next rise is two transactions' commission
+    after_gap = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "u3", "150")
+    after_payout = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "u4", "10")  # Safaricom paid the balance out
+    results = learned(session)
+    assert results[after_gap.pk] == (None, None)
+    assert results[after_payout.pk] == (None, None)
+
+
+def test_a_correction_stands_where_the_wrong_entry_was(shift):
+    operator, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "c3", "100")
+    wrong = record(shift, "CUSTOMER_WITHDRAWAL", "700", "c4", "118")
+    later = record(shift, "CUSTOMER_WITHDRAWAL", "1500", "c5", "136")
+    fixed = correct_transaction(original=wrong, user=operator, key="c6", reason="typed 700, was 1,300", amount="1300")
+    results = learned(session)
+    assert results[fixed.pk] == (Decimal("18.00"), "measured")
+    assert results[later.pk] == (Decimal("18.00"), "measured")
+    assert wrong.pk not in results

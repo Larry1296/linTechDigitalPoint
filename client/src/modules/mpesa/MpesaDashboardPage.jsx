@@ -381,6 +381,10 @@ export function MpesaDashboardPage() {
         <MetricCard label="Transactions">
           {dashboard.transaction_count}
         </MetricCard>
+        {dashboard.commission_shift && <MetricCard label="Commission this shift">
+          {amount(dashboard.commission_shift.earned)}
+          {dashboard.commission_shift.unknown > 0 && <small className="muted"> · {dashboard.commission_shift.unknown} not worked out yet</small>}
+        </MetricCard>}
       </div>
       <MonthlyReport />
       <PastShifts />

@@ -1,3 +1,4 @@
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from apps.tenancy.permissions import has_business_permission, is_business_manager
 from django.db.models import Count, Sum
@@ -162,6 +163,18 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             return rows
         return rows.filter(session__operator=self.request.user)
 
+    def list(self, request):
+        """Each deposit, withdrawal and airtime sale with the commission it earned: measured from its reading, or learned."""
+        from .commission_learning import earned, learn
+        rows = list(self.filter_queryset(self.get_queryset()))
+        data = self.get_serializer(rows, many=True).data
+        outlet_ids = {row.outlet_id for row in rows if row.transaction_type in ("CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE")}
+        results = earned(*learn(outlet_ids)) if outlet_ids else {}
+        for item in data:
+            value, source = results.get(item["id"], (None, None))
+            item["commission_earned"], item["commission_source"] = value, source
+        return Response(data)
+
     def create(self, request):
         if not has_business_permission(request.user, "mpesa.add_mpesatransaction"):
             return Response({"detail": "M-Pesa posting permission required."}, status=403)
@@ -237,6 +250,19 @@ def opening_shifts(outlet, opening_room):
     return rows
 
 
+def commission_estimates():
+    """This month's and last month's commission as the app works it out from the readings, to compare with Safaricom's payment."""
+    from .commission_learning import for_month
+    this = timezone.localdate().replace(day=1)
+    last = (this - timedelta(days=1)).replace(day=1)
+    following = (this + timedelta(days=32)).replace(day=1)
+    start = lambda day: timezone.make_aware(datetime.combine(day, time.min))
+    paid = {row["period"]: row["v"] for row in MpesaCommissionEntry.objects.filter(reversed_at__isnull=True, period__in=[this, last])
+            .values("period").annotate(v=Sum("amount"))}
+    return [{"month": begin, "label": begin.strftime("%B %Y"), "paid": paid.get(begin), **for_month(start(begin), start(end))}
+            for begin, end in [(this, following), (last, this)]]
+
+
 class CommissionInput(serializers.Serializer):
     outlet = serializers.IntegerField()
     period = serializers.DateField()
@@ -257,6 +283,7 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request):
         from .commission import PLACES, due_month, monthly_profit, opening_room
+        from .commission_learning import learn
         due = due_month()
         rows = monthly_profit()
         return Response({"entries": [commission_row(e) for e in self.get_queryset()[:60]],
@@ -264,7 +291,8 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
                          "totals": {key: sum((row[key] for row in rows), Decimal("0")) for key in ["commission", "expenses", "profit"]},
                          "due_month": due, "due_label": due.strftime("%B %Y") if due else None, "places": PLACES,
                          "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first(),
-                                      "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()]})
+                                      "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()],
+                         "estimates": commission_estimates(), "learned": learn()[2].bands()})
 
     def retrieve(self, request, pk=None):
         return Response(commission_row(self.get_object()))
@@ -313,7 +341,8 @@ def dashboard(request):
     # stays put; cash brought in (rebalance), manager adjustments and airtime paid to another number change it.
     in_operation = {"total": cash + electronic_float,
                     "opening": (session.opening_cash + session.opening_float) if session else 0}
-    return Response({"in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    from .commission_learning import for_shift
+    return Response({"commission_shift": for_shift(session) if session else None, "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):
