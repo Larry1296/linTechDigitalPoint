@@ -21,6 +21,24 @@ import { DeleteProductsDialog, ProductSelection, useProductSelection } from "./D
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const count = (value) => Number(value || 0).toLocaleString();
 
+// All the stock held now: goes up when stock is received and down when it is sold, used or lost (the page refreshes
+// itself). What it cost shows only to those who may see buying prices; otherwise it is valued at selling price.
+function StockTotals({ stock }) {
+  if (!stock) return null;
+  const showCost = "value_at_cost" in stock;
+  return (
+    <section className="stockTotals" aria-label="Stock you hold now">
+      <dl className="factTiles">
+        <div><dt>Items in stock</dt><dd>{count(stock.units)}</dd><small>{count(stock.products)} products</small></div>
+        {showCost && <div><dt>Stock total at buying price (BP)</dt><dd>{money(stock.value_at_cost)}</dd>
+          {stock.cost_missing > 0 && <small>{count(stock.cost_missing)} {stock.cost_missing === 1 ? "delivery has" : "deliveries have"} no buying price yet</small>}</div>}
+        <div><dt>Stock total at selling price (SP)</dt><dd>{money(stock.value_at_selling_price)}</dd></div>
+        {showCost && <div><dt>Profit if it all sells</dt><dd>{money(Number(stock.value_at_selling_price) - Number(stock.value_at_cost))}</dd></div>}
+      </dl>
+    </section>
+  );
+}
+
 // A stock item with any variant at or below its restock level.
 const needsRestock = (product) => product.product_type !== "SERVICE"
   && product.variants.some((v) => Number(v.available || 0) <= Number(v.minimum_stock || 0));
@@ -468,6 +486,7 @@ export function ProductsPage() {
           </div>
         )}
       </div>
+      {!category && <StockTotals stock={counts.stock} />}
       {hasPermission(user, "catalog.add_product") && !category && (
         <p className="templateHint">
           <FileSpreadsheet size={18} aria-hidden="true" />

@@ -67,3 +67,25 @@ def product_overview(product, show_cost):
             "sales_30_days": sales(sold.filter(sale__created_at__gte=since)), "sales_all_time": sales(sold),
             "last_sold": last_sale.sale.created_at if last_sale else None, "last_received": lots[0].received_at if lots else None,
             "deliveries": deliveries, "activity": activity}
+
+
+def stock_totals(show_cost):
+    """All the stock the business holds now, for the top of the Products page: how many items, how many products have
+    stock, and what it is worth at selling price and (for those who may see costs) at what it cost. Worked out from the
+    shelves, so it goes up when stock is received or returned and down when it is sold, used, lost or sent back. Stock
+    received without a buying price is counted at selling price only, and how many such lots there are is given."""
+    from django.db.models import DecimalField, ExpressionWrapper, F
+    from apps.inventory.models import StockBalance, StockLot
+    held = StockBalance.objects.filter(quantity__gt=0, lot__variant__active=True, lot__variant__product__active=True,
+                                       lot__variant__product__product_type="STOCK_ITEM")
+    money = lambda price: Sum(ExpressionWrapper(F("quantity") * price, output_field=DecimalField()))
+    totals = held.aggregate(units=Sum("quantity"), retail=money(F("lot__variant__selling_price")),
+                            cost=money(F("lot__unit_cost")))
+    cents = Decimal("0.01")
+    result = {"units": totals["units"] or ZERO, "products": held.values("lot__variant__product_id").distinct().count(),
+              "value_at_selling_price": (totals["retail"] or ZERO).quantize(cents)}
+    if show_cost:
+        uncosted = held.filter(lot__cost_status=StockLot.UNCOSTED)
+        cost = (totals["cost"] or ZERO) - (uncosted.aggregate(v=money(F("lot__unit_cost")))["v"] or ZERO)
+        result.update(value_at_cost=cost.quantize(cents), cost_missing=uncosted.values("lot_id").distinct().count())
+    return result

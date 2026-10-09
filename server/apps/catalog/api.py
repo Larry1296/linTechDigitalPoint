@@ -467,8 +467,10 @@ class ProductViewSet(SecuredModelViewSet):
         from django.db.models import Count
         active = {row["id"] for row in category_tree()}
         counts = self.get_queryset().order_by().values("category_id").annotate(total=Count("id"))
+        from .overview import stock_totals
         return Response({"categories": {str(row["category_id"]): row["total"] for row in counts if row["category_id"] in active},
-                         "other": sum(row["total"] for row in counts if row["category_id"] not in active)})
+                         "other": sum(row["total"] for row in counts if row["category_id"] not in active),
+                         "stock": stock_totals(has_business_permission(request.user, "accounting.view_profit"))})
 
     @action(detail=False, methods=["get"], url_path="search-suggestions")
     def search_suggestions(self, request):

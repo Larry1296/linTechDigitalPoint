@@ -2755,3 +2755,8 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .commissionSpent > button { justify-self: start; margin: 0; }
 .mpesaUnpaid { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--series-3, #1baf7a) 10%, var(--surface)); }
 .mpesaUnpaid p { margin: 2px 0; }
+.stockTotals { margin: 4px 0 18px; }
+.stockTotals .factTiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px; }
+.stockTotals .factTiles div { padding: 12px 14px; border-radius: 12px; background: var(--surface); }
+.stockTotals dd { margin: 4px 0 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stockTotals small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }

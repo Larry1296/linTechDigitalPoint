@@ -700,3 +700,20 @@ def test_quantity_can_be_raised_from_product_details_at_the_latest_buying_price(
     assert response.status_code == 200, response.json()
     assert balance("1200") == D("1500.00")
     assert_every_journal_balances()
+
+
+def test_products_page_stock_totals_grow_when_stock_arrives_and_shrink_when_it_sells(shop):
+    from rest_framework.test import APIClient
+    client = APIClient()
+    client.force_authenticate(shop["owner"])
+    stock = lambda: client.get("/api/v1/catalog/products/category-counts/").json()["stock"]
+    before = stock()
+    receive(shop, 5, 300)  # 5 routers at 300 each, selling at 1,000
+    after = stock()
+    assert Decimal(str(after["units"])) - Decimal(str(before["units"])) == 5
+    assert Decimal(str(after["value_at_cost"])) - Decimal(str(before["value_at_cost"])) == D("1500")
+    assert Decimal(str(after["value_at_selling_price"])) - Decimal(str(before["value_at_selling_price"])) == D("5000")
+    sell(shop, 2)
+    sold = stock()
+    assert Decimal(str(after["units"])) - Decimal(str(sold["units"])) == 2
+    assert Decimal(str(after["value_at_cost"])) - Decimal(str(sold["value_at_cost"])) == D("600")  # what the 2 sold cost
