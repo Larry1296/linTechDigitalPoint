@@ -8,7 +8,7 @@ amounts on both sides of it that earned the same, so it must lie in their band. 
 guessed. Newer measurements win, so a change in Safaricom's rates is picked up by itself.
 
 Transactions in between without a reading are taken off at what the app already knows they earn, so it only needs
-to ask for a reading when an amount is new to it (and now and then as a check). A reading lower than the one before
+to ask for a reading while an amount is new to it. A reading lower than the one before
 (Safaricom paid the commission out), or with a reversed or unknown transaction in between, measures nothing.
 """
 from collections import defaultdict
@@ -70,40 +70,51 @@ def measure(outlets, rates=None):
 
 
 class Rates:
-    """What the app has learned: for each kind of transaction, the latest commission measured at each amount."""
+    """What the app has learned: for each kind of transaction, the latest commission measured at each amount, trusted
+    once it is confirmed: the same amount earned the same twice in a row, or a neighbouring amount earned the same. So
+    one misread balance never becomes a rate; it only makes the app ask again."""
 
     def __init__(self, outlets, measured):
-        seen = defaultdict(dict)
+        seen = defaultdict(lambda: defaultdict(list))
         for rows in outlets.values():
             for row in rows:
                 if row.pk in measured:
-                    seen[row.transaction_type][row.amount] = (row.done_at, measured[row.pk])
-        merged = {}
+                    seen[row.transaction_type][row.amount].append((row.done_at, measured[row.pk]))
+        self.points = {}
         for kind, amounts in seen.items():
-            merged[kind] = sorted((value, earned) for value, (_, earned) in amounts.items())
-        self.points = merged
+            points = []
+            for value, readings in sorted(amounts.items()):
+                readings.sort(key=lambda reading: reading[0])
+                latest = readings[-1][1]
+                points.append([value, latest, len(readings) >= 2 and readings[-2][1] == latest])
+            for i, point in enumerate(points):
+                if any(0 <= j < len(points) and points[j][1] == point[1] for j in (i - 1, i + 1)):
+                    point[2] = True
+            self.points[kind] = [tuple(point) for point in points]
 
     def predict(self, kind, value):
-        """The commission for ``value``: measured at that amount, or between two amounts that earned the same."""
+        """The commission for ``value``: confirmed at that amount, or between two amounts that earned the same."""
         points = self.points.get(kind, [])
-        below = [p for p in points if p[0] <= value]
-        above = [p for p in points if p[0] >= value]
-        if below and below[-1][0] == value:
-            return below[-1][1]
+        exact = [p for p in points if p[0] == value]
+        if exact:
+            return exact[0][1] if exact[0][2] else None
+        below = [p for p in points if p[0] < value]
+        above = [p for p in points if p[0] > value]
         if below and above and below[-1][1] == above[0][1]:
             return below[-1][1]
         return None
 
     def bands(self):
-        """The learned table, as amount ranges that earned the same: what the app knows, shown so it can be checked."""
+        """The learned table, as amount ranges that earned the same: what the app knows, shown so it can be checked.
+        A single amount not yet confirmed is shown too, marked, so it is clear the app will ask about it again."""
         rows = []
         for kind in EARNING:
             band = None
-            for value, earned in self.points.get(kind, []):
+            for value, earned, confirmed in self.points.get(kind, []):
                 if band and band["earned"] == earned:
-                    band["to"], band["seen"] = value, band["seen"] + 1
+                    band["to"], band["seen"], band["confirmed"] = value, band["seen"] + 1, True
                 else:
-                    band = {"kind": kind, "label": LABELS[kind], "from": value, "to": value, "earned": earned, "seen": 1}
+                    band = {"kind": kind, "label": LABELS[kind], "from": value, "to": value, "earned": earned, "seen": 1, "confirmed": confirmed}
                     rows.append(band)
         return rows
 
@@ -125,25 +136,13 @@ def learn(outlet_ids=None):
     return outlets, measured, _learn(_history())[1]
 
 
-CHECK_EVERY = 20
-
-
 def advice(outlet_id, kind, value):
-    """Whether to ask for the commission balance after a ``kind`` transaction of ``value``: when the app has not
-    learned that amount yet, and now and then as a check that Safaricom's rates have not changed."""
-    outlets, _, rates = learn([outlet_id])
+    """Whether to ask for the commission balance after a ``kind`` transaction of ``value``: only while the app has not
+    learned that amount. Once it has, the box goes away and the commission is worked out by itself; a change in
+    Safaricom's rates shows at month end, when what the app worked out is set against what Safaricom paid."""
+    _, _, rates = learn([outlet_id])
     known = rates.predict(kind, value) if kind in EARNING else None
-    rows = [row for row in outlets.get(outlet_id, []) if row.standing]
-    unread = 0
-    for row in reversed(rows):
-        if row.commission_balance is not None:
-            break
-        unread += 1
-    reason = None
-    if kind in EARNING and known is None:
-        reason = "new"
-    elif kind in EARNING and unread >= CHECK_EVERY:
-        reason = "check"
+    reason = "new" if kind in EARNING and known is None else None
     return {"earned": known, "ask": reason is not None, "reason": reason}
 
 

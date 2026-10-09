@@ -113,24 +113,37 @@ def test_a_correction_stands_where_the_wrong_entry_was(shift):
 def test_a_reading_counts_when_the_unread_transactions_before_it_are_already_known(shift):
     _, session = shift
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g1", "100")
-    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g2", "112")  # 1,000 earns 12
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g2b", "124")  # 1,000 earns 12, twice: confirmed
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "g3")  # not read, but known: 12
-    new = record(shift, "CUSTOMER_WITHDRAWAL", "3000", "g4", "154")  # 154 - 112 - 12 = 30
+    new = record(shift, "CUSTOMER_WITHDRAWAL", "3000", "g4", "166")  # 166 - 124 - 12 = 30
     assert learned(session)[new.pk] == (Decimal("30.00"), "measured")
 
 
-def test_the_form_asks_for_a_reading_only_for_amounts_the_app_has_not_learned(shift):
-    from apps.mpesa.commission_learning import CHECK_EVERY, advice
+def test_the_form_asks_a_few_times_then_the_box_goes_away(shift):
+    from apps.mpesa.commission_learning import advice
     _, session = shift
     outlet = session.outlet_id
     assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": None, "ask": True, "reason": "new"}
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q1", "100")
-    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q2", "112")  # one measurement: not trusted yet
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000"))["ask"] is True
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q3", "124")  # the same again: learned
     assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("12.00"), "ask": False, "reason": None}
     assert advice(outlet, "CUSTOMER_DEPOSIT", Decimal("1000"))["ask"] is True  # deposits not learned yet
-    for n in range(CHECK_EVERY):
+    for n in range(30):
         record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"q-{n}")
-    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("12.00"), "ask": True, "reason": "check"}
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000"))["ask"] is False  # never asks again for a learned amount
+
+
+def test_one_misread_balance_does_not_become_a_rate(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x3", "124")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x4", "160")  # misread: 36
+    unread = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x5")
+    assert learned(session)[unread.pk] == (None, None)  # 12 then 36: not trusted until two agree again
 
 
 def test_the_advice_endpoint(shift):
