@@ -8,7 +8,7 @@ import { useAuthForm } from "./useAuthForm";
 export function LoginPage() {
   const platform = usePlatform();
   const { search } = useLocation();
-  const { error, submit } = useAuthForm();
+  const { error, busy, submit } = useAuthForm();
   return (
     <AuthFormCard
       eyebrow={platform.name}
@@ -30,7 +30,7 @@ export function LoginPage() {
         required
         autoComplete="current-password"
       />
-      <button>Sign in</button>
+      <button disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       <FormError title="Could not sign in." message={error} />
       <Link to="/register">Register your business</Link>
       <Link to="/forgot-password">Forgot password?</Link>

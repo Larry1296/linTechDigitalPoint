@@ -15,13 +15,18 @@ function safeNext(search) {
 
 export function useAuthForm() {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const { signedIn } = useAuth();
   const navigate = useNavigate();
   const { search } = useLocation();
   const next = safeNext(search);
   const submit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const data = Object.fromEntries(new FormData(event.currentTarget));
+    // Clear the last attempt's error so a corrected retry starts fresh, and the same mistake made again shows again.
+    setError("");
+    setBusy(true);
     try {
       const identity = await api(
         "/api/v1/auth/login/",
@@ -36,7 +41,9 @@ export function useAuthForm() {
       navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   };
-  return { error, submit };
+  return { error, busy, submit };
 }

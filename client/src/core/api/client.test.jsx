@@ -179,3 +179,19 @@ it("says plainly that the server can't be reached when it sends back nothing or 
   vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
   await expect(api("/api/v1/auth/login/", { method: "POST", body: "{}" })).rejects.toThrow(SERVER_UNREACHABLE);
 });
+it("fetches a fresh security token and retries a sign-in the server refused for a stale one", async () => {
+  resetCsrfToken();
+  let token = 0;
+  let logins = 0;
+  const fetch = vi.fn(async (path, options) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: `token-${++token}` });
+    logins += 1;
+    return options.headers["X-CSRFToken"] === "token-1"
+      ? response(403, { detail: "CSRF Failed: CSRF token from the 'X-Csrftoken' HTTP header incorrect." })
+      : response(400, { detail: "Invalid credentials." });
+  });
+  vi.stubGlobal("fetch", fetch);
+  await expect(api("/api/v1/auth/login/", { method: "POST", body: "{}" })).rejects.toThrow("Invalid credentials.");
+  expect(logins).toBe(2);
+  resetCsrfToken();
+});

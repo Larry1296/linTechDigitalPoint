@@ -190,6 +190,12 @@ async function request(path, options = {}, retried = false, coordinated = false)
       }
       throw new ApiError(423, data.detail || SESSION_EXPIRED_MESSAGE);
     }
+    // The security token changes when someone signs in or out (also in another tab). A refused token is fetched
+    // afresh and the request sent once more, so a corrected sign-in is not stuck failing until the page reloads.
+    if (response.status === 403 && !safe && !retried && /CSRF/i.test(data.detail || "")) {
+      resetCsrfToken();
+      return request(path, options, true);
+    }
     if ([401, 403].includes(response.status) && protectedPath) {
       const state = await checkExpiredSession();
       if (state === "expired") throw new ApiError(response.status, SESSION_EXPIRED_MESSAGE);
