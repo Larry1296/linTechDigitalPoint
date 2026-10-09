@@ -107,6 +107,11 @@ export function DashboardPage() {
       </form>
       <p>Showing {period.start} to {period.end}. {data.financial_scope === "permitted_operations" ? "Only the parts of the business you have access to are included." : ""}</p>
       {period.profit != null && <p className="profitSum"><b>{profitSum({ sales: period.revenue, cost: period.cogs, expenses: period.expenses, stock: period.stock_corrections, profit: period.profit }, money)}</b></p>}
+      {data.mpesa_unpaid && <div className="mpesaUnpaid" role="note">
+        <p><b>M-Pesa commission not paid yet: about {money(data.mpesa_unpaid.amount)}</b> earned in {data.mpesa_unpaid.months.join(" and ")}, worked out from the
+          commission balance readings. Safaricom pays it early the next month; it is added to the books when you record the payment on the Commission page.</p>
+        <p>Profit or loss with it: <b>{profitText(data.mpesa_unpaid.profit_with, money)}</b></p>
+      </div>}
       <PeriodComparison data={data} money={money} />
       {data.comparison ? cards([["Stock you already had, entered at its cost", money(period.opening_stock)], ["Profit before running costs", profitText(period.gross_profit, money)]]) : cards([["Stock bought from suppliers", money(period.purchases)], ["Stock you already had, entered at its cost", money(period.opening_stock)], ["Sales", money(period.revenue)], ["What the sold items cost you", money(period.cogs)], ["Profit before running costs", profitText(period.gross_profit, money)], ["Running costs (expenses)", money(period.expenses)], ...(Number(period.stock_corrections || 0) ? [["Stock found or missing in counts", stockText(period.stock_corrections, money)]] : []), ["Profit or loss", profitText(period.profit, money)]])}
       <div className="callout"><div><b>How to read these figures</b>

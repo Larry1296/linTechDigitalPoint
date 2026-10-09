@@ -305,3 +305,68 @@ def test_commission_paid_into_the_float_and_taken_from_the_drawer_works_like_a_w
     accounts, pl, checks = _books(org)
     assert accounts["1000"]["balance"] == 0 and accounts["4010"]["balance"] == 0 and pl["revenue"] == 0
     assert checks["agency_float"]["reconciled"] and checks["agency_cash"]["reconciled"]
+
+
+def test_commission_partly_spent_straight_away_is_income_and_those_costs(agency):
+    client, org, owner, outlet, today, last_month = agency
+    made = _record(client, outlet, last_month, "5000", "", "BANK", key="split-1", paid_on=str(today), spent=[
+        {"category": "Rent", "description": "Shop rent", "amount": "3000", "unit": "SHOP"},
+        {"category": "Airtime", "description": "Phone airtime", "amount": "200", "unit": "MPESA"}])
+    assert made.status_code == 201, made.content
+    assert D(str(made.json()["amount"])) == D("1800")  # what was left went to the bank
+    entries = client.get("/api/v1/mpesa/commission/").json()["entries"]
+    assert sorted(D(str(e["amount"])) for e in entries) == [D("1800"), D("3200")]
+    spent = next(e for e in entries if D(str(e["amount"])) == D("3200"))
+    assert "Shop rent (3,000.00)" in spent["notes"] and spent["settlement_method"] == "MPESA"
+    _, last_pl, _ = _books(org, last_month, _month_end(last_month))
+    assert last_pl["revenue"] == D("5000")  # all of it is last month's income
+    accounts, this_pl, _ = _books(org)
+    assert this_pl["total_operating_expenses"] == D("3200")  # the costs count when they were paid
+    with organization_context(org):
+        from apps.accounting.models import Expense
+        assert sorted((e.business_unit, e.amount, e.category.name) for e in Expense.objects.all()) == [("MPESA", D("200"), "Airtime"), ("SHOP", D("3000"), "Rent")]
+    assert accounts["1020"]["balance"] == 0 and accounts["1010"]["balance"] == D("1800")  # passed through M-Pesa; the rest is in the bank
+    # Recording the same payment again changes nothing.
+    again = _record(client, outlet, last_month, "5000", "", "BANK", key="split-1", paid_on=str(today), spent=[
+        {"category": "Rent", "description": "Shop rent", "amount": "3000", "unit": "SHOP"},
+        {"category": "Airtime", "description": "Phone airtime", "amount": "200", "unit": "MPESA"}])
+    assert again.status_code == 201 and len(client.get("/api/v1/mpesa/commission/").json()["entries"]) == 2
+    # Undoing the payment undoes the spent part and its costs too.
+    main = next(e for e in entries if D(str(e["amount"])) == D("1800"))
+    assert client.post(f"/api/v1/mpesa/commission/{main['id']}/undo/", {"reason": "wrong month"}, format="json").status_code == 200
+    _, last_pl, _ = _books(org, last_month, _month_end(last_month))
+    _, this_pl, _ = _books(org)
+    assert last_pl["revenue"] == 0 and this_pl["total_operating_expenses"] == 0
+
+
+def test_spending_more_than_was_paid_or_without_saying_what_on_is_refused(agency):
+    client, _, _, outlet, today, last_month = agency
+    over = _record(client, outlet, last_month, "500", "", "CASH", key="over", paid_on=str(today),
+                   spent=[{"category": "Rent", "description": "Rent", "amount": "600", "unit": "SHOP"}])
+    assert over.status_code == 400 and "More was spent" in str(over.json())
+    vague = _record(client, outlet, last_month, "500", "", "CASH", key="vague", paid_on=str(today), spent=[{"amount": "100"}])
+    assert vague.status_code == 400 and "what each amount" in str(vague.json())
+    whole = _record(client, outlet, last_month, "500", "", "CASH", key="whole", paid_on=str(today),
+                    spent=[{"category": "Wages", "description": "Helper", "amount": "500", "unit": "MPESA"}])
+    assert whole.status_code == 201 and whole.json()["settlement_method"] == "MPESA"  # all of it spent: one entry, its costs
+
+
+def test_the_dashboard_shows_profit_with_the_commission_safaricom_has_not_paid_yet(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.services import open_session, post_transaction
+        shift = open_session(outlet=outlet, operator=owner, opening_cash="20000", opening_float="20000")
+        for n, reading in enumerate(["100", "112", "124"]):
+            post_transaction(session=shift, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount="1000", user=owner,
+                             idempotency_key=f"u{n}", commission_balance=reading)
+    data = client.get("/api/v1/inventory/dashboard/").json()
+    coming = data["mpesa_unpaid"]
+    assert D(str(coming["amount"])) == D("36.00") and coming["months"] == [today.strftime("%B %Y")]
+    assert D(str(coming["profit_with"])) == D(str(data["period_summary"]["profit"])) + D("36")
+    estimates = client.get("/api/v1/mpesa/commission/").json()["estimates"]
+    assert estimates[0]["current"] is True and D(str(estimates[0]["earned"])) == D("36.00") and estimates[0]["paid"] is None
+    # Once Safaricom's payment for this month is recorded, it is in the books instead.
+    assert _record(client, outlet, today.replace(day=1), "40", "", "CASH", key="paid-now", paid_on=str(today)).status_code == 201
+    assert client.get("/api/v1/inventory/dashboard/").json()["mpesa_unpaid"] is None
+    row = client.get("/api/v1/mpesa/commission/").json()["estimates"][0]
+    assert (D(str(row["paid"])), D(str(row["difference"]))) == (D("40"), D("40") - D(str(row["expected"])))

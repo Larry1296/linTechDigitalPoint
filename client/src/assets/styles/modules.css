@@ -2742,3 +2742,16 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .shiftChartTable :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .shiftChart { padding: 14px 12px; } .shiftChart dd { font-size: 17px; } }
 .commissionForecast { margin: 4px 0 12px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--chart-commission) 10%, var(--surface)); }
+
+/* M-Pesa commission: Safaricom's payment next to the app's figure, and what was spent straight from it. */
+.commissionCompare { display: grid; gap: 4px; margin: -4px 0 4px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.commissionSpent { display: grid; gap: 10px; margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.commissionSpent legend { padding: 0 6px; font-weight: 700; }
+.commissionSpent p { margin: 0; }
+.commissionSpentLine { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; align-items: end;
+  padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.commissionSpentLine button { margin: 0; }
+.commissionSpent > button { justify-self: start; margin: 0; }
+.mpesaUnpaid { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--series-3, #1baf7a) 10%, var(--surface)); }
+.mpesaUnpaid p { margin: 2px 0; }

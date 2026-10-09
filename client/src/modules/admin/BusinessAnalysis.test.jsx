@@ -23,14 +23,15 @@ it("lays out the analysis for the picked dates, leaving out what the user cannot
   const data = {
     period_summary: { start: "2026-09-01", end: "2026-09-14" },
     performance: { granularity: "day", points: days },
-    unit_period: [{ key: "SHOP", name: "Products / sales", revenue: 900 }, { key: "MPESA", name: "M-Pesa agency", revenue: 150 }],
+    unit_period: [{ key: "SHOP", name: "Products / sales", revenue: 900, cogs: 500, expenses: 100, stock_corrections: 0, profit: 300 },
+      { key: "MPESA", name: "M-Pesa agency", revenue: 150, cogs: 0, expenses: 200, stock_corrections: 0, profit: -50 }],
     top_items: [{ id: 1, name: "Cable — 1m", quantity: 3, sales: 600 }],
     expense_breakdown: [{ category: "Rent", business_unit: "SHOP", amount: 50 }, { category: "Rent", business_unit: "MPESA", amount: 20 }],
     financial_trend: [{ month: "2026-08", sales: 100, expenses: 10, profit: 20 }, { month: "2026-09", sales: 200, expenses: 20, profit: -10 }],
   };
   render(<BusinessAnalysis data={data} money={money} />);
   for (const title of ["Sales each day", "Sales, running costs and profit", "Where the sales came from", "Best sellers", "Where the running costs went",
-    "Busiest days of the week", "The last twelve months", "Profit kept from each 100 of sales"]) {
+    "Busiest days of the week", "The last twelve months", "Profit kept from each 100 of sales", "Profit or loss by part of the business"]) {
     expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
   }
   expect(screen.getByText(/On average, Monday brings the most sales/)).toBeInTheDocument();

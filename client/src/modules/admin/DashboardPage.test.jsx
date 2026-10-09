@@ -55,3 +55,14 @@ it("shows purchase and expense totals and requests the selected report period", 
   fireEvent.click(screen.getByRole("button", { name: "Apply dates" }));
   await waitFor(() => expect(api).toHaveBeenLastCalledWith("/api/v1/inventory/dashboard/?start=2026-09-10&end=2026-09-21"));
 });
+
+it("shows profit with the M-Pesa commission Safaricom has not paid yet", async () => {
+  api.mockResolvedValue({ ...snapshot(),
+    period_summary: { start: "2026-10-01", end: "2026-10-09", purchases: "0", opening_stock: "0", revenue: "200", cogs: "80", gross_profit: "120", expenses: "150", profit: "-30" },
+    mpesa_unpaid: { amount: "1250", months: ["October 2026"], profit_with: "1220" },
+  });
+  render(<DashboardPage />);
+  const note = await screen.findByRole("note");
+  expect(note).toHaveTextContent("M-Pesa commission not paid yet: about KES 1,250.00 earned in October 2026");
+  expect(note).toHaveTextContent("Profit or loss with it: KES 1,220.00 profit");
+});

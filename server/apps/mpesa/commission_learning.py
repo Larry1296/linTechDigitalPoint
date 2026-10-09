@@ -216,3 +216,32 @@ def forecast(as_of=None, learned=None):
     cents = lambda value: value.quantize(Decimal("0.01"))
     return {"month": first, "label": first.strftime("%B %Y"), "as_of": as_of, "so_far": cents(so_far), "daily": cents(daily),
             "days_left": days_left, "forecast": cents(so_far + daily * days_left), "transactions": len(rows), "unknown": totals["unknown"]}
+
+
+def worked_out(start, end, learned=None):
+    """Commission earned from day ``start`` to day ``end`` (both included), as the app works it out: measured or
+    learned, and any transaction not worked out yet at the average of those that were."""
+    outlets, measured, rates = learned or learn()
+    results = earned(outlets, measured, rates)
+    rows = [r for rows in outlets.values() for r in rows if r.standing and start <= timezone.localtime(r.done_at).date() <= end]
+    totals = summary(rows, results)
+    known = totals["measured"] + totals["learned"]
+    average = totals["earned"] / known if known else Decimal("0")
+    return (totals["earned"] + average * totals["unknown"]).quantize(Decimal("0.01"))
+
+
+def unpaid(start, end):
+    """Commission the agency earned between ``start`` and ``end`` in months Safaricom has not paid yet (nothing recorded
+    for them), as the app works it out: income that is coming, not yet in the books. {"amount", "months"}."""
+    from .models import MpesaCommissionEntry
+    month, months, amount, learned = start.replace(day=1), [], Decimal("0"), None
+    while month <= end:
+        following = (month + timedelta(days=32)).replace(day=1)
+        if not MpesaCommissionEntry.objects.filter(period=month, reversed_at__isnull=True).exists():
+            learned = learned or learn()
+            value = worked_out(max(start, month), min(end, following - timedelta(days=1)), learned)
+            if value:
+                amount += value
+                months.append(month.strftime("%B %Y"))
+        month = following
+    return {"amount": amount, "months": months}

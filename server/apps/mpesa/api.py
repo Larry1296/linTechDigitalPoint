@@ -265,17 +265,28 @@ def opening_shifts(outlet, opening_room):
     return rows
 
 
-def commission_estimates():
-    """This month's and last month's commission as the app works it out from the readings, to compare with Safaricom's payment."""
-    from .commission_learning import for_month
-    this = timezone.localdate().replace(day=1)
-    last = (this - timedelta(days=1)).replace(day=1)
-    following = (this + timedelta(days=32)).replace(day=1)
-    start = lambda day: timezone.make_aware(datetime.combine(day, time.min))
-    paid = {row["period"]: row["v"] for row in MpesaCommissionEntry.objects.filter(reversed_at__isnull=True, period__in=[this, last])
+def commission_estimates(months=6):
+    """The last few months' commission as the app works it out from the readings, next to what Safaricom paid for each
+    month and the difference, newest first. The current month is the forecast to its end."""
+    from .commission_learning import forecast, learn
+    learned = learn()
+    first = timezone.localdate().replace(day=1)
+    starts = [first]
+    while len(starts) < months:
+        starts.append((starts[-1] - timedelta(days=1)).replace(day=1))
+    paid = {row["period"]: row["v"] for row in MpesaCommissionEntry.objects.filter(reversed_at__isnull=True, period__in=starts)
             .values("period").annotate(v=Sum("amount"))}
-    return [{"month": begin, "label": begin.strftime("%B %Y"), "paid": paid.get(begin), **for_month(start(begin), start(end))}
-            for begin, end in [(this, following), (last, this)]]
+    rows = []
+    for begin in starts:
+        following = (begin + timedelta(days=32)).replace(day=1)
+        moment = timezone.now() if begin == first else timezone.make_aware(datetime.combine(following - timedelta(days=1), time(23, 59, 59)))
+        result = forecast(moment, learned)
+        if not result["transactions"] and begin not in paid:
+            continue  # nothing recorded for that month: nothing to compare
+        expected = result["forecast"]
+        rows.append({"month": begin, "label": begin.strftime("%B %Y"), "current": begin == first, "earned": result["so_far"], "expected": expected,
+                     "unknown": result["unknown"], "paid": paid.get(begin), "difference": None if paid.get(begin) is None else paid[begin] - expected})
+    return rows
 
 
 class CommissionInput(serializers.Serializer):
@@ -287,7 +298,8 @@ class CommissionInput(serializers.Serializer):
     paid_on = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     session_id = serializers.IntegerField(required=False, allow_null=True)
-    idempotency_key = serializers.CharField(max_length=100)
+    idempotency_key = serializers.CharField(max_length=90)
+    spent = serializers.ListField(child=serializers.DictField(), required=False, default=list, max_length=20)
 
 
 class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -315,13 +327,15 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
     def create(self, request):
         if not has_business_permission(request.user, "mpesa.add_mpesacommissionentry"):
             return Response({"detail": "Commission recording permission required."}, status=403)
+        if request.data.get("spent") and not has_business_permission(request.user, "accounting.add_expense"):
+            return Response({"detail": "Recording what the commission was spent on needs permission to record money spent."}, status=403)
         form = CommissionInput(data=request.data)
         form.is_valid(raise_exception=True)
         d = form.validated_data
         from .commission import record
         entry = record(outlet=d["outlet"], user=request.user, period=d["period"], amount=d["amount"], reference=d["reference"],
                        settlement=d["settlement_method"], key=d["idempotency_key"], paid_on=d.get("paid_on"), notes=d["notes"],
-                       session_id=d.get("session_id"))
+                       session_id=d.get("session_id"), spent=d["spent"])
         return Response(commission_row(entry), status=201)
 
     @action(detail=True, methods=["post"])

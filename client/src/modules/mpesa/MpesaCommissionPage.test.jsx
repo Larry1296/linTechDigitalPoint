@@ -75,3 +75,28 @@ it("records commission that was already in a shift's opening float against that 
   const body = JSON.parse(api.mock.calls.find(([p, o]) => p === "/api/v1/mpesa/commission/" && o?.method === "POST")[1].body);
   expect(body).toEqual(expect.objectContaining({ amount: "1020", settlement_method: "OPENING_FLOAT", session_id: 4, paid_on: "2026-10-05" }));
 });
+
+it("compares Safaricom's payment with the app's figure and records what was spent straight from it", async () => {
+  vi.resetModules();
+  const auth = await import("../../core/auth/AuthContext");
+  vi.spyOn(auth, "useAuth").mockReturnValue({ user: { permissions: ["mpesa.view_mpesacommissionentry", "mpesa.add_mpesacommissionentry", "accounting.add_expense"] } });
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : path.includes("accounting/categories") ? [{ id: 1, name: "Rent" }]
+    : listing({ estimates: [{ month: "2026-09-01", label: "September 2026", current: false, earned: "4000", expected: "4000", unknown: 0, paid: null, difference: null }], learned: [] })));
+  render(<MpesaCommissionPage />);
+  expect(await screen.findByRole("row", { name: /September 2026 KSh 4,000 Not recorded yet/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Record it" }));
+  const form = screen.getByRole("form", { name: "Record commission" });
+  fireEvent.change(within(form).getByLabelText(/Amount Safaricom paid/), { target: { value: "4200" } });
+  expect(within(form).getByText(/The app worked out/)).toHaveTextContent("KSh 4,000 for September 2026");
+  expect(within(form).getByText(/Safaricom paid KSh 200 more \(5%\)/)).toBeInTheDocument();
+  fireEvent.click(within(form).getByRole("button", { name: "+ Add something it was spent on" }));
+  fireEvent.change(within(form).getByLabelText("Type of cost"), { target: { value: "Rent" } });
+  fireEvent.change(within(form).getByLabelText("What for"), { target: { value: "Shop rent" } });
+  fireEvent.change(within(form).getByLabelText(/^Amount \(KSh\)/), { target: { value: "3000" } });
+  fireEvent.change(within(form).getByLabelText("For"), { target: { value: "SHOP" } });
+  expect(within(form).getByText(/KSh 3,000 spent, KSh 1,200 goes to: kept in the agency float/)).toBeInTheDocument();
+  expect(within(form).getByLabelText("Where the rest went")).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record commission" })); });
+  const body = JSON.parse(api.mock.calls.find(([path, options]) => path === "/api/v1/mpesa/commission/" && options?.method === "POST")[1].body);
+  expect(body).toMatchObject({ amount: "4200", settlement_method: "AGENCY_FLOAT", spent: [{ category: "Rent", description: "Shop rent", amount: "3000", unit: "SHOP" }] });
+});

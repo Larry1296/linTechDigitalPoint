@@ -219,6 +219,14 @@ def dashboard_snapshot(request):
     period['money_received'] = money_received(start, end) if visible_units else None
     period['basis'] = "accrual"
     data['period_summary'] = period
+    # Commission the M-Pesa agency earned in these dates that Safaricom has not paid yet: it is not in the books until it
+    # is recorded, so profit is shown with and without it.
+    data['mpesa_unpaid'] = None
+    if 'MPESA' in visible_units and profit_visible:
+        from apps.mpesa.commission_learning import unpaid
+        coming = unpaid(start, end)
+        if coming['amount']:
+            data['mpesa_unpaid'] = {**coming, 'profit_with': period['profit'] + coming['amount']}
     # Each part of the business over the same dates, for the dashboard's "where the sales came from".
     data['unit_period'] = [{'key': key, 'name': name, **{field: value if profit_visible or field == 'revenue' else None
                             for field, value in accrual_totals(period_rows, [key]).items()}}

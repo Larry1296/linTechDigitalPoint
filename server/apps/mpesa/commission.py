@@ -102,10 +102,67 @@ def _opening_shift(outlet, session_id):
     return shift
 
 
+SPENT_FROM = "MPESA"  # commission spent straight away passes through the owner's M-Pesa: in, then out to each cost
+
+
+def _spent_lines(spent):
+    """[(category name, description, amount, unit)] for the parts of a commission spent straight away; each is a cost."""
+    from apps.accounting.models import BusinessUnit
+    lines = []
+    for item in spent or []:
+        category = " ".join(str(item.get("category") or "").split())[:120]
+        description = " ".join(str(item.get("description") or "").split())[:500]
+        unit = str(item.get("unit") or "MPESA").upper()
+        value = money(item.get("amount"))
+        if value <= 0:
+            raise ValidationError("Each amount spent from the commission must be above zero.")
+        if not category or not description:
+            raise ValidationError("Say what each amount spent from the commission was for: a type (e.g. Rent) and a few words.")
+        if unit not in BusinessUnit.values:
+            raise ValidationError("Choose which part of the business each cost belongs to.")
+        lines.append((category, description, value, unit))
+    return lines
+
+
 @transaction.atomic
-def record(*, outlet, user, period, amount, reference, settlement, key=None, paid_on=None, notes="", session_id=None):
-    """Commission Safaricom paid for the month ``period`` falls in, received on ``paid_on`` (today if not given)."""
+def record(*, outlet, user, period, amount, reference, settlement, key=None, paid_on=None, notes="", session_id=None, spent=None):
+    """Commission Safaricom paid for the month ``period``. Any part of it spent straight away (``spent``: what on, how
+    much, for which part of the business) is recorded as those costs; the rest goes where ``settlement`` says.
+
+    The whole amount is the agency's income for that month either way, and each cost counts against profit, so the
+    month's profit or loss is right however the money was used. The spent part is recorded as its own commission entry
+    paid into the owner's M-Pesa and paid straight out again for the costs, so the money's trail is complete."""
     lock_business()
+    key = str(key or "").strip()
+    lines = _spent_lines(spent)
+    total = money(amount)
+    used = sum((line[2] for line in lines), Decimal("0"))
+    if not lines:
+        return _record_part(outlet=outlet, user=user, period=period, amount=amount, reference=reference, settlement=settlement,
+                            key=key, paid_on=paid_on, notes=notes, session_id=session_id)
+    if used > total:
+        raise ValidationError(f"More was spent ({used:,.2f}) than Safaricom paid ({total:,.2f}).")
+    kept = total - used
+    main = None
+    if kept > 0:
+        main = _record_part(outlet=outlet, user=user, period=period, amount=kept, reference=reference, settlement=settlement,
+                            key=key, paid_on=paid_on, notes=notes, session_id=session_id)
+        paid_on = timezone.localtime(main.recognized_at).date()
+    words = "; ".join(f"{description} ({value:,.2f})" for _, description, value, _ in lines)
+    part = _record_part(outlet=outlet, user=user, period=period, amount=used, reference="" if main else reference, settlement=SPENT_FROM,
+                        key=f"{key}:spent" if key else None, paid_on=paid_on,
+                        notes=(f"Spent straight from the commission: {words}." + (f" {notes}" if notes and not main else "")).strip())
+    from apps.accounting.models import ExpenseCategory
+    from apps.accounting.services import record_expense
+    for number, (category, description, value, unit) in enumerate(lines, start=1):
+        kind = ExpenseCategory.objects.filter(name__iexact=category).first() or ExpenseCategory.objects.create(name=category)
+        record_expense(user=user, category=kind, unit=unit, method=SPENT_FROM, amount=value, key=f"commission-spent:{part.pk}:{number}",
+                       description=f"{description} (paid from {period:%B %Y} commission)", incurred_on=timezone.localtime(part.recognized_at).date())
+    return main or part
+
+
+def _record_part(*, outlet, user, period, amount, reference, settlement, key=None, paid_on=None, notes="", session_id=None):
+    """Commission Safaricom paid for the month ``period`` falls in, received on ``paid_on`` (today if not given)."""
     reference = " ".join(str(reference or "").split()).upper()[:100]  # optional: Safaricom often pays commission without a code
     key = str(key or reference or "").strip()
     existing = MpesaCommissionEntry.objects.filter(idempotency_key=key).first() if key else None
@@ -207,8 +264,10 @@ def undo(*, entry, user, reason):
                                   "If the amount was wrong, record the difference with the next commission.")
         reverse_transaction(original=entry.agency_transaction, user=user, idempotency_key=f"commission-undo:{entry.pk}", reason=reason,
                             allow_commission=True)
-    from apps.accounting.models import CashEntry
-    from apps.accounting.services import reverse
+    from apps.accounting.models import CashEntry, Expense
+    from apps.accounting.services import cancel_expense, reverse
+    for cost in Expense.objects.filter(idempotency_key__startswith=f"commission-spent:{entry.pk}:"):
+        cancel_expense(expense=cost, user=user, reason=reason)  # what was paid from this commission comes out of the costs too
     cash = CashEntry.objects.filter(source_key=f"commission:{entry.pk}").first()
     if cash and not CashEntry.objects.filter(reversal_of=cash).exists():
         reverse(entry=cash, user=user, reason=reason)  # reverses the journals and marks the entry undone
@@ -216,6 +275,10 @@ def undo(*, entry, user, reason):
         _reverse_journals(entry, user, reason)
         mark_undone(entry, reason)
     entry.refresh_from_db()
+    if entry.idempotency_key:
+        # Undoing a payment undoes the part of it that was spent straight away, recorded alongside it.
+        for part in MpesaCommissionEntry.objects.filter(idempotency_key=f"{entry.idempotency_key}:spent", reversed_at__isnull=True):
+            undo(entry=part, user=user, reason=reason)
     return entry
 
 
