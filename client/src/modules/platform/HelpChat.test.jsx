@@ -104,3 +104,28 @@ it("follows the platform owner's settings: greeting, suggestions, or switched of
   render(<MemoryRouter><HelpChat /></MemoryRouter>);
   await waitFor(() => expect(screen.queryByRole("button", { name: /Ask us anything/ })).toBeNull());
 });
+
+it("copies a whole answer or question in one tap, as plain text", async () => {
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+  chat.mockResolvedValue(streamed([{ type: "text", text: "### Steps\n1. Open **Products**\n2. See [Pricing](/pricing)" }, { type: "done" }]));
+  show();
+  fireEvent.click(screen.getByRole("button", { name: /Ask us anything/ }));
+  const panel = screen.getByRole("dialog", { name: "DukaFlow assistant" });
+  fireEvent.click(within(panel).getByRole("button", { name: "How do I get started?" }));
+  fireEvent.click(await within(panel).findByRole("button", { name: "Copy answer" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("STEPS\n\n1. Open Products\n2. See Pricing"));
+  expect(within(panel).getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  fireEvent.click(within(panel).getByRole("button", { name: "Copy question" }));
+  await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("How do I get started?"));
+});
+
+it("copies on a plain-http page too, where the clipboard API is missing", async () => {
+  Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  document.execCommand = vi.fn(() => true);
+  const { copyText } = await import("./CopyButton");
+  expect(await copyText("KES 1,200")).toBe(true);
+  expect(document.execCommand).toHaveBeenCalledWith("copy");
+  expect(document.querySelector("textarea[readonly]")).toBeNull();
+});

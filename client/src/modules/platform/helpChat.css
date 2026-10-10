@@ -37,6 +37,15 @@
 .helpChatMessage.user { justify-self: end; color: #fff; border-bottom-right-radius: 6px; background: #1d4ed8; }
 .helpChatMessage.error { border-color: #f5c2c0; color: #8a1c14; background: #fff4f2; }
 .helpChatSources { display: block; color: var(--muted); font-size: 11px; }
+/* Copy a whole message in one tap. Always shown: phones have no hover. */
+.helpChat .helpChatCopy {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 0; padding: 3px 8px; border: 0; border-radius: 8px;
+  color: var(--muted); background: transparent; box-shadow: none; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.helpChat .helpChatCopy:hover, .helpChat .helpChatCopy:focus-visible { color: var(--primary); background: color-mix(in srgb, var(--line) 45%, transparent); }
+.helpChatMessage > .helpChatCopy { display: flex; width: fit-content; margin: 6px -6px -4px auto; }
+.helpChat .helpChatMessage.user .helpChatCopy { color: rgb(255 255 255 / 78%); }
+.helpChat .helpChatMessage.user .helpChatCopy:hover, .helpChat .helpChatMessage.user .helpChatCopy:focus-visible { color: #fff; background: rgb(255 255 255 / 16%); }
 .helpChatSuggestions { display: flex; flex-wrap: wrap; gap: 8px; }
 .helpChatSuggestions button {
   min-height: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px;

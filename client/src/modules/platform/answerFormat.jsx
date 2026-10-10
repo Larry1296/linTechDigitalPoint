@@ -118,3 +118,36 @@ export function Answer({ text }) {
     }
   });
 }
+
+// Inline marks dropped: what the words read as on screen.
+const plainInline = (text) => text.split(INLINE).map((part) => {
+  if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return plainInline(part.slice(2, -2));
+  if (part.startsWith("`") && part.endsWith("`") && part.length > 2) return part.slice(1, -1);
+  const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+  if (link) return link[1];
+  if (/^([*_]).+\1$/.test(part)) return part.slice(1, -1);
+  return part;
+}).join("");
+
+// An answer as plain text, for copying: the same blocks as on screen, without Markdown marks, so it pastes cleanly
+// into WhatsApp, an SMS or a document.
+export function plainText(text) {
+  return parse(text).map((block) => {
+    switch (block.kind) {
+      case "heading": return plainInline(block.text).toUpperCase();
+      case "divider": return "";
+      case "table": return [block.head, ...block.rows].map((row) => row.map(plainInline).join(" | ")).join("\n");
+      case "callout": return block.lines.map(plainInline).join("\n");
+      case "note": return plainInline(block.text);
+      case "list": {
+        const numbers = [];
+        return block.items.map((item) => {
+          numbers.length = item.depth + 1;
+          numbers[item.depth] = (numbers[item.depth] || 0) + 1;
+          return `${"  ".repeat(item.depth)}${item.ordered ? `${numbers[item.depth]}.` : "•"} ${plainInline(item.text)}`;
+        }).join("\n");
+      }
+      default: return plainInline(block.lines.join(" "));
+    }
+  }).filter(Boolean).join("\n\n");
+}
