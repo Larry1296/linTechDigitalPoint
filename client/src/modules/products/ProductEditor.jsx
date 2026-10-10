@@ -38,6 +38,9 @@ const variantFields = (variant, isService) => [
 const payload = (row, fields) =>
   Object.fromEntries(fields.map((f) => [f, f === "barcode" || f === "brand" ? row[f] || null : row[f]]));
 const changed = (row, original, fields) => fields.some((f) => row[f] !== original?.[f]);
+// A number box gives "" when it is empty or holds something that is not a number (e.g. the letter O typed for a zero),
+// which the server rejects without naming the box. Name it here instead.
+const badNumber = (row, fields) => fields.find((f) => numeric.includes(f) && (row[f] === "" || row[f] == null || Number.isNaN(Number(row[f]))));
 
 const QUANTITY_REASONS = ["Data-entry correction", "Physical count variance", "Found stock", "Damaged item", "Lost item"];
 const count = (value) => Number(value || 0);
@@ -147,6 +150,14 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
   };
   const save = async (e) => {
     e.preventDefault();
+    for (const variant of canVariant ? variants : []) {
+      const fields = variantFields(variant, isService);
+      const bad = changed(variant, original(variant.id), fields) && badNumber(variant, fields);
+      if (bad) {
+        setError(`${multiple ? `${variant.name || "Standard"}: ` : ""}${labels[bad]} must be a number. Type digits only (0 is a zero, not the letter O); use 0 for none.`);
+        return;
+      }
+    }
     if (changedBp.length || changedQty.length) {
       const name = (v) => (multiple ? `${v.name}: ` : "");
       const lines = [

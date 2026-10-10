@@ -45,6 +45,18 @@ it("edits the product and every variant from one page with one save", async () =
   ]);
 });
 
+it("names the price box when it holds something that is not a number instead of sending it", async () => {
+  api.mockImplementation(lookups);
+  render(<ProductEditor product={cable} onSaved={() => {}} onClose={() => {}} />);
+  await screen.findByRole("option", { name: "Chargers" });
+  const red = within(screen.getByRole("group", { name: "Variant Red" }));
+  // A number box reports "" for "7o" (letter O typed for a zero).
+  fireEvent.change(red.getByLabelText("Selling price"), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(await screen.findByText(/Red: Selling price must be a number/)).toBeInTheDocument();
+  expect(patches()).toEqual([]);
+});
+
 it("edits a service's pricing and cost without stock levels", async () => {
   api.mockImplementation(lookups);
   const saved = vi.fn();
