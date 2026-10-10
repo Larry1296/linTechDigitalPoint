@@ -124,8 +124,42 @@ it("copies a whole answer or question in one tap, as plain text", async () => {
 it("copies on a plain-http page too, where the clipboard API is missing", async () => {
   Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
   document.execCommand = vi.fn(() => true);
-  const { copyText } = await import("./CopyButton");
+  const { copyText } = await import("./messageActions");
   expect(await copyText("KES 1,200")).toBe(true);
   expect(document.execCommand).toHaveBeenCalledWith("copy");
   expect(document.querySelector("textarea[readonly]")).toBeNull();
+});
+
+it("edits a question in place and asks it again, replacing what came after it", async () => {
+  chat.mockResolvedValueOnce(streamed([{ type: "text", text: "It costs KES 1,000." }, { type: "done" }]))
+    .mockResolvedValueOnce(streamed([{ type: "text", text: "Yes, staff accounts are included." }, { type: "done" }]));
+  show();
+  fireEvent.click(screen.getByRole("button", { name: /Ask us anything/ }));
+  const panel = screen.getByRole("dialog", { name: "DukaFlow assistant" });
+  fireEvent.click(within(panel).getByRole("button", { name: "How much does it cost?" }));
+  await within(panel).findByText("It costs KES 1,000.");
+  fireEvent.click(within(panel).getByRole("button", { name: "Edit question" }));
+  const box = within(panel).getByLabelText("Edit your question");
+  expect(box).toHaveValue("How much does it cost?");
+  fireEvent.change(box, { target: { value: "Can my staff use it?" } });
+  fireEvent.click(within(panel).getByRole("button", { name: "Send" }));
+  expect(await within(panel).findByText("Yes, staff accounts are included.")).toBeInTheDocument();
+  expect(within(panel).queryByText("It costs KES 1,000.")).not.toBeInTheDocument();
+  expect(JSON.parse(chat.mock.calls[1][1].body)).toEqual({ messages: [{ role: "user", content: "Can my staff use it?" }] });
+});
+
+it("shares an answer through the phone's share sheet, or WhatsApp where there is none", async () => {
+  chat.mockResolvedValue(streamed([{ type: "text", text: "Open **Products**." }, { type: "done" }]));
+  const share = vi.fn(async () => {});
+  Object.defineProperty(navigator, "share", { value: share, configurable: true });
+  show();
+  fireEvent.click(screen.getByRole("button", { name: /Ask us anything/ }));
+  const panel = screen.getByRole("dialog", { name: "DukaFlow assistant" });
+  fireEvent.click(within(panel).getByRole("button", { name: "How do I get started?" }));
+  fireEvent.click(await within(panel).findByRole("button", { name: "Share answer" }));
+  await waitFor(() => expect(share).toHaveBeenCalledWith({ text: "Open Products." }));
+  Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  fireEvent.click(within(panel).getByRole("button", { name: "Share answer" }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith("https://wa.me/?text=Open%20Products.", "_blank", "noopener,noreferrer"));
 });

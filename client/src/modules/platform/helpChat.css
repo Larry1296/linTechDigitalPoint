@@ -37,15 +37,28 @@
 .helpChatMessage.user { justify-self: end; color: #fff; border-bottom-right-radius: 6px; background: #1d4ed8; }
 .helpChatMessage.error { border-color: #f5c2c0; color: #8a1c14; background: #fff4f2; }
 .helpChatSources { display: block; color: var(--muted); font-size: 11px; }
-/* Copy a whole message in one tap. Always shown: phones have no hover. */
-.helpChat .helpChatCopy {
-  display: inline-flex; align-items: center; gap: 4px; min-height: 0; padding: 3px 8px; border: 0; border-radius: 8px;
-  color: var(--muted); background: transparent; box-shadow: none; font-size: 11.5px; font-weight: 600; cursor: pointer;
+/* Each message with its buttons under it: Copy, Edit and Share. An answer's always show; a question's show when it is
+   hovered, or tapped or tabbed to (focus), so they do not crowd the conversation. */
+.helpChatTurn { display: grid; gap: 2px; max-width: 88%; outline: none; }
+.helpChatTurn.assistant { justify-self: start; justify-items: start; }
+.helpChatTurn.user { justify-self: end; justify-items: end; }
+.helpChatTurn .helpChatMessage { max-width: 100%; }
+.helpChatActions { display: flex; gap: 2px; }
+.helpChatTurn.user .helpChatActions { visibility: hidden; }
+.helpChatTurn.user:hover .helpChatActions, .helpChatTurn.user:focus-within .helpChatActions { visibility: visible; }
+.helpChatTurn.user:focus-visible .helpChatMessage { outline: 2px solid var(--primary); outline-offset: 2px; }
+.helpChat .helpChatAction {
+  display: grid; place-items: center; width: 30px; height: 30px; min-height: 0; padding: 0; border: 0; border-radius: 8px;
+  color: var(--muted); background: transparent; box-shadow: none; cursor: pointer;
 }
-.helpChat .helpChatCopy:hover, .helpChat .helpChatCopy:focus-visible { color: var(--primary); background: color-mix(in srgb, var(--line) 45%, transparent); }
-.helpChatMessage > .helpChatCopy { display: flex; width: fit-content; margin: 6px -6px -4px auto; }
-.helpChat .helpChatMessage.user .helpChatCopy { color: rgb(255 255 255 / 78%); }
-.helpChat .helpChatMessage.user .helpChatCopy:hover, .helpChat .helpChatMessage.user .helpChatCopy:focus-visible { color: #fff; background: rgb(255 255 255 / 16%); }
+.helpChat .helpChatAction:hover, .helpChat .helpChatAction:focus-visible { color: var(--primary); background: color-mix(in srgb, var(--line) 50%, transparent); }
+.helpChatEdit { width: 88%; gap: 6px; }
+.helpChatEdit textarea {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--primary); border-radius: 14px;
+  color: var(--text); background: var(--surface); font: inherit; font-size: 14px; resize: vertical;
+}
+.helpChatEditButtons { display: flex; gap: 6px; }
+.helpChatEditButtons button { min-height: 0; padding: 6px 12px; font-size: 13px; }
 .helpChatSuggestions { display: flex; flex-wrap: wrap; gap: 8px; }
 .helpChatSuggestions button {
   min-height: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px;

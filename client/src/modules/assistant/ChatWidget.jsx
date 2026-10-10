@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RotateCcw, Send, X } from "lucide-react";
 import { Answer, plainText } from "../platform/answerFormat";
-import { CopyButton } from "../platform/CopyButton";
+import { MessageActions } from "../platform/messageActions";
 import { useCloseOnOutsideClick, usePromptHistory, useQuestionAtTop } from "./promptHistory";
 import "../platform/helpChat.css";
 
@@ -79,12 +79,13 @@ export function ChatWidget({
     return next;
   });
 
-  async function ask(question) {
+  // ``before`` is the conversation the question follows: all of it, or the part before a question being edited.
+  async function ask(question, before = messages) {
     const text = question.trim().slice(0, maxQuestion);
     if (!text || busy) return;
     // A question whose reply failed is left out with its reply, so it is not asked again with the new one.
-    const history = [...messages.filter((m, i) => m.text && !m.error && !(m.role === "user" && messages[i + 1]?.error)), { role: "user", text }];
-    setMessages([...messages, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    const history = [...before.filter((m, i) => m.text && !m.error && !(m.role === "user" && before[i + 1]?.error)), { role: "user", text }];
+    setMessages([...before, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
     asked.remember(text);
     setDraft("");
     setBusy(true);
@@ -107,6 +108,10 @@ export function ChatWidget({
     }
   }
 
+  // Editing a question asks it again in its place: everything after it is replaced by the new answer.
+  const [editing, setEditing] = useState(null); // {index, text}
+  const resend = () => { const { index, text } = editing; if (!text.trim()) return; setEditing(null); void ask(text, messages.slice(0, index)); };
+
   const reset = () => { abort.current?.abort(); setMessages([]); setBusy(false); input.current?.focus(); };
 
   return (
@@ -128,16 +133,33 @@ export function ChatWidget({
                 {suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => ask(suggestion)}>{suggestion}</button>)}
               </div>
             )}
-            {messages.map((message, index) => (
-              <div key={index} className={`helpChatMessage ${message.role}${message.error ? " error" : ""}`}>
-                {message.role === "user" ? <p>{message.text}</p>
-                  : message.pending && !message.text ? <p className="helpChatTyping" aria-label="The assistant is working"><i /><i /><i /></p>
-                  : <Answer text={message.text} />}
-                {message.pending && message.status && <small className="businessAssistantStatus">{message.status}</small>}
-                {message.sources?.length > 0 && !message.pending && <small className="helpChatSources">From: {message.sources.join(" · ")}</small>}
-                {!message.pending && !message.error && message.text && (
-                  <CopyButton text={message.role === "user" ? message.text : plainText(message.text)} label={message.role === "user" ? "Copy question" : "Copy answer"} />
-                )}
+            {messages.map((message, index) => editing?.index === index ? (
+              <form key={index} className="helpChatTurn user helpChatEdit" onSubmit={(event) => { event.preventDefault(); resend(); }}>
+                <label className="srOnly" htmlFor={`${inputId}-edit`}>Edit your question</label>
+                <textarea id={`${inputId}-edit`} autoFocus rows={3} value={editing.text} maxLength={maxQuestion}
+                  onChange={(event) => setEditing({ index, text: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") { event.stopPropagation(); setEditing(null); }
+                    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); resend(); }
+                  }} />
+                <div className="helpChatEditButtons">
+                  <button type="button" className="secondary" onClick={() => setEditing(null)}>Cancel</button>
+                  <button type="submit" disabled={!editing.text.trim()}>Send</button>
+                </div>
+              </form>
+            ) : (
+              // A question's buttons show when it is hovered, tapped or tabbed to; an answer's always show under it.
+              <div key={index} className={`helpChatTurn ${message.role}`} tabIndex={message.role === "user" ? 0 : undefined}>
+                <div className={`helpChatMessage ${message.role}${message.error ? " error" : ""}`}>
+                  {message.role === "user" ? <p>{message.text}</p>
+                    : message.pending && !message.text ? <p className="helpChatTyping" aria-label="The assistant is working"><i /><i /><i /></p>
+                    : <Answer text={message.text} />}
+                  {message.pending && message.status && <small className="businessAssistantStatus">{message.status}</small>}
+                  {message.sources?.length > 0 && !message.pending && <small className="helpChatSources">From: {message.sources.join(" · ")}</small>}
+                </div>
+                {!message.pending && !message.error && message.text && (message.role === "user"
+                  ? <MessageActions text={message.text} what="question" onEdit={busy ? undefined : () => setEditing({ index, text: message.text })} />
+                  : <MessageActions text={plainText(message.text)} what="answer" />)}
               </div>
             ))}
           </div>
