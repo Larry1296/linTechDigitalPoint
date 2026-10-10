@@ -36,8 +36,11 @@ def _conversation(data, max_question=MAX_QUESTION, max_answer=MAX_ANSWER, max_tu
         limit = max_question if role == "user" else max_answer
         if len(content) > limit:
             return None, f"Messages can be at most {limit} characters."
-        # Merge repeated roles so turns alternate, starting with the visitor.
-        if clean and clean[-1]["role"] == role:
+        # Turns must alternate, starting with the visitor. Two questions in a row mean the earlier one was never
+        # answered (its reply failed): keep only the newer one, so an old question is not answered again with it.
+        if clean and clean[-1]["role"] == role == "user":
+            clean[-1] = {"role": role, "content": content.strip()}
+        elif clean and clean[-1]["role"] == role:
             clean[-1]["content"] += "\n\n" + content.strip()
         else:
             clean.append({"role": role, "content": content.strip()})

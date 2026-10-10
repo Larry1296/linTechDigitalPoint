@@ -75,7 +75,8 @@ export function BusinessAssistant({ organization }) {
   async function ask(question) {
     const text = question.trim().slice(0, MAX_QUESTION);
     if (!text || busy) return;
-    const history = [...messages.filter((m) => !m.error && m.text), { role: "user", text }];
+    // A question whose reply failed is left out with its reply, so it is not asked again with the new one.
+    const history = [...messages.filter((m, i) => m.text && !m.error && !(m.role === "user" && messages[i + 1]?.error)), { role: "user", text }];
     setMessages([...messages, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
     asked.remember(text);
     setDraft("");

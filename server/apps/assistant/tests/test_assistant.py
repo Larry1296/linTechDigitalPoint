@@ -137,3 +137,16 @@ def test_visitors_are_rate_limited(settings):
         with mock.patch.object(claude, "client", return_value=fake_client(FakeStream(["ok"]))):
             statuses.append(APIClient().post(URL, body, format="json").status_code)
     assert statuses[:8] == [200] * 8 and statuses[8] == 429
+
+
+def test_an_unanswered_earlier_question_is_not_answered_again_with_the_new_one():
+    from apps.assistant.views import _conversation
+    (history, question), problem = _conversation({"messages": [
+        {"role": "user", "content": "which business can i register here"},
+        {"role": "user", "content": "Can I import my products from Excel?"},
+        {"role": "user", "content": "can you tell me the total worth of my business"}]})
+    assert problem is None and history == [] and question == "can you tell me the total worth of my business"
+    (history, question), _ = _conversation({"messages": [
+        {"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"},
+        {"role": "user", "content": "lost question"}, {"role": "user", "content": "How do I start?"}]})
+    assert history == [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}] and question == "How do I start?"

@@ -80,10 +80,8 @@ it("explains when the assistant is unavailable or busy", async () => {
   fireEvent.change(box, { target: { value: "Hello?" } });
   fireEvent.keyDown(box, { key: "Enter" });
   expect(await screen.findByText(/sending questions quickly/)).toBeInTheDocument();
-  // Failed answers are not sent back as conversation history.
-  await waitFor(() => expect(JSON.parse(chat.mock.calls[1][1].body).messages).toEqual([
-    { role: "user", content: "Does it work with M-Pesa?" }, { role: "user", content: "Hello?" },
-  ]));
+  // A failed answer and its question are not sent back, so the old question is not answered with the new one.
+  await waitFor(() => expect(JSON.parse(chat.mock.calls[1][1].body).messages).toEqual([{ role: "user", content: "Hello?" }]));
 });
 
 it("opens from a link elsewhere on the page and can ask a question straight away", async () => {
