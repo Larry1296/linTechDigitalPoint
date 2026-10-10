@@ -46,6 +46,18 @@ class MpesaSession(TimeStamped):
     carried_cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     carried_float = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     opening_difference_reason = models.TextField(blank=True)
+    # Safaricom's commission balance on the agent line when the shift opened, as the operator read it. The first
+    # transaction's commission is the rise from it (commission_learning.py). Optional, like every other reading.
+    opening_commission_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    # Readings taken while the shift ran, apart from any transaction: [{"at": ISO moment, "balance": "1250.50", "by": user id}].
+    # Each is a fresh starting point, like the opening one.
+    commission_readings = models.JSONField(default=list, blank=True)
+
+    def balance_readings(self):
+        """Every commission balance read in this shift apart from its transactions, oldest first: [(moment, balance)]."""
+        from datetime import datetime
+        readings = [] if self.opening_commission_balance is None else [(self.opened_at, self.opening_commission_balance)]
+        return readings + [(datetime.fromisoformat(r["at"]), Decimal(r["balance"])) for r in self.commission_readings]
 
     class Meta:
         constraints = [

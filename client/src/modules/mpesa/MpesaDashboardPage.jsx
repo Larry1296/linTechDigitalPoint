@@ -2,7 +2,7 @@ import { businessCurrency } from "../../core/organization/presentation";
 import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { MetricCard } from "../../components/dashboard/MetricCard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { useAuth } from "../../core/auth/AuthContext";
 import {
@@ -15,6 +15,7 @@ import {
   openMpesaSession,
   postMpesaTransaction,
   reconcileMpesaSession,
+  recordMpesaCommissionBalance,
   reverseMpesaTransaction,
 } from "./api";
 import { MpesaDepositForm } from "./MpesaDepositForm";
@@ -28,7 +29,7 @@ import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
-import { CashCounter, countPayload, countTotal, emptyCount } from "./CashCounter";
+import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { TOPUP_SOURCES } from "./topUp";
@@ -74,7 +75,7 @@ function OutletForm({ outlet, onSave, onCancel }) {
 
 // Every outlet with its numbers and the money in operation last recorded. Each day except Sunday needs a
 // fresh figure (a shift opened or closed that day); until then the figures show in red as due.
-function OutletCards({ outlets, canChange, canDelete, onChanged }) {
+function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const run = async (action) => {
@@ -97,6 +98,16 @@ function OutletCards({ outlets, canChange, canDelete, onChanged }) {
       confirmButtonText: "Delete outlet" }))) return;
     await deleteMpesaOutlet(outlet.id);
   });
+  // A reading taken while the shift is open (say it opened before the app asked for one): the next transaction is measured from it.
+  const readCommission = (outlet) => run(async () => {
+    const current = outlet.money_in_operation.commission_balance;
+    const values = await askForm({ title: `Commission balance on ${outlet.display_name}`,
+      text: "Read the commission balance off the agent line now. The next transaction's commission is measured from it.",
+      confirmButtonText: "Record balance",
+      fields: [{ name: "balance", label: "Commission balance now", required: true, placeholder: "e.g. 1250.50", value: current == null ? "" : String(Number(current)) }] });
+    if (!values) return;
+    await recordMpesaCommissionBalance(outlet.money_in_operation.open_session, values.balance);
+  });
   if (!outlets.length) return null;
   return (
     <>
@@ -117,10 +128,14 @@ function OutletCards({ outlets, canChange, canDelete, onChanged }) {
                 <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
                 <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
                 <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
+                <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
               </dl>
               {money.due && outlet.active
                 ? <p className="outletDue" role="status">Update due: today's cash and float are not recorded yet{money.updated_on ? ` (last recorded ${money.updated_on})` : ""}. Open or close a shift to record them.</p>
                 : money.updated_on && <p className="muted">Recorded {money.updated_on}</p>}
+              {canRead && money.open_session && <div className="actionRow">
+                <button type="button" className="secondary" onClick={() => void readCommission(outlet)}>Record commission balance</button>
+              </div>}
               {(canChange || canDelete) && <div className="actionRow">
                 {canChange && <button type="button" className="secondary" onClick={() => setEditing(outlet.id)}>Edit</button>}
                 {canChange && <button type="button" className="secondary" onClick={() => void toggle(outlet)}>{outlet.active ? "Deactivate" : "Reactivate"}</button>}
@@ -238,6 +253,7 @@ export function MpesaDashboardPage() {
   const canAddOutlet = Boolean(user?.permissions?.includes("mpesa.add_mpesaoutlet"));
   const canChangeOutlet = Boolean(user?.permissions?.includes("mpesa.change_mpesaoutlet"));
   const canDeleteOutlet = Boolean(user?.permissions?.includes("mpesa.delete_mpesaoutlet"));
+  const canPost = Boolean(user?.permissions?.includes("mpesa.add_mpesatransaction"));
   const [addingOutlet, setAddingOutlet] = useState(false);
   const [dashboard, setDashboard] = useState();
   const [outlets, setOutlets] = useState([]);
@@ -247,6 +263,17 @@ export function MpesaDashboardPage() {
   const [openingOutlet, setOpeningOutlet] = useState("");
   const [openingFloat, setOpeningFloat] = useState("");
   const [opening, setOpening] = useState(emptyOpening);
+  const [openingCommission, setOpeningCommission] = useState("");
+  // The opening form starts from what the outlet last recorded, so the operator only changes what is different.
+  const prefilledFor = useRef(null);
+  const prefill = (outlet) => {
+    prefilledFor.current = outlet?.id ?? null;
+    const money = outlet?.money_in_operation;
+    setOpeningCount(money?.cash == null ? emptyCount() : countFrom(money.cash_count, money.cash));
+    setOpeningFloat(money?.float == null ? "" : String(Number(money.float)));
+    setOpeningCommission(money?.commission_balance == null ? "" : String(Number(money.commission_balance)));
+    setOpening(emptyOpening());
+  };
   const canRecordCommission = Boolean(user?.permissions?.includes("mpesa.add_mpesacommissionentry"));
   const [closing, setClosing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
@@ -260,6 +287,7 @@ export function MpesaDashboardPage() {
       ]);
       setDashboard(summary);
       setOutlets(outletRows);
+      if (!summary.session && prefilledFor.current == null) prefill(outletRows.find((outlet) => outlet.active));
       setTransactions(entries);
       setError("");
     } catch (err) {
@@ -305,6 +333,7 @@ export function MpesaDashboardPage() {
         opening_cash: countTotal(openingCount).toFixed(2),
         opening_float: openingFloat,
         cash_count: countPayload(openingCount),
+        commission_balance: openingCommission,
         difference_reason: gaps.cash || gaps.float ? opening.reason : "",
         ...(commission ? { commission: { period: `${opening.month}-01`, amount: opening.commissionAmount, idempotency_key: crypto.randomUUID() } } : {}),
       });
@@ -312,9 +341,7 @@ export function MpesaDashboardPage() {
       await showError("Could not open the shift.", err.message);
       return;
     }
-    setOpeningCount(emptyCount());
-    setOpeningFloat("");
-    setOpening(emptyOpening());
+    prefilledFor.current = null;  // the next opening starts from what this shift closes with
     await load();
   };
   const rebalance = async (type) => {
@@ -401,7 +428,7 @@ export function MpesaDashboardPage() {
           <h2 id="outlets-heading">Outlets</h2>
           {canAddOutlet && !addingOutlet && <button type="button" className="secondary" onClick={() => setAddingOutlet(true)}>Add outlet</button>}
         </div>
-        <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} onChanged={load} />
+        <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} canRead={canPost} onChanged={load} />
         {canAddOutlet && addingOutlet && <OutletForm onSave={addOutlet} onCancel={() => setAddingOutlet(false)} />}
       </section>
       {!dashboard.session ? (
@@ -421,7 +448,7 @@ export function MpesaDashboardPage() {
           <label>
             Outlet
             <select name="outlet" required value={openingAt ? String(openingAt.id) : ""}
-              onChange={(event) => { setOpeningOutlet(event.target.value); setOpening(emptyOpening()); }}>
+              onChange={(event) => { setOpeningOutlet(event.target.value); prefill(activeOutlets.find((outlet) => String(outlet.id) === event.target.value)); }}>
               {activeOutlets.map((outlet) => (
                 <option key={outlet.id} value={outlet.id}>
                   {outlet.display_name}
@@ -440,6 +467,23 @@ export function MpesaDashboardPage() {
             value={openingFloat}
             onChange={(event) => setOpeningFloat(event.target.value)}
           />
+          <FormField
+            label={`Commission balance now (${businessCurrency()})`}
+            name="commission_balance"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            required
+            placeholder="As shown on the agent line"
+            value={openingCommission}
+            onChange={(event) => setOpeningCommission(event.target.value)}
+          />
+          <p className="muted">{lastClose?.commission_balance == null
+            ? "Read the commission balance off the agent line. The shift's first transaction is measured from it."
+            : Number(openingCommission) < Number(lastClose.commission_balance) && openingCommission !== ""
+              ? `Lower than the last reading (${amount(lastClose.commission_balance)}): Safaricom paid the commission out since then.`
+              : `Filled in with the last reading, ${amount(lastClose.commission_balance)}. Change it if the agent line shows a different balance.`}</p>
           <OpeningCheck last={lastClose} cash={countTotal(openingCount)} electronicFloat={openingFloat} opening={opening}
             onChange={setOpening} canRecordCommission={canRecordCommission} />
           <button disabled={!outlets.length}>Open shift</button>

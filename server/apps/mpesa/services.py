@@ -25,7 +25,14 @@ COMMISSION_READ = {"CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE"}
 
 def commission_reading(transaction_type, value):
     """The commission balance read off the agent line after a deposit, withdrawal or airtime sale; None if not given."""
-    if transaction_type not in COMMISSION_READ or value in (None, ""):
+    if transaction_type not in COMMISSION_READ:
+        return None
+    return parse_reading(value)
+
+
+def parse_reading(value):
+    """A commission balance as typed (commas allowed); None if not given."""
+    if value in (None, ""):
         return None
     try:
         parsed = Decimal(str(value).replace(",", "").strip()).quantize(Decimal("0.01"))
@@ -91,14 +98,17 @@ def session_balances(session):
 
 
 @transaction.atomic
-def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cash_count=None, difference_reason="", commission=None):
+def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cash_count=None, difference_reason="", commission=None,
+                 commission_balance=None):
     """A new shift, opened with the cash and float counted now. They should match what the previous shift closed with;
     any difference needs a reason, except commission Safaricom paid into the float in between, which is recorded as
-    commission (``commission``: {"period": month, "amount": ...}) so it counts as income."""
+    commission (``commission``: {"period": month, "amount": ...}) so it counts as income. ``commission_balance`` is
+    the commission balance on the agent line now, the reading the shift's first transaction is measured from."""
     if MpesaSession.objects.select_for_update().filter(outlet=outlet, status=MpesaSession.OPEN).exists():
         raise ValidationError("This outlet already has an open M-Pesa session.")
     cash, count = counted_cash(opening_cash, cash_count)
     electronic_float = Decimal(str(opening_float))
+    reading = parse_reading(commission_balance)
     if cash < 0 or electronic_float < 0:
         raise ValidationError("Opening balances cannot be negative.")
     from .commission import previous_close
@@ -117,9 +127,10 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
                               "brought in overnight), or record commission Safaricom paid into the float.")
     session = MpesaSession.objects.create(outlet=outlet, operator=operator, opening_cash=cash, opening_float=electronic_float, opened_at=timezone.now(), notes=notes,
                                      opening_cash_count=count, carried_cash=carried_cash, carried_float=carried_float,
-                                     opening_difference_reason=difference_reason)
+                                     opening_difference_reason=difference_reason, opening_commission_balance=reading)
     audit("MPESA_SESSION_OPENED", session, operator, after={"cash": str(cash), "float": str(electronic_float), "carried_cash": str(carried_cash),
-                                                           "carried_float": str(carried_float), "reason": difference_reason})
+                                                           "carried_float": str(carried_float), "reason": difference_reason,
+                                                           "commission_balance": None if reading is None else str(reading)})
     if commission:
         from .commission import record
         record(outlet=outlet, user=operator, period=commission.get("period"), amount=earned, reference=commission.get("reference", ""),
@@ -182,6 +193,21 @@ def customer_details(transaction_type, name, phone, id_number):
     if id_number and not (4 <= len(id_number) <= 20 and id_number.isalnum()):
         raise ValidationError("An ID or passport number has 4 to 20 letters and digits. Leave it empty if the customer has none.")
     return name, normalise_phone(phone) if str(phone or "").strip() else "", id_number
+
+
+@transaction.atomic
+def record_commission_balance(*, session, user, value):
+    """The commission balance read off the agent line now, during an open shift: the next transaction is measured from it."""
+    session = MpesaSession.objects.select_for_update().get(pk=session.pk)
+    if session.status != MpesaSession.OPEN:
+        raise ValidationError("The shift is closed. Record the commission balance when the next shift opens.")
+    reading = parse_reading(value)
+    if reading is None:
+        raise ValidationError("Enter the commission balance shown on the agent line.")
+    session.commission_readings = [*session.commission_readings, {"at": timezone.now().isoformat(), "balance": str(reading), "by": user.pk}]
+    session.save(update_fields=["commission_readings", "updated_at"])
+    audit("MPESA_COMMISSION_BALANCE_READ", session, user, after={"balance": str(reading)})
+    return session
 
 
 @transaction.atomic

@@ -8,7 +8,8 @@ amounts on both sides of it that earned the same, so it must lie in their band. 
 guessed. Newer measurements win, so a change in Safaricom's rates is picked up by itself.
 
 Transactions in between without a reading are taken off at what the app already knows they earn, so it only needs
-to ask for a reading while an amount is new to it. A reading lower than the one before
+to ask for a reading while an amount is new to it. The reading taken when a shift opens, or any time during it, is a starting point
+too, so the next transaction is measured from it. A reading lower than the one before
 (Safaricom paid the commission out), or with a reversed or unknown transaction in between, measures nothing.
 """
 from collections import defaultdict
@@ -17,7 +18,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from .models import MpesaTransaction
+from .models import MpesaSession, MpesaTransaction
 
 EARNING = ("CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE")
 LABELS = {"CUSTOMER_DEPOSIT": "Deposits", "CUSTOMER_WITHDRAWAL": "Withdrawals", "AIRTIME_SALE": "Airtime"}
@@ -25,12 +26,25 @@ HISTORY_DAYS = 400
 SUNDAY = 6  # the agency does not open on Sundays
 
 
+class _Reading:
+    """A commission balance read apart from any transaction (when a shift opened, or later in it): a starting point for
+    the readings, not a transaction (``standing`` is False, so nothing counts it as one)."""
+    pk, standing, start = None, False, True
+
+    def __init__(self, session, done_at, balance):
+        self.outlet_id, self.session_id, self.done_at, self.commission_balance = session.outlet_id, session.pk, done_at, balance
+
+
 def _history(outlet_ids=None):
-    """Each outlet's deposits, withdrawals and airtime sales in the order they were done on the line. A correction takes
-    the place of the entry it replaced; a reversed entry that was not corrected is kept as a break in the readings."""
-    rows = MpesaTransaction.objects.filter(transaction_type__in=EARNING, occurred_at__gte=timezone.now() - timedelta(days=HISTORY_DAYS))
+    """Each outlet's deposits, withdrawals and airtime sales in the order they were done on the line, with the readings
+    taken apart from them (when each shift opened, or later in it). A correction takes the place of the entry it replaced; a reversed entry that was not
+    corrected is kept as a break in the readings."""
+    since = timezone.now() - timedelta(days=HISTORY_DAYS)
+    rows = MpesaTransaction.objects.filter(transaction_type__in=EARNING, occurred_at__gte=since)
+    openings = MpesaSession.objects.filter(opened_at__gte=since)
     if outlet_ids is not None:
         rows = rows.filter(outlet_id__in=outlet_ids)
+        openings = openings.filter(outlet_id__in=outlet_ids)
     rows = list(rows.only("pk", "outlet_id", "session_id", "transaction_type", "amount", "commission_balance", "occurred_at", "corrects_id"))
     reversed_ids = set(MpesaTransaction.objects.filter(reversal_of__in=[r.pk for r in rows]).values_list("reversal_of_id", flat=True))
     by_id = {r.pk: r for r in rows}
@@ -47,6 +61,10 @@ def _history(outlet_ids=None):
             continue  # replaced by its correction, which stands in its place
         row.done_at, row.standing = done_at(row), row.pk not in reversed_ids
         outlets[row.outlet_id].append(row)
+    for session in openings.only("pk", "outlet_id", "opened_at", "opening_commission_balance", "commission_readings"):
+        outlets[session.outlet_id] += [_Reading(session, at, balance) for at, balance in session.balance_readings()]
+    for rows in outlets.values():
+        rows.sort(key=lambda r: (r.done_at, 0 if getattr(r, "start", False) else 1, r.pk or 0))
     return outlets
 
 
@@ -57,6 +75,9 @@ def measure(outlets, rates=None):
     for rows in outlets.values():
         last, between, broken = None, [], True
         for row in rows:
+            if getattr(row, "start", False):
+                last, between, broken = row.commission_balance, [], False  # a reading on its own: measure from it
+                continue
             if not row.standing:
                 broken = True  # a reversed transaction: what happened to its commission is not known
                 continue

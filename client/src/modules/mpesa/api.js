@@ -23,6 +23,11 @@ export const reverseMpesaTransaction = (id, reason) =>
     method: "POST",
     body: JSON.stringify({ reason, idempotency_key: crypto.randomUUID() }),
   });
+export const recordMpesaCommissionBalance = (id, commissionBalance) =>
+  api(`/api/v1/mpesa/sessions/${id}/commission-balance/`, {
+    method: "POST",
+    body: JSON.stringify({ commission_balance: commissionBalance }),
+  });
 export const reconcileMpesaSession = (id, body) =>
   api(`/api/v1/mpesa/sessions/${id}/reconcile/`, {
     method: "POST",

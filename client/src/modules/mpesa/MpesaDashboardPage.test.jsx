@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet", "mpesa.reverse_mpesa_transaction"] } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet", "mpesa.reverse_mpesa_transaction", "mpesa.add_mpesatransaction"] } }) }));
 vi.mock("./api", () => ({
   getMpesaDashboard: vi.fn(), getMpesaAnalysis: vi.fn(async () => ({ days: [], hours: [], sizes: [], commission_by_kind: [], working_days: 30, unknown: 0 })), getCommissionAdvice: vi.fn(async () => ({ earned: null, ask: true, reason: "new" })), getMpesaOutlets: vi.fn(), getMpesaTransactions: vi.fn(), createMpesaOutlet: vi.fn(),
-  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), getPastMpesaShifts: vi.fn(async () => []), getMpesaShiftTransactions: vi.fn(), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), reverseMpesaTransaction: vi.fn(),
+  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), getPastMpesaShifts: vi.fn(async () => []), getMpesaShiftTransactions: vi.fn(), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), recordMpesaCommissionBalance: vi.fn(), reverseMpesaTransaction: vi.fn(),
 }));
 import * as api from "./api";
-vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), askForm: vi.fn(), showError: vi.fn() }));
+import * as alerts from "../../core/ui/alerts";
 import { MpesaDashboardPage } from "./MpesaDashboardPage";
 
 const dashboard = { session: null, cash: 0, float: 0, deposits: 0, withdrawals: 0, transaction_count: 0, commission: 0, in_operation: { total: 0, opening: 0 } };
@@ -116,4 +117,46 @@ it("lets a manager correct the money in operation down, with a reason", async ()
   await waitFor(() => expect(api.postMpesaTransaction).toHaveBeenCalled());
   expect(api.postMpesaTransaction.mock.calls[0][0]).toEqual(expect.objectContaining({ session: 8, transaction_type: "ADJUSTMENT", amount: "5000.00",
     cash_delta: "-5000.00", float_delta: "0.00", notes: "Opening cash counted twice" }));
+});
+
+it("opens a shift filled in with what the outlet last recorded, commission balance included", async () => {
+  api.getMpesaOutlets.mockResolvedValue([
+    outlet(1, "Main till", { cash: "3050.00", float: "7000.00", total: "10050.00", updated_on: "2026-10-09", due: true,
+      cash_count: { 1000: 3, 500: 0, 200: 0, 100: 0, 50: 1, coins: "0.00" }, commission_balance: "1250.50" }),
+    outlet(2, "Market till", { cash: null, float: null, total: null, updated_on: null, due: true, cash_count: {}, commission_balance: null }),
+  ]);
+  api.openMpesaSession.mockResolvedValue({});
+  render(<MpesaDashboardPage />);
+  const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
+  expect(main).toHaveTextContent("Commission balance");
+  expect(main).toHaveTextContent("1,250.5");
+  await waitFor(() => expect(screen.getByLabelText("Opening float")).toHaveValue(7000));
+  expect(screen.getByLabelText("Number of 1000 notes")).toHaveValue(3);
+  expect(screen.getByLabelText("Physical cash total")).toHaveTextContent("3,050");
+  expect(screen.getByLabelText(/Commission balance now/)).toHaveValue(1250.5);
+  fireEvent.change(screen.getByLabelText(/Commission balance now/), { target: { value: "0" } });
+  expect(screen.getByText(/Safaricom paid the commission out/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open shift" }));
+  await waitFor(() => expect(api.openMpesaSession).toHaveBeenCalledWith(expect.objectContaining({
+    outlet: 1, opening_cash: "3050.00", opening_float: "7000", commission_balance: "0" })));
+  fireEvent.change(screen.getByRole("combobox", { name: "Outlet" }), { target: { value: "2" } });
+  expect(screen.getByLabelText("Opening float")).toHaveValue(null);
+  expect(screen.getByLabelText(/Commission balance now/)).toHaveValue(null);
+});
+
+it("records the commission balance during a shift that opened without one", async () => {
+  api.getMpesaOutlets.mockResolvedValue([
+    outlet(1, "Main till", { cash: "3000.00", float: "7000.00", total: "10000.00", updated_on: "2026-10-10", due: false, cash_count: {},
+      commission_balance: null, open_session: 8 }),
+    outlet(2, "Market till", { cash: null, float: null, total: null, updated_on: null, due: true, cash_count: {}, commission_balance: null, open_session: null }),
+  ]);
+  alerts.askForm.mockResolvedValue({ balance: "2,400" });
+  api.recordMpesaCommissionBalance.mockResolvedValue({});
+  render(<MpesaDashboardPage />);
+  const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
+  expect(main).toHaveTextContent("Not recorded yet");
+  const market = screen.getByRole("heading", { name: "Market till" }).closest("li");
+  expect(within(market).queryByRole("button", { name: "Record commission balance" })).not.toBeInTheDocument();
+  fireEvent.click(within(main).getByRole("button", { name: "Record commission balance" }));
+  await waitFor(() => expect(api.recordMpesaCommissionBalance).toHaveBeenCalledWith(8, "2,400"));
 });

@@ -9,6 +9,15 @@ export function countTotal(count) {
   return Math.round((notes + (Number(count.coins) || 0)) * 100) / 100;
 }
 
+// The counter filled in from a stored count, so it adds up to ``cash``: the notes as counted, and whatever the notes
+// do not cover in the coins (all of it when no notes were counted).
+export function countFrom(stored, cash) {
+  const notes = Object.fromEntries(NOTES.map((note) => [note, Number.parseInt(stored?.[note], 10) > 0 ? String(Number.parseInt(stored[note], 10)) : ""]));
+  const rest = Math.round((Number(cash || 0) - countTotal({ ...notes, coins: "" })) * 100) / 100;
+  if (rest < 0) return { ...emptyCount(), coins: cash == null ? "" : String(Number(cash)) };
+  return { ...notes, coins: rest ? String(rest) : "" };
+}
+
 // What the server stores: whole note counts and the coins amount.
 export const countPayload = (count) => ({
   ...Object.fromEntries(NOTES.map((note) => [note, Number.parseInt(count[note], 10) || 0])),

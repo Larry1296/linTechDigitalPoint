@@ -98,6 +98,52 @@ def test_an_unread_transaction_or_a_payout_in_between_measures_nothing(shift):
     assert results[after_payout.pk] == (None, None)
 
 
+def test_the_reading_a_shift_opens_with_measures_its_first_transaction(db):
+    from apps.mpesa.api import money_in_operation
+    from apps.mpesa.services import reconcile_session
+    operator = User.objects.create_superuser("opening-reader", "opening@example.test", "test")
+    outlet = MpesaOutlet.objects.create(store=Store.objects.create(name="Opening shop"), display_name="Till")
+    first = open_session(outlet=outlet, operator=operator, opening_cash="5000", opening_float="5000", commission_balance="1,200")
+    assert first.opening_commission_balance == Decimal("1200.00")
+    assert money_in_operation(outlet)["commission_balance"] == Decimal("1200.00")
+    shift = (operator, first)
+    earned_first = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "o1", "1212")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "o2")  # unread: the closing reading is still 1,212
+    assert money_in_operation(outlet)["commission_balance"] == Decimal("1212.00")
+    reconcile_session(session=first, user=operator, actual_cash="3000", actual_float="7000")
+    second = open_session(outlet=outlet, operator=operator, opening_cash="3000", opening_float="7000", commission_balance="0")  # paid out
+    after_payout = record((operator, second), "CUSTOMER_WITHDRAWAL", "1500", "o3", "18")
+    results = learned(second)
+    assert results[earned_first.pk] == (Decimal("12.00"), "measured")
+    assert results[after_payout.pk] == (Decimal("18.00"), "measured")
+    from apps.mpesa.commission_learning import for_shift
+    assert for_shift(second) == {"earned": Decimal("18.00"), "measured": 1, "learned": 0, "unknown": 0}  # the opening is not a transaction
+    other = MpesaOutlet.objects.create(store=outlet.store, display_name="Second till")
+    with pytest.raises(ValidationError, match="below zero"):
+        open_session(outlet=other, operator=operator, opening_cash="0", opening_float="0", commission_balance="-1")
+
+
+def test_a_reading_taken_during_an_open_shift_measures_the_next_transaction(shift):
+    from apps.mpesa.api import money_in_operation
+    from apps.mpesa.services import reconcile_session, record_commission_balance
+    operator, session = shift  # opened before the app asked for a reading
+    unread = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r1")
+    assert money_in_operation(session.outlet)["commission_balance"] is None
+    assert money_in_operation(session.outlet)["open_session"] == session.pk
+    record_commission_balance(session=session, user=operator, value="2,400")
+    assert money_in_operation(session.outlet)["commission_balance"] == Decimal("2400.00")
+    after = record(shift, "CUSTOMER_WITHDRAWAL", "1500", "r2", "2418")
+    results = learned(session)
+    assert results[unread.pk] == (None, None)
+    assert results[after.pk] == (Decimal("18.00"), "measured")
+    with pytest.raises(ValidationError, match="Enter the commission balance"):
+        record_commission_balance(session=session, user=operator, value="")
+    reconcile_session(session=session, user=operator, actual_cash="47500", actual_float="52500")
+    assert money_in_operation(session.outlet)["commission_balance"] == Decimal("2418.00")
+    with pytest.raises(ValidationError, match="closed"):
+        record_commission_balance(session=session, user=operator, value="2500")
+
+
 def test_a_correction_stands_where_the_wrong_entry_was(shift):
     operator, session = shift
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "c3", "100")

@@ -10,24 +10,45 @@ from rest_framework.response import Response
 from apps.core.permissions import HasLinTechPermission
 
 from .models import MpesaCommissionEntry, MpesaOutlet, MpesaReconciliation, MpesaSession, MpesaTransaction
-from .services import add_provider_reference, correct_transaction, open_session, post_transaction, reconcile_session, reverse_transaction, session_balances
+from .services import (add_provider_reference, correct_transaction, open_session, post_transaction, reconcile_session, record_commission_balance,
+                       reverse_transaction, session_balances)
+
+
+def commission_balance(outlet):
+    """The outlet's commission balance as last read off the agent line: after a transaction, or on its own (when a shift
+    opened, or during it). {"value", "read_at"}."""
+    readings = [(row.occurred_at, row.commission_balance) for row in MpesaTransaction.objects.filter(outlet=outlet, commission_balance__isnull=False)
+                .order_by("-occurred_at", "-pk")[:1]]
+    for session in outlet.sessions.order_by("-opened_at", "-pk").only("opened_at", "opening_commission_balance", "commission_readings")[:60]:
+        if session.balance_readings():
+            readings.append(session.balance_readings()[-1])  # the latest shift that read one on its own
+            break
+    if not readings:
+        return {"value": None, "read_at": None}
+    read_at, value = max(readings, key=lambda reading: reading[0])
+    return {"value": value, "read_at": read_at}
 
 
 def money_in_operation(outlet):
-    """The outlet's cash and float as last recorded, and whether today's figure is still due.
+    """The outlet's cash and float as last recorded, and whether today's figure is still due; with the notes last
+    counted and the commission balance last read, so the next shift opens with them filled in.
 
     A shift opened or closed today is today's update. Updates are expected every day except Sunday.
     """
     today = timezone.localdate()
     session = outlet.sessions.order_by("-opened_at", "-pk").first()
+    count = {}
     if not session:
         cash = electronic_float = updated = None
     elif session.status == MpesaSession.OPEN:
         (cash, electronic_float), updated = session_balances(session), timezone.localdate(session.opened_at)
     else:
         cash, electronic_float, updated = session.closing_cash_actual, session.closing_float_actual, timezone.localdate(session.closed_at)
+        count = getattr(MpesaReconciliation.objects.filter(session=session).first(), "cash_count", None) or {}
     return {"cash": cash, "float": electronic_float, "total": None if cash is None else cash + electronic_float,
-            "updated_on": updated, "due": today.weekday() != 6 and updated != today}
+            "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
+            "commission_balance": commission_balance(outlet)["value"],
+            "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
 
 
 class OutletSerializer(serializers.ModelSerializer):
@@ -124,7 +145,16 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         if request.data.get("commission") and not has_business_permission(request.user, "mpesa.add_mpesacommissionentry"):
             return Response({"detail": "Commission recording permission required."}, status=403)
         result = open_session(outlet=outlet, operator=request.user, opening_cash=request.data.get("opening_cash"), opening_float=request.data.get("opening_float"), notes=request.data.get("notes", ""), cash_count=request.data.get("cash_count"),
-                              difference_reason=request.data.get("difference_reason", ""), commission=request.data.get("commission") or None)
+                              difference_reason=request.data.get("difference_reason", ""), commission=request.data.get("commission") or None,
+                              commission_balance=request.data.get("commission_balance"))
+        return Response(self.get_serializer(result).data, status=201)
+
+    @action(detail=True, methods=["post"], url_path="commission-balance")
+    def read_commission(self, request, pk=None):
+        """The commission balance read off the agent line now, while the shift is open."""
+        if not has_business_permission(request.user, "mpesa.add_mpesatransaction"):
+            return Response({"detail": "M-Pesa posting permission required."}, status=403)
+        result = record_commission_balance(session=self.get_object(), user=request.user, value=request.data.get("commission_balance"))
         return Response(self.get_serializer(result).data, status=201)
 
     @action(detail=True, methods=["post"])
