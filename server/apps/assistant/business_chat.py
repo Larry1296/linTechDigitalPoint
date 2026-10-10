@@ -109,6 +109,21 @@ def stream_offline_answer(ctx, question, reason=""):
     yield event("done")
 
 
+NO_CREDIT = "no_credit"
+TOP_UP = {"anthropic": "the Anthropic Console (console.anthropic.com → Plans & Billing)", "openai": "the OpenAI dashboard (platform.openai.com → Billing)"}
+
+
+def unavailable_reason(ctx, provider, no_credit):
+    """Why the AI did not answer, said above the answer from the records. The AI accounts are the platform's, so only the
+    platform owner is told the account ran out of credit and where to top it up; a business just hears it is unavailable."""
+    if no_credit and ctx.user.is_superuser:
+        return (f"The AI assistant's account has run out of credit, so this is answered directly from your records. "
+                f"Add credit in {TOP_UP.get(provider, 'the AI provider’s billing page')} and it answers again straight away.")
+    if no_credit:
+        logger.error("Business assistant (%s) is out of credit: businesses get answers from their records only", provider)
+    return "The AI assistant is unavailable right now, so this is answered directly from your records."
+
+
 def web_search_on(provider):
     """Market price search runs on Anthropic's servers, so only the Claude assistant has it."""
     return provider == "anthropic" and settings.BUSINESS_ASSISTANT_WEB_SEARCH
@@ -124,7 +139,7 @@ def stream_business_answer(ctx, history, question, provider):
     for item in stream(ctx, system, tools, history, question):
         # The AI could not answer before saying anything (no credit, a bad key, an outage): answer from the records instead.
         if not said and '"type": "error"' in item:
-            yield from stream_offline_answer(ctx, question, "The AI assistant could not be reached, so this is answered directly from your records.")
+            yield from stream_offline_answer(ctx, question, unavailable_reason(ctx, provider, f'"reason": "{NO_CREDIT}"' in item))
             return
         said = said or '"type": "text"' in item
         yield item
@@ -185,7 +200,8 @@ def _stream_anthropic(ctx, system, tools, history, question, web=False):
             return
         except anthropic.APIStatusError as exc:
             logger.error("Business assistant Claude API error %s (request %s): %s", exc.status_code, getattr(exc, "request_id", None), exc.message)
-            yield event("error", message="Something went wrong on our side. Please try again shortly.")
+            yield event("error", message="Something went wrong on our side. Please try again shortly.",
+                        **({"reason": NO_CREDIT} if "credit balance" in str(exc.message).lower() else {}))
             return
         usage[0] += final.usage.input_tokens
         usage[1] += final.usage.cache_read_input_tokens or 0
@@ -263,7 +279,11 @@ def _stream_openai(ctx, system, tools, history, question):
                         slot["name"] += part.function.name or ""
                         slot["arguments"] += part.function.arguments or ""
                 finish = choice.finish_reason or finish
-        except openai.RateLimitError:
+        except openai.RateLimitError as exc:
+            if getattr(exc, "code", None) == "insufficient_quota":  # OpenAI says "out of credit" as a 429
+                logger.error("Business assistant: the OpenAI account has no credit left")
+                yield event("error", message="Something went wrong on our side. Please try again shortly.", reason=NO_CREDIT)
+                return
             logger.warning("Business assistant rate limited by the OpenAI API")
             yield event("error", message="The assistant is busy right now. Please try again in a minute.")
             return

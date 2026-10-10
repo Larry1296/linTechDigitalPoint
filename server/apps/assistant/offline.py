@@ -404,7 +404,8 @@ def stock_list(w, text):
     category = ""
     # The last "in/under/from X" names the category: "which items are in stock in cables" -> cables.
     match = re.search(r".*\b(?:in|under|from) (?:the )?(?:category )?([a-z0-9 &()-]+?)(?: category)?[?.!]*$", text)
-    if match and match.group(1).strip() not in {"stock", "my stock", "the shop", "store", "shop", "the store"}:
+    # A category name is a few words; a longer tail is the rest of a sentence ("in nairobi if you notice …"), not a category.
+    if match and match.group(1).strip() not in {"stock", "my stock", "the shop", "store", "shop", "the store"} and len(match.group(1).split()) <= 4:
         category = match.group(1).strip()
     data = w.call("stock_levels", {"view": "all", "limit": 200, **({"category": category} if category else {})})
     if data is None:
@@ -700,6 +701,15 @@ def help_answer(w, text):
     return f"**{top['section']}**\n\n{top['text']}"
 
 
+def market_prices(w, text):
+    """Comparing prices with other shops needs the internet, which only the AI assistant can search: say so plainly
+    rather than reading the question as something it is not."""
+    return ("**Comparing your prices with other shops needs the AI assistant**, which searches Kenyan shops' websites for "
+            "current prices. It is not available right now, so this cannot be checked from your records alone.\n\n"
+            "Ask again once the assistant is back. Meanwhile you can ask for a product's price here (e.g. *price of HDMI cable*) "
+            "to see what you are selling it for.")
+
+
 FALLBACK = ("I can answer these without the AI assistant: which items are in stock; a product's stock and price; chamas and their "
             "members; investments and loans; service jobs; purchases from suppliers; staff activity; stock adjustments; a sale by its "
             "number or what a customer bought; your business profile; sales today, this week or this month; how sales are trending; profit and "
@@ -709,6 +719,8 @@ FALLBACK = ("I can answer these without the AI assistant: which items are in sto
 
 # (pattern, answer). The first match wins, so the more specific questions come first.
 INTENTS = [
+    (r"\b(retailers?|competitors?|other (shops|stores|sellers)|market (price|rate)s?|jumia|kilimall|carrefour|naivas|quickmart"
+     r"|compare (my |our |the )?(prices?|sp|selling prices?)|(prices?|sp) (compared?|against|vs\.?|versus))\b", market_prices),
     (r"^(how (do|can|should) i|how to|where (do|can) i|can i|is it possible|what is the way)\b", help_answer),
     (r"\b(which|what) (items|products|goods|stock)\b.*\b(in stock|available|do i have|have i got|are there|left)\b"
      r"|\b(items|products|goods|everything|what is|what's) (in stock|available)\b|\b(list|show)( me)? (my |all |the )?(stock|items|products|inventory)\b"

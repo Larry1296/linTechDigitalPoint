@@ -414,3 +414,23 @@ def test_owner_chooses_the_provider_and_staff_cannot(shop, settings):
     settings.OPENAI_API_KEY = ""
     with mock.patch.dict("os.environ", {}, clear=True):
         assert shop.client.get(URL + "settings/").json()["provider"] == "anthropic"  # falls back to a provider that works
+
+
+def test_an_ai_account_out_of_credit_is_named_to_the_platform_owner_and_a_price_comparison_is_not_misread(shop):
+    import anthropic
+    no_credit = anthropic.BadRequestError("Your credit balance is too low to access the Anthropic API.",
+                                          response=mock.MagicMock(status_code=400, headers={}), body=None)
+    fake = mock.MagicMock()
+    fake.beta.messages.stream.side_effect = no_credit
+    question = ("Compare all the current products SP with numerous local retailers in Nairobi; if you notice a significant "
+                "difference point it out clearly so that I correct")
+    ask = lambda: "".join(e.get("text", "") for e in events(shop.client.post(URL + "chat/", {"messages": [{"role": "user", "content": question}]}, format="json")))
+    with mock.patch.object(business_chat, "_anthropic", return_value=fake):
+        owner_sees = ask()
+        shop.owner.is_superuser = True
+        shop.owner.save()
+        platform_sees = ask()
+    assert "unavailable right now" in owner_sees and "credit" not in owner_sees
+    assert "run out of credit" in platform_sees and "console.anthropic.com" in platform_sees
+    for text in (owner_sees, platform_sees):
+        assert "Comparing your prices with other shops needs the AI assistant" in text and "No stock items found" not in text
