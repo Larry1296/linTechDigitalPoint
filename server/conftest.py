@@ -62,6 +62,22 @@ def fast_test_password_hashing(settings):
 
 
 @pytest.fixture(autouse=True)
+def no_machine_specific_addresses(settings):
+    """Tests behave the same on every machine and in CI: a developer's .env (its public web address, the M-Pesa
+    callback address) never changes what they expect. A test that needs one sets it itself."""
+    settings.PUBLIC_APP_URL = ""
+    settings.MPESA_CALLBACK_BASE_URL = ""
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Each test starts with no requests counted: the login and registration limits (a few a minute) are kept in the
+    cache, and would otherwise trip in whichever test happens to run after others that logged in."""
+    from django.core.cache import cache
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def api_test_device_login(monkeypatch):
     """Model the browser's device credentials when legacy API fixtures force-login.
 

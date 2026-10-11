@@ -1,0 +1,113 @@
+# Deploys to the DigitalOcean Droplet after CI passes on main, so nothing untested reaches the live site.
+# Run it by hand (Actions → Deploy → Run workflow) to redeploy, or to roll back to an earlier commit's images.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST      the Droplet's IP address or domain
+#   DEPLOY_USER      the deploy user created by deploy/server-setup.sh (deploy)
+#   DEPLOY_SSH_KEY   the private key whose public half is in that user's ~/.ssh/authorized_keys
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit to deploy (blank: the latest on main). An earlier commit rolls back to its images."
+        required: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Choose the commit
+        id: commit
+        run: |
+          sha="${{ github.event.inputs.commit || github.event.workflow_run.head_sha || github.sha }}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "prefix=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/server.Dockerfile
+          push: true
+          tags: ${{ steps.commit.outputs.prefix }}-server:${{ steps.commit.outputs.sha }},${{ steps.commit.outputs.prefix }}-server:latest
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+
+      - name: Build and push the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/web.Dockerfile
+          push: true
+          tags: ${{ steps.commit.outputs.prefix }}-web:${{ steps.commit.outputs.sha }},${{ steps.commit.outputs.prefix }}-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Connect to the Droplet
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Update the live site
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          PREFIX: ${{ steps.commit.outputs.prefix }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          scp -i ~/.ssh/deploy_key deploy/docker-compose.yml "$TARGET:/opt/lintech/docker-compose.yml"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "SHA=$SHA PREFIX=$PREFIX TOKEN=$TOKEN ACTOR=$ACTOR bash -s" <<'SCRIPT'
+          set -euo pipefail
+          cd /opt/lintech
+          test -f .env || { echo "/opt/lintech/.env is missing: copy deploy/.env.production.example there and fill it in."; exit 1; }
+          sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$SHA|; s|^IMAGE_PREFIX=.*|IMAGE_PREFIX=$PREFIX|" .env
+          grep -q '^IMAGE_TAG=' .env || echo "IMAGE_TAG=$SHA" >> .env
+          grep -q '^IMAGE_PREFIX=' .env || echo "IMAGE_PREFIX=$PREFIX" >> .env
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker compose pull app web
+          docker compose up -d --remove-orphans
+          docker logout ghcr.io
+          # The app migrates the database as it starts; wait until it answers, or show why not.
+          for attempt in $(seq 1 60); do
+            if docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)" 2>/dev/null; then
+              echo "Live: $SHA"
+              docker image prune -af --filter "until=168h" >/dev/null || true
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The app did not become healthy. Its last log lines:"
+          docker compose logs --tail 80 app
+          exit 1
+          SCRIPT

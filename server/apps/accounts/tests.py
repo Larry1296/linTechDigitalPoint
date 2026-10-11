@@ -24,7 +24,9 @@ def test_django_superuser_is_owner_in_both_admin_interfaces():
     api = APIClient()
     response = api.post("/api/v1/auth/login/", {"credential": "owner", "password": "Strong-pass-1296"}, format="json")
     assert response.status_code == 200
-    assert response.json()["is_staff"] is True and response.json()["is_superuser"] is True
+    # The platform owner is told apart as platform_admin; is_superuser is never sent to the browser.
+    assert response.json()["is_staff"] is True and response.json()["platform_admin"] is True and response.json()["is_superuser"] is False
+    api.credentials(HTTP_AUTHORIZATION="Bearer " + response.json()["access_token"])  # as the browser sends it after login
     assert api.get("/api/v1/locations/zones/").status_code == 200
     assert api.get("/api/v1/locations/stacks/").status_code == 200
     assert api.get("/api/v1/commerce/pos/catalog/").status_code == 200
@@ -39,7 +41,7 @@ def test_django_superuser_is_owner_in_both_admin_interfaces():
 @pytest.mark.django_db
 def test_initial_setup_uses_staff_roles_without_owner_group():
     store, groups = ensure_initial_setup()
-    assert set(groups) == {"Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator", "Ecommerce Customer"}
+    assert set(groups) == {"Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator"}
     assert not Group.objects.filter(name="Owner").exists()
     assert not Zone.objects.filter(store=store).exists()
 
@@ -53,7 +55,6 @@ def test_role_permissions_are_real():
     assert groups["Cyber Operator"].permissions.filter(codename="complete_cyber_job").exists()
     assert groups["M-Pesa Operator"].permissions.filter(codename="add_mpesatransaction").exists()
     assert not groups["M-Pesa Operator"].permissions.filter(codename="add_mpesacommissionentry").exists()
-    assert not groups["Ecommerce Customer"].permissions.exists()
 
 
 @pytest.mark.django_db
@@ -70,7 +71,8 @@ def test_cashier_is_staff_but_not_owner_and_remains_permission_limited():
     assert api.post("/api/v1/locations/stacks/", {}, format="json").status_code == 403
     django_admin = Client()
     django_admin.force_login(cashier)
-    assert django_admin.get("/platform-admin/auth/user/").status_code == 403
+    # The platform admin site is for the platform owner only: anyone else is sent to its login page.
+    assert django_admin.get("/platform-admin/auth/user/").status_code == 302
 
 
 @pytest.mark.django_db
@@ -78,7 +80,6 @@ def test_customer_cannot_access_internal_locations():
     ensure_initial_setup()
     user = User.objects.create_user("customer", password="Strong-pass-1296")
     CustomerProfile.objects.create(user=user)
-    user.groups.add(Group.objects.get(name="Ecommerce Customer"))
     client = APIClient()
     client.force_authenticate(user)
     assert client.get("/api/v1/locations/zones/").status_code == 403

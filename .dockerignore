@@ -1,0 +1,22 @@
+# Keep images small and free of local secrets and data.
+.git
+.github
+**/.env
+**/.env.*
+!deploy/.env.production.example
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+server/venv
+server/.venv
+.venv
+server/media
+server/staticfiles
+client/node_modules
+client/dist
+client/.vite
+client/test-results
+client/playwright-report
+docs
+scripts

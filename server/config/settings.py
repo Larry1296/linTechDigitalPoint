@@ -8,16 +8,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
+# Production: the one public domain (e.g. app.example.co.ke). When set, the hosts, trusted origins, receipt links and
+# M-Pesa callback address below default to https://<domain>, so a deployment needs only this one address.
+SITE_DOMAIN = config("SITE_DOMAIN", default="").strip().lower()
+SITE_URL = f"https://{SITE_DOMAIN}" if SITE_DOMAIN else ""
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS",
-    default="localhost,127.0.0.1",
+    default=f"{SITE_DOMAIN},localhost,127.0.0.1" if SITE_DOMAIN else "localhost,127.0.0.1",
     cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
 )
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default="http://localhost:5173,http://127.0.0.1:5173",
+    default=SITE_URL or "http://localhost:5173,http://127.0.0.1:5173",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
+# Behind the HTTPS proxy (Caddy in deploy/), which ends TLS and tells Django the request was https.
+if config("BEHIND_HTTPS_PROXY", default=False, cast=bool):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)  # the proxy already redirects to https
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
 
 # APPLICATIONS
 DJANGO_APPS = [
@@ -89,6 +102,10 @@ DATABASES = {
         "PASSWORD": config("DB_PASSWORD"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432"),
+        # Reuse connections between requests in production (seconds); checked before use so a restart of the database
+        # never hands out a dead one.
+        "CONN_MAX_AGE": config("DB_CONN_MAX_AGE", default=0, cast=int),
+        "CONN_HEALTH_CHECKS": True,
         "TEST": {"NAME": config("DB_TEST_NAME", default="test_lintech_digital_point")},
     }
 }
@@ -112,6 +129,11 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Compressed copies of the admin's static files, served by WhiteNoise.
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # DJANGO REST FRAMEWORK
@@ -129,7 +151,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {"TITLE": config("PLATFORM_NAME", default="DukaFlow") + " API", "VERSION": "1.0.0"}
 
 # CORS / CSRF
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+FRONTEND_URL = config("FRONTEND_URL", default=SITE_URL or "http://localhost:5173")
 
 # COOKIES / SESSION
 COOKIE_SECURE = config("COOKIE_SECURE", default=not DEBUG, cast=bool)
@@ -147,6 +169,24 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 # LINTECH BUSINESS SETTINGS
 EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+# SMTP, with EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend (password resets and emailed receipts).
+EMAIL_HOST = config("EMAIL_HOST", default="localhost")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_TIMEOUT = 20
+
+# LOGGING: everything to the console, where Docker keeps it (docker compose logs app).
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "root": {"handlers": ["console"], "level": config("LOG_LEVEL", default="INFO")},
+    "loggers": {"django.request": {"handlers": ["console"], "level": "WARNING", "propagate": False}},
+}
 
 # DARAJA / EXTERNAL INTEGRATIONS
 DARAJA_CONSUMER_KEY = config("DARAJA_CONSUMER_KEY", default="")
@@ -170,7 +210,7 @@ BUSINESS_ASSISTANT_WEB_SEARCH = config("BUSINESS_ASSISTANT_WEB_SEARCH", default=
 BUSINESS_ASSISTANT_OPENAI_MODEL = config("BUSINESS_ASSISTANT_OPENAI_MODEL", default="gpt-5.5")
 BUSINESS_ASSISTANT_EFFORT = config("BUSINESS_ASSISTANT_EFFORT", default="medium")  # low, medium or high
 # Public address of the web app, used in receipt links sent to customers (e.g. https://app.example.com).
-PUBLIC_APP_URL = config("PUBLIC_APP_URL", default="")
+PUBLIC_APP_URL = config("PUBLIC_APP_URL", default=SITE_URL)
 
 # API device sessions are separate from Django admin session authentication.
 JWT_SIGNING_KEY = config('JWT_SIGNING_KEY', default=SECRET_KEY)
@@ -193,7 +233,7 @@ MPESA_SHORTCODE = config("MPESA_SHORTCODE", default="")
 MPESA_PASSKEY = config("MPESA_PASSKEY", default="")
 MPESA_TRANSACTION_TYPE = config("MPESA_TRANSACTION_TYPE", default="CustomerPayBillOnline")  # or CustomerBuyGoodsOnline for a till
 MPESA_PARTY_B = config("MPESA_PARTY_B", default="")  # the till number when it differs from the shortcode
-MPESA_CALLBACK_BASE_URL = config("MPESA_CALLBACK_BASE_URL", default="")  # public https address Safaricom can reach
+MPESA_CALLBACK_BASE_URL = config("MPESA_CALLBACK_BASE_URL", default=SITE_URL)  # public https address Safaricom can reach
 MPESA_CALLBACK_TOKEN = config("MPESA_CALLBACK_TOKEN", default="")  # long random secret placed in the callback address
 # Each business's own Daraja secrets (M-Pesa prompts at the till) are stored encrypted with this Fernet key; when it is
 # empty a key derived from SECRET_KEY is used. Changing it makes the stored secrets unreadable (owners re-enter them).

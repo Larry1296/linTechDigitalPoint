@@ -171,8 +171,10 @@ def test_products_can_be_browsed_one_category_at_a_time(owner):
     retired = Category.objects.create(name="Retired", slug="retired", active=False)
     for name, category in [("Charger A", chargers), ("Charger B", chargers), ("Cable", mobile), ("Old radio", retired)]:
         Product.objects.create(name=name, slug=name.lower().replace(" ", "-"), category=category)
-    assert owner.get("/api/v1/catalog/products/category-counts/").json() == {
-        "categories": {str(mobile.pk): 1, str(chargers.pk): 2}, "other": 1}
+    counts = owner.get("/api/v1/catalog/products/category-counts/").json()
+    assert {key: counts[key] for key in ("categories", "other")} == {"categories": {str(mobile.pk): 1, str(chargers.pk): 2}, "other": 1}
+    # No stock received yet, so the stock summary that comes with the counts is all zero.
+    assert counts["stock"] == {"cost_missing": 0, "products": 0, "units": 0.0, "value_at_cost": 0.0, "value_at_selling_price": 0.0}
     names = lambda query: [row["name"] for row in owner.get(f"/api/v1/catalog/products/?page=1&{query}").json()["results"]]
     assert names(f"category={mobile.pk}") == ["Cable"]
     assert names(f"category={chargers.pk}") == ["Charger A", "Charger B"]

@@ -1,0 +1,40 @@
+# One site: the React app, with the API, platform admin, media and callbacks passed to Django.
+# SITE_DOMAIN (from .env) is the public domain; Caddy gets and renews its HTTPS certificate by itself.
+# Before the domain points at the server, SITE_DOMAIN=:80 serves plain http on the server's IP for a first look.
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	@app path /api/* /platform-admin/* /media/* /static/* /healthz
+	handle @app {
+		reverse_proxy app:8000 {
+			# Assistant answers stream as they are written: pass each piece on at once.
+			flush_interval -1
+			transport http {
+				read_timeout 200s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		# Built files carry a hash in their name, so they can be cached for good; the page itself never is.
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
