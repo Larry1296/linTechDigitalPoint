@@ -1,11 +1,13 @@
-"""Answers without an AI model: when no AI key is set, or the AI service fails, the business assistant still answers
-the common questions from the same read-only tools, with exact figures, in plain words.
+"""Answers without an AI model: when no AI key is set, or the AI service fails (no credit, an outage), the business
+assistant still answers the common questions from the same read-only tools, with exact figures, in plain words. A
+business is never told the AI was unavailable: it simply gets its answer (business_chat.unavailable_reason).
 
 It recognises what is asked (sales trend, profit and loss, stock to reorder, who owes, ...) and the period
 ("this month", "last 30 days", "since we started"), runs the matching tool for the person asking (so their role's
 limits still apply) and writes the result out. Anything it does not recognise is looked up in the help articles.
 """
 import calendar
+import difflib
 import json
 import re
 from datetime import timedelta
@@ -13,9 +15,6 @@ from datetime import timedelta
 from django.utils import timezone
 
 from . import business_tools
-
-NOTE = "\n\n_Answered directly from your records, without the AI assistant, so only common questions are understood._"
-
 
 # Periods ---------------------------------------------------------------------------------------
 
@@ -226,10 +225,11 @@ def top_products(w, text):
     if data is None:
         return w.problem
     rows = data["rows"]
+    words = words if words.startswith(("today", "yesterday", "this", "last", "since")) else "in " + words
     if not rows:
-        return f"No products were sold in {words}."
+        return f"No products were sold {words}."
     total = sum(r["value"] or 0 for r in data["rows"]) or 1
-    lines = [f"**{rows[0]['product']}** brought in the most in {words}: {w.money(rows[0]['value'])} "
+    lines = [f"**{rows[0]['product']}** brought in the most {words}: {w.money(rows[0]['value'])} "
              f"({(rows[0]['value'] or 0) / total * 100:.0f}% of product sales).", ""]
     profit = rows[0].get("gross_profit") is not None
     lines += table(["Product", "Sold", "Revenue"] + (["Profit"] if profit else []),
@@ -438,7 +438,14 @@ def stock_list(w, text):
     return "\n".join(lines)
 
 
-PRODUCT_QUESTIONS = [r"\bdo (?:i|we) (?:have|stock|sell) (?:any )?(.+?)(?: in stock| left| available)?$",
+# The lowest price a sale can be made at: "lowest price a customer can pay for the MP charger".
+LOWEST = r"\b(?:lowest|least|minimum|min|cheapest|bottom|floor)\b"
+# A price offered for a product: "can a customer pay 600 for the MP charger", "can I sell the MP charger at 650".
+OFFER = r"\b(?:pay|sell|give|accept|take|charge)\b.*?\b(?:kes|ksh|sh)?\s*(\d[\d,]*)\b"
+PRODUCT_QUESTIONS = [OFFER + r"\s*(?:for|of) (?:the |a |an |my )?(.+)$", LOWEST + r".*\b(?:for|of|on)\s+(.+)$", r".*\bprices? (?:for|of) (.+)$",
+                     LOWEST + r".*\b(?:sell|pay|charge|price)\b\s+(?:the |a |an |my )?(.+)$",
+                     r"\bsell (?:the |a |an |my )?(.+?) (?:for|at)\b",
+                     r"\bdo (?:i|we) (?:have|stock|sell) (?:any )?(.+?)(?: in stock| left| available)?$",
                      r"\bhow many (.+?) (?:do (?:i|we) have|are (?:left|there|in stock|available)|left|in stock)$",
                      r"\bis (?:there )?(?:any )?(.+?) (?:in stock|available|left)$", r"\bare (?:there )?(?:any )?(.+?) (?:in stock|available|left)$",
                      r"\b(?:price|cost|selling price) of (?:the |a |an )?(.+)$", r"\bhow much (?:is|does|do) (?:the |a |an )?(.+?)(?: cost| sell for| go for)?$",
@@ -450,27 +457,78 @@ def product_name(text):
     for pattern in PRODUCT_QUESTIONS:
         match = re.search(pattern, clean)
         if match:
-            name = re.sub(r"^(?:the|a|an|any|some|my) ", "", match.group(1).strip())
-            if name and name not in {"stock", "items", "products", "money", "it", "that", "this"}:
+            name = re.sub(r"^(?:the|a|an|any|some|my) ", "", match.group(match.lastindex).strip())
+            name = re.sub(r"^(?:the|a|an|any|some|my|each|one) ", "", name)
+            if name and name not in {"stock", "item", "items", "product", "products", "money", "it", "that", "this", "everything", "all"}:
                 return name
     return None
 
 
+def _word_score(word, tokens):
+    """How well one word asked matches a product's words: 1 for the word itself (or the start of one, "charg"), else how
+    close the nearest is ("chager" ~ "charger"). Two-letter words ("mp", a brand) must match exactly."""
+    if word in tokens or (len(word) > 2 and any(t.startswith(word) for t in tokens)):
+        return 1.0
+    if len(word) <= 2:
+        return 0.0
+    return max((difflib.SequenceMatcher(None, word, t).ratio() for t in tokens), default=0.0)
+
+
+def closest_products(name, limit=10):
+    """SKUs of the products a loosely typed name means, best first: every word asked is matched against the product's
+    name, variant, brand, item code and category, so "mp chager" finds MULTIPLE POWER CHARGER (brand MP)."""
+    from apps.catalog.models import ProductVariant
+    asked = [word for word in re.findall(r"[a-z0-9]+", name.lower()) if word not in {"the", "a", "an", "of", "for", "my"}]
+    if not asked:
+        return []
+    scored = []
+    for v in ProductVariant.objects.filter(product__active=True).select_related("product__brand", "product__category")[:5000]:
+        words = " ".join([v.product.name, v.name, v.sku or "", v.product.brand.name if v.product.brand_id else "", v.product.category.name])
+        tokens = set(re.findall(r"[a-z0-9]+", words.lower()))
+        score = sum(_word_score(word, tokens) for word in asked) / len(asked)
+        if score >= 0.8 and v.sku:
+            scored.append((score, v.sku))
+    if not scored:
+        return []
+    best = max(score for score, _ in scored)
+    return [sku for score, sku in sorted(scored, key=lambda x: -x[0]) if score >= best - 0.05][:limit]
+
+
+def _lookup(w, name):
+    """find_products for a name, trying harder when it finds nothing: the products whose words best match the words
+    asked, allowing for misspellings and brands ("mp chager"), then the longer words one by one."""
+    data = w.call("find_products", {"query": name, "limit": 10})
+    if data is None or data["products"]:
+        return data
+    found = []
+    for sku in closest_products(name):
+        rows = (w.call("find_products", {"query": sku, "limit": 3}) or {"products": []})["products"]
+        found += [row for row in rows if row not in found]
+    if found:
+        return {**data, "products": found[:10]}
+    for word in sorted(name.split(), key=len, reverse=True):
+        if len(word) > 2:
+            matched = w.call("find_products", {"query": word, "limit": 10})
+            if matched and matched["products"]:
+                return matched
+    return data
+
+
 def product(w, text):
     name = product_name(text)
-    data = w.call("find_products", {"query": name, "limit": 10})
+    if not name:
+        return None
+    data = _lookup(w, name)
     if data is None:
         return w.problem
     if not data["products"]:
-        # Try the words one by one: "samsung remote" may be listed as "SUMSUNG SMART REMOTE".
-        for word in sorted(name.split(), key=len, reverse=True):
-            if len(word) > 2:
-                data = w.call("find_products", {"query": word, "limit": 10})
-                if data and data["products"]:
-                    break
-    if not data or not data["products"]:
         return f"I couldn't find a product matching \"{name}\". Check the spelling, or search on the Products page."
     found = data["products"]
+    offer = re.search(OFFER, text)
+    if offer and len(found) == 1:
+        return offered_price(w, found[0], float(offer.group(1).replace(",", "")))
+    if re.search(LOWEST, text) and re.search(r"\b(price|pay|sell|go|charge|accept|take)\b", text):
+        return lowest_price(w, found)
     counted = [p for p in found if p.get("available") is not None]
     if counted and re.search(r"\b(how many|how much stock|available|left|in stock|do (i|we) have)\b", text):
         units = sum(max(p["available"], 0) for p in counted)
@@ -494,6 +552,35 @@ def product(w, text):
     if any(p.get("lowest_price_allowed") for p in found):
         lines += ["", "> **Sell for** is the range you can sell in: from the lowest price allowed up to the normal selling price."]
     return "\n".join(lines)
+
+
+def lowest_price(w, found):
+    """The lowest price each matching product can be sold at, and its normal price."""
+    lines = []
+    for p in found[:5]:
+        low, normal = p.get("lowest_price_allowed"), p["selling_price"] or 0
+        if low and low < normal:
+            lines.append(f"- **{p['product']}**: lowest **{w.money(low)}**, normal price {w.money(normal)}")
+        else:
+            lines.append(f"- **{p['product']}**: **{w.money(normal)}**; no lower price is allowed (no bargaining price is set)")
+    head = ("**The lowest price a customer can pay:**" if len(lines) > 1 else lines[0].replace("- ", "", 1))
+    out = [head] + (["", *lines] if len(lines) > 1 else [])
+    if any(not p.get("lowest_price_allowed") for p in found[:5]):
+        out += ["", "> To allow bargaining, set a **lowest price** on the product (Products → edit the item)."]
+    return "\n".join(out)
+
+
+def offered_price(w, p, offered):
+    """Whether a price offered for a product can be accepted: at or above the lowest price allowed."""
+    low, normal = p.get("lowest_price_allowed") or 0, p["selling_price"] or 0
+    floor = low if low and low < normal else normal
+    if offered >= normal:
+        return f"**Yes.** {w.money(offered)} is at or above the normal price of **{p['product']}** ({w.money(normal)})."
+    if offered >= floor:
+        return (f"**Yes.** {w.money(offered)} is within the bargaining range for **{p['product']}**: lowest {w.money(floor)}, "
+                f"normal {w.money(normal)}.")
+    return (f"**No.** {w.money(offered)} is below the lowest price for **{p['product']}**, which is **{w.money(floor)}** "
+            f"(normal {w.money(normal)}). A sale below it is noted for the owner to review.")
 
 
 def customers(w, text):
@@ -639,6 +726,8 @@ def stock_changes(w, text):
 def sale_lookup(w, text):
     number = re.search(r"\b((?:pos|cyb|onl|sal)-[a-z0-9-]+)\b", text)
     customer = None if number else re.search(r"\b(?:customer|did|has|have)\s+([a-z][a-z .'-]{1,40}?)\s+(?:buy|bought|owe|purchase|spent)", text)
+    if customer and customer.group(1).strip() in {"customers", "customer", "people", "clients", "they", "we", "i", "you", "anyone", "someone"}:
+        customer = None
     args = {"sale_number": number.group(1).upper()} if number else {"customer": customer.group(1).strip()} if customer else None
     if not args:
         return None
@@ -704,13 +793,11 @@ def help_answer(w, text):
 def market_prices(w, text):
     """Comparing prices with other shops needs the internet, which only the AI assistant can search: say so plainly
     rather than reading the question as something it is not."""
-    return ("**Comparing your prices with other shops needs the AI assistant**, which searches Kenyan shops' websites for "
-            "current prices. It is not available right now, so this cannot be checked from your records alone.\n\n"
-            "Ask again once the assistant is back. Meanwhile you can ask for a product's price here (e.g. *price of HDMI cable*) "
-            "to see what you are selling it for.")
+    return ("**Other shops' prices can't be checked right now.** Your records only hold your own prices.\n\n"
+            "Ask for any product's price here (e.g. *price of HDMI cable*) to see what you sell it for and the lowest price allowed.")
 
 
-FALLBACK = ("I can answer these without the AI assistant: which items are in stock; a product's stock and price; chamas and their "
+FALLBACK = ("I didn't quite get that. I can tell you: which items are in stock; a product's stock and price; chamas and their "
             "members; investments and loans; service jobs; purchases from suppliers; staff activity; stock adjustments; a sale by its "
             "number or what a customer bought; your business profile; sales today, this week or this month; how sales are trending; profit and "
             "loss; busiest days and hours; top products; what is running low; stock that has not sold; stock value; who owes you; "
@@ -721,7 +808,11 @@ FALLBACK = ("I can answer these without the AI assistant: which items are in sto
 INTENTS = [
     (r"\b(retailers?|competitors?|other (shops|stores|sellers)|market (price|rate)s?|jumia|kilimall|carrefour|naivas|quickmart"
      r"|compare (my |our |the )?(prices?|sp|selling prices?)|(prices?|sp) (compared?|against|vs\.?|versus))\b", market_prices),
+    (OFFER + r"\s*(for|of)\b|\b(?:sell|charge)\b.+\b(?:for|at)\s*(?:kes|ksh|sh)?\s*\d", product),
+    (r"\bwhat (did|have|do) ((customers?|people|clients?) (buy|bought)|(we|i) (sell|sold))\b", top_products),
     (r"^(how (do|can|should) i|how to|where (do|can) i|can i|is it possible|what is the way)\b", help_answer),
+    # A product's price ("lowest price a customer can pay for the MP charger"), before "customer" reads it as a customers question.
+    (LOWEST + r".*\b(price|pay|sell|charge|go for|accept|take)\b|\bprices? (for|of)\b", product),
     (r"\b(which|what) (items|products|goods|stock)\b.*\b(in stock|available|do i have|have i got|are there|left)\b"
      r"|\b(items|products|goods|everything|what is|what's) (in stock|available)\b|\b(list|show)( me)? (my |all |the )?(stock|items|products|inventory)\b"
      r"|\bstock list\b|\bwhat do (i|we) have\b", stock_list),
@@ -731,8 +822,9 @@ INTENTS = [
     (r"\b(not sold|haven'?t sold|has not sold|hasn'?t sold|dead stock|slow[- ]moving|not selling|unsold)\b", dead_stock),
     (r"\b(running low|low stock|reorder|re-order|restock|out of stock|running out|need to buy|order more)\b", reorder),
     (r"\b(owes? me|owe us|who owes|debtors?|credit sales|unpaid sales|receivables?|lent|loans?)\b", owed_to_me),
-    (r"\b(buy|bought|purchases?|purchased|stock received|received stock)\b.*\b(suppliers?|stock|this|last|today|week|month)\b"
-     r"|\b(purchases?|purchased|stock received|received stock)\b", purchases),
+    # What the business bought from suppliers; "which customers bought ..." is about customers, further down.
+    (r"^(?!.*\b(customers?|clients?)\b).*(\b(buy|bought|purchases?|purchased|stock received|received stock)\b.*\b(suppliers?|stock|this|last|today|week|month)\b"
+     r"|\b(purchases?|purchased|stock received|received stock)\b)", purchases),
     (r"\b(i owe|we owe|do i owe|suppliers?|payables?|bills?|creditors?)\b", i_owe),
     (r"\b(net worth|worth|where is (my|the) money|how much money|cash|bank|balances?|assets?)\b", money_position),
     (r"\b(expenses?|spent|spending|running costs?|costs?)\b", expenses),
@@ -760,13 +852,13 @@ def answer(ctx, question):
     w = Writer(ctx)
     looked_up = sale_lookup(w, text)
     if looked_up:
-        return looked_up + NOTE, w.used
+        return looked_up, w.used
     for pattern, handler in INTENTS:
         if re.search(pattern, text):
             result = handler(w, text)
             if result:
-                return result + NOTE, w.used
+                return result, w.used
     if re.search(r"\b(stock|items?|products?|goods)\b", text):
-        return stock_list(w, text) + NOTE, w.used
+        return stock_list(w, text), w.used
     found = help_answer(w, text)
-    return (found + NOTE if found else FALLBACK), w.used
+    return (found or FALLBACK), w.used

@@ -42,7 +42,7 @@ def test_the_common_questions_get_exact_answers(shop):  # noqa: F811
     text, used = ask(ctx, "How do I add a staff member?")
     assert used == ["platform_help"] and "staff" in text.lower()
     text, used = ask(ctx, "tell me a joke")
-    assert "I can answer these without the AI assistant" in text
+    assert "I didn't quite get that" in text and "AI" not in text
 
 
 def test_a_role_without_access_is_told_so_not_shown(shop):  # noqa: F811
@@ -92,6 +92,37 @@ def test_a_product_answer_shows_the_price_range_it_can_be_sold_in(shop):  # noqa
     text, _ = ask(context(shop), "how many chargers are available")
     assert "**8 chargers available** across 1 of 1 product" in text
     assert "| Duka charger | 8 | KES 250–300 | KES 160 |" in text and "range you can sell in" in text
+
+
+def test_the_lowest_price_is_answered_even_with_customer_in_the_question_and_a_misspelt_name(shop):  # noqa: F811
+    from apps.catalog.models import ProductVariant
+    from apps.tenancy.context import organization_context
+    with organization_context(shop.org):
+        ProductVariant.objects.filter(pk=shop.charger.pk).update(minimum_price=250)
+    text, used = ask(context(shop), "the lowest price a customer can pay for the duka chager")
+    assert "top_customers" not in used and used[0] == "find_products"
+    assert text.startswith("**Duka charger**: lowest **KES 250**, normal price KES 300")
+    text, _ = ask(context(shop), "what is the minimum price for duka charger?")
+    assert "lowest **KES 250**" in text
+    text, _ = ask(context(shop), "price for the duka charger")
+    assert "| Duka charger | 8 | KES 250–300 | KES 160 |" in text
+    with organization_context(shop.org):
+        ProductVariant.objects.filter(pk=shop.charger.pk).update(minimum_price=0)
+    text, _ = ask(context(shop), "lowest price for duka charger")
+    assert "no lower price is allowed" in text and "set a **lowest price**" in text
+
+
+def test_a_price_offered_is_checked_against_the_lowest_price(shop):  # noqa: F811
+    from apps.catalog.models import ProductVariant
+    from apps.tenancy.context import organization_context
+    with organization_context(shop.org):
+        ProductVariant.objects.filter(pk=shop.charger.pk).update(minimum_price=250)
+    text, _ = ask(context(shop), "can a customer pay 200 for the duka charger")
+    assert text.startswith("**No.** KES 200 is below the lowest price for **Duka charger**, which is **KES 250**")
+    text, _ = ask(context(shop), "can I sell the duka charger at 260?")
+    assert text.startswith("**Yes.** KES 260 is within the bargaining range")
+    text, used = ask(context(shop), "what did customers buy today")
+    assert used == ["sales_summary"] and "Duka charger" in text
 
 
 def test_chamas_and_their_members_are_answered(shop):  # noqa: F811

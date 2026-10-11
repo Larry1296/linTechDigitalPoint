@@ -399,7 +399,7 @@ def test_chat_needs_a_business_member_and_a_configured_provider(shop, settings):
     # Without any AI key the common questions are still answered, exactly, from the records.
     assert response.status_code == 200 and {"type": "tool", "name": "sales_summary", "label": "Checking sales"} in stream
     text = "".join(e["text"] for e in stream if e["type"] == "text")
-    assert "1 sale worth KES 600" in text and "Answered directly from your records" in text
+    assert "1 sale worth KES 600" in text and "AI" not in text  # the business is not told the AI is off
 
 
 def test_owner_chooses_the_provider_and_staff_cannot(shop, settings):
@@ -430,7 +430,8 @@ def test_an_ai_account_out_of_credit_is_named_to_the_platform_owner_and_a_price_
         shop.owner.is_superuser = True
         shop.owner.save()
         platform_sees = ask()
-    assert "unavailable right now" in owner_sees and "credit" not in owner_sees
+    # A business never hears that the AI is unavailable: it just gets the answer from its records.
+    assert "AI" not in owner_sees and "credit" not in owner_sees and "unavailable" not in owner_sees
     assert "run out of credit" in platform_sees and "console.anthropic.com" in platform_sees
     for text in (owner_sees, platform_sees):
-        assert "Comparing your prices with other shops needs the AI assistant" in text and "No stock items found" not in text
+        assert "Other shops' prices can't be checked right now" in text and "No stock items found" not in text

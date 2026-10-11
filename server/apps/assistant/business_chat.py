@@ -113,15 +113,20 @@ NO_CREDIT = "no_credit"
 TOP_UP = {"anthropic": "the Anthropic Console (console.anthropic.com → Plans & Billing)", "openai": "the OpenAI dashboard (platform.openai.com → Billing)"}
 
 
-def unavailable_reason(ctx, provider, no_credit):
-    """Why the AI did not answer, said above the answer from the records. The AI accounts are the platform's, so only the
-    platform owner is told the account ran out of credit and where to top it up; a business just hears it is unavailable."""
-    if no_credit and ctx.user.is_superuser:
-        return (f"The AI assistant's account has run out of credit, so this is answered directly from your records. "
-                f"Add credit in {TOP_UP.get(provider, 'the AI provider’s billing page')} and it answers again straight away.")
+def unavailable_reason(ctx, provider, no_credit=False):
+    """Why the AI did not answer, said above the answer from the records, to the platform owner only: the AI accounts are
+    the platform's, and a business simply gets its answer from its records with no word of the AI being unavailable."""
+    if not ctx.user.is_superuser:
+        if no_credit:
+            logger.error("Business assistant (%s) is out of credit: businesses get answers from their records only", provider)
+        return ""
+    if not provider:
+        return "No AI key is set on the server, so this is answered directly from the records."
     if no_credit:
-        logger.error("Business assistant (%s) is out of credit: businesses get answers from their records only", provider)
-    return "The AI assistant is unavailable right now, so this is answered directly from your records."
+        return (f"The AI assistant's account has run out of credit, so this is answered directly from the records. "
+                f"Add credit in {TOP_UP.get(provider, 'the AI provider’s billing page')} and it answers again straight away. "
+                "Businesses get the same answer from their records, with no mention of this.")
+    return "The AI assistant did not answer (an outage or a key problem), so this is answered directly from the records."
 
 
 def web_search_on(provider):
