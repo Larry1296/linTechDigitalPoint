@@ -1,10 +1,14 @@
 # Point of sale, receipts and refunds
 
 ## How do I make a sale at the counter?
-Open **Point of Sale**, search for products by name, SKU or barcode (or scan them) and add them to the current sale. Choose the customer (or leave it as a walk-in customer), choose the payment method and confirm the money received. Stock quantities update as soon as the sale is completed, and a receipt is produced.
+Open **Point of Sale**. Tap products to add them (each tap adds one more; the number on the product shows how many are in the sale), use the category buttons to narrow the list, or search by name, item code or barcode. In the sale on the right, change quantities with − and +, and the total adds up as you go. Choose how the customer pays (Cash, M-Pesa, Bank or Other) and press **Complete sale**. For cash, type what the customer gave and the change is worked out. Stock updates as soon as the sale is completed, and a receipt is produced.
 
 ## Which payment methods can I record?
-Cash, M-Pesa and bank payments. Payments are recorded against each sale so your takings and stock stay in one place. M-Pesa payments for sales are recorded manually by the cashier (for example with the M-Pesa confirmation reference); {platform} does not currently send payment prompts to the customer's phone.
+Cash, M-Pesa, bank and other payments, recorded against each sale so your takings and stock stay in one place.
+
+## Can the till send an M-Pesa prompt to the customer's phone?
+Yes, if your business has its own Safaricom **till number (Buy Goods)** or **paybill**. Choose M-Pesa, type the customer's number and press **Complete sale & send prompt**: the customer gets a prompt on their phone, enters their M-Pesa PIN, the money goes straight to your till or paybill, and the sale is marked paid with the M-Pesa code by itself. If they cancel or the phone is off, send the prompt again or enter the code from their message by hand.
+The business owner sets it up once in **Settings → M-Pesa payments** (it is also offered right after registering a business). You need: your till number and store number (or paybill number); a free Safaricom Daraja account (developer.safaricom.co.ke) with an M-Pesa Express app taken live with your till or paybill; the app's Consumer Key and Consumer Secret; and the Lipa na M-Pesa Online passkey Safaricom emails after Go Live. {platform} checks the keys with Safaricom when you save, and you can send yourself a KES 1 test prompt. A business without a till or paybill records M-Pesa by hand with the code from the customer's message.
 
 ## Can customers buy on credit or pay part now?
 Yes. Choose **Credit sale or partial payment**, pick or add the customer (a customer is needed if anything is left to pay) and optionally a due date. The unpaid amount becomes the customer's balance, and you can record their payments later from Sales history. Reports show how much customers owe you.

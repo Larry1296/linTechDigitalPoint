@@ -1,0 +1,27 @@
+/* M-Pesa payments setup: what the business has, what Safaricom needs, and whether prompts work. */
+.mpesaSetup { display: grid; gap: 14px; }
+.mpesaSetup > p { margin: 0; }
+.mpesaSetupState { display: flex; align-items: start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 12px;
+  color: #92400e; background: color-mix(in srgb, #f59e0b 14%, var(--surface)); }
+.mpesaSetupState svg { flex: none; margin-top: 2px; }
+.mpesaSetupState.on { color: #065f46; background: color-mix(in srgb, #10b981 15%, var(--surface)); }
+.mpesaSetupState.none { color: var(--text); background: var(--primary2); }
+[data-theme="dark"] .mpesaSetupState { color: #fde68a; }
+[data-theme="dark"] .mpesaSetupState.on { color: #6ee7b7; }
+[data-theme="dark"] .mpesaSetupState.none { color: var(--text); }
+.mpesaSetupForm { display: grid; gap: 16px; }
+.mpesaKinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0; padding: 0; border: 0; }
+.mpesaKinds legend { margin-bottom: 8px; padding: 0; font-weight: 700; }
+.mpesaKinds label { position: relative; display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); cursor: pointer; }
+.mpesaKinds label.on { border-color: var(--primary); background: var(--primary2); box-shadow: 0 0 0 1px var(--primary); }
+.mpesaKinds label:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.mpesaKinds input { position: absolute; opacity: 0; pointer-events: none; }
+.mpesaKinds small { color: var(--muted); line-height: 1.4; }
+.mpesaNeeds { padding: 14px 16px; border: 1px dashed var(--line); border-radius: 12px; background: var(--bg); }
+.mpesaNeeds h3 { margin: 0 0 8px; font-size: 15px; }
+.mpesaNeeds ol { display: grid; gap: 8px; margin: 0 0 8px; padding-left: 20px; }
+.mpesaNeeds li { display: grid; gap: 2px; }
+.mpesaNeeds li span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.mpesaNeeds p { margin: 0; font-size: 13px; }
+.mpesaFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }

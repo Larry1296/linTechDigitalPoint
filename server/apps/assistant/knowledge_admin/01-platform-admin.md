@@ -15,6 +15,8 @@ Open the business, then **Record a payment received outside the app**: choose th
 ## How do businesses pay in the app?
 By M-Pesa (STK push to the owner's phone) through Safaricom Daraja. It works only when the server settings MPESA_MODE (off, sandbox, production or simulate), MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY and MPESA_CALLBACK_BASE_URL (a public https address Safaricom can reach) are set; for a till also MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline and MPESA_PARTY_B. Until then owners cannot pay in the app, and the admin page says so; you can still record their payments by hand.
 
+Businesses can also send their own customers M-Pesa prompts from the point of sale, to their own till or paybill (each owner enters their Daraja keys in Settings → M-Pesa payments). That needs only MPESA_CALLBACK_BASE_URL on the server, the public https address Safaricom reports results to; without it the setup page says so and prompts stay off. The businesses' secrets are stored encrypted with FIELD_ENCRYPTION_KEY (a Fernet key; if unset, one derived from SECRET_KEY). Changing either key makes the saved secrets unreadable and owners must enter them again.
+
 ## What are the plans?
 Plans are listed on **All businesses** under **Plans**: each has a price, a period in days and the tools it includes (products and stock, services and jobs, point of sale, customers and credit, expenses, M-Pesa agency, reports, shelves, staff, branches and chama management).
 

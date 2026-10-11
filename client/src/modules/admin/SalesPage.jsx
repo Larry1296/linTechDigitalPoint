@@ -8,6 +8,7 @@ import { businessCurrency } from "../../core/organization/presentation";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { askForm } from "../../core/ui/alerts";
+import { PromptForWaiting, useMpesaExpress } from "../pos/MpesaPrompt";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
@@ -33,6 +34,7 @@ function SaleSummary({ sale, onDelete }) {
 const METHOD_OPTIONS = PAYMENT_METHODS.map(([value, name]) => <option key={value} value={value}>{name}</option>);
 
 export function SalesPage() {
+  const express=useMpesaExpress();
   const { user }=useAuth();
   const [data,setData]=useState(null),[error,setError]=useState(''),[page,setPage]=useState(1),[busy,setBusy]=useState(false);
   const [key,setKey]=useState(() => crypto.randomUUID());
@@ -107,7 +109,7 @@ export function SalesPage() {
         return <div key={p.id}><p>{label(p.method)} · {money(p.amount)} · {label(p.status)}</p>{['PENDING','MANUAL_REVIEW'].includes(p.status)&&can('commerce.change_payment')&&<>
           {Number(p.amount)>Number(s.outstanding)?<p className="formNotice" role="status">This sale is already paid by the other payment{s.payments.filter(o=>o.status==='COMPLETED').length===1?'':'s'} here ({s.payments.filter(o=>o.status==='COMPLETED').map(o=>`${label(o.method)} ${money(o.amount)}`).join(', ')}), so confirming this would count the money twice.
             Delete the payment that is wrong (Delete this payment, under it). If the customer paid by M-Pesa, delete the other payment first, then confirm this one.</p>
-          :<form onSubmit={e=>submit(e,confirmPath,{},`Payment confirmed for ${s.number}.`)}><label>M-Pesa code from the confirmation message<input name="reference" required maxLength="120" defaultValue={p.reference||''} /></label>{p.reference&&<p className="muted">The code typed when the sale was made. Check it matches the SMS, then confirm.</p>}<button disabled={busy}>Confirm money received</button>{problem(confirmPath,'Could not confirm the payment.')}</form>}
+          :<>{express?.ready&&p.method==='MPESA'&&<PromptForWaiting paymentId={p.id} onPaid={load} />}<form onSubmit={e=>submit(e,confirmPath,{},`Payment confirmed for ${s.number}.`)}><label>{express?.ready&&p.method==='MPESA'?'Or enter the M-Pesa code from the confirmation message':'M-Pesa code from the confirmation message'}<input name="reference" required maxLength="120" defaultValue={p.reference||''} /></label>{p.reference&&<p className="muted">The code typed when the sale was made. Check it matches the SMS, then confirm.</p>}<button disabled={busy}>Confirm money received</button>{problem(confirmPath,'Could not confirm the payment.')}</form></>}
           </>}
           {['COMPLETED','PENDING','MANUAL_REVIEW'].includes(p.status)&&can('accounting.reverse_cashentry')&&<details><summary>Delete this payment</summary><p className="muted">Use this when the payment was not done right: wrong method, wrong code, or recorded twice. {p.status==='COMPLETED'?'Its money comes back out and the sale shows what is still owed.':'It is dropped and never counted.'} Then record the right payment.</p><form onSubmit={e=>submit(e,deletePath,{},`Payment of ${money(p.amount)} deleted. ${s.number} now shows what is owed.`)}><label>Reason<input name="reason" required maxLength="240" placeholder="e.g. recorded twice" /></label><button className="danger" disabled={busy}>Delete payment</button>{problem(deletePath,'Could not delete the payment.')}</form></details>}</div>;})}
       {s.status==='COMPLETED'&&canCorrect&&<details><summary>Delete this sale</summary><p className="muted">Use this when the whole sale was recorded wrongly. It is taken out as if it never happened: goods go back on the shelf, its money and payments come out of {new Date(s.created_at).toLocaleDateString()}'s figures, and it disappears from your sales. Then record it again correctly.</p><form onSubmit={e=>submit(e,`/api/v1/commerce/sales/${s.id}/delete/`,{},`${s.number} deleted. Record the sale again if needed.`)}><label>Reason<input name="reason" required maxLength="240" placeholder="e.g. recorded wrongly, will record again" /></label><button className="danger" disabled={busy}>Delete sale</button>{problem(`/api/v1/commerce/sales/${s.id}/delete/`,'Could not delete the sale.')}</form></details>}

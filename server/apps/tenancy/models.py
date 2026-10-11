@@ -154,3 +154,28 @@ class ReceiptLink(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["organization", "sale_id"], name="one_receipt_link_per_sale")]
+
+
+class MpesaExpressSetup(models.Model):
+    """A business's own Safaricom till or paybill, so the till can send the customer an M-Pesa prompt (STK push) and the
+    money goes straight to the business. Kept with the organization rather than as business data, because Safaricom's
+    callback finds the business by ``callback_token`` before any business is known. The secrets are stored encrypted
+    (commerce/secrets.py) and never sent back to the browser."""
+    NONE, TILL, PAYBILL = "NONE", "TILL", "PAYBILL"
+    organization = models.OneToOneField(Organization, related_name="mpesa_express", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=10, choices=[(NONE, "No till or paybill: manual payments"), (TILL, "Till number (Buy Goods)"), (PAYBILL, "Paybill")], default=NONE)
+    # Paybill: the paybill number. Till: the store number (head office number) Safaricom gave with the till.
+    shortcode = models.CharField(max_length=12, blank=True)
+    till_number = models.CharField(max_length=12, blank=True)  # Till only: the number customers pay to
+    account_reference = models.CharField(max_length=12, blank=True)  # Paybill only: the account the payment is booked to
+    environment = models.CharField(max_length=10, choices=[("PRODUCTION", "Live"), ("SANDBOX", "Testing (Safaricom sandbox)")], default="PRODUCTION")
+    consumer_key = models.TextField(blank=True)  # encrypted
+    consumer_secret = models.TextField(blank=True)  # encrypted
+    passkey = models.TextField(blank=True)  # encrypted
+    callback_token = models.CharField(max_length=64, unique=True)
+    verified_at = models.DateTimeField(null=True, blank=True)  # Safaricom accepted the consumer key and secret
+    tested_at = models.DateTimeField(null=True, blank=True)  # a prompt went through end to end
+    status_detail = models.CharField(max_length=255, blank=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    updated_at = models.DateTimeField(auto_now=True)
+

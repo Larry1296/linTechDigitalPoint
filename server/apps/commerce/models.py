@@ -129,3 +129,23 @@ class SaleAdjustment(TimeStamped):
         default_manager_name = "objects"
         constraints=[models.CheckConstraint(condition=Q(amount__gt=0),name="positive_sale_adjustment"),
                      models.UniqueConstraint(fields=["organization","idempotency_key"],name="comm_saleadjustment_key_org")]
+
+
+class StkPush(TenantModel):
+    """One M-Pesa prompt sent to a customer's phone for a sale's waiting M-Pesa payment (or a test prompt)."""
+    PENDING, COMPLETED, FAILED, CANCELLED = "PENDING", "COMPLETED", "FAILED", "CANCELLED"
+    payment = models.ForeignKey("commerce.Payment", null=True, blank=True, related_name="prompts", on_delete=models.PROTECT)
+    phone = models.CharField(max_length=12)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    status = models.CharField(max_length=10, choices=[(x, x.title()) for x in (PENDING, COMPLETED, FAILED, CANCELLED)], default=PENDING)
+    checkout_request_id = models.CharField(max_length=80, blank=True, db_index=True)
+    merchant_request_id = models.CharField(max_length=80, blank=True)
+    receipt_number = models.CharField(max_length=40, blank=True)
+    detail = models.CharField(max_length=255, blank=True)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"

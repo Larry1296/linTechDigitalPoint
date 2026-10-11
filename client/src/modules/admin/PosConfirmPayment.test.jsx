@@ -28,8 +28,8 @@ async function sellByMpesa() {
   fireEvent.click(await screen.findByRole("button", { name: /Oraimo earphones/ }));
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
   fireEvent.change(within(cart).getByLabelText(/Agreed price for/), { target: { value: "250" } });
-  fireEvent.change(within(cart).getByLabelText("Payment"), { target: { value: "MPESA" } });
-  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: "Complete sale" })); });
+  fireEvent.click(within(cart).getByLabelText("M-Pesa"));
+  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Complete sale/ })); });
 }
 
 it("confirms an M-Pesa payment right after the sale, using the code typed at the till", async () => {

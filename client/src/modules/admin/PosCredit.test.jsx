@@ -34,7 +34,7 @@ it("adds a new customer at the till and records a part payment with the balance 
   expect(within(cart).getByLabelText(/^Customer \(needed/)).toHaveValue("31");
   fireEvent.change(within(cart).getByLabelText("Amount paid now"), { target: { value: "500" } });
   fireEvent.change(within(cart).getByLabelText("Balance due date"), { target: { value: "2026-09-26" } });
-  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: "Complete sale" })); });
+  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Complete sale/ })); });
   const sent = JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/commerce/pos/complete/")[1].body);
   expect(sent).toEqual(expect.objectContaining({ customer_id: "31", paid_amount: "500", due_date: "2026-09-26",
     items: [{ variant_id: 4, quantity: 1, unit_price: "800" }] }));

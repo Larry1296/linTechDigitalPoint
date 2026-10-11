@@ -1,0 +1,16 @@
+/* An M-Pesa prompt to a customer's phone: sending it and following it (the till and the setup page). */
+.sendPrompt { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.sendPrompt label { flex: 1 1 200px; }
+.sendPrompt button { display: inline-flex; align-items: center; gap: 6px; }
+.sendPrompt .formNotice { flex-basis: 100%; margin: 0; }
+.mpesaPrompt { display: flex; align-items: start; gap: 10px; margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 14px; }
+.mpesaPrompt svg { flex: none; margin-top: 1px; }
+.mpesaPrompt.pending { color: var(--text); background: var(--primary2); }
+.mpesaPrompt.paid { color: #065f46; background: color-mix(in srgb, #10b981 16%, var(--surface)); }
+.mpesaPrompt.failed { color: #991b1b; background: color-mix(in srgb, #ef4444 12%, var(--surface)); }
+[data-theme="dark"] .mpesaPrompt.failed { color: #fecaca; }
+.spin { animation: posSpin 0.9s linear infinite; }
+@keyframes posSpin { to { transform: rotate(360deg); } }
+
+[data-theme="dark"] .mpesaPrompt.paid { color: #6ee7b7; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

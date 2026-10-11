@@ -35,7 +35,7 @@ it("lets a cashier agree a price below the lowest price, noting it for review", 
   expect(price).toHaveAttribute("min", "0");
   expect(within(cart).getByRole("status")).toHaveTextContent("Below the usual lowest price (500)");
   expect(within(cart).queryByRole("alert")).not.toBeInTheDocument();
-  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: "Complete sale" })); });
+  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Complete sale/ })); });
   const sent = JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/commerce/pos/complete/")[1].body);
   expect(sent.items).toEqual([{ variant_id: 9, quantity: 1, unit_price: "350" }]);
 });
@@ -51,7 +51,7 @@ it("lets the cashier clear the quantity box and type a new quantity", async () =
   fireEvent.change(quantity, { target: { value: "3" } });
   expect(quantity).toHaveValue(3);
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
-  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: "Complete sale" })); });
+  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Complete sale/ })); });
   const sent = JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/commerce/pos/complete/")[1].body);
   expect(sent.items[0].quantity).toBe(3);
 });

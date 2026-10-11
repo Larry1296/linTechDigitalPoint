@@ -207,6 +207,15 @@ def pos_complete(request):
     waiting=sale.payments.filter(status__in=["PENDING","MANUAL_REVIEW"]).order_by("pk").first()
     if waiting:
         data["waiting_payment"]={"id":waiting.pk,"method":waiting.method,"amount":waiting.amount,"reference":waiting.reference}
+        # A customer's number given with M-Pesa: the prompt goes to their phone now. The sale stands either way; a prompt
+        # that cannot go out is said, and can be sent again or the code entered by hand.
+        if waiting.method=="MPESA" and str(request.data.get("mpesa_phone") or "").strip():
+            from . import mpesa_express
+            try:
+                push=mpesa_express.send(mpesa_express.setup_for(request.organization),phone=request.data["mpesa_phone"],amount=waiting.amount,user=request.user,payment=waiting,reference=sale.number[-12:])
+                data["prompt"]=mpesa_express.push_data(push)
+            except ValidationError as exc:
+                data["prompt_error"]=exc.detail[0] if isinstance(exc.detail,list) else str(exc.detail)
     if has_business_permission(request.user, "accounting.view_profit"):
         data.update(net_revenue=sale.net_total, cogs=sale.cogs, gross_profit=sale.gross_profit, loss=sale.gross_profit<0, cost_pending=sale.cost_pending)
     return Response(data,status=201)

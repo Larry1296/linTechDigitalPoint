@@ -9,6 +9,7 @@ import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import "./platform.css";
 import { ChamaSetupFields, emptyChama, chamaPayload, chamaProblem } from "../chama/ChamaSetupFields";
 import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleProblem, searchSectors, timeZones, toggleModule, useBusinessProfiles } from "./businessSetupData";
+import { MpesaPaymentsSetup } from "../settings/MpesaPaymentsSetup";
 
 const STEP_LABELS = { business: "Your business", kind: "Kind of business", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Opening money", review: "Review" };
@@ -65,7 +66,11 @@ function SetupWizard({ catalogue, user, refresh }) {
   useEffect(() => {
     if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan, chama });
   }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan, chama]);
-  if (created) return <LogoStep business={created} onUploaded={refresh} onDone={() => navigate("/admin/dashboard", { replace: true })} />;
+  const toDashboard = () => navigate("/admin/dashboard", { replace: true });
+  // After the logo, a business that sells at a counter sets up M-Pesa prompts (or says it takes M-Pesa by hand).
+  if (created && created.paymentsStep) return <PaymentsStep business={created} onDone={toDashboard} />;
+  if (created) return <LogoStep business={created} onUploaded={refresh}
+    onDone={() => (modules.has("pos") ? setCreated({ ...created, paymentsStep: true }) : toDashboard())} />;
 
   // The chama step appears only when chama management is one of the chosen tools.
   const steps = ["business", "kind", "tools", ...(modules.has("chama") ? ["chama"] : []), "place", "money", "review"];
@@ -314,6 +319,18 @@ function SetupWizard({ catalogue, user, refresh }) {
   </main>;
 }
 
+function PaymentsStep({ business, onDone }) {
+  return <main className="tenantForm businessSetup">
+    <span className="eyebrow">{business.name} is ready</span>
+    <h1>M-Pesa payments</h1>
+    <MpesaPaymentsSetup />
+    <div className="setupActions">
+      <button type="button" onClick={onDone}>Go to my dashboard</button>
+    </div>
+    <p className="muted">You can set this up or change it later in Settings → M-Pesa payments.</p>
+  </main>;
+}
+
 function LogoStep({ business, onUploaded, onDone }) {
   const [busy, setBusy] = useState(false);
   const [logo, setLogo] = useState("");
@@ -344,7 +361,7 @@ function LogoStep({ business, onUploaded, onDone }) {
       <label className={`button${busy ? " disabled" : ""}`}>{busy ? "Uploading…" : logo ? "Choose a different logo" : "Upload logo"}
         <input type="file" accept="image/png,image/jpeg,image/webp" className="sr" onChange={(e) => void upload(e)} disabled={busy} />
       </label>
-      <button type="button" className={logo ? "" : "secondary"} onClick={onDone} disabled={busy}>{logo ? "Go to my dashboard" : "Skip for now"}</button>
+      <button type="button" className={logo ? "" : "secondary"} onClick={onDone} disabled={busy}>{logo ? "Continue" : "Skip for now"}</button>
     </div>
     {error && <FormError title="Could not save the logo." message={error} />}
   </main>;

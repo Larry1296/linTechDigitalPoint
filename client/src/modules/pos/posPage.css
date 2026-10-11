@@ -1,0 +1,141 @@
+/* The point of sale: products on the left as tiles, the sale on the right, always in view. */
+.posPage { --pos-radius: 14px; }
+.posHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.posHeader h1 { margin: 0; }
+.posExpressBadge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); background: var(--surface); font-size: 13px; font-weight: 600;
+}
+.posExpressBadge.on { color: #047857; border-color: color-mix(in srgb, #10b981 45%, var(--line)); background: color-mix(in srgb, #10b981 10%, var(--surface)); }
+
+.posLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 20px; align-items: start; }
+.posCatalog { min-width: 0; display: grid; gap: 14px; }
+
+/* Category filter */
+.posChips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.posChips button {
+  flex: none; min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--text); background: var(--surface); box-shadow: none; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.posChips button[aria-pressed="true"] { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.posGroup h2 { margin: 6px 0 10px; color: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* Product tiles */
+.posTiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 158px), 1fr)); gap: 10px; }
+.posTile { position: relative; min-width: 0; border: 1px solid var(--line); border-radius: var(--pos-radius); background: var(--surface); overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+.posTile:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); box-shadow: var(--shadow); }
+.posTile.inCart { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
+.posTile > button {
+  display: grid; gap: 4px; justify-items: start; width: 100%; height: auto; min-height: 0; padding: 12px; border: 0; border-radius: 0;
+  color: var(--text); background: transparent; box-shadow: none; text-align: left; cursor: pointer;
+}
+.posTile > button:active:not(:disabled) { transform: scale(0.98); }
+.posTile > button:disabled { opacity: 0.5; cursor: not-allowed; }
+.posTileMark {
+  display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 4px; border-radius: 11px;
+  color: hsl(var(--tile-hue) 65% 32%); background: hsl(var(--tile-hue) 80% 92%); font-size: 17px; font-weight: 800;
+}
+[data-theme="dark"] .posTileMark { color: hsl(var(--tile-hue) 80% 82%); background: hsl(var(--tile-hue) 45% 22%); }
+.posTileName { font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.posTileName small { color: var(--muted); font-weight: 600; }
+.posTilePrice { color: var(--primary); font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.posTileStock { color: var(--muted); font-size: 12px; }
+.posTileStock.out { color: #b91c1c; font-weight: 700; }
+.posTileCount {
+  position: absolute; top: 10px; right: 10px; display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 7px;
+  border-radius: 999px; color: var(--on-primary); background: var(--primary); font-size: 13px; font-weight: 800;
+}
+.posTile .posActions { border-top: 1px solid var(--line); }
+
+/* The sale */
+.posCart {
+  position: sticky; top: 12px; display: grid; gap: 14px; max-height: calc(100vh - 24px); overflow-y: auto; padding: 16px;
+  border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow);
+}
+.posCartHead { display: flex; align-items: center; gap: 8px; }
+.posCartHead h2 { margin: 0; flex: 1; font-size: 18px; }
+.posCount { padding: 3px 10px; border-radius: 999px; color: var(--primary); background: var(--primary2); font-size: 12px; font-weight: 800; }
+.posPage .posIconButton {
+  display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: 9px;
+  color: var(--muted); background: transparent; box-shadow: none; cursor: pointer;
+}
+.posPage .posIconButton:hover { color: #b91c1c; background: color-mix(in srgb, #ef4444 12%, transparent); }
+.posLines { display: grid; gap: 10px; }
+.posLine { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.posLineHead { display: flex; align-items: start; gap: 8px; }
+.posLineHead b { flex: 1; font-size: 14px; line-height: 1.35; }
+.posLineRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.posLineEach { color: var(--muted); font-size: 13px; }
+.posLineTotal { margin-left: auto; font-variant-numeric: tabular-nums; }
+.posStepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.posStepper button {
+  display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: 0;
+  color: var(--text); background: transparent; box-shadow: none; cursor: pointer;
+}
+.posStepper button:hover:not(:disabled) { background: var(--primary2); }
+.posStepper input { width: 46px; height: 32px; min-height: 0; padding: 0; border: 0; border-inline: 1px solid var(--line); border-radius: 0;
+  text-align: center; font-weight: 700; background: transparent; -moz-appearance: textfield; }
+.posStepper input::-webkit-inner-spin-button, .posStepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.posLine .lineAdjust { display: grid; gap: 6px; font-size: 13px; }
+.posLine .agreedPrice { display: grid; gap: 2px; }
+
+.posTotals { display: grid; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.posTotals > div { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.posSaleDiscount summary, .posCredit summary { color: var(--primary); font-size: 13px; font-weight: 700; cursor: pointer; }
+.posSaleDiscount[open], .posCredit[open] { display: grid; gap: 8px; }
+.posGrandTotal { align-items: baseline; font-size: 15px; font-weight: 700; }
+.posGrandTotal strong { font-size: 26px; letter-spacing: -0.01em; }
+
+.posMethods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; padding: 0; border: 0; }
+.posMethods legend { margin-bottom: 6px; padding: 0; font-size: 13px; font-weight: 700; }
+.posMethods label {
+  position: relative; display: grid; justify-items: center; gap: 4px; padding: 10px 4px; border: 1px solid var(--line); border-radius: 12px;
+  color: var(--muted); background: var(--surface); font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: center;
+}
+.posMethods label.on { color: var(--primary); border-color: var(--primary); background: var(--primary2); }
+.posMethods input { position: absolute; opacity: 0; pointer-events: none; }
+.posMethods label:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.posPayDetail { display: grid; gap: 8px; }
+.posPayDetail p { margin: 0; font-size: 13px; }
+.posChange { color: #047857; font-size: 15px; }
+.posChange b { font-size: 18px; }
+
+.posCharge {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 54px; padding: 0 18px;
+  border-radius: 14px; font-size: 16px; font-weight: 800;
+}
+.posCharge strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* The sale just recorded */
+.posDone { display: grid; gap: 12px; margin-bottom: 18px; padding: 16px 18px; border: 1px solid color-mix(in srgb, #10b981 45%, var(--line));
+  border-radius: 18px; background: color-mix(in srgb, #10b981 7%, var(--surface)); }
+.posDone header { display: flex; justify-content: space-between; align-items: start; gap: 14px; flex-wrap: wrap; }
+.posDone header p { margin: 2px 0 0; }
+.posDoneTotal { font-size: 26px; font-weight: 800; }
+.posDoneActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.posDoneActions button { display: inline-flex; align-items: center; gap: 6px; }
+.posDone .paymentConfirm { display: grid; gap: 10px; }
+.posDone .manualConfirm { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.posDone .manualConfirm label { flex: 1 1 220px; }
+.posConfirmed { margin: 0; color: #047857; font-weight: 700; }
+[data-theme="dark"] .mpesaPrompt.paid, [data-theme="dark"] .posChange, [data-theme="dark"] .posConfirmed { color: #6ee7b7; }
+[data-theme="dark"] .posExpressBadge.on { color: #6ee7b7; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } .posTile { transition: none; } }
+
+/* Phones: one column; a bar at the bottom keeps the total in view and jumps to the sale. */
+.posMobileBar { display: none; }
+@media (max-width: 900px) {
+  .posLayout { grid-template-columns: 1fr; }
+  .posCart { position: static; max-height: none; }
+  .posMobileBar {
+    position: fixed; left: 12px; right: 80px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 8px;
+    min-height: 52px; padding: 0 16px; border-radius: 14px; box-shadow: 0 10px 30px rgb(2 18 45 / 30%); font-weight: 700;
+  }
+  .posMobileBar span { margin-left: auto; font-size: 13px; opacity: 0.9; }
+  .posPage { padding-bottom: 76px; }
+}
+@media (max-width: 420px) {
+  .posTiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .posMethods { grid-template-columns: repeat(2, 1fr); }
+}

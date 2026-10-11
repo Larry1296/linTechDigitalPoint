@@ -7,6 +7,7 @@ import { ErrorState, Loading } from "../../components/States";
 import { confirmAction } from "../../core/ui/alerts";
 import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
+import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
 import { allowedModules, findSector, fitModules, moduleProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
 
 const roleLabels = {
@@ -30,6 +31,10 @@ export function SettingsPage() {
     <h1>Settings</h1>
     {isAdmin && <BusinessLogo />}
     {isAdmin && <BusinessSettings />}
+    {isAdmin && user.organization?.enabled_modules?.includes("pos") && <section className="formCard" aria-labelledby="mpesa-payments-heading">
+      <h2 id="mpesa-payments-heading">M-Pesa payments</h2>
+      <MpesaPaymentsSetup />
+    </section>}
     {isAdmin && <BranchSettings />}
     {isAdmin && <StaffSettings isOwner={role === "OWNER"} />}
     <PasswordSettings />

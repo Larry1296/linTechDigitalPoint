@@ -29,7 +29,7 @@ it("sells at a negotiated price and, after a clear warning, records a below-cost
   fireEvent.click(await screen.findByRole("button", { name: /Router/ }));
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
   fireEvent.change(within(cart).getByLabelText(/Agreed price for/), { target: { value: "400" } });
-  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: "Complete sale" })); });
+  await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Complete sale/ })); });
   expect(attempts).toBe(2);
   expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Sell at a loss?", text: expect.stringContaining("recorded cost is 550.00") }));
   const sent = JSON.parse(api.mock.calls.filter(([p]) => p === "/api/v1/commerce/pos/complete/").at(-1)[1].body);
