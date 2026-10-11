@@ -86,8 +86,8 @@ it("sets up a business that does both, with its own description, categories and 
   next();
   fireEvent.click(screen.getByRole("button", { name: /Other mix of goods and services/ }));
   next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Describe what your business does.");
-  fireEvent.change(screen.getByLabelText("Describe your business"), { target: { value: "Agrovet and vet clinic" } });
+  expect(screen.getByRole("alert")).toHaveTextContent("Name your kind of business.");
+  fireEvent.change(screen.getByLabelText("Name your kind of business"), { target: { value: "Agrovet and vet clinic" } });
   next();
 
   expect(screen.getByRole("button", { name: /^Shelves & locations/ })).toBeInTheDocument();
@@ -132,4 +132,19 @@ it("resumes where the owner stopped after the page reloads, and forgets the draf
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   expect(createBody()).toMatchObject({ name: "Fresh Cuts", sector: "barber", starter_services: [expect.objectContaining({ name: "Haircut", selling_price: "200" })] });
   expect(sessionStorage.getItem("business-setup-draft:1")).toBeNull();
+});
+
+it("lets an owner whose business is not listed create it straight from the search", async () => {
+  render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
+  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Sauti Studio" } });
+  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
+  next();
+  fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "music studio" } });
+  // "Other" stays offered even when the search matches nothing.
+  expect(screen.getByRole("button", { name: /Other service provider/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Create “music studio” as my kind of business" }));
+  expect(screen.getByLabelText("Name your kind of business")).toHaveValue("music studio");
+  expect(screen.getByRole("button", { name: /Other service provider/ })).toHaveAttribute("aria-pressed", "true");
+  next();
+  expect(screen.getByText(/usual tools for a/)).toHaveTextContent("music studio");
 });

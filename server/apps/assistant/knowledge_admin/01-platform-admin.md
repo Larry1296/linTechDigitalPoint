@@ -20,6 +20,9 @@ Businesses can also send their own customers M-Pesa prompts from the point of sa
 ## What are the plans?
 Plans are listed on **All businesses** under **Plans**: each has a price, a period in days and the tools it includes (products and stock, services and jobs, point of sale, customers and credit, expenses, M-Pesa agency, reports, shelves, staff, branches and chama management).
 
+## How do new kinds of business get into the set-up list?
+When an owner's business is not listed, they name it under "Other" when setting up (or later in Settings). It appears on **All businesses** under **Kinds of business added by owners**, with how many businesses described it and the tools and starter list the first owner chose; owners who type the same name add to its count instead of making a copy. Tidy its name, short description, search words, usual tools and product categories, then press **List for everyone**: new owners then find it in the list and start with those tools. **Take off the list** hides it from new owners; businesses already using it keep working.
+
 # AI assistants
 
 ## Which AI chats are there?

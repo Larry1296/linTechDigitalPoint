@@ -114,7 +114,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   };
   const problem = {
     business: () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
-    kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Describe what your business does." : "",
+    kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Name your kind of business." : "",
     tools: () => moduleProblem(catalogue, model, modules)
       || (services.some((service) => service.selling_price !== "" && Number(service.selling_price) < 0) ? "Service prices cannot be negative." : ""),
     chama: () => chamaProblem(chama),
@@ -155,7 +155,11 @@ function SetupWizard({ catalogue, user, refresh }) {
   const proOnly = (id) => Boolean(basicModules && !basicModules.includes(id));
   const lockedOnBasic = !user.platform_admin && plan === "BASIC" ? [...modules].filter(proOnly) : [];
   const modelLabel = catalogue.models.find((item) => item.id === model)?.label;
-  const sectors = model ? searchSectors(catalogue.sectors[model], sectorQuery) : [];
+  // "Other" stays in view whatever the search, so a business that is not listed can always create its own kind.
+  const otherSector = model ? catalogue.sectors[model].find((item) => catalogue.other_sectors.includes(item.id)) : null;
+  const matches = model ? searchSectors(catalogue.sectors[model], sectorQuery) : [];
+  const sectors = otherSector && !matches.includes(otherSector) ? [...matches, otherSector] : matches;
+  const createOwnKind = () => { chooseSector(otherSector); setOtherText(sectorQuery.trim().slice(0, 100)); };
 
   return <main className="tenantForm businessSetup">
     <BackLink className="authBackButton" />
@@ -203,9 +207,14 @@ function SetupWizard({ catalogue, user, refresh }) {
             <strong>{item.label}</strong><span>{item.hint}</span>
           </button>)}
         </div>
-        {!sectors.length && <p className="muted">Nothing matches “{sectorQuery}”. Choose the “Other” option and describe your business.</p>}
+        {sectorQuery.trim() && !matches.length && <p className="muted">“{sectorQuery.trim()}” is not listed yet.{" "}
+          <button type="button" className="linkButton" onClick={createOwnKind}>Create “{sectorQuery.trim()}” as my kind of business</button></p>}
       </fieldset>
-      {isOther && <label>Describe your business<input value={otherText} onChange={(e) => setOtherText(e.target.value)} maxLength={100} placeholder="e.g. Poultry farm, Car hire, Music studio" /></label>}
+      {isOther && <>
+        <label>Name your kind of business<input value={otherText} onChange={(e) => setOtherText(e.target.value)} maxLength={100} placeholder="e.g. Poultry farm, Car hire, Music studio" /></label>
+        <p className="muted">You start with the usual tools for a business that {catalogue.models.find((item) => item.id === model)?.phrase}, and choose your own on the next step.
+          Once reviewed, your kind of business is added to this list so others like you find it.</p>
+      </>}
       {model !== "MIXED" && <p className="muted">Doing more than this? Go back and choose <strong>Both goods and services</strong>.</p>}
     </section>}
 

@@ -6,6 +6,10 @@ decides which tools can exist at all, so a barbershop is never asked about shelv
 counts. The owner then picks a *sector* (barbershop, mama mboga, phone repair…), which chooses the
 usual tools and offers a starter price list or product categories.
 
+No list covers every business, so "Other" is always offered under each model. What an owner describes there is
+kept as a suggested kind (models.BusinessKind); once the platform owner lists it, it joins this catalogue and the
+next owner with the same business finds it, with the tools and starter list the first one chose.
+
 The platform currently targets small and medium businesses. Large companies and supermarkets
 (multi-warehouse, purchasing departments, loyalty programmes) are a later phase and are not
 offered here.
@@ -110,7 +114,7 @@ SECTORS = {
                 ["Gas refills", "Cylinders", "Water refills", "Accessories"], keywords="lpg"),
         _sector("wholesale", "Wholesale / distributor", "Sell in bulk to other businesses", ["inventory", "locations", "customers", *BASE],
                 keywords="distributor bulk supplier"),
-        _sector("other_goods", "Other goods", "Describe what you sell", ["inventory", *BASE]),
+        _sector("other_goods", "Other products", "Not listed? Name your business: you sell products", ["inventory", *BASE]),
     ],
     SERVICES: [
         _sector("barber", "Barbershop", "Haircuts, shaves and beard trims", ["services", *BASE],
@@ -154,7 +158,7 @@ SECTORS = {
                 keywords="cleaners"),
         _sector("mpesa_agent", "M-Pesa / mobile money agent", "Deposits, withdrawals and float", ["mpesa", "expenses", "reports"],
                 keywords="agent mobile money float"),
-        _sector("other_services", "Other services", "Describe the service you offer", ["services", *BASE]),
+        _sector("other_services", "Other service provider", "Not listed? Name your business: customers pay for your skill or time", ["services", *BASE]),
     ],
     MIXED: [
         _sector("cyber_shop", "Cyber, accessories & M-Pesa", "Printing and online services, phone accessories and an M-Pesa till",
@@ -178,12 +182,59 @@ SECTORS = {
         _sector("tailor_shop", "Tailor with fabrics & clothes", "Tailoring plus fabric and ready-made clothes",
                 ["inventory", "services", "customers", *BASE], ["Fabrics", "Ready-made clothes"],
                 [_service("Alterations", job=True), _service("Dress making", job=True)], keywords="tailor boutique"),
-        _sector("other_mixed", "Other mix of goods and services", "Describe what you sell and do", ["inventory", "services", *BASE]),
+        _sector("other_mixed", "Other mix of goods and services", "Not listed? Name your business: you sell products and offer services", ["inventory", "services", *BASE]),
     ],
 }
 
 SECTOR_INDEX = {sector["id"]: (model, sector) for model, sectors in SECTORS.items() for sector in sectors}
 OTHER_SECTORS = {"other_goods", "other_services", "other_mixed"}
+KIND_PREFIX = "kind-"
+
+
+def kind_sector(kind):
+    """A kind of business added by an owner, in the same shape as the built-in ones."""
+    allowed = BUSINESS_MODELS[kind.business_model]["modules"]
+    return _sector(kind.sector_id, kind.label, kind.hint or "Added by a business like yours",
+                   [module for module in kind.modules if module in allowed],
+                   kind.categories if kind.business_model != SERVICES else (),
+                   kind.services if kind.business_model != GOODS else (), kind.keywords)
+
+
+def find_sector(sector_id, also=""):
+    """(model, sector) for a built-in or listed kind of business, or None. ``also`` is a kind accepted even when not
+    listed, such as the one a business already has: hiding a kind from new owners never breaks a business using it."""
+    if sector_id in SECTOR_INDEX:
+        return SECTOR_INDEX[sector_id]
+    if not sector_id.startswith(KIND_PREFIX) or not sector_id[len(KIND_PREFIX):].isdigit():
+        return None
+    from .models import BusinessKind
+    kinds = BusinessKind.objects.filter(pk=int(sector_id[len(KIND_PREFIX):]))
+    kind = (kinds if sector_id == also else kinds.filter(status="LISTED")).first()
+    return (kind.business_model, kind_sector(kind)) if kind else None
+
+
+def kind_key(label):
+    from django.utils.text import slugify
+    return slugify(" ".join(label.split()))[:100]
+
+
+def record_kind(organization, model, label, modules, categories=(), services=()):
+    """Keep what an owner described under "Other" for the platform owner to review. The first description sets the
+    tools and starter list; later owners who describe the same kind only add to its count."""
+    from django.db.models import F
+    from .models import BusinessKind
+    key = kind_key(label)
+    if not key:
+        return None
+    kind, created = BusinessKind.objects.get_or_create(business_model=model, key=key, defaults={
+        "label": " ".join(label.split())[:100], "modules": sorted(set(modules), key=list(MODULES).index), "created_by": organization,
+        "categories": [name.strip()[:120] for name in categories if name.strip()][:30] if model != SERVICES else [],
+        "services": [{"name": s["name"].strip()[:180], "billing_unit": s.get("billing_unit", "FIXED"), "requires_job": bool(s.get("requires_job"))}
+                     for s in services if s["name"].strip()][:40] if model != GOODS else [],
+        "uses": 1})
+    if not created:
+        BusinessKind.objects.filter(pk=kind.pk).update(uses=F("uses") + 1)
+    return kind
 
 
 def model_for_modules(modules):
@@ -217,11 +268,20 @@ def module_problems(model, modules):
     return problems
 
 
-def suggested_modules(model, sector_id, size):
-    _, sector = SECTOR_INDEX[sector_id]
+def suggested_modules(model, sector, size):
     allowed = BUSINESS_MODELS[model]["modules"]
     chosen = set(sector["modules"]) | set(SIZES[size]["modules"])
     return [module for module in MODULES if module in chosen and module in allowed]
+
+
+def _sectors_with_listed_kinds():
+    """The built-in kinds with the listed owner-added ones before each model's "Other", alphabetically."""
+    from .models import BusinessKind
+    added = {model: [] for model in SECTORS}
+    for kind in BusinessKind.objects.filter(status="LISTED").order_by("label"):
+        added[kind.business_model].append(kind_sector(kind))
+    return {model: [s for s in sectors if s["id"] not in OTHER_SECTORS] + added[model] + [s for s in sectors if s["id"] in OTHER_SECTORS]
+            for model, sectors in SECTORS.items()}
 
 
 def catalogue():
@@ -230,7 +290,7 @@ def catalogue():
         "models": [{"id": key, **value} for key, value in BUSINESS_MODELS.items()],
         "sizes": [{"id": key, "label": value["label"], "hint": value["hint"]} for key, value in SIZES.items()],
         "modules": [{"id": key, **value, "needs": list(MODULE_NEEDS.get(key, ()))} for key, value in MODULES.items()],
-        "sectors": {model: [{**sector, "modules": {size: suggested_modules(model, sector["id"], size) for size in SIZES}}
-                            for sector in sectors] for model, sectors in SECTORS.items()},
+        "sectors": {model: [{**sector, "modules": {size: suggested_modules(model, sector, size) for size in SIZES}}
+                            for sector in sectors] for model, sectors in _sectors_with_listed_kinds().items()},
         "other_sectors": sorted(OTHER_SECTORS),
     }

@@ -38,6 +38,38 @@ class Organization(models.Model):
     def __str__(self):
         return self.name
 
+class BusinessKind(models.Model):
+    """A kind of business an owner described under "Other", with the tools and starter list they chose.
+
+    The platform owner reviews it; once listed, later owners find it in the list like any built-in kind (see business_profiles.py).
+    Services keep only names and units: each business sets its own prices."""
+    STATUSES = [("SUGGESTED", "Waiting for review"), ("LISTED", "Listed for everyone"), ("HIDDEN", "Not listed")]
+    business_model = models.CharField(max_length=10, choices=[("GOODS", "Sells goods"), ("SERVICES", "Provides services"), ("MIXED", "Goods and services")])
+    key = models.SlugField(max_length=100)  # the label folded, so "Poultry farm" and "poultry  FARM" are one kind
+    label = models.CharField(max_length=100)
+    hint = models.CharField(max_length=160, blank=True)
+    keywords = models.CharField(max_length=255, blank=True)
+    modules = models.JSONField(default=list)
+    categories = models.JSONField(default=list)
+    services = models.JSONField(default=list)
+    status = models.CharField(max_length=10, choices=STATUSES, default="SUGGESTED")
+    uses = models.PositiveIntegerField(default=0)  # businesses that described or chose it
+    created_by = models.ForeignKey(Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["business_model", "key"], name="unique_business_kind")]
+        ordering = ["-created_at"]
+
+    @property
+    def sector_id(self):
+        return f"kind-{self.pk}"
+
+    def __str__(self):
+        return self.label
+
+
 class Membership(models.Model):
     ROLES = [(x, x.replace("_", " ").title()) for x in ["OWNER", "ADMIN", "MANAGER", "CASHIER", "INVENTORY", "ACCOUNTANT", "SERVICE_ATTENDANT", "READ_ONLY", "CUSTOM"]]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memberships")

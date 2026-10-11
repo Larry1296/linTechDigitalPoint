@@ -753,8 +753,8 @@
    },
    {
     "id": "other_goods",
-    "label": "Other goods",
-    "hint": "Describe what you sell",
+    "label": "Other products",
+    "hint": "Not listed? Name your business: you sell products",
     "modules": {
      "SOLO": [
       "inventory",
@@ -1482,8 +1482,8 @@
    },
    {
     "id": "other_services",
-    "label": "Other services",
-    "hint": "Describe the service you offer",
+    "label": "Other service provider",
+    "hint": "Not listed? Name your business: customers pay for your skill or time",
     "modules": {
      "SOLO": [
       "services",
@@ -1857,7 +1857,7 @@
    {
     "id": "other_mixed",
     "label": "Other mix of goods and services",
-    "hint": "Describe what you sell and do",
+    "hint": "Not listed? Name your business: you sell products and offer services",
     "modules": {
      "SOLO": [
       "inventory",

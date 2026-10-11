@@ -25,6 +25,8 @@ urlpatterns = [
     path("platform-admin/overview/", billing_api.platform_overview),
     path("platform-admin/businesses/<int:pk>/", billing_api.platform_business),
     path("platform-admin/plans/<int:pk>/", billing_api.platform_plan),
+    path("platform-admin/business-kinds/", billing_api.platform_kinds),
+    path("platform-admin/business-kinds/<int:pk>/", billing_api.platform_kind),
     path("public/receipts/<str:token>/", api.public_receipt),
     path("public/logos/<str:name>", api.public_logo),
 ]

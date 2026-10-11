@@ -340,3 +340,68 @@ def platform_plan(request, pk):
         setattr(plan, field, value)
     plan.save()
     return Response(plan_data(plan))
+
+
+# --- Kinds of business added by owners ----------------------------------------------------------------------------
+
+def kind_data(kind):
+    from . import business_profiles as profiles
+    return {"id": kind.pk, "sector_id": kind.sector_id, "business_model": kind.business_model, "label": kind.label, "hint": kind.hint,
+            "keywords": kind.keywords, "modules": kind.modules, "categories": kind.categories, "services": kind.services,
+            "status": kind.status, "uses": kind.uses, "created_by": kind.created_by.name if kind.created_by else "",
+            "created_at": kind.created_at, "allowed_modules": profiles.BUSINESS_MODELS[kind.business_model]["modules"]}
+
+
+class KindInput(serializers.Serializer):
+    label = serializers.CharField(max_length=100, required=False)
+    hint = serializers.CharField(max_length=160, allow_blank=True, required=False)
+    keywords = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), required=False)
+    categories = serializers.ListField(child=serializers.CharField(max_length=120), max_length=30, required=False)
+    status = serializers.ChoiceField(choices=["SUGGESTED", "LISTED", "HIDDEN"], required=False)
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def platform_kinds(request):
+    """Kinds of business owners described under "Other", newest first, for the platform owner to list or hide."""
+    denied = _platform_admin(request)
+    if denied:
+        return denied
+    from .models import BusinessKind
+    return Response([kind_data(kind) for kind in BusinessKind.objects.select_related("created_by")])
+
+
+@api_view(["PATCH"])
+@permission_classes([permissions.IsAuthenticated])
+def platform_kind(request, pk):
+    """Tidy a suggested kind (name, description, search words, usual tools, categories) and list or hide it."""
+    denied = _platform_admin(request)
+    if denied:
+        return denied
+    from . import business_profiles as profiles
+    from .models import BusinessKind
+    kind = BusinessKind.objects.select_related("created_by").filter(pk=pk).first()
+    if not kind:
+        return Response({"detail": "Kind of business not found."}, status=404)
+    form = KindInput(data=request.data, partial=True)
+    form.is_valid(raise_exception=True)
+    values = dict(form.validated_data)
+    if "label" in values:
+        values["label"] = " ".join(values["label"].split())
+        values["key"] = profiles.kind_key(values["label"])
+        if not values["key"]:
+            return Response({"label": ["Enter a name."]}, status=400)
+        if BusinessKind.objects.filter(business_model=kind.business_model, key=values["key"]).exclude(pk=kind.pk).exists():
+            return Response({"label": ["Another kind of business already has this name."]}, status=400)
+    if "modules" in values:
+        problems = profiles.module_problems(kind.business_model, values["modules"])
+        if problems:
+            return Response({"modules": [" ".join(problems)]}, status=400)
+        values["modules"] = sorted(set(values["modules"]), key=list(profiles.MODULES).index)
+    if "categories" in values:
+        values["categories"] = list(dict.fromkeys(name.strip() for name in values["categories"] if name.strip()))
+    for field, value in values.items():
+        setattr(kind, field, value)
+    kind.save()
+    return Response(kind_data(kind))

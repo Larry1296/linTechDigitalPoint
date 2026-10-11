@@ -202,10 +202,11 @@ class ProfileInput(serializers.Serializer):
         # Older clients send only tools; the way the business makes money then follows from them.
         model = data.setdefault("business_model", profiles.model_for_modules(data["enabled_modules"]))
         sector = data.get("sector", "")
+        found = profiles.find_sector(sector, also=self.context.get("current_sector", "")) if sector else None
         if sector:
-            if sector not in profiles.SECTOR_INDEX:
+            if not found:
                 raise serializers.ValidationError({"sector": "Choose your kind of business from the list."})
-            if profiles.SECTOR_INDEX[sector][0] != model:
+            if found[0] != model:
                 raise serializers.ValidationError({"sector": "That kind of business does not match how your business makes money."})
             if sector in profiles.OTHER_SECTORS and not data.get("business_type", "").strip():
                 raise serializers.ValidationError({"business_type": "Describe what your business does."})
@@ -215,7 +216,7 @@ class ProfileInput(serializers.Serializer):
         data["enabled_modules"] = sorted(set(data["enabled_modules"]))
         # The label shown on the dashboard: the owner's own words for "other", otherwise the sector's name.
         if sector and sector not in profiles.OTHER_SECTORS:
-            data["business_type"] = profiles.SECTOR_INDEX[sector][1]["label"]
+            data["business_type"] = found[1]["label"]
         return data
 
 
@@ -237,6 +238,16 @@ def seed_starter_records(user, modules, categories, services):
         from apps.cyber.services import create_service
         for service in services:
             create_service(user, **service)
+
+
+def note_kind(organization, categories=(), services=()):
+    """A business described under "Other" suggests a new kind for the list; one chosen from the list counts a use."""
+    from django.db.models import F
+    from .models import BusinessKind
+    if organization.sector in profiles.OTHER_SECTORS:
+        profiles.record_kind(organization, organization.business_model, organization.business_type, organization.enabled_modules, categories, services)
+    elif organization.sector.startswith(profiles.KIND_PREFIX):
+        BusinessKind.objects.filter(pk=organization.sector[len(profiles.KIND_PREFIX):]).update(uses=F("uses") + 1)
 
 
 class BusinessInput(serializers.Serializer):
@@ -299,6 +310,7 @@ def create_business(request):
                 post_cash(unit='SHOP', method=method, amount=amount, kind='OPENING', reference='Starting money entered at setup',
                           key=f'opening:setup-{method.lower()}', user=request.user, branch=store)
         seed_starter_records(request.user, organization.enabled_modules, starter_categories, starter_services)
+        note_kind(organization, starter_categories, starter_services)
         if chama and "chama" in organization.enabled_modules:
             # Its own records only: a chama's money never enters the shop's books.
             from apps.chama.api import create_from_setup
@@ -496,7 +508,7 @@ def business_settings(request):
         current = {field: getattr(organization, field) for field in profile_fields}
         if "business_model" in values and "sector" not in values and values["business_model"] != organization.business_model:
             current["sector"] = ""  # the old kind of business belongs to the old model
-        profile = ProfileInput(data={**current, **{k: v for k, v in values.items() if k in profile_fields}})
+        profile = ProfileInput(data={**current, **{k: v for k, v in values.items() if k in profile_fields}}, context={"current_sector": organization.sector})
         profile.is_valid(raise_exception=True)
         values.update(profile.validated_data)
         from .billing import plan_modules
@@ -518,6 +530,8 @@ def business_settings(request):
             store.receipt_footer = footer
             store.save(update_fields=["receipt_footer", "updated_at"])
         after = settings_data(organization, store)
+        if before["sector"] != after["sector"] or (organization.sector in profiles.OTHER_SECTORS and before["business_type"] != after["business_type"]):
+            note_kind(organization)
         AuditLog.objects.create(action="BUSINESS_SETTINGS_CHANGED", object_type="Organization", object_id=str(organization.pk), user=request.user,
                                 before={k: before[k] for k in values if k in before}, after={k: after[k] for k in values if k in after})
     return Response(after)

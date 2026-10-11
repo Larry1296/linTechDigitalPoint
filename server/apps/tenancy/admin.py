@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Organization, Membership, SubscriptionPlan, OrganizationSubscription
+from .models import BusinessKind, Organization, Membership, SubscriptionPlan, OrganizationSubscription
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
@@ -13,3 +13,9 @@ class MembershipAdmin(admin.ModelAdmin):
 
 admin.site.register(SubscriptionPlan)
 admin.site.register(OrganizationSubscription)
+
+@admin.register(BusinessKind)
+class BusinessKindAdmin(admin.ModelAdmin):
+    list_display = ["label", "business_model", "status", "uses", "created_by"]
+    list_filter = ["business_model", "status"]
+    search_fields = ["label", "keywords"]

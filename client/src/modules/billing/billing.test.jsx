@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { POLL_INTERVAL, SubscriptionPage } from "./SubscriptionPage";
 import { SubscriptionBanner } from "./SubscriptionBanner";
-import { PlatformAdminPage } from "./PlatformAdminPage";
+import { BusinessKinds, PlatformAdminPage } from "./PlatformAdminPage";
 import { api } from "../../core/api/client";
 import { confirmAction, showError, showSuccess } from "../../core/ui/alerts";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -123,4 +123,22 @@ it("keeps the platform page away from everyone else", () => {
   useAuth.mockReturnValue({ user: { platform_admin: false } });
   render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
   expect(api).not.toHaveBeenCalled();
+});
+
+it("lets the platform owner tidy and list a kind of business an owner added", async () => {
+  const kind = { id: 4, sector_id: "kind-4", business_model: "GOODS", label: "Poultry farm", hint: "", keywords: "", modules: ["inventory", "pos"],
+    categories: ["Eggs"], services: [], status: "SUGGESTED", uses: 3, created_by: "Kuku Bora", created_at: "2026-10-12T08:00:00Z",
+    allowed_modules: ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama"] };
+  api.mockImplementation(async (path, options = {}) => (options.method ? { ...kind, status: "LISTED" } : [kind]));
+  render(<BusinessKinds />);
+  const form = await screen.findByRole("form", { name: "Poultry farm" });
+  expect(within(form).getByText(/3 businesses · first added by Kuku Bora/)).toBeInTheDocument();
+  fireEvent.change(within(form).getByLabelText("Short description"), { target: { value: "Eggs, broilers and layers" } });
+  fireEvent.change(within(form).getByLabelText("Product categories"), { target: { value: "Eggs, Broilers ," } });
+  fireEvent.click(within(form).getByLabelText(/Customers/));
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "List for everyone" })); });
+  await waitFor(() => expect(showSuccess).toHaveBeenCalledWith("Listed", "New owners can now choose Poultry farm."));
+  const [, options] = api.mock.calls.find(([, o]) => o?.method === "PATCH");
+  expect(JSON.parse(options.body)).toEqual({ label: "Poultry farm", hint: "Eggs, broilers and layers", keywords: "",
+    modules: ["inventory", "pos", "customers"], categories: ["Eggs", "Broilers"], status: "LISTED" });
 });

@@ -169,3 +169,53 @@ def test_an_email_already_in_use_cannot_open_a_second_account():
     User.objects.create_user("someone", email="WANJIRU@example.test", password="x")
     response = APIClient().post("/api/v1/tenancy/register/", REGISTRATION, format="json")
     assert response.status_code == 400 and "Unable to register" in str(response.json())
+
+
+def test_a_business_not_in_the_list_is_created_and_suggested_for_the_list(owner):
+    response = create(owner, name="Kuku Bora", business_model="GOODS", sector="other_goods", business_type="Poultry  farm",
+        enabled_modules=["inventory", "pos", "customers"], starter_categories=["Eggs", "Broilers"])
+    assert response.status_code == 201, response.content
+    assert (response.json()["sector"], response.json()["business_type"]) == ("other_goods", "Poultry  farm")
+    from apps.tenancy.models import BusinessKind
+    kind = BusinessKind.objects.get()
+    assert (kind.label, kind.business_model, kind.status, kind.uses) == ("Poultry farm", "GOODS", "SUGGESTED", 1)
+    assert (kind.modules, kind.categories, kind.created_by.name) == (["inventory", "pos", "customers"], ["Eggs", "Broilers"], "Kuku Bora")
+    # A second owner describing the same business adds to its count, not a duplicate; nothing is listed until reviewed.
+    assert create(owner, name="Kuku Two", business_model="GOODS", sector="other_goods", business_type="poultry FARM",
+                  enabled_modules=["inventory", "pos"]).status_code == 201
+    assert BusinessKind.objects.get().uses == 2
+    assert "Poultry farm" not in str(owner.get("/api/v1/tenancy/business-profiles/").json()["sectors"])
+
+
+def test_a_listed_kind_is_offered_to_the_next_owner_with_its_tools_and_starter_list(owner):
+    create(owner, name="Sauti Studio", business_model="SERVICES", sector="other_services", business_type="Music studio",
+           enabled_modules=["services", "pos", "customers"],
+           starter_services=[{"name": "Recording session", "selling_price": "1500", "billing_unit": "PER_HOUR"}])
+    from apps.tenancy.models import BusinessKind
+    kind = BusinessKind.objects.get()
+    assert kind.services == [{"name": "Recording session", "billing_unit": "PER_HOUR", "requires_job": False}]
+    admin = APIClient()
+    admin.force_login(User.objects.create_superuser("platform", password="Safe-pass-1848"))
+    assert owner.patch(f"/api/v1/tenancy/platform-admin/business-kinds/{kind.pk}/", {"status": "LISTED"}, format="json").status_code == 403
+    response = admin.patch(f"/api/v1/tenancy/platform-admin/business-kinds/{kind.pk}/", {"modules": ["pos"]}, format="json")
+    assert response.status_code == 400 and "Turn on Services & jobs" in str(response.json())
+    response = admin.patch(f"/api/v1/tenancy/platform-admin/business-kinds/{kind.pk}/",
+                           {"status": "LISTED", "hint": "Recording, mixing and beats", "keywords": "music beats"}, format="json")
+    assert response.status_code == 200, response.content
+
+    services = APIClient().get("/api/v1/tenancy/business-profiles/").json()["sectors"]["SERVICES"]
+    listed = next(sector for sector in services if sector["id"] == kind.sector_id)
+    assert services[-1]["id"] == "other_services"  # "Other" stays last
+    assert listed["label"] == "Music studio" and listed["services"][0]["name"] == "Recording session"
+    assert profiles.module_problems("SERVICES", listed["modules"]["SMALL"]) == []
+
+    response = create(owner, name="Beat Lab", business_model="SERVICES", sector=kind.sector_id, enabled_modules=listed["modules"]["SOLO"])
+    assert response.status_code == 201, response.content
+    assert response.json()["business_type"] == "Music studio"
+    kind.refresh_from_db()
+    assert kind.uses == 2
+    # Hiding the kind takes it off the list for new owners, but the business using it keeps working.
+    admin.patch(f"/api/v1/tenancy/platform-admin/business-kinds/{kind.pk}/", {"status": "HIDDEN"}, format="json")
+    assert create(owner, name="Late", business_model="SERVICES", sector=kind.sector_id, enabled_modules=["services"]).status_code == 400
+    response = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["services", "pos", "expenses"]}, format="json")
+    assert response.status_code == 200, response.content

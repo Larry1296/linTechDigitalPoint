@@ -103,6 +103,8 @@ export function PlatformAdminPage() {
 
     <h2>Plans</h2>
     <div className="platformPlans">{data.plans.map((item) => <PlanEditor key={item.id} plan={item} onSaved={load} />)}</div>
+
+    <BusinessKinds />
   </section>;
 }
 
@@ -235,5 +237,65 @@ function PlanEditor({ plan, onSaved }) {
     </fieldset>
     <label className="inline"><input type="checkbox" name="active" defaultChecked={plan.active} /> Offered to businesses</label>
     <button disabled={busy}>{busy ? "Saving…" : "Save plan"}</button>
+  </form>;
+}
+
+const MODEL_LABELS = { GOODS: "Sells goods", SERVICES: "Provides services", MIXED: "Goods and services" };
+const KIND_STATUS = { SUGGESTED: { label: "Waiting for review", tone: "warn" }, LISTED: { label: "Listed", tone: "active" }, HIDDEN: { label: "Not listed", tone: "ended" } };
+
+// Kinds of business owners created under "Other". Listing one adds it to the set-up list for every new owner.
+export function BusinessKinds() {
+  const [kinds, setKinds] = useState();
+  const [error, setError] = useState("");
+  const load = useCallback(() => api("/api/v1/tenancy/platform-admin/business-kinds/").then(setKinds).catch((e) => setError(e.message)), []);
+  useEffect(() => { void load(); }, [load]);
+  return <>
+    <h2>Kinds of business added by owners</h2>
+    <p className="muted">When an owner's business is not in the list, they name it under “Other”. List it here and the next owner finds it, with the tools and starter list the first one chose.</p>
+    {error && !kinds && <ErrorState message={error} retry={load} />}
+    {kinds && !kinds.length && <p className="muted">No owner has added a kind of business yet.</p>}
+    {kinds && kinds.length > 0 && <div className="platformPlans">{kinds.map((kind) => <KindEditor key={`${kind.id}-${kind.status}`} kind={kind} onSaved={load} />)}</div>}
+  </>;
+}
+
+function KindEditor({ kind, onSaved }) {
+  const [modules, setModules] = useState(new Set(kind.modules));
+  const [busy, setBusy] = useState(false);
+  const status = KIND_STATUS[kind.status];
+  const save = async (event, nextStatus) => {
+    event.preventDefault();
+    const form = Object.fromEntries(new FormData(event.currentTarget.form || event.currentTarget));
+    const categories = String(form.categories || "").split(",").map((name) => name.trim()).filter(Boolean);
+    setBusy(true);
+    try {
+      await api(`/api/v1/tenancy/platform-admin/business-kinds/${kind.id}/`, { method: "PATCH", body: JSON.stringify({
+        label: form.label, hint: form.hint, keywords: form.keywords, modules: [...modules],
+        ...(kind.business_model !== "SERVICES" ? { categories } : {}), ...(nextStatus ? { status: nextStatus } : {}) }) });
+      await onSaved();
+      await showSuccess(nextStatus === "LISTED" ? "Listed" : nextStatus === "HIDDEN" ? "Taken off the list" : "Saved",
+        nextStatus === "LISTED" ? `New owners can now choose ${form.label}.` : `${form.label} is updated.`);
+    } catch (e) {
+      await showError("Could not save this kind of business", e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (id) => setModules((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  return <form onSubmit={(event) => void save(event)} aria-label={kind.label}>
+    <h3>{kind.label} <span className={`statusPill ${status.tone}`}>{status.label}</span></h3>
+    <p className="muted">{MODEL_LABELS[kind.business_model]} · {kind.uses} {kind.uses === 1 ? "business" : "businesses"} · first added by {kind.created_by || "a removed business"} on {dateText(kind.created_at)}</p>
+    <label>Name<input name="label" defaultValue={kind.label} required maxLength={100} /></label>
+    <label>Short description<input name="hint" defaultValue={kind.hint} maxLength={160} placeholder="What these businesses sell or do" /></label>
+    <label>Search words<input name="keywords" defaultValue={kind.keywords} maxLength={255} placeholder="Other names owners might search for" /></label>
+    <fieldset className="checkList"><legend>Usual tools</legend>
+      {kind.allowed_modules.map((id) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {MODULE_LABELS[id]}</label>)}
+    </fieldset>
+    {kind.business_model !== "SERVICES" && <label>Product categories<input name="categories" defaultValue={kind.categories.join(", ")} placeholder="Separate with commas" /></label>}
+    {kind.business_model !== "GOODS" && <p className="muted">Starter services: {kind.services.map((service) => service.name).join(", ") || "none"}</p>}
+    <div className="setupActions">
+      <button type="submit" className="secondary" disabled={busy}>Save</button>
+      {kind.status !== "LISTED" && <button type="button" disabled={busy} onClick={(event) => void save(event, "LISTED")}>List for everyone</button>}
+      {kind.status !== "HIDDEN" && <button type="button" className="secondary" disabled={busy} onClick={(event) => void save(event, "HIDDEN")}>{kind.status === "LISTED" ? "Take off the list" : "Do not list"}</button>}
+    </div>
   </form>;
 }
