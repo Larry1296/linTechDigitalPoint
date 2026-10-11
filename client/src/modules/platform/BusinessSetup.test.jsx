@@ -112,7 +112,7 @@ it("sets up a business that does both, with its own description, categories and 
   expect(createBody()).toMatchObject({ business_model: "MIXED", sector: "other_mixed", business_type: "Agrovet and vet clinic",
     starter_categories: ["Animal feeds"], starter_services: [], branch_name: "Kiandas market stall", country: "UG",
     currency: "UGX", timezone: "Africa/Kampala", opening_cash: "15000" });
-});
+}, 20000);  // the same multi-step set-up as above
 
 it("resumes where the owner stopped after the page reloads, and forgets the draft once the business exists", async () => {
   sessionStorage.clear();

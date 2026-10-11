@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { PhysicalLocationPicker } from "./PhysicalLocationPicker";
 import { StackPreview } from "../modules/digital-shop/StackPreview";
 
-it("shows physical labels in selectors and renders levels top to bottom", () => {
+it("shows physical labels in selectors and draws Level 1 at the bottom, just above the floor", () => {
   const levels = [1, 2, 3].map((n) => ({
     id: n, level_number: n, active: true,
     shelves: [1, 2].map((p) => ({ id: n * 10 + p, active: true,
@@ -27,7 +27,8 @@ it("shows physical labels in selectors and renders levels top to bottom", () => 
   }
   render(<StackPreview stack={stack} width={6} height={6} depth={1} />);
   const buttons = screen.getAllByRole("button");
+  // Read top to bottom as the rack stands: the highest level first, Level 1 last (nearest the floor).
   expect(buttons.map((b) => b.querySelector("b").textContent)).toEqual([
-    "AL1C1S1", "AL1C2S1", "AL2C1S1", "AL2C2S1", "AL3C1S1", "AL3C2S1",
+    "AL3C1S1", "AL3C2S1", "AL2C1S1", "AL2C2S1", "AL1C1S1", "AL1C2S1",
   ]);
 });

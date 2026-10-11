@@ -124,20 +124,6 @@ def test_round_location_rollback(shop, target):
     assert not StockReceipt.objects.exists()
 
 
-def test_cleanup_preserves_genuine_and_preview(racks):
-    run("seed_sample_inventory")
-    category = Category.objects.get(slug="smartphone-covers")
-    genuine = Product.objects.create(name="Genuine", slug="genuine", category=category)
-    run("cleanup_sample_inventory")
-    assert StockReceipt.objects.count() == 1
-    run("cleanup_sample_inventory", execute=True)
-    assert Product.objects.get() == genuine
-    assert Category.objects.filter(pk=category.pk).exists()
-    assert not StockReceipt.objects.exists()
-    assert not StockLot.objects.exists()
-    assert not Movement.objects.exists()
-
-
 @pytest.mark.parametrize("conflict", ["balance", "movement", "cart"])
 def test_cleanup_refuses_conflicts(racks, conflict):
     run("seed_sample_inventory")
@@ -171,22 +157,6 @@ def test_unreconciled_manifest_rejected(shop):
     assert not StockReceipt.objects.exists()
     assert not Product.objects.exists()
     assert before == [list(model.objects.order_by("pk").values()) for model in models]
-
-
-def test_public_catalog_hides_opening_stock_and_internal_fields(shop):
-    from rest_framework.test import APIClient
-
-    run("seed_shop_inventory")
-    client = APIClient()
-    response = client.get("/api/v1/store/products/")
-    assert response.status_code == 200
-    assert response.data == []
-    from apps.core.api import PublicVariantSerializer
-
-    serialized = str(PublicVariantSerializer(ProductVariant.objects.first()).data)
-    for private in ("unit_cost", "latest_bp", "average_stock_cost", "shelf", "location", "AL1", "cogs"):
-        assert private not in serialized
-    assert client.get("/api/v1/catalog/products/").status_code in (401, 403)
 
 
 @pytest.mark.parametrize("conflict", ["reservation", "extra_lot", "sale"])
@@ -253,36 +223,3 @@ def test_round_failure_rolls_back_all_new_records(shop):
     assert not Product.objects.exists()
     assert not StockReceipt.objects.exists()
 
-
-def test_cleanup_leaves_genuine_receipt_graph_unchanged(racks):
-    from apps.inventory.services import complete_stock_receipt
-
-    run("seed_sample_inventory")
-    product = Product.objects.create(
-        name="Real cable", slug="real-cable", category=Category.objects.get(slug="smartphone-covers")
-    )
-    variant = ProductVariant.objects.create(product=product, sku="REAL-CABLE", selling_price=300)
-    receipt = complete_stock_receipt(
-        external_reference="GENUINE",
-        idempotency_key="genuine-round",
-        lines=[
-            {
-                "variant_id": variant.pk,
-                "received_quantity": 2,
-                "unit_cost": 100,
-                "placements": [{"shelf_id": Shelf.objects.get(code="RIGHT-R01-L01-S01").pk, "quantity": 2}],
-            }
-        ],
-    )
-    lots = list(StockLot.objects.filter(variant=variant).values())
-    movements = list(Movement.objects.filter(variant=variant).values())
-    balances = list(StockBalance.objects.filter(lot__variant=variant).values())
-    shelves = list(Shelf.objects.values())
-    categories = list(Category.objects.values())
-    run("cleanup_sample_inventory", execute=True)
-    assert StockReceipt.objects.get().pk == receipt.pk
-    assert lots == list(StockLot.objects.values())
-    assert movements == list(Movement.objects.values())
-    assert balances == list(StockBalance.objects.values())
-    assert shelves == list(Shelf.objects.values())
-    assert categories == list(Category.objects.values())

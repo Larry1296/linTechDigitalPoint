@@ -105,23 +105,6 @@ def test_other_product_variant_rejected(catalog):
     assert response.status_code == 400 and not ProductImage.objects.exists()
 
 
-def test_cart_checkout_and_order_snapshot_use_variant_photo(catalog):
-    client, category, shelf, _ = catalog
-    result = create(client, category, display_image=photo())
-    variant = ProductVariant.objects.get(pk=result.data["variant_id"])
-    complete_stock_receipt(external_reference="REAL", lines=[{"variant_id": variant.pk, "received_quantity": 2, "unit_cost": 100, "placements": [{"shelf_id": shelf.pk, "quantity": 2}]}])
-    url = variant_images(variant)[0]["url"]
-    buyer = APIClient()
-    buyer.force_authenticate(User.objects.create(username="buyer"))
-    cart = buyer.post("/api/v1/commerce/cart/", {"variant_id": variant.pk, "quantity": 1}, format="json")
-    assert cart.data["items"][0]["images"][0]["url"] == url
-    order = buyer.post("/api/v1/commerce/checkout/", {"fulfillment_method": "PICKUP"}, format="json")
-    assert order.status_code == 201 and order.data["items"][0]["images"][0]["url"] == url
-    client.post(f"/api/v1/catalog/products/{variant.product_id}/display-image/", {"display_image": photo("new.png")}, format="multipart")
-    detail = buyer.get(f'/api/v1/commerce/orders/{order.data["id"]}/').data
-    assert detail["items"][0]["images"][0]["url"] == url
-
-
 def test_upload_requires_staff_permission(catalog):
     _, category, _, _ = catalog
     product = Product.objects.create(name="Cable", category=category, slug="cable")

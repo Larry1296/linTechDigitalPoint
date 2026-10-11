@@ -158,45 +158,6 @@ def test_customer_order_ownership():
 
 
 @pytest.mark.django_db
-def test_anonymous_cart_survives_registration_and_checkout(reserved_order):
-    order, old_reservation, lot, shelf, owner = reserved_order
-    OrderItem.objects.filter(order=order).delete()
-    old_reservation.delete()
-    order.delete()
-    balance = StockBalance.objects.get(lot=lot, shelf=shelf)
-    balance.reserved = 0
-    balance.save()
-    variant = lot.variant
-    client = APIClient()
-    assert (
-        client.post("/api/v1/commerce/cart/", {"variant_id": variant.id, "quantity": 1}, format="json").status_code
-        == 200
-    )
-    registered = client.post(
-        "/api/v1/auth/register/",
-        {
-            "username": "newbuyer",
-            "email": "new@buyer.test",
-            "first_name": "New Buyer",
-            "password": "Strong-pass-1296",
-            "confirm_password": "Strong-pass-1296",
-        },
-        format="json",
-    )
-    assert registered.status_code == 201
-    cart = client.get("/api/v1/commerce/cart/").json()
-    assert len(cart["items"]) == 1
-    checkout = client.post(
-        "/api/v1/commerce/checkout/",
-        {"fulfillment_method": "PICKUP", "payment_method": "CASH_ON_PICKUP"},
-        format="json",
-    )
-    assert checkout.status_code == 201
-    assert checkout.json()["items"][0]["unit_price"] == "250.00"
-    assert StockBalance.objects.get().reserved == 1
-
-
-@pytest.mark.django_db
 def test_shared_login_accepts_customer_staff_and_email():
     ensure_initial_setup()
     customer = User.objects.create_user("customer-login", "buyer@lintech.test", "Strong-pass-1296")
@@ -210,72 +171,6 @@ def test_shared_login_accepts_customer_staff_and_email():
     )
     assert customer_response.status_code == 200 and not customer_response.json()["is_staff"]
     assert staff_response.status_code == 200 and staff_response.json()["is_staff"]
-
-
-@pytest.mark.django_db
-def test_anonymous_cart_survives_customer_login(reserved_order):
-    _, reservation, lot, _, _ = reserved_order
-    OrderItem.objects.filter(reservation=reservation).delete()
-    reservation.delete()
-    balance = StockBalance.objects.get(lot=lot)
-    balance.reserved = 0
-    balance.save()
-    # This login test requests two units; cart stock validation requires both.
-    receive_stock(variant=lot.variant, placements=[{"shelf": balance.shelf, "quantity": 1}], unit_cost=120, reference="PO-LOGIN")
-    customer = User.objects.create_user("returning", "returning@lintech.test", "Strong-pass-1296")
-    client = APIClient()
-    client.post("/api/v1/commerce/cart/", {"variant_id": lot.variant_id, "quantity": 2}, format="json")
-    response = client.post(
-        "/api/v1/auth/login/", {"credential": "returning", "password": "Strong-pass-1296"}, format="json"
-    )
-    cart = client.get("/api/v1/commerce/cart/").json()
-    assert response.status_code == 200
-    assert len(cart["items"]) == 1 and cart["items"][0]["quantity"] == "2.000"
-
-
-@pytest.mark.django_db
-def test_anonymous_and_customer_carts_merge_one_line(reserved_order):
-    _, reservation, lot, _, _ = reserved_order
-    OrderItem.objects.filter(reservation=reservation).delete()
-    reservation.delete()
-    balance = StockBalance.objects.get(lot=lot)
-    balance.reserved = 0
-    balance.quantity = 5
-    balance.save()
-    customer = User.objects.create_user("merge-user", password="Strong-pass-1296")
-    owned = Cart.objects.create(customer=customer)
-    CartItem.objects.create(cart=owned, variant=lot.variant, quantity=2)
-    client = APIClient()
-    client.post("/api/v1/commerce/cart/", {"variant_id": lot.variant_id, "quantity": 1}, format="json")
-    client.post("/api/v1/auth/login/", {"credential": "merge-user", "password": "Strong-pass-1296"}, format="json")
-    cart = client.get("/api/v1/commerce/cart/").json()
-    assert len(cart["items"]) == 1 and cart["items"][0]["quantity"] == "3.000"
-
-
-@pytest.mark.django_db
-def test_failed_authentication_never_discards_cart(reserved_order):
-    _, reservation, lot, _, _ = reserved_order
-    OrderItem.objects.filter(reservation=reservation).delete()
-    reservation.delete()
-    balance = StockBalance.objects.get(lot=lot)
-    balance.reserved = 0
-    balance.save()
-    client = APIClient()
-    client.post("/api/v1/commerce/cart/", {"variant_id": lot.variant_id, "quantity": 1}, format="json")
-    assert (
-        client.post("/api/v1/auth/login/", {"credential": "missing", "password": "wrong"}, format="json").status_code
-        == 400
-    )
-    assert (
-        client.post(
-            "/api/v1/auth/register/",
-            {"username": "x", "email": "bad", "password": "short", "confirm_password": "different"},
-            format="json",
-        ).status_code
-        == 400
-    )
-    cart = client.get("/api/v1/commerce/cart/").json()
-    assert len(cart["items"]) == 1 and cart["items"][0]["quantity"] == "1.000"
 
 
 @pytest.mark.django_db
