@@ -27,7 +27,15 @@ const isoDay = (value) => value.toLocaleDateString("en-CA");
 function nextDates(chama, count) {
   const start = new Date(`${chama.start_date}T12:00:00`);
   const at = (index) => {
-    if (chama.frequency === "DAILY") return new Date(start.getFullYear(), start.getMonth(), start.getDate() + index, 12);
+    if (chama.frequency === "DAILY") {
+      // Monday to Saturday: Sunday is the chama's rest day.
+      const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + Math.floor(index / 6) * 7, 12);
+      for (let rest = index % 6; rest > 0;) {
+        day.setDate(day.getDate() + 1);
+        if (day.getDay() !== 0) rest -= 1;
+      }
+      return day;
+    }
     if (chama.frequency === "WEEKLY") return new Date(start.getFullYear(), start.getMonth(), start.getDate() + index * 7, 12);
     const month = new Date(start.getFullYear(), start.getMonth() + index, 1, 12);
     const last = new Date(month.getFullYear(), month.getMonth() + 1, 0, 12).getDate();

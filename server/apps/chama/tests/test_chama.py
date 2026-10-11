@@ -80,6 +80,28 @@ def test_contribution_dates_follow_the_chosen_frequency():
     assert services.is_period_date(daily, TODAY + timedelta(days=3)) and not services.is_period_date(weekly, TODAY + timedelta(days=3))
 
 
+def test_a_daily_chama_rests_on_sunday():
+    """Monday to Saturday only: Saturday's turn ends the week and the next member's turn starts on Monday."""
+    monday = date(2026, 10, 5)
+    daily = Chama(frequency="DAILY", start_date=monday, periods_per_round=6, grace_days=1)
+    days = services.periods_between(daily, None, monday + timedelta(days=14))
+    assert all(day.weekday() != 6 for day in days) and len(days) == 13  # two weeks and a Monday, no Sundays
+    assert services.round_dates(daily, 1) == [monday + timedelta(days=i) for i in range(6)]
+    assert services.round_dates(daily, 2) == [monday + timedelta(days=7 + i) for i in range(6)]  # starts Monday the 12th
+    sunday = date(2026, 10, 11)
+    assert not services.is_period_date(daily, sunday) and services.period_index(daily, sunday) == 5  # still Saturday's
+    assert services.deadline_for(daily, date(2026, 10, 10)) == date(2026, 10, 12)  # Saturday + 1 grace day: Monday
+    assert services.period_index(daily, date(2026, 10, 12)) == 6
+    for index in range(40):
+        assert services.period_index(daily, services.period_date(daily, index)) == index
+
+
+def test_a_daily_chama_cannot_start_on_a_sunday(on):
+    with pytest.raises(ValidationError, match="Sunday is the chama's rest day"):
+        services._rules({"frequency": "DAILY", "start_date": date(2026, 10, 11)}, TODAY)
+    assert services._rules({"frequency": "WEEKLY", "start_date": date(2026, 10, 11)}, TODAY)["start_date"] == date(2026, 10, 11)
+
+
 # --- Setting up -------------------------------------------------------------------------------------------------
 
 def test_owner_sets_up_a_chama_from_the_dashboard_which_turns_chama_management_on(on):
@@ -321,10 +343,11 @@ def test_only_the_owner_and_administrators_see_a_chama_by_default(on):
 
 
 def test_members_give_daily_for_a_week_and_agree_who_receives_next(on):
-    """100 every day; after a week of contributions one member receives, and the members agree who that is each turn."""
+    """100 every day but Sunday; after a week (six contributions, Monday to Saturday) one member receives, and the members agree
+    who that is each turn. TODAY is a Tuesday, so the first turn runs Tuesday to the next Monday, skipping Sunday."""
     org, owner, client = business(modules=["chama"])
     made = client.post("/api/v1/chama/setup/", setup_data(contribution_amount="100", frequency="DAILY", grace_days=0, fine_amount="0",
-                       periods_per_round=7, turn_choice="AGREED", first_receiver=2), format="json")
+                       periods_per_round=6, turn_choice="AGREED", first_receiver=2), format="json")
     assert made.status_code == 201, made.content
     data = made.json()
     larry, mary, john = (m["id"] for m in data["members"])
@@ -334,11 +357,11 @@ def test_members_give_daily_for_a_week_and_agree_who_receives_next(on):
     with organization_context(org):
         chama = Chama.objects.get(pk=data["id"])
         for member in (larry, mary, john):  # each pays the whole week
-            services.record_payment(chama=chama, member_id=member, amount="700", paid_on=None, method="CASH", key=f"week-{member}", user=owner)
+            services.record_payment(chama=chama, member_id=member, amount="600", paid_on=None, method="CASH", key=f"week-{member}", user=owner)
     on(TODAY + timedelta(days=6))
     turn = client.get(f"/api/v1/chama/{chama.pk}/").json()["turns"][0]
-    assert (turn["status"], Decimal(turn["collected"]), Decimal(turn["expected"])) == ("DUE", Decimal("2100"), Decimal("2100"))
-    given = client.post(f"/api/v1/chama/{chama.pk}/payouts/", {"amount": "2100", "method": "CASH", "idempotency_key": "w1"}, format="json").json()
+    assert (turn["status"], Decimal(turn["collected"]), Decimal(turn["expected"])) == ("DUE", Decimal("1800"), Decimal("1800"))
+    given = client.post(f"/api/v1/chama/{chama.pk}/payouts/", {"amount": "1800", "method": "CASH", "idempotency_key": "w1"}, format="json").json()
     assert given["payouts"][0]["member"] == "John Kamau" and given["next_receiver"] is None
     assert [m["full_name"] for m in given["still_to_receive"]] == ["Larry Musau", "Mary Achieng"]
     # Next week nobody has been agreed yet, so the money cannot go out until the members choose.

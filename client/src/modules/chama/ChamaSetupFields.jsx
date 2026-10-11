@@ -24,6 +24,8 @@ export function chamaProblem(chama) {
   if (!chama.name.trim()) return "Enter the chama's name.";
   if (!(Number(chama.contribution_amount) > 0)) return "Enter how much each member contributes.";
   if (!chama.start_date) return "Choose the date of the first contribution to record.";
+  if (chama.frequency === "DAILY" && new Date(`${chama.start_date}T12:00:00`).getDay() === 0)
+    return "Sunday is the chama's rest day: a daily chama contributes Monday to Saturday. Start on Monday instead.";
   if (chama.fine_amount !== "" && Number(chama.fine_amount) < 0) return "The fine cannot be below zero. Enter 0 for no fine.";
   if (Number(chama.grace_days) < 0 || Number(chama.grace_days) > 60) return "Allow between 0 and 60 days to pay after the contribution date.";
   const people = chama.members.filter((m) => m.full_name.trim() || m.id_number.trim() || m.phone.trim());
@@ -56,7 +58,13 @@ export function chamaPayload(chama) {
 }
 
 export function ChamaSetupFields({ value, onChange }) {
-  const set = (field) => (event) => onChange({ ...value, [field]: event.target.value });
+  const set = (field) => (event) => {
+    const next = { ...value, [field]: event.target.value };
+    // A daily chama rests on Sunday: a Sunday start moves to the Monday after.
+    const start = next.start_date && new Date(`${next.start_date}T12:00:00`);
+    if (next.frequency === "DAILY" && start?.getDay() === 0) next.start_date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, 12).toLocaleDateString("en-CA");
+    onChange(next);
+  };
   const setMember = (index, changes) => {
     // Giving someone an office takes it from whoever had it, as in the chama itself.
     const members = value.members.map((member, i) => {
@@ -96,7 +104,7 @@ export function ChamaSetupFields({ value, onChange }) {
         <label>Days allowed to pay after it<input type="number" min="0" max="60" step="1" value={value.grace_days} onChange={set("grace_days")} /></label>
         <label>Fine for paying late ({currency})<input type="number" min="0" step="0.01" inputMode="decimal" value={value.fine_amount} onChange={set("fine_amount")} placeholder="0 for no fine" /></label>
       </div>
-      <p className="muted">Members contribute {value.frequency === "DAILY" ? "every day" : `every ${word}`} from {value.start_date || "the first date"}
+      <p className="muted">Members contribute {value.frequency === "DAILY" ? "every day from Monday to Saturday (Sunday is a rest day)" : `every ${word}`} from {value.start_date || "the first date"}
         {value.frequency === "MONTHLY" && value.start_date ? `, on day ${Number(value.start_date.slice(8, 10))} of each month` : ""}.
         {Number(value.fine_amount) > 0 ? ` Anyone who has not paid in full ${Number(value.grace_days) ? `${value.grace_days} day${Number(value.grace_days) === 1 ? "" : "s"} after` : "by the end of"} the contribution day is fined ${currency} ${Number(value.fine_amount).toLocaleString()}, unless they gave an excuse and pay by the date they promised.` : " Nobody is fined for paying late."}
         {" "}If your chama has been running for a while, start from the current or next contribution.</p>
@@ -112,7 +120,7 @@ export function ChamaSetupFields({ value, onChange }) {
         </button>
       </div>
       {rotation && <label className="chamaRound">Contributions in each turn<input type="number" min="1" max="60" step="1" value={value.periods_per_round} onChange={set("periods_per_round")} />
-        <small className="muted">1 means a member receives every {word}.{value.frequency === "DAILY" ? " 7 means everyone gives every day for a week, then one member receives." : ""}{pot > 0 ? ` Each turn's money: about ${currency} ${pot.toLocaleString()}.` : ""}</small></label>}
+        <small className="muted">1 means a member receives every {word}.{value.frequency === "DAILY" ? " 6 means everyone gives Monday to Saturday, one member receives, and the next member's turn starts on Monday." : ""}{pot > 0 ? ` Each turn's money: about ${currency} ${pot.toLocaleString()}.` : ""}</small></label>}
       {rotation && <div className="choiceGrid wideChoices chamaTurnChoice" role="group" aria-label="Who receives next">
         <button type="button" className={`choiceCard${!agreed ? " selected" : ""}`} aria-pressed={!agreed} onClick={() => onChange({ ...value, turn_choice: "ORDER" })}>
           <strong>In the order listed</strong><span>Turns follow the member list below. The members can still agree to let someone go next.</span>

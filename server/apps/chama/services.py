@@ -4,7 +4,9 @@ All of it is the chama's own record. Nothing here touches the shop's cash book, 
 the members', held by the treasurer, never the shop's.
 
 Schedule: contributions fall on the start date and then every day, week or month after it (a monthly chama
-starting on the 31st falls on the last day of shorter months). A round is `periods_per_round` contributions;
+starting on the 31st falls on the last day of shorter months). A daily chama rests on Sunday: it contributes Monday to
+Saturday, and a deadline that would fall on a Sunday moves to Monday, so a week's turn ends on Saturday and the next
+member's turn starts on Monday. A round is `periods_per_round` contributions;
 in a rotating chama one member receives the money at the end of each round, in turn order.
 
 Fines: once a contribution's deadline (period date + grace days, or the date the member promised in an excuse)
@@ -51,10 +53,35 @@ def _log(action, obj, user, **after):
 
 # --- Schedule ---------------------------------------------------------------------------------------------------
 
+SUNDAY = 6
+
+
+def _working_day(start, index):
+    """The working day (Monday to Saturday) `index` working days after `start`, itself a working day."""
+    weeks, rest = divmod(index, 6)
+    day = start + timedelta(weeks=weeks)
+    while rest:
+        day += timedelta(days=1)
+        rest -= day.weekday() != SUNDAY
+    return day
+
+
+def _working_days_through(start, day):
+    """How many working days there are from `start` through `day`, both included."""
+    weeks, rest = divmod((day - start).days, 7)
+    return weeks * 6 + sum((start + timedelta(days=offset)).weekday() != SUNDAY for offset in range(rest + 1))
+
+
+def deadline_for(chama, day):
+    """The last day to pay a contribution without a fine: the grace days after it, never a Sunday for a daily chama."""
+    deadline = day + timedelta(days=chama.grace_days)
+    return deadline + timedelta(days=1) if chama.frequency == "DAILY" and deadline.weekday() == SUNDAY else deadline
+
+
 def period_date(chama, index):
     start = chama.start_date
     if chama.frequency == "DAILY":
-        return start + timedelta(days=index)
+        return _working_day(start, index)
     if chama.frequency == "WEEKLY":
         return start + timedelta(weeks=index)
     months = start.month - 1 + index
@@ -68,7 +95,7 @@ def period_index(chama, day):
     if day < start:
         return -1
     if chama.frequency == "DAILY":
-        return (day - start).days
+        return _working_days_through(start, day) - 1
     if chama.frequency == "WEEKLY":
         return (day - start).days // 7
     months = (day.year - start.year) * 12 + day.month - start.month
@@ -111,7 +138,7 @@ def _create_dues(chama, members, after, through, fines):
                    .values_list("member_id", "period_date"))
     rows = []
     for day in dates:
-        deadline = day + timedelta(days=chama.grace_days)
+        deadline = deadline_for(chama, day)
         for member in members:
             if owes_on(member, day) and (member.pk, day) not in existing:
                 # Days that passed before they could be recorded here are never fined.
@@ -126,7 +153,7 @@ def _due_for(chama, member, day):
     if due:
         return due
     return ChamaDue.objects.create(chama=chama, member=member, period_date=day, amount=chama.contribution_amount,
-                                   deadline=day + timedelta(days=chama.grace_days))
+                                   deadline=deadline_for(chama, day))
 
 
 def with_totals(dues):
@@ -248,6 +275,10 @@ def _rules(data, today, chama=None):
             raise ValidationError("The first contribution must be within the next year.")
     if "notes" in data:
         values["notes"] = str(data["notes"] or "")[:2000]
+    frequency = values.get("frequency", chama.frequency if chama else None)
+    start = values.get("start_date", chama.start_date if chama else None)
+    if frequency == "DAILY" and start and start.weekday() == SUNDAY:
+        raise ValidationError("Sunday is the chama's rest day: a daily chama contributes Monday to Saturday. Start on Monday instead.")
     return values
 
 
