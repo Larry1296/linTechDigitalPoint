@@ -69,13 +69,10 @@ it("adds a chama step to registration when chama management is chosen", async ()
   expect(screen.getAllByLabelText("Role").map((select) => select.value)).toEqual(["MEMBER", "TREASURER"]);
   fireEvent.click(screen.getByRole("button", { name: "Move Mary Achieng up" }));
   expect(screen.getAllByLabelText("Full name").map((input) => input.value)).toEqual(["Mary Achieng", "Larry Musau"]);
-  // Give 100 every day but Sunday; after a week one member receives, and the members agree who.
-  fireEvent.change(screen.getByLabelText("First contribution to record"), { target: { value: "2026-10-11" } });  // a Sunday
+  // Give 100 every day; after a week one member receives, and the members agree who.
   fireEvent.change(screen.getByLabelText("How often"), { target: { value: "DAILY" } });
-  expect(screen.getByLabelText("First contribution to record")).toHaveValue("2026-10-12");  // moved to Monday: Sunday is a rest day
-  expect(screen.getByText(/every day from Monday to Saturday \(Sunday is a rest day\)/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText(/Contributions in each turn/), { target: { value: "6" } });
-  expect(screen.getByText(/6 means everyone gives Monday to Saturday/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/Contributions in each turn/), { target: { value: "7" } });
+  expect(screen.getByText(/7 means everyone gives every day for a week/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Members agree who receives next/ }));
   fireEvent.change(screen.getByLabelText(/Who receives the first turn/), { target: { value: "1" } });
   fireEvent.click(screen.getByRole("button", { name: "Move Larry Musau up" }));  // the choice follows Larry's row
@@ -90,7 +87,7 @@ it("adds a chama step to registration when chama management is chosen", async ()
   const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
   expect(body.enabled_modules).toContain("chama");
   expect(body.chama).toMatchObject({ name: "Wamama Chama", contribution_amount: "300", fine_amount: "50", payout_mode: "ROTATION",
-    frequency: "DAILY", periods_per_round: 6, start_date: "2026-10-12", turn_choice: "AGREED", first_receiver: 0,
+    frequency: "DAILY", periods_per_round: 7, turn_choice: "AGREED", first_receiver: 0,
     members: [{ full_name: "Larry Musau", id_number: "12345678", role: "MEMBER" }, { full_name: "Mary Achieng", role: "TREASURER" }] });
 }, 20000);  // a whole multi-step set-up: slow when every test file runs at once
 
