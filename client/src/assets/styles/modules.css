@@ -2775,3 +2775,93 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .protectedCard form > small { color: var(--muted); }
 .protectedBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
 .protectedBar .linkButton { margin: 0; }
+
+/* Business overview: header with actions, today's key figures, then the analysis beside what is held now; reference
+   tables fold away at the bottom. One column on phones and tablets, two from wide screens up. */
+.dashHeader {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 24px; align-items: start;
+  padding: clamp(18px, 3vw, 28px); border-radius: 20px; color: #fff;
+  background: radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 42%), linear-gradient(135deg, #123d70, #081d3a);
+  box-shadow: 0 14px 36px rgb(9 35 60 / 16%);
+}
+.dashHeaderTitle { min-width: 0; }
+.dashHeader .eyebrow { color: #bfdbfe; }
+.dashHeader h1 { margin: 4px 0 6px; color: #fff; font-size: clamp(1.6rem, 3.4vw, 2.5rem); letter-spacing: -.03em; overflow-wrap: anywhere; }
+.dashHeader p { margin: 0; color: rgb(255 255 255 / 80%); }
+.dashHeaderLive { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+.dashHeaderLive button { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 8px 14px; color: #fff; border: 1px solid rgb(255 255 255 / 30%); background: rgb(255 255 255 / 10%); }
+.dashActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dashActions a { padding: 9px 14px; border: 1px solid rgb(255 255 255 / 28%); border-radius: 999px; color: #fff; background: rgb(255 255 255 / 10%); font-weight: 650; font-size: 14px; text-decoration: none; }
+.dashActions a:hover, .dashActions a:focus-visible { background: rgb(255 255 255 / 20%); }
+.dashActions a.main { color: #10213d; border-color: transparent; background: var(--accent); }
+@media (min-width: 900px) {
+  .dashHeader { grid-template-columns: minmax(0, 1fr) auto; }
+  .dashHeaderLive { justify-content: flex-end; max-width: 340px; text-align: right; }
+  .dashActions { grid-column: 1 / -1; }
+}
+
+/* Cards fill whole rows: 2 on phones, 3 on tablets and laptops, all six side by side on wide screens. */
+.businessDashboard { container-type: inline-size; }
+.dashKpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@container (min-width: 700px) { .dashKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 1500px) { .dashKpis { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.dashKpi {
+  display: grid; align-content: start; gap: 6px; min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px;
+  color: var(--text); background: var(--surface); box-shadow: var(--shadow); text-decoration: none; transition: border-color .15s ease, transform .15s ease;
+}
+a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transform: translateY(-1px); }
+.dashKpi span { color: var(--muted); font-size: 13px; font-weight: 650; }
+.dashKpi strong { font-size: clamp(1.05rem, 1.7vw, 1.5rem); font-variant-numeric: tabular-nums; overflow-wrap: normal; word-break: keep-all; }
+.dashKpi small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.dashKpi.profit strong { color: var(--success, #15803d); }
+.dashKpi.loss strong { color: var(--danger, #b42318); }
+.dashKpi.warn { border-color: color-mix(in srgb, #d97706 45%, var(--line)); }
+.dashKpi.warn strong { color: #b45309; }
+
+.dashColumns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+.dashMain, .dashSide { display: grid; gap: 20px; min-width: 0; }
+.dashMain > *, .dashSide > * { min-width: 0; margin: 0; }
+@container (min-width: 1000px) { .dashColumns { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); } }
+@container (min-width: 640px) and (max-width: 999px) {
+  /* Tablets: the side cards sit two by two under the analysis. */
+  .dashSide { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+.businessDashboard .financialTrend { padding: clamp(16px, 2.5vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.businessDashboard .financialTrend > h2 { margin-top: 0; }
+.dashCard { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.dashCard > h2, .dashSide .accountingPanel h2, .dashSide .ownerSummary h2 { margin: 0 0 10px; font-size: 17px; }
+.dashSide .accountingPanel, .dashSide .ownerSummary { padding: 18px 20px; }
+.dashSide .ownerSummaryMoney { margin-top: 0; padding: 0; border: 0; }
+.dashSide .ownerSummary { border-width: 1px; }
+.dashUnit { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
+.dashUnit:first-of-type { border-top: 0; padding-top: 0; }
+.dashUnit h3 { margin: 0; font-size: 14px; }
+.dashUnitFigure { margin: 0; }
+.dashUnitFigure strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+.dashUnitFigure span, .dashUnit small { color: var(--muted); font-size: 13px; }
+.dashList { display: grid; gap: 7px; margin: 0; }
+.dashList > div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.dashList dt { color: var(--muted); }
+.dashList dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Short tables show in full; only long ones (latest money, month by month) scroll inside their box. */
+.businessDashboard .ownerSummary .trendTable, .businessDashboard .financialTrend .trendTable, .businessDashboard .dashSide .trendTable { max-height: none; }
+.dashMain { container-type: inline-size; }
+.businessDashboard .accountingKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@container (min-width: 620px) { .dashMain .accountingKpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.businessDashboard .accountingKpis article { padding: 14px; gap: 6px; }
+.businessDashboard .accountingKpis strong { font-size: clamp(1rem, 1.5vw, 1.35rem); white-space: nowrap; }
+.businessDashboard .ownerSummary .trendTable th:first-child { white-space: normal; text-align: left; }
+.dashMore { display: grid; gap: 10px; }
+.dashMore > h2 { margin: 8px 0 0; font-size: 18px; }
+.dashMore details { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.dashMore summary { padding: 14px 18px; font-weight: 700; cursor: pointer; }
+.dashMore details[open] summary { border-bottom: 1px solid var(--line); }
+.dashMore details > :not(summary) { margin: 0; border: 0; border-radius: 0 0 14px 14px; box-shadow: none; }
+@media (max-width: 520px) {
+  .businessDashboard { gap: 16px; }
+  .dashKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .dashKpi { padding: 12px 14px; }
+  .dashActions a { flex: 1 1 calc(50% - 8px); text-align: center; }
+  .reportPeriod > * { flex: 1 1 100%; }
+}

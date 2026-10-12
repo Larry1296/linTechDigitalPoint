@@ -3,7 +3,8 @@ import { profitText, stockText } from "./plainMoney";
 // The first thing on the dashboard: the shop and services without the M-Pesa agency. Sales, what the sold items really
 // cost, running costs and the profit or loss, today and since the start; then the money the owner should be holding,
 // added up step by step from the cash book. Parts the viewer may not see are left out.
-export function OwnerSummary({ summary, money }) {
+// ``part`` shows only "sales" (the table) or "money" (what should be held); without it, both.
+export function OwnerSummary({ summary, money, part }) {
   if (!summary) return null;
   const { today, all_time: all, money: held } = summary;
   const showStock = [today.stock_corrections, all.stock_corrections].some(value => Number(value || 0) !== 0);
@@ -17,17 +18,19 @@ export function OwnerSummary({ summary, money }) {
     all.profit != null && ["Profit or loss", today.profit, all.profit, value => profitText(value, money), true],
   ].filter(Boolean);
   const signed = (amount) => Number(amount) < 0 ? `− ${money(-Number(amount))}` : `+ ${money(amount)}`;
-  return <section className="ownerSummary" aria-labelledby="owner-summary-title">
-    <h2 id="owner-summary-title">Your business at a glance (without M-Pesa)</h2>
+  const sales = part !== "money", cash = part !== "sales";
+  if (!sales && !held) return null;
+  return <section className={`ownerSummary${part ? ` ownerSummary-${part}` : ""}`} aria-labelledby={`owner-summary-title${part ? `-${part}` : ""}`}>
+    {sales && <><h2 id={`owner-summary-title${part ? `-${part}` : ""}`}>Your business at a glance (without M-Pesa)</h2>
     <p>Products and services only. M-Pesa agency cash, float and commission are kept apart and checked on the M-Pesa desk.</p>
     <div className="trendTable"><table>
       <caption>Sales, costs and profit</caption>
       <thead><tr><th scope="col">What</th><th scope="col">Today</th><th scope="col">Since you started{summary.since ? ` (${summary.since})` : ""}</th></tr></thead>
       <tbody>{rows.map(([label, day, ever, show, strong]) => <tr key={label} className={strong ? "ownerSummaryTotal" : undefined}>
         <th scope="row">{label}</th><td>{show(day)}</td><td>{show(ever)}</td></tr>)}</tbody>
-    </table></div>
-    {held && <div className="ownerSummaryMoney">
-      <h3>Money you should be holding now</h3>
+    </table></div></>}
+    {cash && held && <div className="ownerSummaryMoney">
+      {sales ? <h3>Money you should be holding now</h3> : <h2 id="owner-summary-title-money">Money you should be holding now</h2>}
       <p className="ownerSummaryHeld"><strong>{money(held.expected)}</strong></p>
       <p>{held.places.map(place => `${place.label}: ${money(place.expected)}`).join(" · ")}</p>
       <dl>
