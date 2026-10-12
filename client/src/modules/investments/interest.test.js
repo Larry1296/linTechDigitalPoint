@@ -20,6 +20,7 @@ it("handles empty or silly input without breaking", () => {
 });
 
 it("says what a balance earns a day, a month and a year after tax", () => {
-  expect(earnings(365000, 10, 15)).toEqual({ day: 85, month: 2585.42, year: 31025 });
+  // The year counts each month's interest earning interest after it is added: more than 12 × the month.
+  expect(earnings(365000, 10, 15)).toEqual({ day: 85, month: 2585.42, year: 32262.68 });
   expect(earnings(365000, 10, 0).day).toBe(100);
 });

@@ -29,12 +29,58 @@ def current_rate(investment):
     return investment.rates.order_by("-month").first()
 
 
+def rate_now(investment, today=None):
+    """The yearly rate the money earns today, or None: the fund's published rate for an account that follows one."""
+    rates = timeline(investment)
+    return _rate_for(rates, today or timezone.localdate()) if rates else None
+
+
 def due(investment, today=None):
-    """True when the investment holds money and nobody has recorded this month's rate yet."""
+    """True when the investment holds money and nobody has recorded this month's rate yet.
+
+    An account that follows a fund's published rate is never due while that rate is current: the app keeps it up.
+    """
     today = today or timezone.localdate()
     if value(investment) <= 0:
         return False
+    if investment.fund:
+        from .fund_rates import is_fresh, latest
+        if is_fresh(latest(investment.fund)):
+            return False
     return not investment.rates.filter(month=month_of(today)).exists()
+
+
+def timeline(investment):
+    """[(from_date, yearly rate)], oldest first: the rates typed in for each month and, for an account that follows a
+    fund, every rate the fund published from its own date (so a change mid-month counts from the right day)."""
+    published = []
+    if investment.fund:
+        from .fund_rates import history
+        published = history(investment.fund)
+    monthly = investment.rates.order_by("month")
+    if published:
+        monthly = monthly.filter(automatic=False)  # the fund's own dated rates replace the copies written into each month
+    # On the same date a published rate comes after (and so wins over) a month's typed-in rate.
+    rows = [(r.month, 0, r.annual_rate) for r in monthly] + [(day, 1, rate) for day, rate in published]
+    return [(day, rate) for day, _, rate in sorted(rows, key=lambda row: (row[0], row[1]))]
+
+
+def earnings(balance, annual_rate, tax_rate):
+    """What a balance earns at a yearly rate: a day, an average month and a year, before and after withholding tax.
+
+    Interest is worked out daily (rate ÷ 365) and added each month end after tax, so over a year it earns interest on
+    its own interest: the year is twelve months compounded on the after-tax interest, as the fund pays it.
+    """
+    balance, rate = Decimal(balance or 0), Decimal(annual_rate or 0) / 100
+    keep = 1 - Decimal(tax_rate or 0) / 100
+
+    def split(gross):
+        gross = gross.quantize(CENT)
+        net = (gross * keep).quantize(CENT)
+        return {"gross": gross, "tax": gross - net, "net": net}
+    year_net = balance * ((1 + rate / 12 * keep) ** 12 - 1)
+    return {"balance": balance.quantize(CENT), "annual_rate": Decimal(annual_rate or 0), "day": split(balance * rate / 365),
+            "month": split(balance * rate / 12), "year": split(year_net / keep if keep else balance * rate)}
 
 
 def _rate_for(rates, day):
@@ -52,7 +98,7 @@ def estimate(investment, today=None):
     {since, days, rate, gross, tax, net, value}: value is what the app records now plus the estimated interest after tax.
     """
     today = today or timezone.localdate()
-    rates = [(r.month, r.annual_rate) for r in investment.rates.order_by("month")]
+    rates = timeline(investment)
     live = list(investment.movements.filter(reversed_at__isnull=True).order_by("occurred_on", "pk"))
     if not rates or not live:
         return None

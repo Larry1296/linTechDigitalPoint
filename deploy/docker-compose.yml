@@ -37,6 +37,29 @@ services:
       db:
         condition: service_healthy
 
+  # Jobs the app runs by itself. Every 6 hours: money market fund rates (e.g. CIC's), which it looks up only when due,
+  # every 10 days (docker compose logs scheduler to see them).
+  scheduler:
+    image: ${IMAGE_PREFIX}-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      TZ: Africa/Nairobi
+    healthcheck:
+      disable: true  # the image's check is for the web server, which this container does not run
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 120
+        while true; do
+          python manage.py refresh_fund_rates || echo "Fund rates: the check failed; trying again later"
+          sleep 21600
+        done
+    depends_on:
+      - app
+
   web:
     image: ${IMAGE_PREFIX}-web:${IMAGE_TAG:-latest}
     restart: unless-stopped

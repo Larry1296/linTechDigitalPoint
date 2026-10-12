@@ -2656,7 +2656,17 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .loanCard.investDue { border-left: 4px solid #f79009; }
 .loanStatus.investRate { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
 .investEarning { margin: 0 0 10px; font-size: 14px; }
+.investEarning > p { margin: 0 0 6px; }
 .investEarning strong { font-variant-numeric: tabular-nums; }
+.investEarningTiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; margin: 0 0 6px; }
+.investEarningTiles > div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.investEarningTiles dt { font-size: 13px; color: var(--muted); }
+.investEarningTiles dd { margin: 2px 0 0; display: grid; gap: 2px; }
+.investEarningTiles strong { font-size: 18px; }
+.investEarningTiles small, .investMetrics small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.investSource { margin: 0 0 10px; font-size: 14px; }
+.investSource > p { margin: 0 0 6px; }
+.investSource .actionRow { margin: 0; }
 .investFormTitle { margin: 0; font-size: 15px; }
 .investRates { margin: 4px 0 10px; }
 .investRates summary { cursor: pointer; font-weight: 700; padding: 4px 0; }

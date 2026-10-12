@@ -259,6 +259,9 @@ class Investment(TenantModel):
     notes = models.TextField(blank=True)
     # Withholding tax taken from the interest before it is added (15% on Kenyan money market funds).
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15)
+    # The published fund whose rate the app keeps up to date by itself (see fund_rates.py), e.g. CIC_MMF_KES; empty when
+    # the owner records the rate by hand.
+    fund = models.CharField(max_length=40, blank=True, default='')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     class Meta:
@@ -306,6 +309,8 @@ class InvestmentRate(TenantModel):
     statement_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # the balance seen at the same check
     recorded_on = models.DateField()
     note = models.TextField(blank=True)
+    # Written by the app from the fund's published rate rather than typed in by a person.
+    automatic = models.BooleanField(default=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     class Meta:

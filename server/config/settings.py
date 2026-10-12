@@ -54,6 +54,7 @@ LOCAL_APPS = [
     "apps.chama.apps.ChamaConfig",
     "apps.assistant.apps.AssistantConfig",
     "apps.accounting.apps.AccountingConfig",
+    "apps.market.apps.MarketConfig",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -209,6 +210,8 @@ BUSINESS_ASSISTANT_ANTHROPIC_MODEL = config("BUSINESS_ASSISTANT_ANTHROPIC_MODEL"
 BUSINESS_ASSISTANT_WEB_SEARCH = config("BUSINESS_ASSISTANT_WEB_SEARCH", default=True, cast=bool)
 BUSINESS_ASSISTANT_OPENAI_MODEL = config("BUSINESS_ASSISTANT_OPENAI_MODEL", default="gpt-5.5")
 BUSINESS_ASSISTANT_EFFORT = config("BUSINESS_ASSISTANT_EFFORT", default="medium")  # low, medium or high
+# Looks up money market fund rates (e.g. CIC's) every 10 days with Claude's web search (apps/accounting/fund_rates.py).
+FUND_RATE_MODEL = config("FUND_RATE_MODEL", default="claude-opus-5-5")
 # Public address of the web app, used in receipt links sent to customers (e.g. https://app.example.com).
 PUBLIC_APP_URL = config("PUBLIC_APP_URL", default=SITE_URL)
 

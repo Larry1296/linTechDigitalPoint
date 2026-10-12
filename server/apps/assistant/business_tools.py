@@ -703,15 +703,33 @@ def top_customers(ctx, args):
 
 
 def investments(ctx, args):
+    from apps.accounting import fund_rates
+    from apps.accounting.investment_interest import earnings, estimate, rate_now
     from apps.accounting.investments import totals, value
     from apps.accounting.models import Investment
     rows = []
     for inv in Investment.objects.all():
         t = totals(inv)
-        rows.append({"investment": inv.name, "value_now": _money(value(inv)),
-                     **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}})
+        guess, rate = estimate(inv), rate_now(inv)
+        fund = fund_rates.summary(inv.fund)
+        row = {"investment": inv.name, "value_now": _money(value(inv)),
+               **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}}
+        if rate is not None:
+            balance = guess["value"] if guess else value(inv)
+            pace = earnings(balance, rate, inv.tax_rate)
+            row["yearly_rate_now"] = f"{rate}%"
+            row["rate_source"] = (f"{fund['name']}'s published rate as of {fund['as_of']}, kept up to date automatically"
+                                  if fund and fund["annual_rate"] is not None else "the rate recorded by the business")
+            row["earns_after_tax"] = {period: _money(pace[period]["net"]) for period in ("day", "month", "year")}
+            row["withholding_tax"] = f"{inv.tax_rate}%"
+        if guess:
+            row["estimated_interest_since_last_statement"] = _money(guess["net"])
+            row["estimated_value_today"] = _money(guess["value"])
+        rows.append(row)
     return {"investments": rows, "total_value": _money(sum((Decimal(str(row["value_now"] or 0)) for row in rows), ZERO)),
-            "explained": "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted."}
+            "explained": "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted. "
+                         "earns_after_tax is what the money earns now at the current yearly rate after withholding tax: a day, an "
+                         "average month, and a year with each month's interest earning interest after it is added."}
 
 
 def chamas(ctx, args):
@@ -862,7 +880,7 @@ TOOLS = {
                    _schema({"sale_number": {"type": "string"}, "customer": {"type": "string"}, **LIMIT}), "commerce.view_sale", None),
     "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
                       _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
-    "investments": (investments, "Investments such as money market funds: value now, money put in and taken out, interest and fees.",
+    "investments": (investments, "Investments such as money market funds: value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
                     _schema(), "accounting.view_investment", None),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),

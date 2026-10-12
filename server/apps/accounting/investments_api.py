@@ -9,7 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
-from .investment_interest import current_rate, due, estimate, first_rate, month_label, month_of, record_month
+from . import fund_rates
+from .investment_interest import current_rate, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month
 from .investments import SOURCES, move, open_investment, record_statement, totals, undo, value
 from .models import Investment, InvestmentMovement
 
@@ -25,16 +26,28 @@ def _name(user):
 
 def _rate(rate):
     return {"month": rate.month, "label": month_label(rate.month), "annual_rate": rate.annual_rate, "statement_balance": rate.statement_balance,
-            "recorded_on": rate.recorded_on, "recorded_by": _name(rate.created_by), "note": rate.note}
+            "recorded_on": rate.recorded_on, "recorded_by": _name(rate.created_by) or ("Automatic" if rate.automatic else ""),
+            "note": rate.note, "automatic": rate.automatic}
+
+
+def _earning(investment, guess):
+    """What the money earns at today's rate: on the estimated value today when there is one, else the recorded value."""
+    rate = rate_now(investment)
+    balance = guess["value"] if guess else value(investment)
+    if rate is None or balance <= 0:
+        return None
+    return {**earnings(balance, rate, investment.tax_rate), "estimated_balance": bool(guess)}
 
 
 def investment_row(investment):
     sums = totals(investment)
     latest = current_rate(investment)
+    guess = estimate(investment)
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"], "tax_rate": investment.tax_rate,
-            "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": estimate(investment),
+            "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
+            "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
             "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "occurred_on": m.occurred_on, "source": m.source,
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
@@ -70,6 +83,12 @@ class InvestmentInput(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal("0"), max_value=Decimal("100"), required=False, default=Decimal("15"))
     annual_rate = serializers.DecimalField(max_digits=6, decimal_places=3, min_value=Decimal("0"), max_value=Decimal("100"), required=False, allow_null=True)
+    # A fund whose published rate the app follows; left out, it is guessed from the name ("CIC MMF"); "" means typed in.
+    fund = serializers.ChoiceField(choices=["", *fund_rates.FUNDS], required=False, allow_null=True, allow_blank=True)
+
+
+def _sum(rows, period):
+    return sum((r["earning"][period]["net"] for r in rows if r["earning"]), Decimal("0"))
 
 
 class InvestmentsView(APIView):
@@ -81,6 +100,8 @@ class InvestmentsView(APIView):
         return Response({"investments": rows, "total_value": sum((r["value"] for r in rows), Decimal("0")),
                          "interest_earned": sum((r["interest"] - r["fees"] for r in rows), Decimal("0")),
                          "estimated_interest": sum((r["estimate"]["net"] for r in rows if r["estimate"]), Decimal("0")),
+                         "earning": {period: _sum(rows, period) for period in ("day", "month", "year")},
+                         "funds": [{"code": code, "name": fund["name"]} for code, fund in fund_rates.FUNDS.items()],
                          "this_month": month_label(timezone.localdate()),
                          "spare_money": _spare_money(), "agency_sessions": _agency_sessions()})
 
@@ -90,9 +111,14 @@ class InvestmentsView(APIView):
         form.is_valid(raise_exception=True)
         d = form.validated_data
         rate = d.pop("annual_rate", None)
+        fund = d.pop("fund", None)
         with transaction.atomic():
             investment = open_investment(user=request.user, **d)
-            first_rate(investment=investment, user=request.user, annual_rate=rate)
+            fund = fund_rates.guess_fund(investment.name) if fund is None else fund
+            if fund:
+                fund_rates.link(investment=investment, user=request.user, fund=fund)
+            if rate is not None and not (fund and fund_rates.latest(fund)):
+                first_rate(investment=investment, user=request.user, annual_rate=rate)
         return Response(investment_row(investment), status=201)
 
 
@@ -182,3 +208,35 @@ class InvestmentReminderView(APIView):
         today = timezone.localdate()
         return Response({"month": month_label(today), "month_start": month_of(today),
                          "due": [{"id": i.pk, "name": i.name} for i in Investment.objects.all() if due(i, today)]})
+
+
+class InvestmentFundView(APIView):
+    """An account starts or stops following its fund's published rate (e.g. CIC's), which the app keeps up to date."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investmentmovement"
+
+    def post(self, request, pk):
+        form = serializers.ChoiceField(choices=["", *fund_rates.FUNDS], allow_blank=True)
+        fund = form.run_validation(request.data.get("fund", ""))
+        investment = get_object_or_404(Investment, pk=pk)
+        fund_rates.link(investment=investment, user=request.user, fund=fund)
+        return Response(investment_row(Investment.objects.get(pk=pk)))
+
+
+class FundRateCheckView(APIView):
+    """Starts a look at the fund's rate when it is missing or due and nobody has looked lately. The look runs in the
+    background (it takes a couple of minutes) and the page shows the rate when it arrives. Whatever happens, the
+    business sees only whether a rate is there; why a look failed is for the platform owner.
+    """
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investmentmovement"
+
+    def post(self, request, code):
+        if code not in fund_rates.FUNDS:
+            return Response({"detail": "Unknown fund."}, status=404)
+        if not Investment.objects.filter(fund=code).exists():
+            return Response({"detail": "None of your investments follow this fund."}, status=403)
+        started = fund_rates.due(code)
+        if started:
+            transaction.on_commit(lambda: fund_rates.start_refresh(code))
+        return Response({"started": started, "fund": fund_rates.summary(code)})

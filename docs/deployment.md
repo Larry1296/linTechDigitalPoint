@@ -15,6 +15,7 @@ On the Droplet (`/opt/lintech`, from `deploy/docker-compose.yml`):
 | `app` | Django under Gunicorn. Applies new migrations each time it starts |
 | `db` | PostgreSQL 17. Data in the `db` volume |
 | `backup` | A compressed database copy every night at 02:00, the last 14 kept in the `backups` volume |
+| `scheduler` | Jobs the app runs by itself: every 6 hours it checks whether money market fund rates (CIC's) are due, and looks them up every 10 days (`docker compose logs scheduler`; `docker compose exec app python manage.py refresh_fund_rates --force` to look now) |
 
 Uploaded logos and product photos live in the `media` volume, so they survive every deploy.
 

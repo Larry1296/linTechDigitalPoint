@@ -4,11 +4,16 @@
 
 const round = (value) => Math.round(value * 100) / 100;
 
-/** Interest earned per day and per month on a balance, after tax. */
+/**
+ * Interest earned on a balance after tax: a day, an average month, and a year in which each month's interest is
+ * added after tax and earns interest itself (as the fund pays it).
+ */
 export function earnings(balance, annualRate, taxRate = 15) {
   const keep = 1 - Number(taxRate || 0) / 100;
-  const daily = (Number(balance || 0) * Number(annualRate || 0)) / 100 / 365;
-  return { day: round(daily * keep), month: round(((daily * 365) / 12) * keep), year: round(daily * 365 * keep) };
+  const amount = Number(balance || 0);
+  const rate = Number(annualRate || 0) / 100;
+  return { day: round((amount * rate / 365) * keep), month: round((amount * rate / 12) * keep),
+    year: round(amount * ((1 + (rate / 12) * keep) ** 12 - 1)) };
 }
 
 /**

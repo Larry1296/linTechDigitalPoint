@@ -8,7 +8,6 @@ import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InterestCalculator } from "./InterestCalculator";
-import { earnings } from "./interest";
 
 const BUSINESS = [["MPESA", "Lipa na M-Pesa (till)"], ["CASH", "Cash"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa agency float"]];
@@ -19,16 +18,27 @@ const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:0
 const today = () => new Date().toLocaleDateString("en-CA");
 const percent = (value) => `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
 
-function NewInvestmentForm({ onSaved, onCancel }) {
+// The fund an account's name points to, as the server guesses it: "CIC MMF" follows CIC's shilling money market fund.
+export const guessFund = (name) => {
+  const words = String(name || "").toLowerCase().replace(/-/g, " ").split(/\s+/);
+  if (!words.includes("cic")) return "";
+  return words.some((w) => ["dollar", "usd", "equity", "fixed", "balanced", "wealth", "global"].includes(w)) ? "" : "CIC_MMF_KES";
+};
+
+function NewInvestmentForm({ funds, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [fund, setFund] = useState(null); // null until chosen: follows the name
+  const chosen = fund ?? guessFund(name);
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      await api("/api/v1/accounting/investments/", { method: "POST", body: JSON.stringify({ ...values, annual_rate: values.annual_rate || null }) });
+      await api("/api/v1/accounting/investments/", { method: "POST",
+        body: JSON.stringify({ ...values, fund: chosen, annual_rate: chosen ? null : values.annual_rate || null }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -39,13 +49,22 @@ function NewInvestmentForm({ onSaved, onCancel }) {
     <form className="formCard" onSubmit={(event) => void submit(event)}>
       <h2>Add an investment account</h2>
       <fieldset disabled={busy} className="loanFields">
-        <FormField label="Name of the fund or account" name="name" required minLength={2} maxLength={120} placeholder="e.g. Sanlam MMF" autoComplete="off" />
+        <FormField label="Name of the fund or account" name="name" required minLength={2} maxLength={120} placeholder="e.g. CIC MMF"
+          autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
         <FormField label="Account number (optional)" name="account_number" maxLength={60} autoComplete="off" />
-        <FormField label="Yearly interest rate it pays now (%)" name="annual_rate" type="number" min="0" max="100" step="0.001"
-          placeholder="e.g. 13.25 — the annual yield in the fund's app or SMS" />
+        <FormField label="Interest rate">
+          <select value={chosen} onChange={(event) => setFund(event.target.value)}>
+            {funds.map((f) => <option key={f.code} value={f.code}>Follow {f.name}'s published rate (updated automatically)</option>)}
+            <option value="">I'll enter the rate myself</option>
+          </select>
+        </FormField>
+        {!chosen && <FormField label="Yearly interest rate it pays now (%)" name="annual_rate" type="number" min="0" max="100" step="0.001"
+          placeholder="e.g. 13.25 — the annual yield in the fund's app or SMS" />}
         <FormField label="Withholding tax on interest (%)" name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue="15" required />
         <FormField label="Note (optional)"><textarea name="notes" maxLength={500} placeholder="e.g. spare agency cash, withdraw takes 2 days" /></FormField>
       </fieldset>
+      {chosen && <p className="muted">The app reads the rate on the fund's own website and checks it again every 10 days, so interest
+        estimates stay right without a monthly check. You still record the balance from your statement now and then.</p>}
       <div className="actionRow">
         <button disabled={busy}>Add account</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
@@ -207,7 +226,90 @@ function MonthlyCheckForm({ investment, month, onSaved, onCancel }) {
   );
 }
 
-function InvestmentCard({ investment, sessions, spare, preset, month, canMove, canCorrect, onChanged }) {
+// What the money earns now at today's rate, after withholding tax.
+function Earning({ investment }) {
+  const e = investment.earning;
+  if (!e) return null;
+  const tile = (label, period) => (
+    <div><dt>{label}</dt><dd><strong>{money(e[period].net)}</strong>
+      <small>{money(e[period].gross)} before {percent(investment.tax_rate)} tax</small></dd></div>
+  );
+  return (
+    <section className="investEarning" aria-label={`What ${investment.name} earns`}>
+      <p>At {percent(e.annual_rate)} a year, {money(e.balance)}{e.estimated_balance ? " (estimated value today)" : ""} earns after tax:</p>
+      <dl className="investEarningTiles">
+        {tile("A day", "day")}
+        {tile("A month", "month")}
+        {tile("A year", "year")}
+      </dl>
+      <p className="muted">A year counts each month's interest earning interest once it is added. The fund's rate changes, so these are a guide.</p>
+    </section>
+  );
+}
+
+// Where the rate comes from: the fund's published rate, kept up to date by the app, or typed in each month.
+function RateSource({ investment, funds, canMove, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const fund = investment.fund;
+  const follow = async (code) => {
+    const name = funds.find((f) => f.code === code)?.name;
+    if (!(await confirmAction({ title: code ? `Follow ${name}'s published rate?` : "Enter the rate yourself?",
+      text: code ? "The app reads the rate on the fund's website and checks it again every 10 days. Estimates use each rate from its date."
+        : "The app stops updating the rate; record it with the monthly check.",
+      confirmButtonText: code ? "Follow the fund's rate" : "Enter it myself" }))) return;
+    setBusy(true);
+    try {
+      await api(`/api/v1/accounting/investments/${investment.id}/fund/`, { method: "POST", body: JSON.stringify({ fund: code }) });
+      await onChanged();
+    } catch (err) {
+      setNote(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const checkNow = async () => {
+    setBusy(true);
+    setNote("");
+    try {
+      const result = await api(`/api/v1/accounting/investments/funds/${fund.code}/check/`, { method: "POST" });
+      if (!result.started) {
+        await onChanged();
+        return;
+      }
+      // The check takes a minute or two; the page picks the rate up then.
+      setNote(`Checking ${fund.short}'s current rate. It shows here in a minute or two.`);
+      [90, 180].forEach((seconds) => setTimeout(() => void onChanged(), seconds * 1000));
+    } catch (err) {
+      setNote(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const suggested = !fund && guessFund(investment.name);
+  return (
+    <div className="investSource">
+      {fund
+        ? <p>{fund.annual_rate != null
+          ? <>Rate: <strong>{fund.short}'s published rate</strong>, {percent(fund.annual_rate)} a year
+            {fund.effective_annual_rate != null && <> ({percent(fund.effective_annual_rate)} with monthly interest added)</>}, as of {date(fund.as_of)}.
+            {" "}Checked {date(fund.checked_on)}; next check by {date(fund.next_check_on)}.</>
+          : <>Rate: follows <strong>{fund.name}</strong>. The app is getting its current rate.</>}</p>
+        : <p>Rate: entered by hand with the monthly check.</p>}
+      {canMove && <div className="actionRow">
+        {fund?.can_check_now && <button type="button" className="secondary" disabled={busy} onClick={() => void checkNow()}>
+          {busy ? "Checking…" : `Check ${fund.short}'s rate now`}</button>}
+        {fund
+          ? <button type="button" className="linkButton" disabled={busy} onClick={() => void follow("")}>Enter the rate myself instead</button>
+          : funds.map((f) => <button key={f.code} type="button" className={f.code === suggested ? "secondary" : "linkButton"} disabled={busy}
+            onClick={() => void follow(f.code)}>Follow {f.name}'s published rate</button>)}
+      </div>}
+      {note && <p className="muted" role="status">{note}</p>}
+    </div>
+  );
+}
+
+function InvestmentCard({ investment, funds, sessions, spare, preset, month, canMove, canCorrect, onChanged }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const card = useRef(null);
@@ -218,7 +320,9 @@ function InvestmentCard({ investment, sessions, spare, preset, month, canMove, c
   }, [preset]);
   const done = async () => { setForm(null); await onChanged(); };
   const rate = investment.current_rate;
-  const pace = rate ? earnings(investment.value, rate.annual_rate, investment.tax_rate) : null;
+  const published = investment.fund?.annual_rate != null ? investment.fund : null;
+  // An account following a fund's current rate needs no monthly rate check; its balance is still updated from statements.
+  const automatic = Boolean(investment.fund?.fresh);
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
       text: m.source ? `The money goes back to your ${sourceName(m.source).toLowerCase()}.` : "The investment's value goes back to what it was.",
@@ -239,9 +343,12 @@ function InvestmentCard({ investment, sessions, spare, preset, month, canMove, c
           <h3>{investment.name}</h3>
           {investment.account_number && <p className="muted">Account {investment.account_number}</p>}
         </div>
-        {rate
-          ? <span className="loanStatus investRate" title={`Recorded ${date(rate.recorded_on)}`}>{percent(rate.annual_rate)} a year · {rate.label}</span>
-          : <span className="loanStatus overdue">No rate recorded</span>}
+        {published
+          ? <span className="loanStatus investRate" title={`As of ${date(published.as_of)}, checked ${date(published.checked_on)}`}>
+            {percent(published.annual_rate)} a year · {published.short} rate, automatic</span>
+          : rate
+            ? <span className="loanStatus investRate" title={`Recorded ${date(rate.recorded_on)}`}>{percent(rate.annual_rate)} a year · {rate.label}</span>
+            : <span className="loanStatus overdue">No rate recorded</span>}
       </header>
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
@@ -252,8 +359,8 @@ function InvestmentCard({ investment, sessions, spare, preset, month, canMove, c
           <dd>+ {money(investment.estimate.net)} <small>after {percent(investment.tax_rate)} tax</small></dd></div>}
         {investment.estimate && <div><dt>Estimated value today</dt><dd>{money(investment.estimate.value)}</dd></div>}
       </dl>
-      {rate && Number(investment.value) > 0 && <p className="investEarning">At {percent(rate.annual_rate)}, {money(investment.value)} earns about{" "}
-        <strong>{money(pace.day)} a day</strong> · {money(pace.month)} a month after tax.</p>}
+      <Earning investment={investment} />
+      <RateSource investment={investment} funds={funds} canMove={canMove} onChanged={onChanged} />
       {investment.check_due && <p className="investWarning">{month}'s check is due: record the rate {investment.name} pays now
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}
       {investment.notes && <p className="loanNote">{investment.notes}</p>}
@@ -280,7 +387,7 @@ function InvestmentCard({ investment, sessions, spare, preset, month, canMove, c
           <table className="loanRepayments">
             <thead><tr><th>Month</th><th>Yearly rate</th><th>Balance seen</th><th>Recorded</th></tr></thead>
             <tbody>{investment.rates.map((r) => (
-              <tr key={r.month}><td>{r.label}</td><td>{percent(r.annual_rate)}</td><td>{r.statement_balance != null ? money(r.statement_balance) : "—"}</td>
+              <tr key={r.month}><td>{r.label}</td><td>{percent(r.annual_rate)}{r.automatic && <small> · automatic</small>}</td><td>{r.statement_balance != null ? money(r.statement_balance) : "—"}</td>
                 <td>{date(r.recorded_on)}{r.recorded_by && ` · ${r.recorded_by}`}</td></tr>))}</tbody>
           </table>
         </details>
@@ -292,7 +399,7 @@ function InvestmentCard({ investment, sessions, spare, preset, month, canMove, c
         : form === "STATEMENT"
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
           : canMove && <div className="actionRow">
-            <button type="button" className={investment.check_due ? undefined : "secondary"} onClick={() => setForm("MONTHLY")}>Monthly check</button>
+            {!automatic && <button type="button" className={investment.check_due ? undefined : "secondary"} onClick={() => setForm("MONTHLY")}>Monthly check</button>}
             <button type="button" onClick={() => setForm("DEPOSIT")}>Put money in</button>
             <button type="button" className="secondary" disabled={Number(investment.value) <= 0} onClick={() => setForm("WITHDRAWAL")}>Take money out</button>
             <button type="button" className="secondary" onClick={() => setForm("STATEMENT")}>Update from statement</button>
@@ -355,7 +462,11 @@ export function InvestmentsPage() {
   const spare = data.spare_money || [];
   const till = spare.find((p) => p.method === "MPESA");
   const due = data.investments.filter((i) => i.check_due);
-  const rated = data.investments.find((i) => i.current_rate);
+  const rated = data.investments.find((i) => i.earning) || data.investments.find((i) => i.current_rate);
+  const ratedAt = rated?.earning ? rated.earning.annual_rate : rated?.current_rate?.annual_rate;
+  const ratedFrom = rated ? (rated.fund?.annual_rate != null ? `${rated.fund.short}'s published rate as of ${date(rated.fund.as_of)}` : `${rated.name}, ${rated.current_rate?.label}`) : "";
+  const funds = data.funds || [];
+  const earning = data.earning;
   return (
     <>
       <div className="loanSummary">
@@ -368,6 +479,8 @@ export function InvestmentsPage() {
         <article><span>Invested now</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
+        {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
+          <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}
         {till && <article><span>Expected in Lipa na M-Pesa till</span><strong>{money(till.expected)}</strong></article>}
       </div>
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
@@ -379,16 +492,15 @@ export function InvestmentsPage() {
         {canMove && <button type="button" onClick={() => setPreset({ id: due[0].id, kind: "MONTHLY", nonce: Date.now() })}>
           Do the check{due.length > 1 ? ` for ${due[0].name}` : ""}</button>}
       </section>}
-      {adding && <NewInvestmentForm onCancel={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
+      {adding && <NewInvestmentForm funds={funds} onCancel={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
       {data.investments.length > 0 && <SpareMoney spare={spare} investments={data.investments} canMove={canMove}
         onInvest={(choice) => setPreset({ ...choice, nonce: Date.now() })} />}
       {data.investments.length
-        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} sessions={data.agency_sessions}
+        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} sessions={data.agency_sessions}
           spare={spare} preset={preset?.id === i.id ? preset : null} month={data.this_month}
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
         : <Empty>No investment accounts yet. Add your MMF to start tracking what you put in, take out and earn.</Empty>}
-      <InterestCalculator defaultRate={rated ? Number(rated.current_rate.annual_rate) : ""} defaultTax={rated ? Number(rated.tax_rate) : 15}
-        rateSource={rated ? `${rated.name}, ${rated.current_rate.label}` : ""} />
+      <InterestCalculator defaultRate={ratedAt != null ? Number(ratedAt) : ""} defaultTax={rated ? Number(rated.tax_rate) : 15} rateSource={ratedFrom} />
     </>
   );
 }

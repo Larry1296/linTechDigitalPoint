@@ -37,7 +37,18 @@ def _settings_data():
             "providers": [{"id": key, "label": label, "available": business_chat.configured(key)} for key, label in business_chat.PROVIDERS.items()],
             "models": {"public": settings.ASSISTANT_MODEL, "business_claude": settings.BUSINESS_ASSISTANT_ANTHROPIC_MODEL,
                        "business_chatgpt": settings.BUSINESS_ASSISTANT_OPENAI_MODEL},
-            "default_provider": settings.BUSINESS_ASSISTANT_PROVIDER}
+            "default_provider": settings.BUSINESS_ASSISTANT_PROVIDER, "fund_rates": _fund_rates()}
+
+
+def _fund_rates():
+    """The latest looks at money market fund rates, with why any failed: businesses only ever see the rate in use."""
+    from apps.accounting import fund_rates
+    from apps.market.models import FundRateCheck
+    return {"model": settings.FUND_RATE_MODEL, "every_days": fund_rates.REFRESH_DAYS,
+            "funds": [{**fund_rates.summary(code), "followed": fund_rates.linked_anywhere(code)} for code in fund_rates.FUNDS],
+            "checks": [{"fund": c.fund, "status": c.status, "annual_rate": c.annual_rate, "effective_annual_rate": c.effective_annual_rate,
+                        "as_of": c.as_of, "checked_at": c.checked_at, "source_url": c.source_url, "message": c.message}
+                       for c in FundRateCheck.objects.order_by("-checked_at", "-pk")[:12]]}
 
 
 def _record(user, action, after):

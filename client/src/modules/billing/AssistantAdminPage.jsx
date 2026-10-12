@@ -12,6 +12,38 @@ const dateText = (value) => (value ? new Date(value).toLocaleString(undefined, {
 const SOURCE = { "built-in": "Built in", edited: "Edited", added: "Added by you" };
 const slugFrom = (title) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 
+// Money market fund rates the app looks up by itself, with why a look failed. Businesses only ever see the rate in use.
+const STATUS = { APPLIED: "Used", UNCONFIRMED: "Waiting for a second look", FAILED: "Not used" };
+
+function FundRates({ rates }) {
+  if (!rates) return null;
+  return (
+    <section className="panel" aria-labelledby="fund-rates">
+      <h2 id="fund-rates">Money market fund rates</h2>
+      <p className="muted">Looked up with {rates.model} every {rates.every_days} days from the fund's own website, checked, and then used for
+        every business whose investment follows the fund. A failed look keeps the last rate and is tried again 6 hours later.
+        To look now: <code>python manage.py refresh_fund_rates --force</code>.</p>
+      <ul className="assistantProviders">
+        {rates.funds.map((f) => <li key={f.code}><strong>{f.name}</strong>: {f.annual_rate != null
+          ? `${Number(f.annual_rate)}% a year as of ${f.as_of}, next look ${f.next_check_on}` : "no rate yet"}{f.followed ? "" : " · no business follows it"}</li>)}
+      </ul>
+      {rates.checks.length > 0 && (
+        <table className="loanRepayments">
+          <caption>Latest looks</caption>
+          <thead><tr><th>When</th><th>Fund</th><th>Result</th><th>Rate</th><th>Details</th></tr></thead>
+          <tbody>{rates.checks.map((c) => (
+            <tr key={`${c.fund}-${c.checked_at}`}>
+              <td>{dateText(c.checked_at)}</td><td>{c.fund}</td><td>{STATUS[c.status] || c.status}</td>
+              <td>{c.annual_rate != null ? `${Number(c.annual_rate)}%${c.effective_annual_rate != null ? ` (effective ${Number(c.effective_annual_rate)}%)` : ""}` : "—"}
+                {c.as_of && <small> · as of {c.as_of}</small>}</td>
+              <td>{c.message}{c.source_url && <> · <a href={c.source_url} target="_blank" rel="noreferrer">source</a></>}</td>
+            </tr>))}</tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
 // Keys, models and the public chat's switch, greeting and suggested questions.
 function ChatSettings({ data, onSaved }) {
   const [enabled, setEnabled] = useState(data.enabled);
@@ -178,6 +210,7 @@ export function AssistantAdminPage() {
       <p className="muted">The website chat answers visitors from the help articles. Each business's assistant reads only that business's records.
         Yours also sees every registered business in general terms and the admin articles.</p>
       <ChatSettings data={settings} onSaved={setSettings} />
+      <FundRates rates={settings.fund_rates} />
       <Articles draft={draft} onDraftUsed={clearDraft} />
       <Questions onWrite={(question) => { setDraft({ title: "", body: `## ${question}\n`, active: true }); window.scrollTo?.({ top: 0, behavior: "smooth" }); }} />
     </>

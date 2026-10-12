@@ -11,14 +11,18 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
   interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
-  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26" }, movements: [
+  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26" }, fund: null,
+  earning: { balance: "20161.26", annual_rate: "12.000", estimated_balance: true, day: { gross: "6.63", tax: "0.99", net: "5.64" },
+    month: { gross: "201.61", tax: "30.24", net: "171.37" }, year: { gross: "2554.10", tax: "383.12", net: "2170.98" } }, movements: [
     { id: 8, kind: "INTEREST", amount: "150.00", occurred_on: "2026-09-30", source: "", reference: "", note: "", statement_balance: "20150.00", reversed_at: null },
     { id: 9, kind: "WITHDRAWAL", amount: "5000.00", occurred_on: "2026-09-20", source: "MPESA", reference: "INV-77", note: "", statement_balance: null, reversed_at: null,
       purchase: { id: 4, receipt_number: "INV-77", supplier: "Phone Hub" } },
     { id: 7, kind: "DEPOSIT", amount: "20000.00", occurred_on: "2026-09-01", source: "AGENCY_CASH", reference: "", note: "", statement_balance: null, reversed_at: null }] };
 const session = { id: 5, outlet: "Main agency", cash: "45000.00", float: "30000.00" };
 
+const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)" }];
 const listing = (investment) => ({ investments: [investment], total_value: "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
+    funds: FUNDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
     spare_money: [{ method: "CASH", label: "Cash in the drawer", expected: "0.00" }, { method: "MPESA", label: "Lipa na M-Pesa till", expected: "64000.00" }] });
 beforeEach(() => {
   vi.clearAllMocks();
@@ -82,13 +86,19 @@ it("offers the till's spare money for investing, filled in and warned when it is
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "50000", source: "MPESA" }));
 });
 
-it("shows the rate, the interest estimated since the statement and what the money earns a day", async () => {
+it("shows the rate, the interest estimated since the statement and what the money earns a day, a month and a year", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
   expect(within(card).getByText("12% a year · October 2026")).toBeInTheDocument();
   expect(within(card).getByText(/Estimated since/).nextSibling).toHaveTextContent("+ KSh 11.26 after 15% tax");
   expect(within(card).getByText("Estimated value today").nextSibling).toHaveTextContent("KSh 20,161.26");
-  expect(within(card).getByText(/earns about/)).toHaveTextContent("KSh 5.63 a day");  // 20,150 × 12% ÷ 365 × 85%
+  const earns = within(card).getByRole("region", { name: "What Sanlam MMF earns" });
+  expect(earns).toHaveTextContent("At 12% a year, KSh 20,161.26 (estimated value today) earns after tax:");
+  expect(within(earns).getByText("A day").nextSibling).toHaveTextContent("KSh 5.64KSh 6.63 before 15% tax");
+  expect(within(earns).getByText("A month").nextSibling).toHaveTextContent("KSh 171.37");
+  expect(within(earns).getByText("A year").nextSibling).toHaveTextContent("KSh 2,170.98");
+  expect(screen.getByText("Earning now, after tax").nextSibling).toHaveTextContent("KSh 5.64 a day");
+  expect(within(card).getByText(/entered by hand/)).toBeInTheDocument();
   expect(screen.queryByRole("status", { name: "Monthly check due" })).toBeNull();
 });
 
@@ -117,4 +127,55 @@ it("works out what an amount could earn, starting from the latest rate", async (
   expect(within(calculator).getByText("Interest after tax").nextSibling).toHaveTextContent("KSh 850");
   expect(within(calculator).getByText("Balance at the end").nextSibling).toHaveTextContent("KSh 100,850");
   expect(api.mock.calls.filter(([, o]) => o?.method === "POST")).toHaveLength(0);  // nothing is saved
+});
+
+const cic = { ...mmf, id: 4, name: "CIC MMF", check_due: false, estimate: null,
+  earning: { balance: "20150.00", annual_rate: "8.120", estimated_balance: false, day: { gross: "4.48", tax: "0.67", net: "3.81" },
+    month: { gross: "136.35", tax: "20.45", net: "115.90" }, year: { gross: "1666.25", tax: "249.94", net: "1416.31" } },
+  fund: { code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)", short: "CIC", annual_rate: "8.120", effective_annual_rate: "8.430",
+    as_of: "2026-10-10", checked_on: "2026-10-10", next_check_on: "2026-10-20", source_url: "https://ke.cicinsurancegroup.com/investment/",
+    fresh: true, can_check_now: false } };
+
+it("follows CIC's published rate by itself, with no monthly rate check", async () => {
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing(cic)));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "CIC MMF" })).closest("li");
+  expect(within(card).getByText("8.12% a year · CIC rate, automatic")).toBeInTheDocument();
+  const source = within(card).getByText(/CIC's published rate/).closest("p");
+  expect(source).toHaveTextContent("Rate: CIC's published rate, 8.12% a year (8.43% with monthly interest added), as of");
+  expect(source).toHaveTextContent(/Checked .+; next check by .+\./);
+  expect(within(card).queryByRole("button", { name: "Monthly check" })).toBeNull();
+  expect(within(card).getByRole("button", { name: "Update from statement" })).toBeInTheDocument();
+  expect(within(card).queryByRole("button", { name: /Check CIC's rate now/ })).toBeNull();  // the rate is current
+  expect(within(screen.getByRole("region", { name: "What could it earn?" })).getByLabelText("Yearly rate (%)")).toHaveValue(8.12);
+  await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "Enter the rate myself instead" })); });
+  expect(JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/4/fund/")[1].body)).toEqual({ fund: "" });
+});
+
+it("starts a check of CIC's rate on request when it is missing", async () => {
+  const waiting = { ...cic, earning: null, fund: { ...cic.fund, annual_rate: null, effective_annual_rate: null, as_of: null, checked_on: null,
+    next_check_on: null, fresh: false, can_check_now: true } };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? { started: true, fund: waiting.fund } : listing(waiting)));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "CIC MMF" })).closest("li");
+  expect(within(card).getByText(/The app is getting its current rate/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "Check CIC's rate now" })); });
+  expect(api).toHaveBeenCalledWith("/api/v1/accounting/investments/funds/CIC_MMF_KES/check/", { method: "POST" });
+  expect(within(card).getByRole("status")).toHaveTextContent("Checking CIC's current rate. It shows here in a minute or two.");
+});
+
+it("suggests following CIC's rate when a new account is named after it", async () => {
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing(mmf)));
+  render(<InvestmentsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Add investment account" }));
+  const name = screen.getByLabelText("Name of the fund or account");
+  const rate = screen.getByLabelText("Interest rate");
+  expect(rate).toHaveValue("");
+  expect(screen.getByLabelText(/Yearly interest rate it pays now/)).toBeInTheDocument();
+  fireEvent.change(name, { target: { value: "CIC MMF" } });
+  expect(rate).toHaveValue("CIC_MMF_KES");
+  expect(screen.queryByLabelText(/Yearly interest rate it pays now/)).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add account" })); });
+  const [, options] = api.mock.calls.find(([p, o]) => p === "/api/v1/accounting/investments/" && o?.method === "POST");
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ name: "CIC MMF", fund: "CIC_MMF_KES", annual_rate: null }));
 });
