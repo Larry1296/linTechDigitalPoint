@@ -201,7 +201,9 @@ function Learned({ estimates, learned, forecast }) {
         the month closes (Sundays closed). Worked out again after every transaction.</span></p>}
       <p className="muted">After each deposit, withdrawal or airtime sale, enter the commission balance on the agent line. The rise is what that
         transaction earned, and the app learns from it. Once an amount has earned the same twice, the box stops showing for it and its
-        commission is worked out by itself. If Safaricom changes its rates, the month's figure here stops matching what Safaricom paid.</p>
+        commission is worked out by itself. Amounts other agents using the app have already confirmed are worked out from the start, so
+        the box only shows for amounts nobody has learned yet; only what each amount earns is shared, never your balances or transactions.
+        If Safaricom changes its rates, the month's figure here stops matching what Safaricom paid.</p>
       <div className="trendTable"><table className="loanRepayments">
         <caption>What the app worked out, next to what Safaricom paid</caption>
         <thead><tr><th scope="col">Month</th><th scope="col">Worked out by the app</th><th scope="col">Safaricom paid</th><th scope="col">Difference</th></tr></thead>
@@ -220,7 +222,7 @@ function Learned({ estimates, learned, forecast }) {
           <tr key={`${band.kind}-${band.from}`}>
             <th scope="row">{band.label}</th>
             <td>{band.from === band.to ? money(band.from) : `${money(band.from)} to ${money(band.to)}`}</td>
-            <td>{money(band.earned)}{!band.confirmed && <small className="muted"> · still learning</small>}</td>
+            <td>{money(band.earned)}{band.shared ? <small className="muted"> · confirmed by other agents</small> : !band.confirmed && <small className="muted"> · still learning</small>}</td>
           </tr>))}</tbody>
       </table></div> : <p className="muted">Nothing learned yet: it starts with the first two readings in a row.</p>}
     </section>

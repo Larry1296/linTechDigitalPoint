@@ -114,6 +114,13 @@ class Rates:
                     point[2] = True
             self.points[kind] = [tuple(point) for point in points]
 
+    @classmethod
+    def from_points(cls, points):
+        """Rates from a ready table {kind: [(amount, earned, confirmed)]}, e.g. the one shared by all agents."""
+        rates = cls.__new__(cls)
+        rates.points = points
+        return rates
+
     def predict(self, kind, value):
         """The commission for ``value``: confirmed at that amount, or between two amounts that earned the same."""
         points = self.points.get(kind, [])
@@ -149,13 +156,29 @@ def _learn(outlets):
     return measured, Rates(outlets, measured)
 
 
+def latest_measurements(outlets, measured):
+    """{(kind, amount): earned} — the latest commission measured for each kind of transaction at each amount."""
+    latest = {}
+    for rows in outlets.values():
+        for row in rows:
+            if row.pk in measured:
+                key = (row.transaction_type, row.amount)
+                if key not in latest or row.done_at >= latest[key][0]:
+                    latest[key] = (row.done_at, measured[row.pk])
+    return {key: value for key, (_, value) in latest.items()}
+
+
 def learn(outlet_ids=None):
-    """The transactions, what was measured and the rates learned from all outlets' readings (the tariff is Safaricom's, the same everywhere)."""
+    """The transactions, what was measured and the rates learned from all outlets' readings (the tariff is Safaricom's,
+    the same everywhere), filled out with what other agents using the app have confirmed (see commission_shared)."""
+    from .commission_shared import WithShared, shared_rates
     outlets = _history(outlet_ids)
     if outlet_ids is None:
-        return (outlets, *_learn(outlets))
-    measured, _ = _learn(outlets)
-    return outlets, measured, _learn(_history())[1]
+        measured, rates = _learn(outlets)
+    else:
+        measured, _ = _learn(outlets)
+        rates = _learn(_history())[1]
+    return outlets, measured, WithShared(rates, shared_rates())
 
 
 def advice(outlet_id, kind, value):
