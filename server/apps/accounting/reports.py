@@ -64,7 +64,7 @@ def summary(user, params):
     daily = defaultdict(lambda: Decimal('0'))
     monthly = defaultdict(lambda: Decimal('0'))
     for row in pnl_rows(start, end):
-        if row['unit'] in units and (not filters.get('business_unit') or row['unit'] == filters['business_unit']):
+        if row['unit'] in units and row['field'] in units[row['unit']] and (not filters.get('business_unit') or row['unit'] == filters['business_unit']):
             units[row['unit']][row['field']] += row['amount']
             if row['field'] == 'revenue':
                 daily[str(row['date'])] += row['amount']

@@ -45,3 +45,22 @@ def test_service_income_counts_before_running_costs_and_m_pesa_stays_out():
     parts = {part["key"]: D(str(part["amount"])) for part in summary["money"]["parts"]}
     assert (parts["starting"], parts["received"], parts["expenses"]) == (D("1000"), D("20"), D("-50"))
     assert D(str(summary["customers_owe"])) == 0
+
+
+def test_interest_earned_on_an_investment_is_not_products_sold():
+    owner = User.objects.create_user("interest-owner", password="Safe-pass-1848")
+    org = Organization.objects.create(name="Interest shop", slug="interest", owner=owner, enabled_modules=["inventory", "pos", "reports", "expenses"])
+    Membership.objects.create(user=owner, organization=org, role="OWNER")
+    OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
+    client = APIClient()
+    client.force_login(owner)
+    with organization_context(org):
+        from apps.accounting.investments import move, open_investment, record_statement
+        Store.objects.create(name="Main")
+        fund = open_investment(user=owner, name="CIC MMF")
+        move(investment=fund, user=owner, kind="DEPOSIT", amount="1000", source="MPESA", key="dep")
+        record_statement(investment=fund, user=owner, balance="1250", key="stmt")
+    summary = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["all_time"]
+    assert (D(str(summary["products"])), D(str(summary["sales"])), D(str(summary["profit"]))) == (D("0"), D("0"), D("0"))
+    report = client.get("/api/v1/accounting/reports/").json()
+    assert D(str(report["totals"]["revenue"])) == 0

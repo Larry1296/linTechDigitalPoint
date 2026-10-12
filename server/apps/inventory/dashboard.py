@@ -27,6 +27,9 @@ UNITS = [('SHOP', 'Products / sales', 'pos', 'commerce.view_sale'),
 # belongs to the unit it was recorded for; stock losses belong to the shop.
 REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4020': 'CYBER', '4010': 'MPESA'}
 COST_UNIT = {'5000': 'SHOP', '5010': 'CYBER'}
+# Interest earned on investments (e.g. a CIC money market fund) is not a sale of anything: it is kept apart from
+# sales and from the trading profit, and investment figures stay on the protected Investments page.
+INVESTMENT_INCOME = {'4910'}
 
 
 def pnl_rows(start, end):
@@ -49,7 +52,9 @@ def pnl_rows(start, end):
     for line in lines:
         code, kind = line['account__code'], line['account__kind']
         prefix, _, ident = line['entry__source_key'].partition(':')
-        if kind == 'REVENUE':
+        if kind == 'REVENUE' and code in INVESTMENT_INCOME:
+            unit, field, amount = 'SHOP', 'interest', line['c'] - line['d']
+        elif kind == 'REVENUE':
             unit, field, amount = REVENUE_UNIT.get(code, 'SHOP'), 'revenue', line['c'] - line['d']
         elif kind == 'COGS':
             unit, field, amount = COST_UNIT.get(code, 'SHOP'), 'cogs', line['d'] - line['c']
@@ -73,7 +78,7 @@ def pnl_rows(start, end):
 def accrual_totals(rows, units):
     result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO)
     for row in rows:
-        if row['unit'] in units:
+        if row['unit'] in units and row['field'] in result:
             result[row['field']] += row['amount']
     result['profit'] = result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections']
     return result
