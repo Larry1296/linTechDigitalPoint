@@ -7,7 +7,7 @@ import { VariantSummary, hasPermission } from "./VariantSummary";
 import { useAuth } from "../../core/auth/AuthContext";
 import { loadZonesIfUsed } from "../digital-shop/api";
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ProductImage } from "../storefront/components/ProductImage";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { api } from "../../core/api/client";
@@ -320,6 +320,7 @@ function ProductDetail({ product, categories, selectedVariant, user, zones, onBa
 export function ProductsPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const productId = params.get("product");
   const selectedVariant = Number(params.get("variant")) || null;
   // The open category (none: the top-level categories) and the page of its products, kept in the address so Back works.
@@ -383,6 +384,19 @@ export function ProductsPage() {
     void load();
   }, [category, page]);
   useEffect(loadProduct, [productId]);
+  // "A similar product" from Receive stock: a new product filled in from an existing one, received once created.
+  const similarId = params.get("similar");
+  useEffect(() => {
+    if (!similarId) return;
+    api(`/api/v1/catalog/products/${encodeURIComponent(similarId)}/`).then((row) => {
+      const v = row.variants[0] || {};
+      setAdding({ similarTo: row.name, name: row.name, description: row.description, category: row.category ? String(row.category) : "",
+        brand: row.brand ? String(row.brand) : "", product_type: row.product_type, variant_name: v.name, selling_price: v.selling_price,
+        minimum_price: v.minimum_price, minimum_stock: v.minimum_stock, target_stock: v.target_stock, pack_size: v.pack_size,
+        piece_name: v.piece_name, shelf: row.locations?.find((l) => l.variant_id === v.id)?.preferred_shelf?.id || "" });
+      setParams((current) => { current.delete("similar"); return current; }, { replace: true });
+    }).catch((e) => setError(e.message));
+  }, [similarId]);
   useLiveRefresh(() => { void load(); loadProduct(); });
   const refresh = () => { void load(); loadProduct(); };
   if (error) return <ErrorState message={error} retry={refresh} />;
@@ -419,7 +433,8 @@ export function ProductsPage() {
         defaults={adding === true ? {} : adding}
         onClose={() => setAdding(false)}
         zones={zones}
-        onSaved={() => {
+        onSaved={(created) => {
+          if (adding?.similarTo && created?.variant_id) { navigate(`/admin/quick-receive?variant=${created.variant_id}`); return; }
           setAdding(false);
           void load();
         }}

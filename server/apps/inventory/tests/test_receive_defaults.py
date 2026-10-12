@@ -57,3 +57,16 @@ def test_needs_permission_to_receive(receipt_data):
     user.is_staff = True
     user.save()
     assert defaults(user, variant).status_code == 403
+
+
+@pytest.mark.django_db
+def test_a_new_item_follows_the_shops_last_purchase_habit(receiver):
+    user, variant, shelves = receiver
+    other = variant.__class__.objects.create(product=variant.product, name="Spark 40", sku="TEC-SP40", selling_price=250)
+    complete_stock_receipt(user=user, supplier_name="Luthuli Covers", document_status="NO_DOCUMENT",
+                           payment={"method": "MPESA", "amount": "240"}, lines=[{
+        "variant_id": other.pk, "received_quantity": "2", "unit_cost": "120",
+        "placements": [{"shelf_id": shelves[0].pk, "quantity": "2"}]}])
+    data = defaults(user, variant).json()
+    assert data["document_status"] == "NO_DOCUMENT" and data["payment_method"] == "MPESA"
+    assert data["supplier_name"] == "" and data["unit_cost"] is None

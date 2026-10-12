@@ -39,8 +39,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       setCost(data.unit_cost == null ? "" : String(Math.round(Number(data.unit_cost) / packOf * 100) / 100));
       setDetails((old) => ({ ...old, supplier_name: data.supplier_name || "", document_status: data.document_status || "NO_DOCUMENT",
         payment_method: data.payment_method || "" }));
-      const known = data.unit_cost != null;
-      setPrefilled(known ? data : null); setEditing(!known);
+      setPrefilled(data); setEditing(false);
       setTimeout(() => quantityBox.current?.focus(), 0);
     }).catch((e) => { if (live) setError(e.message); });
     return () => { live = false; };
@@ -79,7 +78,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       setKey(crypto.randomUUID()); setQuantity('');
       // From a product page the same item stays ready for its next delivery; otherwise the form starts again.
       if (!prefilled) { setItem(null); setQuery(''); setCost(''); setShelf(null); }
-      else setPrefilled({ ...prefilled, supplier_name: details.supplier_name });
+      else setPrefilled({ ...prefilled, supplier_name: details.supplier_name, unit_cost: packCost });
       setDetails({ ...(prefilled ? details : NEW_RECEIPT_COSTS), supplier_name: details.supplier_name, external_reference: "", payment_amount: "" });
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
@@ -88,8 +87,19 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
   return <>
     <h1>{opening ? "Add stock you already have" : "Receive stock"}</h1>
     {quick ? <div className="formCard receivePrefilled">
-      <p><strong>{item.product_name} {item.variant_name}</strong> · {item.sku} · <strong>{already} already in stock</strong></p>
-      <p className="muted">As last time: {prefilled.supplier_name ? <>from <b>{prefilled.supplier_name}</b> </> : ""}at <b>{money(cost)}</b> {size > 1 ? `a ${piece.replace(/s$/, "")}` : "each"},
+      <fieldset className="choiceGroup">
+        <legend>What arrived?</legend>
+        <div className="choiceGrid wideChoices">
+          <button type="button" className="choiceCard selected" aria-pressed="true">
+            <strong>This exact product</strong><span>{item.product_name} {item.variant_name} · {item.sku} · {already} in stock. Only the quantity is asked.</span>
+          </button>
+          <Link className="choiceCard" to={`/admin/products?similar=${item.product_id}`}>
+            <strong>A similar product</strong><span>A different model, colour or price. Opens a new product filled in from this one; change what differs, then receive it.</span>
+          </Link>
+        </div>
+      </fieldset>
+      <p className="muted">{prefilled.unit_cost != null ? <>As last time: {prefilled.supplier_name ? <>from <b>{prefilled.supplier_name}</b> </> : ""}at <b>{money(cost)}</b> {size > 1 ? `a ${piece.replace(/s$/, "")}` : "each"},</>
+        : <>No delivery of this product is recorded yet, so its buying price{prefilled.supplier_name ? "" : " and supplier"} {prefilled.supplier_name ? "is" : "are"} asked this once. Then:</>}
         {" "}{details.document_status === "NO_DOCUMENT" ? "no supplier document" : "with a supplier invoice"}, {PAID[details.payment_method] || "owed to the supplier"},
         {" "}{shelf ? <>placed in <b>{shelf.display_name || shelf.code}</b></> : "not on a shelf yet"}.</p>
       <button type="button" className="secondary" onClick={() => {
@@ -123,6 +133,8 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
         <input type="number" min={opening ? "0" : "0.01"} step="0.01" required={!opening} value={cost} onChange={(e) => setCost(e.target.value)} placeholder={opening ? "Leave empty if unknown" : undefined} />
       </label>}
       {opening && <small className="muted">Unknown buying price? Leave it empty. The stock can still be sold; it is marked cost pending until you add the price, so profit is not guessed.</small>}
+      {quick && prefilled.unit_cost == null && <label>{size > 1 ? `Buying price for one ${piece.replace(/s$/, "")}` : "Buying price for one"}
+        <input type="number" min="0.01" step="0.01" required value={cost} onChange={(e) => setCost(e.target.value)} /></label>}
       {quick && !prefilled.supplier_name && <label>Supplier<input maxLength="180" required value={details.supplier_name} onChange={(e) => setDetails({ ...details, supplier_name: e.target.value })} /></label>}
       {quick && details.document_status !== "NO_DOCUMENT" && <ReceiptDocumentFields details={details} onChange={setDetails} />}
       {quick && Number(quantity) > 0 && <small className="muted" role="status">Total {money(goodsTotal)}{details.payment_method ? `, ${PAID[details.payment_method]}` : ", owed to the supplier"}.</small>}

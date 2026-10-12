@@ -5,7 +5,7 @@ import { QuickReceivePage } from "./QuickReceivePage";
 import { api } from "../../core/api/client";
 
 const DEFAULTS = {
-  item: { id: 9, product_name: "TECNO SPARK 40 HARD COVER (MEN)", variant_name: "HARD (MEN)", sku: "TEC-SP40-HARD-M", available: "1.000", pack_size: 1 },
+  item: { id: 9, product_name: "TECNO SPARK 40 HARD COVER (MEN)", variant_name: "HARD (MEN)", sku: "TEC-SP40-HARD-M", available: "1.000", pack_size: 1, product_id: 5 },
   supplier_name: "Luthuli Covers", unit_cost: "120.00", document_status: "NO_DOCUMENT", payment_method: "CASH",
   shelf: { id: 31, code: "LEFTWALL-R01-L03-S02", display_name: "Left wall level 3 compartment 2" },
 };
@@ -47,9 +47,24 @@ it("asks for the supplier too when none was recorded (an imported item)", async 
   expect(screen.queryByLabelText(/Buying price/)).not.toBeInTheDocument();
 });
 
-it("asks for everything when nothing is known about the item", async () => {
-  api.mockImplementation(async () => ({ ...DEFAULTS, supplier_name: "", unit_cost: null, shelf: null, payment_method: "" }));
+it("a product never delivered asks its buying price and supplier once, beside the quantity", async () => {
+  api.mockImplementation(async (url) => (url.includes("receive-defaults")
+    ? { ...DEFAULTS, supplier_name: "", unit_cost: null, payment_method: "" } : { id: 4, receipt_number: "RCV-1" }));
   await open();
-  expect(screen.queryByText(/As last time/)).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Buying price for one")).toHaveValue(null);
+  expect(screen.getByText(/asked this once/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Quantity received"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText("Buying price for one"), { target: { value: "180" } });
+  fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "Oraimo shop" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Receive stock" })); });
+  expect(JSON.parse(api.mock.calls.at(-1)[1].body)).toMatchObject({ supplier_name: "Oraimo shop",
+    lines: [{ variant_id: 9, received_quantity: "2", unit_cost: "180", placements: [{ shelf_id: 31, quantity: "2" }] }] });
+  // The next delivery of it asks only the quantity.
+  expect(screen.queryByLabelText("Buying price for one")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Supplier")).not.toBeInTheDocument();
+});
+
+it("offers a similar product instead, filled in from this one", async () => {
+  await open();
+  expect(screen.getByRole("button", { name: /This exact product/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("link", { name: /A similar product/ })).toHaveAttribute("href", "/admin/products?similar=5");
 });

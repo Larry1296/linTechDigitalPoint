@@ -19,12 +19,12 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
   const [addingCategory, setAddingCategory] = useState(false);
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const [brands, setBrands] = useState([]);
-  const [productName, setProductName] = useState("");
-  const [variantName, setVariantName] = useState("Standard");
+  const [productName, setProductName] = useState(defaults.name || "");
+  const [variantName, setVariantName] = useState(defaults.variant_name || "Standard");
   // Sold one at a time, or in packs (paper 2 sheets for 5, cable clips 10 to a pack). One pack is one unit of stock and price.
-  const [inPacks, setInPacks] = useState(false);
-  const [packSize, setPackSize] = useState("2");
-  const [pieceName, setPieceName] = useState("piece");
+  const [inPacks, setInPacks] = useState(Number(defaults.pack_size) > 1);
+  const [packSize, setPackSize] = useState(Number(defaults.pack_size) > 1 ? String(defaults.pack_size) : "2");
+  const [pieceName, setPieceName] = useState(defaults.piece_name || "piece");
   const [openingPieces, setOpeningPieces] = useState("0");
   const [pieceCost, setPieceCost] = useState("0");
   const size = inPacks ? Math.max(1, Math.floor(Number(packSize) || 1)) : 1;
@@ -85,11 +85,11 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       data.set("opening_unit_cost", String(Math.round((Number(pieceCost) || 0) * size * 100) / 100));
     }
     try {
-      await api("/api/v1/catalog/products/create-with-stock/", {
+      const created = await api("/api/v1/catalog/products/create-with-stock/", {
         method: "POST",
         body: data,
       });
-      onSaved();
+      onSaved(created);
     } catch (err) {
       setError(err.message);
     }
@@ -98,7 +98,8 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
     <form className="formCard productForm" onSubmit={save}>
       {onClose && <button type="button" className="pageBackLink" onClick={onClose}>← Back</button>}
       <h2>Add Product</h2>
-      {defaults.categoryName && <p className="muted">Filled in for {defaults.categoryName}, from the products already there. Change anything that doesn't fit.</p>}
+      {defaults.similarTo ? <p className="muted">Filled in from {defaults.similarTo}. Change what is different about the product you received (at least its name), then receive it.</p>
+        : defaults.categoryName && <p className="muted">Filled in for {defaults.categoryName}, from the products already there. Change anything that doesn't fit.</p>}
       <FormField
         label="Product name"
         name="name"
@@ -147,7 +148,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       </div>
       <label>
         Description
-        <textarea name="description" />
+        <textarea name="description" defaultValue={defaults.description || ""} />
       </label>
       <label>
         Product type
@@ -195,6 +196,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
         type="number"
         min="0"
         step=".01"
+        defaultValue={defaults.selling_price}
         required
       />
       <FormField
@@ -203,6 +205,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
         type="number"
         min="0"
         step=".01"
+        defaultValue={Number(defaults.minimum_price) > 0 ? defaults.minimum_price : undefined}
         placeholder="e.g. 500 — leave empty for no bargaining"
       />
       <small className="muted">A guide for bargaining. Staff can agree any price up to the selling price, even below this one, but never below what the item cost to buy; sales below it are noted for you to review.</small>
@@ -249,7 +252,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
             value={shelf}
             onChange={setShelf}
           />}
-          <fieldset className="openingStock">
+          {!defaults.similarTo && <fieldset className="openingStock">
             <legend>Stock you have now (optional)</legend>
             <p className="muted">Items already in your shop. They are added as stock you own, not as a new purchase, so nothing is recorded as money spent or owed to a supplier.</p>
             {inPacks ? <>
@@ -279,10 +282,10 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
             />
             <small className="muted">What you paid for one. If you do not know it, leave 0: the stock is marked cost pending and you can add the price later.</small>
             </>}
-          </fieldset>
+          </fieldset>}
         </>
       )}
-      <button>Create Product</button>
+      <button>{defaults.similarTo ? "Create and receive it" : "Create Product"}</button>
       <FormError title="Could not create the product." message={error} />
     </form>
   );

@@ -187,7 +187,7 @@ def variant_buying_prices(request, pk):
 
 
 def _search_row(v, on_hand):
-    return {"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":on_hand or Decimal("0")}
+    return {"id":v.id,"product_id":v.product_id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":on_hand or Decimal("0")}
 
 
 @api_view(["GET"])
@@ -205,9 +205,12 @@ def receive_defaults(request, pk):
     lot=StockLot.objects.filter(variant=v).order_by("-received_at","-id").first()
     supplier=line.receipt.supplier_name if line else (lot.supplier_name if lot else "")
     unit_cost=line.unit_cost if line else (lot.unit_cost-(lot.landed_unit_cost or 0) if lot else None)
-    document_status=line.receipt.document_status if line else StockReceipt.NO_DOCUMENT
+    # Never bought before: the document and payment follow the shop's last purchase of anything (its habit), the
+    # supplier and price are asked once.
+    last=line.receipt if line else StockReceipt.objects.exclude(document_status=StockReceipt.OPENING_BALANCE).order_by("-received_at","-id").first()
+    document_status=last.document_status if last else StockReceipt.NO_DOCUMENT
     payment_method=""
-    purchase=getattr(line.receipt,"purchase",None) if line else None
+    purchase=getattr(last,"purchase",None) if last else None
     if purchase:
         paid=purchase.payments.select_related("entry__account").first()
         method=paid.entry.account.payment_method if paid else ""
