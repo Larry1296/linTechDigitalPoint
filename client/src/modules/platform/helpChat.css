@@ -17,7 +17,14 @@
   overflow: hidden; border: 1px solid var(--line); border-radius: 20px;
   color: var(--text); background: var(--surface); box-shadow: 0 24px 60px rgb(2 18 45 / 28%);
   animation: helpChatIn 0.25s ease both; transform-origin: bottom right;
+  position: relative;
 }
+/* Drag the top-left corner to make the chat bigger (up to half the screen, never over the navbar). */
+.helpChatGrip {
+  position: absolute; top: 0; left: 0; z-index: 2; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none;
+  border-top-left-radius: 20px; background: linear-gradient(135deg, rgb(255 255 255 / 70%) 0 3px, transparent 3px 6px, rgb(255 255 255 / 45%) 6px 8px, transparent 8px);
+}
+.helpChatGrip:focus-visible { outline: 3px solid #93c5fd; outline-offset: -3px; }
 .helpChatPanel header { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; color: #fff; background: linear-gradient(135deg, #0b2a55, #1558e6); }
 .helpChatPanel header > div { display: grid; flex: 1; min-width: 0; }
 .helpChatPanel header strong { font-size: 15px; }
@@ -93,6 +100,7 @@
   .helpChatLauncher span { display: none; }
   .helpChatLauncher { width: 56px; height: 56px; padding: 0; justify-content: center; }
   .helpChatPanel { width: calc(100vw - 24px); height: calc(100vh - 100px); }
+  .helpChatGrip, .helpChatSize { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .helpChatPanel, .helpChatTyping i { animation: none; }

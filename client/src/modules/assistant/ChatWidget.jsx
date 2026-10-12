@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RotateCcw, Send, X } from "lucide-react";
+import { Maximize2, Minimize2, RotateCcw, Send, X } from "lucide-react";
 import { Answer, plainText } from "../platform/answerFormat";
 import { MessageActions } from "../platform/messageActions";
 import { useCloseOnOutsideClick, usePromptHistory, useQuestionAtTop } from "./promptHistory";
+import { useResizablePanel } from "./resizablePanel";
 import "../platform/helpChat.css";
 
 // Reads the server-sent events from a chat endpoint as they arrive.
@@ -56,6 +57,7 @@ export function ChatWidget({
   const input = useRef(null);
   const container = useRef(null);
   const close = useCallback(() => setOpen(false), [setOpen]);
+  const resize = useResizablePanel(`${storageKey}:size`, open);
   useCloseOnOutsideClick(container, open, close);
   const asked = usePromptHistory(historyKey, draft, setDraft);
   useEffect(() => save(storageKey, messages), [storageKey, messages]);
@@ -117,13 +119,20 @@ export function ChatWidget({
   return (
     <div ref={container} className={`helpChat ${className}`.trim()}>
       {open && (
-        <section className="helpChatPanel" role="dialog" aria-label={title}
+        <section ref={resize.panel} style={resize.style} className="helpChatPanel" role="dialog" aria-label={title}
           onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
+          <span className="helpChatGrip" role="separator" aria-orientation="vertical" tabIndex={0}
+            aria-label="Resize the chat: drag, or use the arrow keys" title="Drag to resize"
+            onPointerDown={resize.startDrag} onKeyDown={resize.onGripKey} />
           <header>
             <span className="helpChatAvatar" aria-hidden="true">{avatar}</span>
             <div><strong>{title}</strong><small>{subtitle}</small></div>
             {headerExtra}
             {messages.length > 0 && <button type="button" className="helpChatIcon" onClick={reset} aria-label="Start a new conversation"><RotateCcw size={17} /></button>}
+            <button type="button" className="helpChatIcon helpChatSize" onClick={resize.toggleMaximised}
+              aria-label={resize.maximised ? "Make the chat smaller" : "Make the chat bigger"} title={resize.maximised ? "Restore" : "Maximise"}>
+              {resize.maximised ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+            </button>
             <button type="button" className="helpChatIcon" onClick={() => setOpen(false)} aria-label="Close chat"><X size={19} /></button>
           </header>
           <div className="helpChatMessages" ref={list} aria-live="polite">
