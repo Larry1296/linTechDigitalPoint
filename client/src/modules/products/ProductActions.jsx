@@ -13,7 +13,7 @@ export function ProductActions({ row, user }) {
         {row.product_type !== "SERVICE" && (
           <>
             {hasPermission(user, "inventory.add_stockreceipt") && (
-              <a href={`/admin/receive?variant=${row.id}`}>
+              <a href={`/admin/quick-receive?variant=${row.id}`}>
                 Receive more stock
               </a>
             )}

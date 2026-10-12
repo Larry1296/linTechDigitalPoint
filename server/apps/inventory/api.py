@@ -184,3 +184,39 @@ def variant_buying_prices(request, pk):
         return Response({"detail":"Permission to see buying prices is required."},status=403)
     lots=StockLot.objects.filter(variant_id=pk).select_related("receipt_line__receipt").order_by("-received_at","-id")[:50]
     return Response([_lot_cost_row(lot, request.user) for lot in lots])
+
+
+def _search_row(v, on_hand):
+    return {"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":on_hand or Decimal("0")}
+
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
+def receive_defaults(request, pk):
+    """Everything a new delivery of one item is expected to repeat from the last one, so receiving it from its
+    product page asks only how many arrived: the supplier, the buying price, whether it had a supplier document, how
+    the supplier was paid, and the compartment it is kept in."""
+    if not has_business_permission(request.user, "inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
+    v=ProductVariant.objects.select_related("product","product__category","product__brand").filter(pk=pk,active=True,product__active=True,product__product_type="STOCK_ITEM").first()
+    if not v:return Response({"detail":"Item not found."},status=404)
+    on_hand=StockBalance.objects.filter(lot__variant=v).aggregate(q=Sum(F("quantity")-F("reserved")))["q"]
+    line=(StockReceiptLine.objects.filter(variant=v,uncosted=False).exclude(receipt__document_status=StockReceipt.OPENING_BALANCE)
+          .select_related("receipt").order_by("-receipt__received_at","-id").first())
+    lot=StockLot.objects.filter(variant=v).order_by("-received_at","-id").first()
+    supplier=line.receipt.supplier_name if line else (lot.supplier_name if lot else "")
+    unit_cost=line.unit_cost if line else (lot.unit_cost-(lot.landed_unit_cost or 0) if lot else None)
+    document_status=line.receipt.document_status if line else StockReceipt.NO_DOCUMENT
+    payment_method=""
+    purchase=getattr(line.receipt,"purchase",None) if line else None
+    if purchase:
+        paid=purchase.payments.select_related("entry__account").first()
+        method=paid.entry.account.payment_method if paid else ""
+        payment_method=method if method in ("CASH","MPESA","BANK") else ""
+    preferred=getattr(v,"preferred_location",None)
+    shelf=preferred.shelf if preferred and preferred.shelf.active else None
+    if not shelf:
+        held=(StockBalance.objects.filter(lot__variant=v,quantity__gt=0,shelf__active=True,shelf__is_virtual=False)
+              .values("shelf_id").annotate(q=Sum("quantity")).order_by("-q").first())
+        shelf=Shelf.objects.filter(pk=held["shelf_id"]).first() if held else None
+    return Response({"item":_search_row(v,on_hand),"supplier_name":supplier,"unit_cost":unit_cost,"document_status":document_status,
+                     "payment_method":payment_method,"shelf":{"id":shelf.id,"code":shelf.code,"display_name":shelf.display_name} if shelf else None})

@@ -234,7 +234,7 @@ function ProductDetail({ product, categories, selectedVariant, user, zones, onBa
           {product.description && <p className="productDescription">{product.description}</p>}
         </div>
         <div className="productHeroActions">
-          {!service && product.variants.length === 1 && hasPermission(user, "inventory.add_stockreceipt") && <a className="button" href={`/admin/receive?variant=${first.id}`}>Receive stock</a>}
+          {!service && product.variants.length === 1 && hasPermission(user, "inventory.add_stockreceipt") && <a className="button" href={`/admin/quick-receive?variant=${first.id}`}>Receive stock</a>}
           {(hasPermission(user, "catalog.change_product") || hasPermission(user, "catalog.change_productvariant")) &&
             <button type="button" className="secondary" onClick={() => onEdit({ product })}>Edit product details</button>}
           {selection?.enabled && <button type="button" className="danger" onClick={() => selection.askDelete([product.id])}>Delete</button>}
@@ -268,7 +268,7 @@ function ProductDetail({ product, categories, selectedVariant, user, zones, onBa
               <td>{money(variant.selling_price)}</td><td>{Number(variant.minimum_price) ? money(variant.minimum_price) : "—"}</td>
               {!service && <><td><span className={`stockBadge${restock ? " low" : ""}`}>{count(variant.available)}</span></td><td>{count(variant.minimum_stock)}</td></>}
               <td className="rowActions">
-                {!service && product.variants.length > 1 && hasPermission(user, "inventory.add_stockreceipt") && <a className="button secondary" href={`/admin/receive?variant=${variant.id}`}>Receive</a>}
+                {!service && product.variants.length > 1 && hasPermission(user, "inventory.add_stockreceipt") && <a className="button secondary" href={`/admin/quick-receive?variant=${variant.id}`}>Receive</a>}
               </td>
             </tr>;
           })}</tbody>
