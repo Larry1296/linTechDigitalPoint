@@ -116,6 +116,9 @@ class DeviceAuthenticationMiddleware:
                     if state(device)['locked']:
                         DeviceSession.objects.filter(pk=device.pk,locked_at=None).update(locked_at=timezone.now())
                         error=JsonResponse({'detail':'Your workspace is locked. Enter your password.', 'code':'session_locked','session':state(device)},status=423)
+                    else:
+                        from .protected_pages import guard
+                        error=guard(request)
                 except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
                     error=JsonResponse({'detail':'Sign in again or refresh your session.','code':'token_expired'},status=401)
         if endpoint in COOKIE_ENDPOINTS and endpoint not in {'session','me','unlock','lock','logout','refresh'}:

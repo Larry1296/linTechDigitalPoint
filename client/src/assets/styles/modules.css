@@ -2770,3 +2770,8 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .stockTotals .factTiles div { padding: 12px 14px; border-radius: 12px; background: var(--surface); }
 .stockTotals dd { margin: 4px 0 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stockTotals small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+/* Protected pages (M-Pesa, investments): the password card sits in the page, the bar above an opened page. */
+.protectedCard { margin: 24px auto; }
+.protectedCard form > small { color: var(--muted); }
+.protectedBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.protectedBar .linkButton { margin: 0; }

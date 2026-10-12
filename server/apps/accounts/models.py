@@ -31,6 +31,11 @@ class DeviceSession(models.Model):
     expires_at = models.DateTimeField(db_index=True)
     failed_unlocks = models.PositiveIntegerField(default=0)
     unlock_blocked_until = models.DateTimeField(null=True, blank=True)
+    # The protected pages are open on this device while this matches ``version``: locking or unlocking the
+    # workspace changes the version, so they close again with it.
+    protected_version = models.PositiveIntegerField(null=True, blank=True)
+    protected_failures = models.PositiveIntegerField(default=0)
+    protected_blocked_until = models.DateTimeField(null=True, blank=True)
 
 
 class RefreshCredential(models.Model):
@@ -51,3 +56,19 @@ class AccountProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name="account_profile", on_delete=models.CASCADE)
     phone = models.CharField(max_length=20)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ProtectedPagesPassword(models.Model):
+    """A person's password for the protected pages (M-Pesa, investments), apart from their sign-in password.
+
+    Every password they ever set stays, so none can be used twice; the newest is the one in use, for seven days.
+    The digest uses one salt per person, so a new password is checked against all the old ones in a single lookup.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="protected_passwords", on_delete=models.CASCADE)
+    salt = models.CharField(max_length=32)
+    digest = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [models.UniqueConstraint(fields=["user", "digest"], name="acco_protected_password_once")]

@@ -10,7 +10,7 @@ export function CommissionReminder() {
   useEffect(() => {
     if (!allowed) return undefined;
     let live = true;
-    api("/api/v1/mpesa/commission/").then((data) => { if (live) setDue(data.due_label || null); }).catch(() => {});
+    api("/api/v1/mpesa/commission/due/").then((data) => { if (live) setDue(data.due_label || null); }).catch(() => {});
     return () => { live = false; };
   }, [allowed]);
   if (!due) return null;

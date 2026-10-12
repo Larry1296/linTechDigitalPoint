@@ -9,6 +9,7 @@ import { RegisterPage, OnboardingPage, SelectBusinessPage, ForgotPasswordPage, R
 import { SubscriptionPage } from "../modules/billing/SubscriptionPage";
 import { MoneyLentPage } from "../modules/loans/MoneyLentPage";
 import { InvestmentsPage } from "../modules/investments/InvestmentsPage";
+import { ProtectedPages } from "../core/auth/ProtectedPages";
 import { MoneyCheckPage } from "../modules/accounting/MoneyCheckPage";
 import { StockCheckPage } from "../modules/inventory/StockCheckPage";
 import { PlatformAdminPage } from "../modules/billing/PlatformAdminPage";
@@ -59,7 +60,13 @@ export function AppRoutes() {
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="subscription" element={<SubscriptionPage />} />
         <Route path="money-lent" element={<MoneyLentPage />} />
-        <Route path="investments" element={<InvestmentsPage />} />
+        <Route element={<ProtectedPages />}>
+          <Route path="investments" element={<InvestmentsPage />} />
+          <Route path="mpesa" element={<MpesaDashboardPage />} />
+          <Route path="mpesa/transactions" element={<MpesaDashboardPage />} />
+          <Route path="mpesa/reconciliation" element={<MpesaDashboardPage />} />
+          <Route path="mpesa/commission" element={<MpesaCommissionPage />} />
+        </Route>
         <Route path="money-check" element={<MoneyCheckPage />} />
         <Route path="stock-check" element={<StockCheckPage />} />
         <Route path="platform" element={<PlatformAdminPage />} />
@@ -88,10 +95,6 @@ export function AppRoutes() {
         <Route path="cyber/services" element={<CyberDashboardPage />} />
         <Route path="cyber/income" element={<CyberIncomePage />} />
         <Route path="cyber/income/:serviceId" element={<CyberServiceIncomePage />} />
-        <Route path="mpesa" element={<MpesaDashboardPage />} />
-        <Route path="mpesa/transactions" element={<MpesaDashboardPage />} />
-        <Route path="mpesa/reconciliation" element={<MpesaDashboardPage />} />
-        <Route path="mpesa/commission" element={<MpesaCommissionPage />} />
         <Route path="chama" element={<ChamaHomePage />} />
         <Route path="chama/setup" element={<ChamaSetupPage />} />
         <Route path="chama/:id" element={<ChamaDetailPage />} />

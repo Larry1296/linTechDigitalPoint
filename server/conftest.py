@@ -57,6 +57,15 @@ def legacy_business_context(request, monkeypatch):
         m2m_changed.disconnect(sync_permissions, sender=User.user_permissions.through)
 
 @pytest.fixture(autouse=True)
+def protected_pages_open(request, monkeypatch, settings):
+    """Tests of M-Pesa and investments run as if the protected pages password was entered; tests marked
+    ``protected_pages`` check that password itself."""
+    settings.PROTECTED_PASSWORD_ITERATIONS = 1000
+    if not request.node.get_closest_marker('protected_pages'):
+        monkeypatch.setattr('apps.accounts.protected_pages.guard', lambda request: None)
+
+
+@pytest.fixture(autouse=True)
 def fast_test_password_hashing(settings):
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

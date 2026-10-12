@@ -42,15 +42,18 @@ function usePayableInvestments() {
   const { user } = useAuth();
   const allowed = ["accounting.view_investment", "accounting.add_investmentmovement"].every((p) => user?.permissions?.includes(p));
   const [investments, setInvestments] = useState([]);
+  const [locked, setLocked] = useState(false);
   useEffect(() => {
     if (!allowed) return undefined;
     let live = true;
     api("/api/v1/accounting/investments/")
       .then((data) => { if (live) setInvestments(data.investments.filter((i) => Number(i.value) > 0)); })
-      .catch(() => {});  // without them the supplier is simply paid from cash, M-Pesa or bank
+      // Without them the supplier is simply paid from cash, M-Pesa or bank; investments stay hidden until the
+      // protected pages password is entered.
+      .catch((err) => { if (live && err.data?.code === "protected_locked") setLocked(true); });
     return () => { live = false; };
   }, [allowed]);
-  return investments;
+  return { investments, locked };
 }
 
 export function ReceiptDocumentFields({ details, onChange }) {
@@ -70,7 +73,7 @@ export function ReceiptDocumentFields({ details, onChange }) {
 
 export function ReceiptCostFields({ details, onChange, goodsTotal }) {
   const set = (changes) => onChange({ ...details, ...changes });
-  const investments = usePayableInvestments();
+  const { investments, locked: investmentsLocked } = usePayableInvestments();
   const investment = investments.find((i) => String(i.id) === String(details.investment_id));
   const chooseInvestment = (id) => set({ investment_id: id, investment_name: investments.find((i) => String(i.id) === String(id))?.name || "" });
   const costs = details.landed_costs || [];
@@ -102,6 +105,8 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
         {investments.length > 0 && <option value="INVESTMENT">Yes, from my investment (MMF)</option>}
       </select>
     </label>
+    {investmentsLocked && <small>To pay from an investment, open <a href="/admin/investments" target="_blank" rel="noreferrer">Investments</a> with
+      your protected pages password first, then come back.</small>}
     {details.payment_method === "INVESTMENT" && <div className="receiptInvestment">
       {investments.length > 1 && <label>Take it out of
         <select value={details.investment_id} required onChange={(e) => chooseInvestment(e.target.value)}>

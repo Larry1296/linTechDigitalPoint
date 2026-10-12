@@ -351,6 +351,13 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
                                       "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()],
                          "estimates": commission_estimates(), "learned": learn()[2].bands(), "forecast": forecast()})
 
+    @action(detail=False)
+    def due(self, request):
+        # For the dashboard nudge, which works without the protected pages password: the month only, no amounts.
+        from .commission import due_month
+        due = due_month()
+        return Response({"due_label": due.strftime("%B %Y") if due else None})
+
     def retrieve(self, request, pk=None):
         return Response(commission_row(self.get_object()))
 
