@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -25,6 +26,7 @@ jobs:
         working-directory: server
   client:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +37,7 @@ jobs:
         working-directory: client
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25  # a stuck browser test fails the run instead of holding the deploy for GitHub's 6 hours
     services:
       postgres:
         image: postgres:17
@@ -55,5 +58,7 @@ jobs:
         working-directory: client
       - run: npm run dev -- --host 127.0.0.1 &
         working-directory: client
-      - run: npx wait-on http://127.0.0.1:5173 http://127.0.0.1:8000/api/v1/auth/me/ && npm run test:e2e
+      # The API only has to be listening: /auth/me/ answers "not signed in" to an anonymous check, which wait-on never accepts.
+      - run: npx wait-on --timeout 180000 http://127.0.0.1:5173 tcp:127.0.0.1:8000 && npm run test:e2e
         working-directory: client
+        env: {E2E_BASE_URL: "http://127.0.0.1:5173"}
