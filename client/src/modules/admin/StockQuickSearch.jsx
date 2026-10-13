@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { api } from "../../core/api/client";
 import { businessCurrency } from "../../core/organization/presentation";
+import { STOCK_SEARCH_ID } from "../../core/ui/keyboardShortcuts";
 
 // The counter's quick answer when a customer asks "do you have…?": type any words ("mobile charger", "micro usb",
 // even with a typo) and every matching product shows at once with its price, how many are in stock and the shelf.
@@ -9,6 +11,10 @@ export function StockQuickSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
+  const input = useRef(null);
+  const { state } = useLocation();
+  // Pressing "/" on another page comes here with the cursor already in the box.
+  useEffect(() => { if (state?.focusStockSearch) input.current?.focus(); }, [state]);
   useEffect(() => {
     const words = query.trim();
     if (!words) { setResults(null); setError(""); return undefined; }
@@ -28,10 +34,11 @@ export function StockQuickSearch() {
     <h2 id="stock-search-title">Do we have it?</h2>
     <div className="stockQuickSearchBox">
       <Search size={18} aria-hidden="true" />
-      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
+      <input ref={input} id={STOCK_SEARCH_ID} type="search" value={query} onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Escape") { if (query) setQuery(""); else event.currentTarget.blur(); } }}
         placeholder="Type what the customer wants, e.g. mobile charger" aria-label="Search stock" autoComplete="off" />
-      {query && <button type="button" className="secondary" onClick={() => setQuery("")} aria-label="Clear search"><X size={16} aria-hidden="true" /></button>}
+      {query ? <button type="button" className="secondary" onClick={() => setQuery("")} aria-label="Clear search"><X size={16} aria-hidden="true" /></button>
+        : <kbd title="Press / anywhere to search">/</kbd>}
     </div>
     {error && <p className="formNotice" role="alert">Could not search right now: {error}</p>}
     {results && !error && <p className="muted" role="status">{rows.length

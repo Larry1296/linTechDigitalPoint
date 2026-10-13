@@ -8,7 +8,7 @@ export function PasswordField({ label = "Password", ...props }) {
     <div className="passwordField">
       <label htmlFor={id}>{label}</label>
       <div className="passwordInput">
-        <input {...props} id={id} type={visible ? "text" : "password"} />
+        <input {...props} id={id} type={visible ? "text" : "password"} data-password="true" />
         <button
           type="button"
           className="passwordToggle"

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import { StockQuickSearch } from "./StockQuickSearch";
 import { api } from "../../core/api/client";
@@ -11,7 +12,7 @@ const row = (id, name, available, extra = {}) => ({ id, product_id: id, product_
 it("shows every matching product with its price, stock and shelf, what is in stock first", async () => {
   api.mockResolvedValue([row(1, "ORIGINAL CAR CHARGER", 0), row(2, "AMAYA 10W MICROUSB CHARGER", 2, { variant_name: "10W" }),
     row(3, "WINDOWS INSTALL", 0, { product_type: "SERVICE" })]);
-  render(<StockQuickSearch />);
+  render(<MemoryRouter><StockQuickSearch /></MemoryRouter>);
   fireEvent.change(screen.getByLabelText("Search stock"), { target: { value: "mobile charger" } });
   expect(await screen.findByText("2 products found · 1 in stock")).toBeInTheDocument();
   expect(api).toHaveBeenLastCalledWith("/api/v1/catalog/products/search-suggestions/?q=mobile%20charger");
@@ -23,4 +24,9 @@ it("shows every matching product with its price, stock and shelf, what is in sto
   expect(screen.queryByText(/WINDOWS INSTALL/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Clear search"));
   expect(screen.queryByRole("list")).not.toBeInTheDocument();
+});
+
+it("comes with the cursor in the box when / was pressed on another page", () => {
+  render(<MemoryRouter initialEntries={[{ pathname: "/admin/dashboard", state: { focusStockSearch: true } }]}><StockQuickSearch /></MemoryRouter>);
+  expect(screen.getByLabelText("Search stock")).toHaveFocus();
 });

@@ -2883,3 +2883,9 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .stockQuickPrice { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .stockQuickCount { font-size: 13px; text-align: right; color: var(--success, #15803d); font-weight: 650; }
 .stockQuickResults li.out .stockQuickCount { color: var(--muted); }
+
+/* Caps Lock note under a password box (CapsLockWarning). */
+.capsLockWarning { position: fixed; z-index: 3000; margin: 0; padding: 7px 11px; border: 1px solid color-mix(in srgb, #d97706 55%, var(--line)); border-radius: 10px;
+  color: var(--text); background: color-mix(in srgb, #f59e0b 16%, var(--surface)); box-shadow: var(--shadow); font-size: 13px; line-height: 1.4; pointer-events: none; }
+.stockQuickSearchBox kbd { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font: 600 12px/1.4 inherit; }
+@media (hover: none) { .stockQuickSearchBox kbd { display: none; } }

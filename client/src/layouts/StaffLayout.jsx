@@ -34,6 +34,7 @@ import {
   Users,
 } from "lucide-react";
 import { Outlet } from "react-router-dom";
+import { useKeyboardShortcuts } from "../core/ui/keyboardShortcuts";
 import { SubscriptionBanner } from "../modules/billing/SubscriptionBanner";
 import { useEffect, useRef, useState } from "react";
 import { useTableLabels } from "../core/ui/useTableLabels";
@@ -131,6 +132,7 @@ export function StaffLayout() {
   const mainRef = useRef(null);
   const topbarRef = useRef(null);
   useTableLabels(mainRef);
+  useKeyboardShortcuts();
   useEffect(() => {
     const bar = topbarRef.current;
     if (!bar || typeof ResizeObserver === "undefined") return undefined;
