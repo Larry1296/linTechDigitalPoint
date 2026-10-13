@@ -93,3 +93,34 @@ def test_paper_sold_two_sheets_for_five_is_counted_and_sold_in_packs():
     bad = client.post("/api/v1/catalog/products/create-with-stock/", {"name": "Clips", "category_id": category.id, "sku": "CLIP-0",
         "selling_price": "20", "pack_size": "0"}, format="json")
     assert bad.status_code == 400 and "pack" in str(bad.json()).lower()
+
+
+@pytest.mark.django_db
+def test_search_finds_what_is_meant_not_only_the_exact_wording():
+    from apps.catalog.search import search_variants
+    phone = Category.objects.create(name="Phone Accessories", slug="phone-acc")
+    phone_chargers = Category.objects.create(name="Chargers", slug="phone-chargers", parent=phone)
+    computer = Category.objects.create(name="Computer Accessories", slug="computer-acc")
+    laptop_chargers = Category.objects.create(name="Laptop Chargers", slug="laptop-chargers", parent=computer)
+    phones = Category.objects.create(name="Mobile Phones", slug="mobile-phones", parent=phone)
+
+    def item(name, category, sku, description=""):
+        product = Product.objects.create(name=name, slug=sku.lower(), category=category, description=description)
+        return ProductVariant.objects.create(product=product, sku=sku, selling_price=100)
+
+    amaya = item("AMAYA 10W MICROUSB CHARGER", phone_chargers, "AMY-MICRO-10W")
+    car = item("ORIGINAL CAR CHARGER", phone_chargers, "OCC-1")
+    laptop = item("HP BLUE PIN CHARGER (65W)", laptop_chargers, "HP-CHG")
+    handset = item("KHK MOBILE PHONE", phones, "KHK-1")
+    cable = item("CHEAP MICROUSB CABLE", phone, "MICRO-CHEAP", "Cheap USB to Micro-USB cable")
+    found = lambda query: list(search_variants(ProductVariant.objects.all(), query))
+
+    assert set(found("charger")) == {amaya, car, laptop}
+    assert set(found("mobile charger")) == {amaya, car}  # "mobile" = phone: the phone chargers, not the laptop one
+    assert set(found("phone chargers")) == {amaya, car}  # plural
+    assert set(found("chager")) == {amaya, car, laptop}  # a small typo
+    assert set(found("micro usb")) == {amaya, cable}  # "micro usb", "micro-usb" and "MICROUSB" are the same
+    assert set(found("laptop charger")) == {laptop}
+    assert found("mobile phone")[0] == handset  # its own name holds the words, so it comes before what is only filed under phones
+    assert found("micro-cheap") == [cable]  # an item code
+    assert found("") != [] and found("xyzzy") == []

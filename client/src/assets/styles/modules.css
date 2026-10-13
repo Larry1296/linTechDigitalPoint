@@ -2865,3 +2865,21 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .dashActions a { flex: 1 1 calc(50% - 8px); text-align: center; }
   .reportPeriod > * { flex: 1 1 100%; }
 }
+
+/* "Do we have it?": the quick stock search under the dashboard header. */
+.stockQuickSearch { display: grid; gap: 10px; padding: clamp(14px, 2.5vw, 20px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.stockQuickSearch h2 { margin: 0; font-size: 1.1rem; }
+.stockQuickSearch p { margin: 0; }
+.stockQuickSearchBox { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--muted); }
+.stockQuickSearchBox:focus-within { border-color: var(--primary); }
+.stockQuickSearchBox input { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 16px; }
+.stockQuickSearchBox button { display: grid; place-items: center; min-height: 0; padding: 6px; border: 0; }
+.stockQuickResults { display: grid; gap: 6px; max-height: 420px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.stockQuickResults li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.stockQuickResults li.out { opacity: .6; }
+.stockQuickResults a { display: grid; gap: 2px; grid-row: span 2; min-width: 0; color: var(--text); text-decoration: none; }
+.stockQuickResults a:hover strong, .stockQuickResults a:focus-visible strong { color: var(--primary); }
+.stockQuickResults a span { font-size: 13px; overflow-wrap: anywhere; }
+.stockQuickPrice { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.stockQuickCount { font-size: 13px; text-align: right; color: var(--success, #15803d); font-weight: 650; }
+.stockQuickResults li.out .stockQuickCount { color: var(--muted); }

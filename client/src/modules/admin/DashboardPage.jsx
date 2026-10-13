@@ -13,6 +13,7 @@ import { RecordsSummary } from "./RecordsSummary";
 import { OwnerSummary } from "./OwnerSummary";
 import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
 import { BusinessAnalysis } from "./BusinessAnalysis";
+import { StockQuickSearch } from "./StockQuickSearch";
 
 // On phones tables stack row by row; each figure is labelled with its column heading so it still says what it is.
 function useColumnLabels(root) {
@@ -139,6 +140,7 @@ export function DashboardPage() {
       </nav>}
     </header>
     {error && <ErrorState message={error} retry={() => refresh.current()} />}
+    {on("inventory") && can("catalog.view_product") && <StockQuickSearch />}
     <InvestmentReminder />
     <CommissionReminder />
     <section className="dashKpis" aria-label="Today at a glance">
