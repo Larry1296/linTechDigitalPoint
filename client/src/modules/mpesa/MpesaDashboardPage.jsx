@@ -39,6 +39,17 @@ const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimum
 const signedFigure = (value) => (Number(value) > 0 ? `+${figure(value)}` : Number(value) < 0 ? `−${figure(-Number(value))}` : "—");
 const amount = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
+// How the commission balance was reached when the app added commission it worked out after the last reading.
+function commissionSince(money) {
+  const added = Number(money.commission_worked_out) > 0;
+  const unknown = Number(money.commission_unknown) || 0;
+  if (money.commission_read == null || (!added && !unknown)) return "";
+  const parts = [`Last read ${amount(money.commission_read)}`];
+  if (added) parts.push(`+ ${amount(money.commission_worked_out)} worked out since`);
+  if (unknown) parts.push(`${unknown} transaction${unknown === 1 ? "" : "s"} not worked out yet`);
+  return parts.join(" · ");
+}
+
 // The outlet's name and the numbers M-Pesa gave it; used both to add and to edit.
 function OutletForm({ outlet, onSave, onCancel }) {
   const [busy, setBusy] = useState(false);
@@ -130,6 +141,7 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
                 <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
                 <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
               </dl>
+              {commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
               {money.due && outlet.active
                 ? <p className="outletDue" role="status">Update due: today's cash and float are not recorded yet{money.updated_on ? ` (last recorded ${money.updated_on})` : ""}. Open or close a shift to record them.</p>
                 : money.updated_on && <p className="muted">Recorded {money.updated_on}</p>}
@@ -482,8 +494,10 @@ export function MpesaDashboardPage() {
           <p className="muted">{lastClose?.commission_balance == null
             ? "Read the commission balance off the agent line. The shift's first transaction is measured from it."
             : Number(openingCommission) < Number(lastClose.commission_balance) && openingCommission !== ""
-              ? `Lower than the last reading (${amount(lastClose.commission_balance)}): Safaricom paid the commission out since then.`
-              : `Filled in with the last reading, ${amount(lastClose.commission_balance)}. Change it if the agent line shows a different balance.`}</p>
+              ? `Lower than ${amount(lastClose.commission_balance)}: Safaricom paid the commission out since then.`
+              : Number(lastClose.commission_worked_out) > 0
+                ? `Filled in with the last reading, ${amount(lastClose.commission_read)}, plus ${amount(lastClose.commission_worked_out)} the app worked out since. Change it if the agent line shows a different balance.`
+                : `Filled in with the last reading, ${amount(lastClose.commission_balance)}. Change it if the agent line shows a different balance.`}</p>
           <OpeningCheck last={lastClose} cash={countTotal(openingCount)} electronicFloat={openingFloat} opening={opening}
             onChange={setOpening} canRecordCommission={canRecordCommission} />
           <button disabled={!outlets.length}>Open shift</button>

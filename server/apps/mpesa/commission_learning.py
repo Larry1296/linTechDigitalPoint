@@ -219,6 +219,21 @@ def summary(rows, results):
     return {"earned": total, **counts}
 
 
+def balance_now(outlet_id):
+    """The outlet's commission balance now: the last balance read off the agent line, plus what every transaction since
+    then earned as the app works it out (measured or learned). A transaction it cannot work out yet adds nothing and is
+    counted in ``unknown``, so the figure is never guessed. {"value", "read", "read_at", "worked_out", "unknown"}."""
+    outlets, measured, rates = learn([outlet_id])
+    rows = outlets.get(outlet_id, [])
+    last = max((i for i, row in enumerate(rows) if row.commission_balance is not None), default=None)
+    if last is None:
+        return {"value": None, "read": None, "read_at": None, "worked_out": Decimal("0"), "unknown": 0}
+    since = [row for row in rows[last + 1:] if row.standing]
+    totals = summary(since, earned(outlets, measured, rates))
+    read = rows[last].commission_balance
+    return {"value": read + totals["earned"], "read": read, "read_at": rows[last].done_at, "worked_out": totals["earned"], "unknown": totals["unknown"]}
+
+
 def for_shift(session):
     outlets, measured, rates = learn([session.outlet_id])
     results = earned(outlets, measured, rates)

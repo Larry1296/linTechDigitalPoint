@@ -144,6 +144,23 @@ def test_a_reading_taken_during_an_open_shift_measures_the_next_transaction(shif
         record_commission_balance(session=session, user=operator, value="2500")
 
 
+def test_the_balance_now_adds_what_the_app_worked_out_since_the_last_reading(shift):
+    from apps.mpesa.api import money_in_operation
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "b1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1200", "b2", "118")
+    record(shift, "CUSTOMER_WITHDRAWAL", "2000", "b3", "136")  # 1,200 to 2,000 earn 18
+    record(shift, "CUSTOMER_WITHDRAWAL", "1500", "b4")  # no reading: worked out as 18
+    record(shift, "CUSTOMER_WITHDRAWAL", "2000", "b5")  # no reading: worked out as 18
+    record(shift, "CUSTOMER_WITHDRAWAL", "9000", "b6")  # not known yet: adds nothing
+    money = money_in_operation(session.outlet)
+    assert money["commission_balance"] == Decimal("172.00")
+    assert (money["commission_read"], money["commission_worked_out"], money["commission_unknown"]) == (Decimal("136.00"), Decimal("36.00"), 1)
+    record(shift, "CUSTOMER_WITHDRAWAL", "1500", "b7", "250")  # a new reading starts again from it
+    money = money_in_operation(session.outlet)
+    assert (money["commission_balance"], money["commission_worked_out"], money["commission_unknown"]) == (Decimal("250.00"), Decimal("0"), 0)
+
+
 def test_a_correction_stands_where_the_wrong_entry_was(shift):
     operator, session = shift
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "c3", "100")

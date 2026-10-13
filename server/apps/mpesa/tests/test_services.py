@@ -141,7 +141,8 @@ def test_outlet_money_in_operation_is_due_every_day_but_sunday(db, monkeypatch):
     monday = today + datetime.timedelta(days=(0 - today.weekday()) % 7 or 7)
     on(monday)
     assert money_in_operation(outlet) == {"cash": None, "float": None, "total": None, "updated_on": None, "due": True,
-                                          "cash_count": {}, "commission_balance": None, "open_session": None}
+                                          "cash_count": {}, "commission_balance": None, "commission_read": None,
+                                          "commission_worked_out": 0, "commission_unknown": 0, "open_session": None}
     on(monday + datetime.timedelta(days=6))  # Sunday: nothing is expected
     assert money_in_operation(outlet)["due"] is False
     session = open_session(outlet=outlet, operator=operator, opening_cash="3000", opening_float="7000")

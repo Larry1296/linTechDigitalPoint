@@ -14,29 +14,17 @@ from .services import (add_provider_reference, correct_transaction, open_session
                        reverse_transaction, session_balances)
 
 
-def commission_balance(outlet):
-    """The outlet's commission balance as last read off the agent line: after a transaction, or on its own (when a shift
-    opened, or during it). {"value", "read_at"}."""
-    readings = [(row.occurred_at, row.commission_balance) for row in MpesaTransaction.objects.filter(outlet=outlet, commission_balance__isnull=False)
-                .order_by("-occurred_at", "-pk")[:1]]
-    for session in outlet.sessions.order_by("-opened_at", "-pk").only("opened_at", "opening_commission_balance", "commission_readings")[:60]:
-        if session.balance_readings():
-            readings.append(session.balance_readings()[-1])  # the latest shift that read one on its own
-            break
-    if not readings:
-        return {"value": None, "read_at": None}
-    read_at, value = max(readings, key=lambda reading: reading[0])
-    return {"value": value, "read_at": read_at}
-
-
 def money_in_operation(outlet):
     """The outlet's cash and float as last recorded, and whether today's figure is still due; with the notes last
-    counted and the commission balance last read, so the next shift opens with them filled in.
+    counted and the commission balance now (last read, plus what the app worked out since), so the next shift opens
+    with them filled in.
 
     A shift opened or closed today is today's update. Updates are expected every day except Sunday.
     """
+    from .commission_learning import balance_now
     today = timezone.localdate()
     session = outlet.sessions.order_by("-opened_at", "-pk").first()
+    commission = balance_now(outlet.pk)
     count = {}
     if not session:
         cash = electronic_float = updated = None
@@ -47,7 +35,8 @@ def money_in_operation(outlet):
         count = getattr(MpesaReconciliation.objects.filter(session=session).first(), "cash_count", None) or {}
     return {"cash": cash, "float": electronic_float, "total": None if cash is None else cash + electronic_float,
             "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
-            "commission_balance": commission_balance(outlet)["value"],
+            "commission_balance": commission["value"], "commission_read": commission["read"],
+            "commission_worked_out": commission["worked_out"], "commission_unknown": commission["unknown"],
             "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
 
 

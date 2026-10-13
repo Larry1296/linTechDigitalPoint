@@ -122,7 +122,8 @@ it("lets a manager correct the money in operation down, with a reason", async ()
 it("opens a shift filled in with what the outlet last recorded, commission balance included", async () => {
   api.getMpesaOutlets.mockResolvedValue([
     outlet(1, "Main till", { cash: "3050.00", float: "7000.00", total: "10050.00", updated_on: "2026-10-09", due: true,
-      cash_count: { 1000: 3, 500: 0, 200: 0, 100: 0, 50: 1, coins: "0.00" }, commission_balance: "1250.50" }),
+      cash_count: { 1000: 3, 500: 0, 200: 0, 100: 0, 50: 1, coins: "0.00" }, commission_balance: "1250.50",
+      commission_read: "1214.50", commission_worked_out: "36.00", commission_unknown: 1 }),
     outlet(2, "Market till", { cash: null, float: null, total: null, updated_on: null, due: true, cash_count: {}, commission_balance: null }),
   ]);
   api.openMpesaSession.mockResolvedValue({});
@@ -130,6 +131,7 @@ it("opens a shift filled in with what the outlet last recorded, commission balan
   const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
   expect(main).toHaveTextContent("Commission balance");
   expect(main).toHaveTextContent("1,250.5");
+  expect(main).toHaveTextContent("Last read KSh 1,214.5 · + KSh 36 worked out since · 1 transaction not worked out yet");
   await waitFor(() => expect(screen.getByLabelText("Opening float")).toHaveValue(7000));
   expect(screen.getByLabelText("Number of 1000 notes")).toHaveValue(3);
   expect(screen.getByLabelText("Physical cash total")).toHaveTextContent("3,050");
