@@ -52,7 +52,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 24, cache: npm, cache-dependency-path: client/package-lock.json}
       - run: pip install -r server/requirements.txt
-      - run: python manage.py migrate && python manage.py seed_initial && python manage.py runserver 127.0.0.1:8000 &
+      # Like production: a fresh database only needs its migrations (seed_initial is for the original single-business
+      # setup and stops on an empty database, so the server never started).
+      - run: python manage.py migrate && python manage.py runserver 127.0.0.1:8000 &
         working-directory: server
       - run: npm ci && npx playwright install --with-deps chromium
         working-directory: client
