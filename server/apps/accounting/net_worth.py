@@ -18,23 +18,17 @@ from django.db.models import Sum
 from django.utils import timezone
 
 ZERO = Decimal("0")
-OUTSIDE_AGENCY = ["CASH", "MPESA", "BANK", "OTHER"]
 
 
 def _shop_money():
+    """The owner's own places (drawer or each part's drawer, till, bank), commission paid out to the owner included."""
     from .money_check import places
     rows = []
     for place in places():
         last = place["last_check"]
-        rows.append({"key": f"shop-{place['method'].lower()}", "label": place["label"], "amount": place["expected"], "method": place["method"],
+        rows.append({"key": f"shop-{place['key'].lower().replace(':', '-')}", "label": place["label"], "amount": place["expected"], "method": place["method"],
                      "counted": last["actual"] if last else None, "counted_at": last["created_at"] if last else None,
                      "difference": last["difference"] if last else None})
-    # Commission paid to the owner's own M-Pesa, bank or cash is the agency's money kept outside the shift.
-    from .models import CashEntry
-    kept = CashEntry.objects.filter(business_unit="MPESA", account__payment_method__in=OUTSIDE_AGENCY).aggregate(v=Sum("amount"))["v"] or ZERO
-    if kept:
-        rows.append({"key": "agency-kept", "label": "Agency commission kept outside the shift", "amount": kept, "method": None,
-                     "counted": None, "counted_at": None, "difference": None})
     return rows
 
 

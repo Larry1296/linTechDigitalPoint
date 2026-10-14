@@ -12,13 +12,15 @@ class MoneyCheckView(APIView):
     permission_required = "accounting.view_moneycheck"
 
     def get(self, request):
-        return Response({"places": places(), "history": [check_row(c) for c in MoneyCheck.objects.select_related("created_by")[:30]]})
+        from .money_mode import money_mode
+        return Response({"mode": money_mode(), "places": places(), "history": [check_row(c) for c in MoneyCheck.objects.select_related("created_by")[:30]]})
 
     def post(self, request):
         if not has_business_permission(request.user, "accounting.add_moneycheck"):
             raise PermissionDenied()
         check = record_check(user=request.user, method=request.data.get("method"), actual=request.data.get("actual"),
-                             cash_count=request.data.get("cash_count"), note=request.data.get("note", ""))
+                             cash_count=request.data.get("cash_count"), note=request.data.get("note", ""),
+                             unit=request.data.get("unit") or None)
         return Response(check_row(check), status=201)
 
 
@@ -31,5 +33,5 @@ class StartingMoneyView(APIView):
         if not key:
             return Response({"detail": "A request key is required."}, status=400)
         add_starting_money(user=request.user, method=request.data.get("method"), amount=request.data.get("amount"),
-                           note=request.data.get("note", ""), key=key)
+                           note=request.data.get("note", ""), key=key, unit=request.data.get("unit") or None)
         return Response({"places": places()}, status=201)

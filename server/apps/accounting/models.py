@@ -239,6 +239,8 @@ class MoneyCheck(TenantModel):
     """
     branch = models.ForeignKey('core.Store', null=True, blank=True, on_delete=models.PROTECT, editable=False)
     method = models.CharField(max_length=20)
+    # With a separate cash drawer for each part of the business: whose drawer was counted ("" for a shared place).
+    business_unit = models.CharField(max_length=20, choices=BusinessUnit.choices, blank=True, default="")
     expected = models.DecimalField(max_digits=16, decimal_places=2)
     actual = models.DecimalField(max_digits=16, decimal_places=2)
     difference = models.DecimalField(max_digits=16, decimal_places=2)

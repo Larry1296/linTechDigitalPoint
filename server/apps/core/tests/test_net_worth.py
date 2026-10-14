@@ -41,7 +41,7 @@ def test_net_worth_adds_shop_money_live_agency_money_and_investments_less_what_i
     worth = client.get("/api/v1/inventory/dashboard/").json()["net_worth"]
     groups = {g["key"]: g for g in worth["groups"]}
     till = next(i for i in groups["money"]["items"] if i["key"] == "shop-mpesa")
-    assert D(str(till["amount"])) == D("7000")  # 10,000 starting less 3,000 invested
+    assert D(str(till["amount"])) == D("7500")  # 10,000 starting less 3,000 invested, plus the 500 commission kept there
     assert D(str(groups["money"]["amount"])) == D("7500")  # plus the commission kept in the owner's M-Pesa
     shift = groups["agency"]["items"][0]
     assert shift["state"] == "OPEN" and (D(str(shift["cash"])), D(str(shift["float"]))) == (D("6000"), D("19000"))

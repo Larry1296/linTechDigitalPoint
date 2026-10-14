@@ -1,5 +1,5 @@
 """Tenant-scoped dashboard snapshots from posted books and operational records."""
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import DecimalField, ExpressionWrapper, F, Sum, Value, Q
@@ -82,6 +82,36 @@ def accrual_totals(rows, units):
             result[row['field']] += row['amount']
     result['profit'] = result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections']
     return result
+
+
+def unit_series(trend_rows, period_rows, units, profit_visible, first_month, start, end):
+    """Each part of the business side by side over time, for the dashboard's comparison charts: month by month for the
+    last twelve months, and day by day over the chosen dates (when they span at most two months). Each point carries
+    ``<PART>_sales`` and ``<PART>_profit`` (profit None when the viewer may not see it)."""
+    keys = [key for key, _, _, _ in UNITS if key in units]
+    if len(keys) < 2:
+        return [], []
+
+    def point(rows, **label):
+        values = {}
+        for key in keys:
+            totals = accrual_totals(rows, [key])
+            values[f'{key}_sales'] = totals['revenue']
+            values[f'{key}_profit'] = totals['profit'] if profit_visible else None
+        return {**label, **values}
+
+    months = {}
+    for row in trend_rows:
+        months.setdefault(row['date'].strftime('%Y-%m'), []).append(row)
+    trend = [point(months.get(shift_month(first_month, offset).strftime('%Y-%m'), []), month=shift_month(first_month, offset).strftime('%Y-%m'))
+             for offset in range(12)]
+    days = []
+    if (end - start).days <= 62:
+        by_day = {}
+        for row in period_rows:
+            by_day.setdefault(row['date'], []).append(row)
+        days = [point(by_day.get(start + timedelta(days=n), []), date=(start + timedelta(days=n)).isoformat()) for n in range((end - start).days + 1)]
+    return trend, days
 
 
 def money_received(start, end):
@@ -259,6 +289,8 @@ def dashboard_snapshot(request):
                 'expenses': values['expenses'] if profit_visible else None, 'cogs': values['cogs'] if profit_visible else None,
                 'stock_corrections': values['stock_corrections'] if profit_visible else None,
                 'profit': values['profit'] if profit_visible else None, 'verdict': verdict if profit_visible else 'RESTRICTED'})
+    data['unit_trend'], data['unit_days'] = unit_series(trend_rows if visible_units else [], period_rows, visible_units, profit_visible,
+                                                        month_start if visible_units else today, start, end)
     from .dashboard_analytics import enrich_dashboard
     enrich_dashboard(data, books=books, purchase_lots=purchase_lots, stock_value=stock_value,
                      start=start, end=end, now=now, channels=channels, visible_units=visible_units,

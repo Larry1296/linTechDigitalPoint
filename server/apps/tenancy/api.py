@@ -25,13 +25,15 @@ def public_logo_path(organization, variant="logo"):
     return logo_url(organization, variant=variant)
 
 def organization_data(organization):
+    from apps.accounting.money_mode import money_mode
     from .billing import state
     subscription_view = state(organization)
     return {"id": organization.pk, "name": organization.name, "slug": organization.slug,
             "logo_url": public_logo_path(organization), "logo_dark_url": public_logo_path(organization, "logo_dark"),
             "currency": organization.currency, "country": organization.country, "timezone": organization.timezone,
             "business_model": organization.business_model, "sector": organization.sector, "business_type": organization.business_type,
-            "enabled_modules": sorted(effective_modules(organization)), "subscription_status": subscription_view["status"],
+            "enabled_modules": sorted(effective_modules(organization)), "money_mode": money_mode(organization),
+            "subscription_status": subscription_view["status"],
             "subscription": subscription_view}
 
 @api_view(["GET"])
@@ -267,6 +269,8 @@ class BusinessInput(serializers.Serializer):
 @api_view(["POST"])
 @transaction.atomic
 def create_business(request):
+    from apps.accounting.money_mode import MODES as MONEY_MODES, ONE_DRAWER
+
     class SetupInput(BusinessInput, ProfileInput):
         business_size = serializers.ChoiceField(choices=list(profiles.SIZES), default="SMALL")
         enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), default=list)
@@ -280,6 +284,7 @@ def create_business(request):
         opening_cash = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0, default=0)
         opening_bank = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0, default=0)
         chama = serializers.DictField(required=False, allow_null=True, default=None)  # the chama to set up, when that tool is chosen
+        money_mode = serializers.ChoiceField(choices=list(MONEY_MODES), default=ONE_DRAWER)
     form = SetupInput(data=request.data)
     form.is_valid(raise_exception=True)
     values = dict(form.validated_data)
@@ -288,8 +293,10 @@ def create_business(request):
     starter_categories, starter_services = values.pop('starter_categories'), values.pop('starter_services')
     plan_code = values.pop('plan')
     chama = values.pop('chama')
+    money_mode = values.pop('money_mode')
     from uuid import uuid4
-    organization = Organization.objects.create(owner=request.user, slug=f"{slugify(form.validated_data['name'])[:35] or 'business'}-{uuid4().hex[:10]}", **values)
+    organization = Organization.objects.create(owner=request.user, slug=f"{slugify(form.validated_data['name'])[:35] or 'business'}-{uuid4().hex[:10]}",
+                                               settings={"money_mode": money_mode}, **values)
     Membership.objects.create(user=request.user, organization=organization, role="OWNER")
     # The first month is free on the plan chosen. The platform owner's own businesses are complimentary Pro.
     from .billing import start_trial
@@ -475,11 +482,13 @@ class SettingsInput(serializers.Serializer):
     timezone = serializers.CharField(required=False)
     enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), required=False)
     receipt_footer = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    money_mode = serializers.ChoiceField(choices=["ONE_DRAWER", "SEPARATE_CASH"], required=False)
     validate_timezone = BusinessInput.validate_timezone
 
 def settings_data(organization, store):
+    from apps.accounting.money_mode import money_mode
     from .billing import plan_modules
-    return {"name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
+    return {"money_mode": money_mode(organization), "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
             "sector": organization.sector, "business_size": organization.business_size, "phone": organization.phone,
             "email": organization.email, "address": organization.address, "currency": organization.currency,
             "timezone": organization.timezone, "country": organization.country,
@@ -520,9 +529,13 @@ def business_settings(request):
             return Response({"enabled_modules": [f"{names} {'needs' if len(beyond) == 1 else 'need'} the Pro plan. Upgrade on the Subscription page to use {'it' if len(beyond) == 1 else 'them'}."]}, status=400)
     before = settings_data(organization, store)
     footer = values.pop("receipt_footer", None)
+    mode = values.pop("money_mode", None)
     with transaction.atomic():
         for field, value in values.items():
             setattr(organization, field, value)
+        if mode:
+            organization.settings = {**(organization.settings or {}), "money_mode": mode}
+            values["money_mode"] = mode  # for the audit below
         organization.save()
         if "timezone" in values:
             Store.objects.update(timezone=organization.timezone)

@@ -76,7 +76,7 @@ def test_money_check_expects_starting_money_plus_sales_less_spending(owner_shop)
     assert history[0]["note"] == "Evening count" and history[0]["cash_count"]["1000"] == 5
 
 
-def test_money_check_is_shop_money_only_never_the_mpesa_agency(owner_shop):
+def test_money_check_counts_commission_paid_to_the_owner_never_the_agency_cash_or_float(owner_shop):
     client, org, charger = owner_shop
     with organization_context(org):
         from apps.mpesa.models import MpesaOutlet
@@ -88,12 +88,36 @@ def test_money_check_is_shop_money_only_never_the_mpesa_agency(owner_shop):
         record_commission(outlet=outlet, user=owner, period=timezone.localdate(), commission_amount="400", reference="COMM", settlement_method="CASH")
         record_commission(outlet=outlet, user=owner, period=timezone.localdate(), commission_amount="300", reference="COMM-2", settlement_method="MPESA")
     data = client.get("/api/v1/accounting/money-check/").json()
-    assert [p["method"] for p in data["places"]] == ["CASH", "MPESA"]  # the drawer and the Lipa na M-Pesa till
-    assert all(D(p["expected"]) == 0 for p in data["places"])  # agency cash and commission are not shop money
+    assert data["mode"] == "ONE_DRAWER" and [p["method"] for p in data["places"]] == ["CASH", "MPESA"]
+    # The commission is the owner's, labelled as the M-Pesa part's; the agency's 20,000 cash and 30,000 float are not.
+    cash, till = data["places"]
+    assert (D(cash["expected"]), D(till["expected"])) == (D("400"), D("300"))
+    assert {row["unit"]: D(row["amount"]) for row in cash["by_part"]}["MPESA"] == D("400")
     client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1}], "payment_method": "MPESA",
                 "payment_reference": "SJK4ABC123"}, format="json")
     till = next(p for p in client.get("/api/v1/accounting/money-check/").json()["places"] if p["method"] == "MPESA")
-    assert D(till["expected"]) == D("300")  # an M-Pesa sale with the code from its SMS is in the till at once
+    assert D(till["expected"]) == D("600")  # an M-Pesa sale with the code from its SMS is in the till at once
+    assert {row["unit"]: D(row["amount"]) for row in till["by_part"] if D(row["amount"])} == {"SHOP": D("300"), "MPESA": D("300")}
+
+
+def test_separate_drawers_expect_and_count_each_parts_cash_on_its_own(owner_shop):
+    client, org, charger = owner_shop
+    org.enabled_modules = ["inventory", "pos", "services", "reports", "expenses"]
+    org.settings = {"money_mode": "SEPARATE_CASH"}
+    org.save()
+    for unit, amount in (("SHOP", "1000"), ("CYBER", "200")):
+        assert client.post("/api/v1/accounting/money-check/starting/", {"method": "CASH", "unit": unit, "amount": amount,
+                           "idempotency_key": f"start-{unit}"}, format="json").status_code == 201
+    client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1}]}, format="json")  # +300 shop cash
+    places = {p["key"]: p for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert (places["CASH:SHOP"]["label"], D(places["CASH:SHOP"]["expected"])) == ("Shop cash drawer", D("1300"))
+    assert (places["CASH:CYBER"]["label"], D(places["CASH:CYBER"]["expected"])) == ("Cyber cash drawer", D("200"))
+    refused = client.post("/api/v1/accounting/money-check/", {"method": "CASH", "actual": "1300"}, format="json")
+    assert refused.status_code == 400  # whose drawer?
+    counted = client.post("/api/v1/accounting/money-check/", {"method": "CASH", "unit": "CYBER", "actual": "180"}, format="json").json()
+    assert (counted["unit"], D(counted["difference"])) == ("CYBER", D("-20"))
+    places = {p["key"]: p for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert places["CASH:CYBER"]["last_check"]["id"] == counted["id"] and places["CASH:SHOP"]["last_check"] is None
 
 
 def test_mpesa_sale_with_its_code_is_confirmed_at_once_and_without_one_waits_for_the_code(owner_shop):
