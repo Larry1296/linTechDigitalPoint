@@ -70,3 +70,28 @@ def test_a_new_item_follows_the_shops_last_purchase_habit(receiver):
     data = defaults(user, variant).json()
     assert data["document_status"] == "NO_DOCUMENT" and data["payment_method"] == "MPESA"
     assert data["supplier_name"] == "" and data["unit_cost"] is None
+
+
+@pytest.mark.django_db
+def test_lists_the_suppliers_already_in_the_system(receiver):
+    from apps.accounting.models import Supplier
+    user, variant, shelves = receiver
+    Supplier.objects.create(name="Oraimo shop")
+    complete_stock_receipt(user=user, supplier_name="luthuli covers", document_status="NO_DOCUMENT", lines=[{
+        "variant_id": variant.pk, "received_quantity": "1", "unit_cost": "100",
+        "placements": [{"shelf_id": shelves[0].pk, "quantity": "1"}]}])
+    client = APIClient()
+    client.force_authenticate(user=user)
+    names = client.get("/api/v1/inventory/suppliers/").json()
+    assert names == sorted(set(names), key=str.casefold) and "Oraimo shop" in names
+    assert [n for n in names if n.casefold() == "luthuli covers"] == ["luthuli covers"]
+
+
+@pytest.mark.django_db
+def test_supplier_list_needs_permission_to_receive(receipt_data):
+    user, _, _ = receipt_data
+    user.is_staff = True
+    user.save()
+    client = APIClient()
+    client.force_authenticate(user=user)
+    assert client.get("/api/v1/inventory/suppliers/").status_code == 403

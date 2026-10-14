@@ -119,7 +119,7 @@ it("revisits earlier receipt steps and reviews the amended entries", async () =>
   fireEvent.click(
     await screen.findByRole("button", { name: "1. Receipt details" }),
   );
-  fireEvent.change(screen.getByLabelText("Supplier name"), {
+  fireEvent.change(await screen.findByRole("textbox", { name: "Supplier name" }), {
     target: { value: "Updated supplier" },
   });
   fireEvent.click(
@@ -180,7 +180,7 @@ it("keeps unfinished product creation fields when returning to earlier receipt s
   fireEvent.click(
     screen.getByRole("button", { name: "Back to receipt details" }),
   );
-  fireEvent.change(screen.getByLabelText("Supplier name"), {
+  fireEvent.change(await screen.findByRole("textbox", { name: "Supplier name" }), {
     target: { value: "Amended supplier" },
   });
   fireEvent.click(
@@ -197,7 +197,7 @@ it("keeps unfinished product creation fields when returning to earlier receipt s
 });
 it("keeps unsaved edits behind the password unlock overlay", async () => {
   renderFlow();
-  fireEvent.change(await screen.findByLabelText("Supplier name"), {
+  fireEvent.change(await screen.findByRole("textbox", { name: "Supplier name" }), {
     target: { value: "Cable supplier" },
   });
   fireEvent.change(screen.getByLabelText("General notes"), {
@@ -212,7 +212,7 @@ it("keeps unsaved edits behind the password unlock overlay", async () => {
   fireEvent.change(screen.getByLabelText("Password", { exact: true }), {
     target: { value: "password" },
   });
-  expect(await screen.findByLabelText("Supplier name")).toHaveValue(
+  expect(await screen.findByRole("textbox", { name: "Supplier name" })).toHaveValue(
     "Cable supplier",
   );
   expect(screen.getByLabelText("General notes")).toHaveValue(

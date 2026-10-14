@@ -5,6 +5,7 @@ import { api } from "../../core/api/client";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { confirmAction } from "../../core/ui/alerts";
 import "../platform/platform.css";
+import { SupplierPicker } from "./SupplierPicker";
 import { NEW_RECEIPT_COSTS, ReceiptCostFields, ReceiptDocumentFields, receiptCostsPayload, receiptCostsProblem } from "./ReceiptCosts";
 
 const SOURCES = [
@@ -135,11 +136,11 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       {opening && <small className="muted">Unknown buying price? Leave it empty. The stock can still be sold; it is marked cost pending until you add the price, so profit is not guessed.</small>}
       {quick && prefilled.unit_cost == null && <label>{size > 1 ? `Buying price for one ${piece.replace(/s$/, "")}` : "Buying price for one"}
         <input type="number" min="0.01" step="0.01" required value={cost} onChange={(e) => setCost(e.target.value)} /></label>}
-      {quick && !prefilled.supplier_name && <label>Supplier<input maxLength="180" required value={details.supplier_name} onChange={(e) => setDetails({ ...details, supplier_name: e.target.value })} /></label>}
+      {quick && !prefilled.supplier_name && <SupplierPicker value={details.supplier_name} onChange={(supplier_name) => setDetails({ ...details, supplier_name })} />}
       {quick && details.document_status !== "NO_DOCUMENT" && <ReceiptDocumentFields details={details} onChange={setDetails} />}
       {quick && Number(quantity) > 0 && <small className="muted" role="status">Total {money(goodsTotal)}{details.payment_method ? `, ${PAID[details.payment_method]}` : ", owed to the supplier"}.</small>}
       {!opening && !quick && <>
-        <label>Supplier<input maxLength="180" required value={details.supplier_name} onChange={(e) => setDetails({ ...details, supplier_name: e.target.value })} /></label>
+        <SupplierPicker value={details.supplier_name} onChange={(supplier_name) => setDetails({ ...details, supplier_name })} />
         <ReceiptDocumentFields details={details} onChange={setDetails} />
         <ReceiptCostFields details={details} onChange={setDetails} goodsTotal={goodsTotal} />
       </>}

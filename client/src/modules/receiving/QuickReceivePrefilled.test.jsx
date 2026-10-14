@@ -68,3 +68,16 @@ it("offers a similar product instead, filled in from this one", async () => {
   expect(screen.getByRole("button", { name: /This exact product/ })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("link", { name: /A similar product/ })).toHaveAttribute("href", "/admin/products?similar=5");
 });
+
+it("picks the supplier from the suppliers already in the system", async () => {
+  api.mockImplementation(async (url) => (url.includes("suppliers") ? ["Luthuli Covers", "Oraimo shop"]
+    : url.includes("receive-defaults") ? { ...DEFAULTS, supplier_name: "", payment_method: "" } : { id: 4, receipt_number: "RCV-1" }));
+  await open();
+  const supplier = await screen.findByRole("combobox", { name: "Supplier" });
+  expect([...supplier.options].map((o) => o.text)).toEqual(["Choose a supplier", "Luthuli Covers", "Oraimo shop", "+ A new supplier"]);
+  fireEvent.change(supplier, { target: { value: "__new__" } });
+  const typed = screen.getByLabelText("New supplier name");
+  fireEvent.change(typed, { target: { value: "oraimo SHOP" } });
+  fireEvent.blur(typed);
+  expect(typed).toHaveValue("Oraimo shop");
+});

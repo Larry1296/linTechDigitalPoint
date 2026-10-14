@@ -11,6 +11,7 @@ import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
 import { NEW_RECEIPT_COSTS, ReceiptCostFields, ReceiptDocumentFields, paymentSummary, receiptCostsPayload, receiptCostsProblem } from "./ReceiptCosts";
 import { FormError } from "../../components/forms/FormNotice";
+import { SupplierPicker } from "./SupplierPicker";
 
 const emptyLine = () => ({
   variant_id: "",
@@ -329,16 +330,11 @@ export function ReceivePage() {
             </select>
           </label>
           <UnrackedHint categories={categories} />
-          <label>
-            Supplier name
-            <input
-              value={details.supplier_name}
-              onChange={(e) =>
-                setDetails({ ...details, supplier_name: e.target.value })
-              }
-              required
-            />
-          </label>
+          <SupplierPicker
+            label="Supplier name"
+            value={details.supplier_name}
+            onChange={(supplier_name) => setDetails({ ...details, supplier_name })}
+          />
           <ReceiptDocumentFields details={details} onChange={setDetails} />
           <label>
             Date received

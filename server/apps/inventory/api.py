@@ -223,3 +223,17 @@ def receive_defaults(request, pk):
         shelf=Shelf.objects.filter(pk=held["shelf_id"]).first() if held else None
     return Response({"item":_search_row(v,on_hand),"supplier_name":supplier,"unit_cost":unit_cost,"document_status":document_status,
                      "payment_method":payment_method,"shelf":{"id":shelf.id,"code":shelf.code,"display_name":shelf.display_name} if shelf else None})
+
+@api_view(["GET"])
+@permission_classes([HasLinTechPermission])
+def suppliers(request):
+    """The suppliers already in the system, for the supplier list when receiving stock: those in the books and any
+    name used on an earlier delivery, each once whatever its capitals, A to Z."""
+    if not (has_business_permission(request.user, "inventory.add_stockreceipt") or has_business_permission(request.user, "inventory.add_stocklot")):
+        return Response({"detail":"Receiving permission required."},status=403)
+    from apps.accounting.models import Supplier
+    names={}
+    for name in [*Supplier.objects.values_list("name",flat=True),*StockReceipt.objects.exclude(supplier_name="").values_list("supplier_name",flat=True).distinct()]:
+        name=(name or "").strip()
+        if name:names.setdefault(name.casefold(),name)
+    return Response(sorted(names.values(),key=str.casefold))

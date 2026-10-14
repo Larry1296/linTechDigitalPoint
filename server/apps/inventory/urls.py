@@ -8,6 +8,6 @@ urlpatterns += [path("adjustments/", adjustments), path("adjustments/variants/<i
 
 from .receipt_correction_api import receipt_line_correct
 urlpatterns += [path("receipts/<int:pk>/lines/<int:line_id>/correct/", receipt_line_correct)]
-from .api import receipt_return, lot_cost, variant_buying_prices
+from .api import receipt_return, lot_cost, variant_buying_prices, suppliers
 urlpatterns += [path("receipts/<int:pk>/return/", receipt_return), path("lots/<int:pk>/cost/", lot_cost),
-                path("variants/<int:pk>/buying-prices/", variant_buying_prices)]
+                path("variants/<int:pk>/buying-prices/", variant_buying_prices), path("suppliers/", suppliers)]
