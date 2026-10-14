@@ -56,3 +56,32 @@ it("counts a confirmed dialog as a save, but not reading data or signing in", as
   await vi.advanceTimersByTimeAsync(1000);
   expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success", title: "Saved" }));
 });
+
+const saveOn = async (path, idx = 3) => {
+  window.history.replaceState({ idx }, "", path);
+  const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+  submit();
+  mutationStarted("/api/v1/anything/");
+  mutationFinished(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  return back;
+};
+
+it("closes the page after a save and returns to the page it was opened from", async () => {
+  expect(await saveOn("/admin/expenses")).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the till, the M-Pesa agency and other entry-after-entry screens open", async () => {
+  expect(await saveOn("/admin/pos")).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
+  expect(await saveOn("/admin/mpesa/transactions")).not.toHaveBeenCalled();
+});
+
+it("stays when the page was opened directly, or the form is in a dialog", async () => {
+  expect(await saveOn("/admin/expenses", 0)).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
+  form.setAttribute("role", "dialog");
+  expect(await saveOn("/admin/expenses")).not.toHaveBeenCalled();
+});

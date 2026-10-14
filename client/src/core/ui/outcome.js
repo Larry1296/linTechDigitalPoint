@@ -6,9 +6,13 @@ import Swal from "sweetalert2";
 // A save is a changing request (POST, PATCH, …) made within a minute of submitting a form or confirming a dialog.
 // When all of them have finished without an error, the success overlay shows: the page's own success message if it
 // shows one (FormSuccess, showSuccess), otherwise a plain "Saved". Errors come from the request, FormError or showError.
+//
+// Once a staff page's form has saved, the page is done: it closes and returns to the page it was opened from. Screens
+// where many entries are made one after another stay open for the next (STAY), as does a form in a dialog (closing
+// the dialog is its close) or one marked data-stay; a page that has already moved on by itself is left where it went.
 
 let enabled = true;
-let pending = null; // { form: HTMLFormElement | null, at: time }
+let pending = null; // { form: HTMLFormElement | null, at: time, where: the page's address when submitted }
 let inflight = 0;
 let failed = false;
 let timer;
@@ -18,11 +22,24 @@ const SETTLE = 700; // time for the page to show its own success message first
 export const outcomeOverlays = () => enabled;
 export function setOutcomeOverlays(on) { enabled = on; pending = null; inflight = 0; failed = false; clearTimeout(timer); }
 
+// The till, the M-Pesa agency, the stock count, a chama's payments and the cyber job queue take entry after entry.
+const STAY = [/^\/admin\/pos\b/, /^\/admin\/mpesa\b/, /^\/admin\/stock-check\b/, /^\/admin\/chama\/\d+/, /^\/admin\/cyber\/jobs\b/];
+const address = () => (typeof window === "undefined" ? "" : window.location.pathname + window.location.search);
+
+export function returnToPrevious(form, where) {
+  if (!form || form.closest("[data-stay], [role='dialog'], dialog")) return false;
+  const path = window.location.pathname;
+  if (address() !== where || !path.startsWith("/admin/") || STAY.some((stay) => stay.test(path))) return false;
+  if (!(window.history.state?.idx > 0)) return false; // opened directly: there is no page of this app to go back to
+  window.history.back();
+  return true;
+}
+
 const live = () => pending && Date.now() - pending.at < WINDOW;
 const heading = (form) => form?.querySelector("h1, h2, h3, legend")?.textContent?.trim() || form?.getAttribute("aria-label") || "";
 
 function start(form) {
-  pending = { form, at: Date.now() };
+  pending = { form, at: Date.now(), where: address() };
   inflight = 0;
   failed = false;
   clearTimeout(timer);
@@ -48,13 +65,14 @@ function overlay(icon, title, text) {
 }
 
 async function succeed(title, text) {
-  const { form } = pending;
+  const { form, where } = pending;
   pending = null;
   clearTimeout(timer);
   await overlay("success", title, text);
   if (form?.isConnected) {
     form.reset();
     form.dispatchEvent(new Event("outcome-reset"));
+    returnToPrevious(form, where);
   }
 }
 
