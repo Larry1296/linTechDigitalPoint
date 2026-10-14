@@ -36,7 +36,7 @@ def money_in_operation(outlet):
     return {"cash": cash, "float": electronic_float, "total": None if cash is None else cash + electronic_float,
             "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
             "commission_balance": commission["value"], "commission_read": commission["read"],
-            "commission_worked_out": commission["worked_out"], "commission_unknown": commission["unknown"],
+            "commission_worked_out": commission["worked_out"], "commission_paid_out": commission["paid_out"], "commission_unknown": commission["unknown"],
             "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
 
 

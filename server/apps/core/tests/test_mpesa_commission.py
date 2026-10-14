@@ -370,3 +370,19 @@ def test_the_dashboard_shows_profit_with_the_commission_safaricom_has_not_paid_y
     assert client.get("/api/v1/inventory/dashboard/").json()["mpesa_unpaid"] is None
     row = client.get("/api/v1/mpesa/commission/").json()["estimates"][0]
     assert (D(str(row["paid"])), D(str(row["difference"]))) == (D("40"), D("40") - D(str(row["expected"])))
+
+
+def test_commission_recorded_as_paid_out_comes_off_the_commission_balance(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.api import money_in_operation
+        from apps.mpesa.services import open_session
+        open_session(outlet=outlet, operator=owner, opening_cash="1000", opening_float="1000", commission_balance="1020")
+        assert money_in_operation(outlet)["commission_balance"] == D("1020.00")
+    made = _record(client, outlet, last_month, "1020", "SJQ9COMM09", "MPESA")  # paid out and used: the line shows 0
+    with organization_context(org):
+        money = money_in_operation(outlet)
+        assert (money["commission_balance"], money["commission_paid_out"]) == (D("0.00"), D("1020.00"))
+    client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": "Entered by mistake"}, format="json")
+    with organization_context(org):
+        assert money_in_operation(outlet)["commission_balance"] == D("1020.00")  # undone: back as it was

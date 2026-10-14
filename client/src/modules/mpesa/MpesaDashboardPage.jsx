@@ -39,13 +39,15 @@ const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimum
 const signedFigure = (value) => (Number(value) > 0 ? `+${figure(value)}` : Number(value) < 0 ? `−${figure(-Number(value))}` : "—");
 const amount = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
-// How the commission balance was reached when the app added commission it worked out after the last reading.
+// How the commission balance was reached since the last reading: commission the app worked out, less what was paid out.
 function commissionSince(money) {
   const added = Number(money.commission_worked_out) > 0;
+  const paid = Number(money.commission_paid_out) > 0;
   const unknown = Number(money.commission_unknown) || 0;
-  if (money.commission_read == null || (!added && !unknown)) return "";
+  if (money.commission_read == null || (!added && !paid && !unknown)) return "";
   const parts = [`Last read ${amount(money.commission_read)}`];
   if (added) parts.push(`+ ${amount(money.commission_worked_out)} worked out since`);
+  if (paid) parts.push(`− ${amount(money.commission_paid_out)} paid out or used`);
   if (unknown) parts.push(`${unknown} transaction${unknown === 1 ? "" : "s"} not worked out yet`);
   return parts.join(" · ");
 }
@@ -495,8 +497,8 @@ export function MpesaDashboardPage() {
             ? "Read the commission balance off the agent line. The shift's first transaction is measured from it."
             : Number(openingCommission) < Number(lastClose.commission_balance) && openingCommission !== ""
               ? `Lower than ${amount(lastClose.commission_balance)}: Safaricom paid the commission out since then.`
-              : Number(lastClose.commission_worked_out) > 0
-                ? `Filled in with the last reading, ${amount(lastClose.commission_read)}, plus ${amount(lastClose.commission_worked_out)} the app worked out since. Change it if the agent line shows a different balance.`
+              : Number(lastClose.commission_worked_out) > 0 || Number(lastClose.commission_paid_out) > 0
+                ? `Filled in with ${amount(lastClose.commission_balance)}: ${commissionSince(lastClose).replace(/^Last/, "last")}. Change it if the agent line shows a different balance.`
                 : `Filled in with the last reading, ${amount(lastClose.commission_balance)}. Change it if the agent line shows a different balance.`}</p>
           <OpeningCheck last={lastClose} cash={countTotal(openingCount)} electronicFloat={openingFloat} opening={opening}
             onChange={setOpening} canRecordCommission={canRecordCommission} />

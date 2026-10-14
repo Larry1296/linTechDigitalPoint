@@ -123,7 +123,7 @@ it("opens a shift filled in with what the outlet last recorded, commission balan
   api.getMpesaOutlets.mockResolvedValue([
     outlet(1, "Main till", { cash: "3050.00", float: "7000.00", total: "10050.00", updated_on: "2026-10-09", due: true,
       cash_count: { 1000: 3, 500: 0, 200: 0, 100: 0, 50: 1, coins: "0.00" }, commission_balance: "1250.50",
-      commission_read: "1214.50", commission_worked_out: "36.00", commission_unknown: 1 }),
+      commission_read: "1214.50", commission_worked_out: "36.00", commission_paid_out: "0", commission_unknown: 1 }),
     outlet(2, "Market till", { cash: null, float: null, total: null, updated_on: null, due: true, cash_count: {}, commission_balance: null }),
   ]);
   api.openMpesaSession.mockResolvedValue({});

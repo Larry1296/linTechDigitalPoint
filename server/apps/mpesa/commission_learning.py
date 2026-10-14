@@ -221,17 +221,27 @@ def summary(rows, results):
 
 def balance_now(outlet_id):
     """The outlet's commission balance now: the last balance read off the agent line, plus what every transaction since
-    then earned as the app works it out (measured or learned). A transaction it cannot work out yet adds nothing and is
-    counted in ``unknown``, so the figure is never guessed. {"value", "read", "read_at", "worked_out", "unknown"}."""
+    then earned as the app works it out (measured or learned), less commission recorded as paid out or used since then
+    (Safaricom moves it out of the commission balance). A transaction it cannot work out yet adds nothing and is
+    counted in ``unknown``, so the figure is never guessed. {"value", "read", "read_at", "worked_out", "paid_out", "unknown"}."""
+    from .models import MpesaCommissionEntry
     outlets, measured, rates = learn([outlet_id])
     rows = outlets.get(outlet_id, [])
     last = max((i for i, row in enumerate(rows) if row.commission_balance is not None), default=None)
     if last is None:
-        return {"value": None, "read": None, "read_at": None, "worked_out": Decimal("0"), "unknown": 0}
+        return {"value": None, "read": None, "read_at": None, "worked_out": Decimal("0"), "paid_out": Decimal("0"), "unknown": 0}
     since = [row for row in rows[last + 1:] if row.standing]
     totals = summary(since, earned(outlets, measured, rates))
-    read = rows[last].commission_balance
-    return {"value": read + totals["earned"], "read": read, "read_at": rows[last].done_at, "worked_out": totals["earned"], "unknown": totals["unknown"]}
+    read, read_at = rows[last].commission_balance, rows[last].done_at
+    paid_out = Decimal("0")
+    for entry in MpesaCommissionEntry.objects.filter(outlet_id=outlet_id, reversed_at__isnull=True).select_related("opening_session"):
+        # Paid between two shifts: the reading that shift opened with already shows it, so it is taken off only when
+        # the shift opened after the last reading.
+        moment = entry.opening_session.opened_at if entry.opening_session_id else entry.recognized_at
+        if moment > read_at:
+            paid_out += entry.amount
+    value = max(Decimal("0"), read + totals["earned"] - paid_out)
+    return {"value": value, "read": read, "read_at": read_at, "worked_out": totals["earned"], "paid_out": paid_out, "unknown": totals["unknown"]}
 
 
 def for_shift(session):
