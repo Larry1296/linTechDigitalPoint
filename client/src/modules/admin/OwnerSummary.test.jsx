@@ -33,3 +33,14 @@ it("leaves out what the viewer may not see", () => {
   expect(screen.queryByText("Money you should be holding now")).toBeNull();
   expect(screen.getByRole("row", { name: /Total sales/ })).toHaveTextContent("KSh 2,810.00");
 });
+
+it("counts M-Pesa by its commission, says whose money is held, and keeps the agency's money apart", () => {
+  const withAgency = { ...summary, today: { ...summary.today, commission: "50.00" }, all_time: { ...summary.all_time, commission: "1020.00" },
+    money: { ...summary.money, by_part: [{ unit: "SHOP", label: "Shop sales", amount: "2000.00" }, { unit: "MPESA", label: "M-Pesa commission", amount: "1020.00" }] },
+    agency: { cash: "6000.00", float: "19000.00", total: "25000.00" } };
+  render(<OwnerSummary summary={withAgency} money={money} />);
+  expect(screen.getByRole("row", { name: /M-Pesa commission/ })).toHaveTextContent("KSh 1,020.00");
+  expect(screen.getByRole("row", { name: /Total income/ })).toBeInTheDocument();
+  expect(screen.getByText(/Whose money it is:/).closest("p")).toHaveTextContent("Shop sales KSh 2,000.00 · M-Pesa commission KSh 1,020.00");
+  expect(screen.getByText(/M-Pesa money in operation: KSh 25,000.00/).closest("p")).toHaveTextContent("not in the total above");
+});

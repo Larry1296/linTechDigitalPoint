@@ -1,8 +1,10 @@
 import { profitText, stockText } from "./plainMoney";
 
-// The first thing on the dashboard: the shop and services without the M-Pesa agency. Sales, what the sold items really
-// cost, running costs and the profit or loss, today and since the start; then the money the owner should be holding,
-// added up step by step from the cash book. Parts the viewer may not see are left out.
+// The first thing on the dashboard: every part of the business together. Products, services and M-Pesa commission, what
+// the sold items really cost, running costs and the profit or loss, today and since the start; then the money the owner
+// should be holding, added up step by step from the cash book with what each part brought into it, and the M-Pesa
+// agency's own cash and float beside it (the agency's working money, never the owner's). Parts the viewer may not see
+// are left out.
 // ``part`` shows only "sales" (the table) or "money" (what should be held); without it, both.
 export function OwnerSummary({ summary, money, part }) {
   if (!summary) return null;
@@ -11,7 +13,8 @@ export function OwnerSummary({ summary, money, part }) {
   const rows = [
     today.products != null && ["Products sold", today.products, all.products, money],
     today.services != null && ["Services (printing, charging…)", today.services, all.services, money],
-    ["Total sales", today.sales, all.sales, money, true],
+    today.commission != null && ["M-Pesa commission", today.commission, all.commission, money],
+    [today.commission != null ? "Total income" : "Total sales", today.sales, all.sales, money, true],
     all.cost != null && ["− What the sold items cost you", today.cost, all.cost, money],
     all.expenses != null && ["− Running costs (money spent)", today.expenses, all.expenses, money],
     showStock && ["Stock found or missing in counts", today.stock_corrections, all.stock_corrections, value => stockText(value, money)],
@@ -21,8 +24,8 @@ export function OwnerSummary({ summary, money, part }) {
   const sales = part !== "money", cash = part !== "sales";
   if (!sales && !held) return null;
   return <section className={`ownerSummary${part ? ` ownerSummary-${part}` : ""}`} aria-labelledby={`owner-summary-title${part ? `-${part}` : ""}`}>
-    {sales && <><h2 id={`owner-summary-title${part ? `-${part}` : ""}`}>Your business at a glance (without M-Pesa)</h2>
-    <p>Products and services only. M-Pesa agency cash, float and commission are kept apart and checked on the M-Pesa desk.</p>
+    {sales && <><h2 id={`owner-summary-title${part ? `-${part}` : ""}`}>Your business at a glance</h2>
+    <p>{today.commission != null ? "Every part of the business together. From the M-Pesa agency only the commission counts: its cash and float are the agency's working money, not yours." : "Every part of the business together."}</p>
     <div className="trendTable"><table>
       <caption>Sales, costs and profit</caption>
       <thead><tr><th scope="col">What</th><th scope="col">Today</th><th scope="col">Since you started{summary.since ? ` (${summary.since})` : ""}</th></tr></thead>
@@ -33,6 +36,8 @@ export function OwnerSummary({ summary, money, part }) {
       {sales ? <h3>Money you should be holding now</h3> : <h2 id="owner-summary-title-money">Money you should be holding now</h2>}
       <p className="ownerSummaryHeld"><strong>{money(held.expected)}</strong></p>
       <p>{held.places.map(place => `${place.label}: ${money(place.expected)}`).join(" · ")}</p>
+      {(held.by_part || []).filter(row => Number(row.amount) !== 0).length > 1 && <p className="ownerSummaryParts">
+        <b>Whose money it is:</b> {held.by_part.filter(row => Number(row.amount) !== 0).map(row => `${row.label} ${money(row.amount)}`).join(" · ")}</p>}
       <dl>
         {held.parts.filter(part => Number(part.amount) !== 0 || ["starting", "received", "expenses"].includes(part.key)).map(part =>
           <div key={part.key}><dt>{part.label}</dt><dd>{signed(part.amount)}</dd></div>)}
@@ -40,6 +45,8 @@ export function OwnerSummary({ summary, money, part }) {
       </dl>
       {Number(summary.customers_owe) > 0 && <p>Customers still owe you <strong>{money(summary.customers_owe)}</strong> for things already sold. That is part of your sales but not yet in your hands.</p>}
       <p>Count your money under <a href="/admin/money-check">Money check</a> to see if anything is missing.</p>
+      {summary.agency && <p className="ownerSummaryAgency"><b>M-Pesa money in operation: {money(summary.agency.total)}</b> (cash {money(summary.agency.cash)} ·
+        float {money(summary.agency.float)}). This belongs to the M-Pesa agency, so it is not in the total above. What the agency earns for you is its commission.</p>}
     </div>}
   </section>;
 }

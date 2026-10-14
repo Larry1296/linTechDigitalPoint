@@ -3,6 +3,7 @@ import { useTranslation } from "../../core/i18n";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
+import { businessParts } from "../../core/organization/MoneyModeChoice";
 import { ErrorState, Loading } from "../../components/States";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
@@ -51,6 +52,8 @@ export function LedgerPage() {
 const EXPENSE_STATUS = { PAID: "Paid", PARTLY_PAID: "Partly paid", UNPAID: "Unpaid", CANCELLED: "Cancelled" };
 
 export function ExpensesPage() {
+  const { user: viewer } = useAuth();
+  const parts = businessParts(viewer?.organization);
   const { t } = useTranslation();
   const [rows, setRows] = useState([]), [categories, setCategories] = useState([]);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
@@ -100,7 +103,8 @@ export function ExpensesPage() {
     <label>Category<input name="category_name" list="expense-categories" required maxLength="120" placeholder="Rent, transport, electricity…" /></label><datalist id="expense-categories">{categories.map(c => <option key={c.id} value={c.name} />)}</datalist>
     <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required /></label>
     <label>Which period is it for?<input name="incurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label>
-    <label>Part of the business<select name="business_unit"><option value="SHOP">Shop</option><option value="CYBER">Cyber & services</option><option value="MPESA">M-Pesa agency</option></select></label>
+    {parts.length > 1 ? <label>Part of the business<select name="business_unit">{parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select></label>
+      : <input type="hidden" name="business_unit" value={parts[0].key} />}
     <fieldset className="checkList"><legend>Has it been paid?</legend>
       <label><input type="radio" name="paid_choice" checked={paid} onChange={() => setPaid(true)} /> Yes, paid now</label>
       <label><input type="radio" name="paid_choice" checked={!paid} onChange={() => setPaid(false)} /> No, to be paid later</label>

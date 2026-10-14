@@ -9,6 +9,7 @@ import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
 import { allowedModules, findSector, fitModules, moduleProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
+import { MONEY_PARTS, MoneyModeChoice } from "../../core/organization/MoneyModeChoice";
 
 const roleLabels = {
   OWNER: "Owner",
@@ -109,7 +110,7 @@ function BusinessSettings() {
   const show = (settings) => {
     setData(settings);
     setProfile({ business_model: settings.business_model, sector: settings.sector, business_size: settings.business_size,
-      business_type: settings.business_type, modules: new Set(settings.enabled_modules) });
+      business_type: settings.business_type, modules: new Set(settings.enabled_modules), money_mode: settings.money_mode || "ONE_DRAWER" });
   };
   const load = useCallback(() => {
     setError("");
@@ -142,7 +143,7 @@ function BusinessSettings() {
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(["name", "phone", "email", "address", "timezone", "receipt_footer"].map((key) => [key, form.get(key) || ""]));
     Object.assign(body, { business_model: profile.business_model, sector: profile.sector, business_size: profile.business_size,
-      business_type: profile.business_type, enabled_modules: [...profile.modules] });
+      business_type: profile.business_type, enabled_modules: [...profile.modules], money_mode: profile.money_mode });
     setBusy(true); setError(""); setMessage("");
     try {
       show(await api("/api/v1/tenancy/settings/", { method: "PATCH", body: JSON.stringify(body) }));
@@ -188,6 +189,10 @@ function BusinessSettings() {
     </fieldset>
     {data.plan_modules && allowed.some((id) => !data.plan_modules.includes(id)) && <p className="muted">Tools marked Pro plan are not in your current plan. <Link to="/admin/subscription">Upgrade to Pro</Link> to use them.</p>}
     {notes.length > 0 && <p className="muted" role="status">{notes.join(" ")}</p>}
+    {MONEY_PARTS.filter((part) => profile.modules.has(part.module)).length > 1 && <MoneyModeChoice parts={MONEY_PARTS.filter((part) => profile.modules.has(part.module))}
+      value={profile.money_mode} onChange={(mode) => setProfile({ ...profile, money_mode: mode })} />}
+    {(data.money_mode || "ONE_DRAWER") !== profile.money_mode && <p className="muted">Past records are kept as they are. From now on the money check
+      {profile.money_mode === "SEPARATE_CASH" ? " counts each part's cash drawer on its own: count each drawer once to start." : " counts all the cash as one drawer."}</p>}
     <button disabled={busy}>{busy ? "Saving…" : "Save business details"}</button>
     <FormSuccess message={message} />
     <FormError title="Could not save business details." message={error} />

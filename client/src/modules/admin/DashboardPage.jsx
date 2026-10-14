@@ -13,6 +13,7 @@ import { RecordsSummary } from "./RecordsSummary";
 import { OwnerSummary } from "./OwnerSummary";
 import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
 import { BusinessAnalysis } from "./BusinessAnalysis";
+import { PartsAnalysis } from "./PartsAnalysis";
 import { StockQuickSearch } from "./StockQuickSearch";
 
 // On phones tables stack row by row; each figure is labelled with its column heading so it still says what it is.
@@ -171,6 +172,7 @@ export function DashboardPage() {
             ? <div className="trendTable"><table><caption>Running costs by type</caption><thead><tr><th scope="col">Type</th><th scope="col">Part of the business</th><th scope="col">Amount</th></tr></thead><tbody>{data.expense_breakdown.map(row => <tr key={`${row.category}-${row.business_unit}`}><th scope="row">{row.category}</th><td>{data.business_units.find(unit => unit.key === row.business_unit)?.name || row.business_unit}</td><td>{money(row.amount)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan="2">Total</th><td>{money(period.expenses)}</td></tr></tfoot></table></div>
             : <p className="muted">No running costs recorded for these dates.</p>}
         </section>}
+        <PartsAnalysis data={data} money={money} />
         <PeriodComparison data={data} money={money} />
         <BusinessAnalysis data={data} money={money} />
         {data.performance && <CollectionsPanel data={data} money={money} />}

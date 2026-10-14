@@ -30,8 +30,8 @@ it("lays out the analysis for the picked dates, leaving out what the user cannot
     financial_trend: [{ month: "2026-08", sales: 100, expenses: 10, profit: 20 }, { month: "2026-09", sales: 200, expenses: 20, profit: -10 }],
   };
   render(<BusinessAnalysis data={data} money={money} />);
-  for (const title of ["Sales each day", "Sales, running costs and profit", "Where the sales came from", "Best sellers", "Where the running costs went",
-    "Busiest days of the week", "The last twelve months", "Profit kept from each 100 of sales", "Profit or loss by part of the business"]) {
+  for (const title of ["Sales each day", "Sales, running costs and profit", "Best sellers", "Where the running costs went",
+    "Busiest days of the week", "The last twelve months", "Profit kept from each 100 of sales"]) {
     expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
   }
   expect(screen.getByText(/On average, Monday brings the most sales/)).toBeInTheDocument();

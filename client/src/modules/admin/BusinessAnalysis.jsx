@@ -36,7 +36,6 @@ export function BusinessAnalysis({ data, money }) {
   const points = daily ? withWeekAverage(performance.points) : performance.points;
   const label = daily ? dayLabel : monthLabel("date");
   const profitShown = points.some((p) => p.profit != null);
-  const units = (data.unit_period || []).map((unit) => ({ label: unit.name, value: Number(unit.revenue) || 0 }));
   const items = (data.top_items || []).map((item) => ({ label: item.name, value: Number(item.sales) || 0, detail: `${Number(item.quantity).toLocaleString()} sold` }));
   const costs = Object.values((data.expense_breakdown || []).reduce((all, row) => {
     all[row.category] = { label: row.category, value: (all[row.category]?.value || 0) + Number(row.amount) };
@@ -57,12 +56,6 @@ export function BusinessAnalysis({ data, money }) {
         {profitShown && <LineChart title="Sales, running costs and profit" points={points} label={label} format={money}
           note="Below zero means a loss on that day."
           series={[{ key: "revenue", label: "Sales" }, { key: "expenses", label: "Running costs" }, { key: "profit", label: "Profit or loss" }]} />}
-        {(data.unit_period || []).length > 1 && data.unit_period.every((unit) => unit.profit != null) && <ColumnChart title="Profit or loss by part of the business" format={money}
-          points={data.unit_period.map((unit) => ({ name: unit.name, revenue: Number(unit.revenue), costs: Number(unit.cogs) + Number(unit.expenses) + Number(unit.stock_corrections || 0), profit: Number(unit.profit) }))}
-          label={{ header: "Part of the business", short: (p) => p.name.split(" ")[0].replace("Products", "Shop"), full: (p) => p.name }}
-          note={`What each part brought in, what it cost (goods sold and running costs) and what was left.${data.mpesa_unpaid ? " M-Pesa does not yet include commission Safaricom has not paid." : ""}`}
-          series={[{ key: "revenue", label: "Income" }, { key: "costs", label: "Costs" }, { key: "profit", label: "Profit or loss" }]} />}
-        {units.length > 1 && <BarList title="Where the sales came from" note="Each part of the business, for these dates." rows={units} format={money} empty="No sales in these dates." />}
         <BarList title="Best sellers" note="Products by what they sold for, after returns." rows={items} format={money} empty="No products sold in these dates." />
         {profitShown && <BarList title="Where the running costs went" note="Running costs by type." rows={costs} format={money} color={SERIES[1]} empty="No running costs in these dates." />}
         {weekdays.length > 1 && <ColumnChart title="Busiest days of the week" points={weekdays} label={{ header: "Day", short: (p) => p.day.slice(0, 3), full: (p) => p.day }}

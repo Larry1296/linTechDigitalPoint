@@ -192,3 +192,14 @@ def test_a_waiting_mpesa_that_duplicates_cash_can_be_marked_not_received(owner_s
         from apps.commerce.models import Sale
         from apps.commerce.returns import sale_amounts
         assert sale_amounts(Sale.objects.get(pk=sale_id)) == (D("250.00"), D("250.00"))
+
+
+def test_the_money_mode_is_chosen_in_settings_and_known_everywhere(owner_shop):
+    client, org, _ = owner_shop
+    assert client.get("/api/v1/tenancy/settings/").json()["money_mode"] == "ONE_DRAWER"
+    changed = client.patch("/api/v1/tenancy/settings/", {"money_mode": "SEPARATE_CASH"}, format="json")
+    assert changed.status_code == 200 and changed.json()["money_mode"] == "SEPARATE_CASH"
+    org.refresh_from_db()
+    assert org.settings["money_mode"] == "SEPARATE_CASH"
+    assert client.patch("/api/v1/tenancy/settings/", {"money_mode": "ANYTHING"}, format="json").status_code == 400
+    assert client.get("/api/v1/accounting/money-check/").json()["mode"] == "SEPARATE_CASH"

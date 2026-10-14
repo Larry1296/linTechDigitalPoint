@@ -2889,3 +2889,9 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   color: var(--text); background: color-mix(in srgb, #f59e0b 16%, var(--surface)); box-shadow: var(--shadow); font-size: 13px; line-height: 1.4; pointer-events: none; }
 .stockQuickSearchBox kbd { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font: 600 12px/1.4 inherit; }
 @media (hover: none) { .stockQuickSearchBox kbd { display: none; } }
+
+/* "How each part of the business is doing": the plain sentences above the charts. */
+.partsStory { display: grid; gap: 6px; margin: 0 0 16px; padding: 12px 16px 12px 32px; border-radius: 12px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.partsStory li { line-height: 1.5; }
+.ownerSummaryParts, .ownerSummaryAgency { font-size: 14px; }
+.ownerSummaryAgency { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }

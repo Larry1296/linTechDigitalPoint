@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
+import { businessParts } from "../../core/organization/MoneyModeChoice";
 import { businessCurrency } from "../../core/organization/presentation";
 import { askForm, confirmAction } from "../../core/ui/alerts";
 import { Empty, ErrorState, Loading } from "../../components/States";
@@ -25,7 +26,8 @@ const GROUPS = [["During the open shift", (p) => p.startsWith("AGENCY_")], ["Bet
   ["Outside the agency", (p) => !p.startsWith("AGENCY_") && p !== "OPENING_FLOAT"]];
 
 // Commission Safaricom paid: for which month, how much, when and where the money went (Safaricom gives no M-Pesa code for it).
-const UNITS = [["MPESA", "M-Pesa agency"], ["SHOP", "Shop"], ["CYBER", "Services"]];
+// The M-Pesa agency first, then the other parts this business runs.
+const units = (organization) => [...businessParts(organization)].sort((a, b) => (b.key === "MPESA") - (a.key === "MPESA"));
 const blankCost = () => ({ id: crypto.randomUUID(), category: "", description: "", amount: "", unit: "MPESA" });
 
 // Safaricom's payment next to what the app worked out for that month from your readings.
@@ -47,6 +49,7 @@ function Comparison({ estimate, amount }) {
 
 // Any part of the commission spent straight away: what on, how much, for which part of the business. Each is a cost.
 function SpentLines({ lines, onChange, categories }) {
+  const { user } = useAuth();
   const set = (id, key, value) => onChange(lines.map((line) => (line.id === id ? { ...line, [key]: value } : line)));
   return (
     <fieldset className="commissionSpent">
@@ -64,7 +67,7 @@ function SpentLines({ lines, onChange, categories }) {
             onChange={(event) => set(line.id, "amount", event.target.value)} />
           <FormField label="For">
             <select value={line.unit} onChange={(event) => set(line.id, "unit", event.target.value)}>
-              {UNITS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+              {units(user?.organization).map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}
             </select>
           </FormField>
           <button type="button" className="secondary" aria-label={`Remove cost ${index + 1}`} onClick={() => onChange(lines.filter((l) => l.id !== line.id))}>Remove</button>

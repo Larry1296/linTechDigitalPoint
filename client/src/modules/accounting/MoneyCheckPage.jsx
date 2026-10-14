@@ -39,7 +39,7 @@ function CountForm({ place, onSaved, canAddStarting, onStartingAdded }) {
     setBusy(true);
     setError("");
     try {
-      await api("/api/v1/accounting/money-check/starting/", { method: "POST", body: JSON.stringify({ method: place.method, amount: extra.toFixed(2),
+      await api("/api/v1/accounting/money-check/starting/", { method: "POST", body: JSON.stringify({ method: place.method, unit: place.unit, amount: extra.toFixed(2),
         note: "Money already there before using the app", idempotency_key: crypto.randomUUID() }) });
       await onStartingAdded();
     } catch (err) {
@@ -54,7 +54,7 @@ function CountForm({ place, onSaved, canAddStarting, onStartingAdded }) {
     setError("");
     try {
       const saved = await api("/api/v1/accounting/money-check/", { method: "POST", body: JSON.stringify({
-        method: place.method, note, ...(cash ? { actual: actual.toFixed(2), cash_count: countPayload(count) } : { actual: amount }) }) });
+        method: place.method, unit: place.unit, note, ...(cash ? { actual: actual.toFixed(2), cash_count: countPayload(count) } : { actual: amount }) }) });
       setCount(emptyCount());
       setAmount("");
       setNote("");
@@ -68,7 +68,7 @@ function CountForm({ place, onSaved, canAddStarting, onStartingAdded }) {
   return (
     <form className="moneyCount" onSubmit={(event) => void submit(event)}>
       <fieldset disabled={busy}>
-        {cash ? <CashCounter count={count} onChange={setCount} legend="Count the cash in the drawer" />
+        {cash ? <CashCounter count={count} onChange={setCount} legend={`Count the cash in the ${place.unit ? place.label.toLowerCase() : "drawer"}`} />
           : <FormField label={`Amount you have on ${place.label} (${businessCurrency()})`} type="number" min="0" step="0.01" required
             value={amount} onChange={(event) => setAmount(event.target.value)} />}
         {(cash || amount !== "") && <p className="moneyCompare">You have <b>{money(actual)}</b> · the app expects <b>{money(place.expected)}</b> · {differenceText(actual - Number(place.expected))}</p>}
@@ -85,6 +85,15 @@ function CountForm({ place, onSaved, canAddStarting, onStartingAdded }) {
   );
 }
 
+// Whose money is in a place: what each part of the business brought in less what it paid out from there.
+export function WhoseMoney({ place }) {
+  const rows = (place.by_part || []).filter((row) => Number(row.amount) !== 0);
+  if (place.unit || rows.length < 2) return null;
+  return <table className="moneyParts"><caption>Whose money it is</caption><tbody>
+    {rows.map((row) => <tr key={row.unit}><th scope="row">{row.label}</th><td>{Number(row.amount) < 0 ? `− ${money(-Number(row.amount))}` : money(row.amount)}</td></tr>)}
+  </tbody></table>;
+}
+
 function StartingMoney({ places, onSaved }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,7 +101,9 @@ function StartingMoney({ places, onSaved }) {
   if (!open) return <button type="button" className="secondary" onClick={() => setOpen(true)}>Add money I already had</button>;
   const submit = async (event) => {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const { place: where, ...values } = Object.fromEntries(new FormData(event.currentTarget));
+    const [method, unit] = where.split(":");
+    Object.assign(values, { method, unit: unit || null });
     if (!(await confirmAction({ title: `Add ${money(values.amount)} as starting money?`,
       text: "Use this for money you had before you started recording in the app. It is not a sale and does not count as profit.",
       confirmButtonText: "Add starting money" }))) return;
@@ -115,7 +126,7 @@ function StartingMoney({ places, onSaved }) {
         using the app, or money you put in yourself. Not M-Pesa agency money.</p>
       <fieldset disabled={busy}>
         <FormField label="Where is it kept?">
-          <select name="method" defaultValue="CASH">{[...places.map((p) => [p.method, p.label]), ...[["BANK", "Bank"], ["OTHER", "Other"]].filter(([m]) => !places.some((p) => p.method === m))]
+          <select name="place" defaultValue={places[0]?.key || "CASH"}>{[...places.map((p) => [p.key, p.label]), ...[["BANK", "Bank"], ["OTHER", "Other"]].filter(([m]) => !places.some((p) => p.method === m))]
             .map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         </FormField>
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01" required />
@@ -151,17 +162,21 @@ export function MoneyCheckPage() {
       <p className="muted">For each place you keep money, the app works out what should be there: the money you started with, plus what customers paid,
         minus what you spent, paid suppliers or lent. Count what you really have and compare. If they differ, find what was not recorded,
         for example with a <Link to="/admin/stock-check">stock check</Link>.</p>
-      <p className="formNotice formNoticeInfo">This is the shop's money only: the cash drawer and the Lipa na M-Pesa till. M-Pesa agency cash and float are kept separate and are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
+      <p className="formNotice formNoticeInfo">{data.mode === "SEPARATE_CASH"
+        ? "Each part of the business keeps its own cash drawer, counted on its own. The Lipa na M-Pesa till and the bank are shared; each shows how much of it belongs to each part."
+        : "All your cash is in one drawer. Each place shows how much of it each part of the business brought in."}{" "}
+        M-Pesa commission paid out to you is your money and is counted here. The M-Pesa agency's own cash and float are not yours: they are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
       {result && <p className={Math.abs(Number(result.difference)) < 0.005 ? "formNotice formNoticeSuccess" : "formNotice formNoticeInfo"} role="status">
         Saved. You have {money(result.actual)}; the app expected {money(result.expected)}. {differenceText(result.difference)}</p>}
       <div className="moneyPlaces">{data.places.map((place) => (
-        <section key={place.method} className="moneyPlace" aria-labelledby={`place-${place.method}`}>
-          <h2 id={`place-${place.method}`}>{place.label}</h2>
+        <section key={place.key} className="moneyPlace" aria-labelledby={`place-${place.key}`}>
+          <h2 id={`place-${place.key}`}>{place.label}</h2>
           <p className="moneyExpected"><span>The app expects</span><strong>{money(place.expected)}</strong></p>
           <table className="moneyParts"><caption>How it is worked out</caption><tbody>
             {place.parts.map((part) => <tr key={part.key}><th scope="row">{part.label}</th><td>{Number(part.amount) < 0 ? `− ${money(-Number(part.amount))}` : `+ ${money(part.amount)}`}</td></tr>)}
             <tr className="reportTotal"><th scope="row">Expected</th><td>{money(place.expected)}</td></tr>
           </tbody></table>
+          <WhoseMoney place={place} />
           {place.last_check && <p className="muted">Last counted {when(place.last_check.created_at)}: {money(place.last_check.actual)} ({differenceText(place.last_check.difference)})</p>}
           {can("accounting.add_moneycheck") && <CountForm place={place} onSaved={async (saved) => { setResult(saved); await load(); }}
             canAddStarting={can("accounting.add_cashentry")} onStartingAdded={load} />}
@@ -171,7 +186,7 @@ export function MoneyCheckPage() {
       {data.history.length > 0 && <section aria-labelledby="history-heading">
         <h2 id="history-heading">Earlier counts</h2>
         <div className="trendTable"><table><thead><tr><th scope="col">When</th><th scope="col">Where</th><th scope="col">You had</th><th scope="col">App expected</th><th scope="col">Difference</th><th scope="col">Counted by</th><th scope="col">Note</th></tr></thead>
-          <tbody>{data.history.map((check) => <tr key={check.id}><td>{when(check.created_at)}</td><td>{data.places.find((p) => p.method === check.method)?.label || check.method}</td>
+          <tbody>{data.history.map((check) => <tr key={check.id}><td>{when(check.created_at)}</td><td>{data.places.find((p) => p.method === check.method && (p.unit || null) === (check.unit || null))?.label || check.method}</td>
             <td>{money(check.actual)}</td><td>{money(check.expected)}</td>
             <td className={Math.abs(Number(check.difference)) < 0.005 ? undefined : "lossText"}>{Math.abs(Number(check.difference)) < 0.005 ? "✓ matched" : Number(check.difference) < 0 ? `${money(-Number(check.difference))} short` : `${money(check.difference)} over`}</td>
             <td>{check.counted_by}</td><td>{check.note}</td></tr>)}</tbody>
