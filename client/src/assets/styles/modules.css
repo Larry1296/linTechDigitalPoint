@@ -2925,3 +2925,12 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .shareWays small { font-weight: 400; }
 .shareAmounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 10px; }
 .shareAmounts > p { grid-column: 1 / -1; margin: 0; }
+
+/* A combined M-Pesa shift: what to expect at closing, the agency's money and the business's own. */
+.combinedExpected { display: grid; gap: 8px; }
+.combinedExpected p { margin: 0; }
+.combinedTable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.combinedTable caption { text-align: left; font-weight: 700; margin-bottom: 6px; }
+.combinedTable th, .combinedTable td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+.combinedTable th[scope="row"], .combinedTable thead th:first-child { text-align: left; font-weight: 500; }
+.combinedTable tfoot th, .combinedTable tfoot td { font-weight: 800; border-bottom: 0; }

@@ -111,7 +111,7 @@ function BusinessSettings() {
     setData(settings);
     setProfile({ business_model: settings.business_model, sector: settings.sector, business_size: settings.business_size,
       business_type: settings.business_type, modules: new Set(settings.enabled_modules), money_mode: settings.money_mode || "ONE_DRAWER",
-      structure: settings.structure || "SINGLE", part_names: settings.own_part_names || {} });
+      structure: settings.structure || "SINGLE", part_names: settings.own_part_names || {}, sale_mpesa_to: settings.sale_mpesa_to || "AGENT_LINE" });
   };
   const load = useCallback(() => {
     setError("");
@@ -145,7 +145,7 @@ function BusinessSettings() {
     const body = Object.fromEntries(["name", "phone", "email", "address", "timezone", "receipt_footer"].map((key) => [key, form.get(key) || ""]));
     Object.assign(body, { business_model: profile.business_model, sector: profile.sector, business_size: profile.business_size,
       business_type: profile.business_type, enabled_modules: [...profile.modules], money_mode: profile.money_mode,
-      structure: profile.structure, part_names: Object.fromEntries(MONEY_PARTS.map((part) => [part.key, profile.part_names[part.key]?.trim() || ""])) });
+      structure: profile.structure, sale_mpesa_to: profile.sale_mpesa_to, part_names: Object.fromEntries(MONEY_PARTS.map((part) => [part.key, profile.part_names[part.key]?.trim() || ""])) });
     setBusy(true); setError(""); setMessage("");
     try {
       show(await api("/api/v1/tenancy/settings/", { method: "PATCH", body: JSON.stringify(body) }));
@@ -193,6 +193,13 @@ function BusinessSettings() {
     {notes.length > 0 && <p className="muted" role="status">{notes.join(" ")}</p>}
     {MONEY_PARTS.filter((part) => profile.modules.has(part.module)).length > 1 && <BusinessPartsChoice parts={MONEY_PARTS.filter((part) => profile.modules.has(part.module))}
       sector={profile.sector} value={profile} onChange={(next) => setProfile({ ...profile, ...next })} />}
+    {profile.modules.has("mpesa") && MONEY_PARTS.filter((part) => profile.modules.has(part.module)).length > 1 && profile.money_mode === "ONE_DRAWER" &&
+      <fieldset className="checkList">
+        <legend>When customers pay for sales by M-Pesa, where does the money go?</legend>
+        <label><input type="radio" name="sale_mpesa_to" checked={profile.sale_mpesa_to === "AGENT_LINE"} onChange={() => setProfile({ ...profile, sale_mpesa_to: "AGENT_LINE" })} /> To the agent line</label>
+        <label><input type="radio" name="sale_mpesa_to" checked={profile.sale_mpesa_to === "TILL"} onChange={() => setProfile({ ...profile, sale_mpesa_to: "TILL" })} /> To a till of the business's own</label>
+        <small className="muted">With one drawer, the M-Pesa shift counts all the money: the cash in the drawer{profile.sale_mpesa_to === "AGENT_LINE" ? " and everything on the agent line" : ""}, and expects the sales with the agency's money.</small>
+      </fieldset>}
     {(data.money_mode || "ONE_DRAWER") !== profile.money_mode && <p className="muted">Past records are kept as they are. From now on the money check
       {profile.money_mode === "SEPARATE_CASH" ? " counts each part's cash drawer on its own: count each drawer once to start." : " counts all the cash as one drawer."}</p>}
     <button disabled={busy}>{busy ? "Saving…" : "Save business details"}</button>

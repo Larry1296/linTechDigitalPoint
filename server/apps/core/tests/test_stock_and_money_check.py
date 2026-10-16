@@ -18,7 +18,8 @@ D = Decimal
 @pytest.fixture
 def owner_shop():
     owner = User.objects.create_user("checker", password="Safe-pass-1848")
-    org = Organization.objects.create(name="Check shop", slug="check", owner=owner)
+    org = Organization.objects.create(name="Check shop", slug="check", owner=owner,  # no agency of its own: the drawer is counted here
+                                      enabled_modules=["inventory", "pos", "services", "customers", "expenses", "reports", "branches", "staff"])
     Membership.objects.create(user=owner, organization=org, role="OWNER")
     OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
     with organization_context(org):

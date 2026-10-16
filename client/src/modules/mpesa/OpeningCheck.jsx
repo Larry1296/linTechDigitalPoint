@@ -25,9 +25,12 @@ export function OpeningCheck({ last, cash, electronicFloat, opening, onChange, c
   const counted = electronicFloat !== "";
   return (
     <div className="openingCheck" aria-label="Compared with the last shift">
-      <p className="muted">The last shift closed with cash <strong>{amount(last.cash)}</strong> and float <strong>{amount(last.float)}</strong>
-        {last.updated_on ? ` (${new Date(`${last.updated_on}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })})` : ""}.
-        Today's counts should match.</p>
+      {last.agencyCash !== undefined
+        ? <p className="muted">Expected now: cash <strong>{amount(last.cash)}</strong> and <strong>{amount(last.float)}</strong> on the line: what the
+          last shift closed with (the agency's), plus the business's own money from sales since. Today's counts should match.</p>
+        : <p className="muted">The last shift closed with cash <strong>{amount(last.cash)}</strong> and float <strong>{amount(last.float)}</strong>
+          {last.updated_on ? ` (${new Date(`${last.updated_on}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })})` : ""}.
+          Today's counts should match.</p>}
       {counted && canRecordCommission && gaps.extraFloat > 0 && (
         <label className="checkRow">
           <input type="checkbox" checked={opening.commission}

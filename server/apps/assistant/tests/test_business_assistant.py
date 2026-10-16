@@ -171,6 +171,8 @@ def test_the_assistant_sees_each_mpesa_transaction_and_service_job_in_full(shop)
     from apps.cyber.services import complete_job, create_job
     from apps.mpesa.models import MpesaOutlet
     from apps.mpesa.services import open_session, post_transaction, reverse_transaction
+    shop.org.settings = {**(shop.org.settings or {}), "money_mode": "SEPARATE_CASH"}  # the agency keeps its own drawer
+    shop.org.save(update_fields=["settings"])
     with organization_context(shop.org):
         outlet = MpesaOutlet.objects.create(store=Store.objects.first(), display_name="Main M-Pesa")
         session = open_session(outlet=outlet, operator=shop.owner, opening_cash="5000", opening_float="8000")

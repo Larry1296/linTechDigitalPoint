@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from apps.core.permissions import HasLinTechPermission
 
 from .models import MpesaCommissionEntry, MpesaOutlet, MpesaReconciliation, MpesaSession, MpesaTransaction
+from .combined import view as combined_view
 from .services import (add_provider_reference, correct_transaction, open_session, post_transaction, reconcile_session, record_commission_balance,
                        reverse_transaction, session_balances)
 
@@ -37,7 +38,9 @@ def money_in_operation(outlet):
             "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
             "commission_balance": commission["value"], "commission_read": commission["read"],
             "commission_worked_out": commission["worked_out"], "commission_paid_out": commission["paid_out"], "commission_unknown": commission["unknown"],
-            "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
+            "open_session": session.pk if session and session.status == MpesaSession.OPEN else None,
+            # One drawer for the whole business: the next count includes the business's own money, so it is offered too.
+            "combined": combined_view(organization=outlet.organization)}
 
 
 class OutletSerializer(serializers.ModelSerializer):
@@ -397,7 +400,7 @@ def dashboard(request):
     in_operation = {"total": cash + electronic_float,
                     "opening": (session.opening_cash + session.opening_float) if session else 0}
     from .commission_learning import for_shift, forecast
-    return Response({"commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    return Response({"combined": combined_view(session), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):

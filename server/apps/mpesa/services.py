@@ -104,6 +104,7 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     any difference needs a reason, except commission Safaricom paid into the float in between, which is recorded as
     commission (``commission``: {"period": month, "amount": ...}) so it counts as income. ``commission_balance`` is
     the commission balance on the agent line now, the reading the shift's first transaction is measured from."""
+    from .combined import business_money, combined
     if MpesaSession.objects.select_for_update().filter(outlet=outlet, status=MpesaSession.OPEN).exists():
         raise ValidationError("This outlet already has an open M-Pesa session.")
     cash, count = counted_cash(opening_cash, cash_count)
@@ -111,6 +112,17 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     reading = parse_reading(commission_balance)
     if cash < 0 or electronic_float < 0:
         raise ValidationError("Opening balances cannot be negative.")
+    # One drawer for the whole business: the count is everything; the agency's part is what the business's own money
+    # (from the cash book) leaves.
+    business_cash = business_line = None
+    if combined(outlet.organization):
+        business_cash, business_line = business_money(outlet.organization)
+        if cash < business_cash or electronic_float < business_line:
+            raise ValidationError(f"The business's own money alone should be cash {business_cash:,.2f} and {business_line:,.2f} on the line "
+                                  f"(sales less what was spent, from the cash book), but you counted cash {cash:,.2f} and {electronic_float:,.2f} "
+                                  "on the line. Count again. If the business's money really left (spent, paid to a supplier, banked or taken out), record "
+                                  "where it went first, then open the shift.")
+        cash, electronic_float = cash - business_cash, electronic_float - business_line
     from .commission import previous_close
     last = previous_close(outlet)
     carried_cash, carried_float = (last.closing_cash_actual, last.closing_float_actual) if last else (None, None)
@@ -122,12 +134,19 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
                               f"({carried_float:,.2f}), so at most that much of it can be Safaricom's commission.")
     difference_reason = str(difference_reason or "").strip()
     if last and (cash != carried_cash or electronic_float - earned != carried_float) and not difference_reason:
-        raise ValidationError(f"The last shift closed with cash {carried_cash:,.2f} and float {carried_float:,.2f}, but you counted cash "
-                              f"{cash:,.2f} and float {electronic_float:,.2f}. Say why they differ (for example money taken out or "
-                              "brought in overnight), or record commission Safaricom paid into the float.")
+        if business_cash is None:
+            raise ValidationError(f"The last shift closed with cash {carried_cash:,.2f} and float {carried_float:,.2f}, but you counted cash "
+                                  f"{cash:,.2f} and float {electronic_float:,.2f}. Say why they differ (for example money taken out or "
+                                  "brought in overnight), or record commission Safaricom paid into the float.")
+        # Counting everything: said in what was counted, the business's own money added back on both sides.
+        raise ValidationError(f"Expected cash {carried_cash + business_cash:,.2f} and {carried_float + business_line:,.2f} on the line (what the last "
+                              f"shift closed with, plus the business's own money now), but you counted cash {cash + business_cash:,.2f} and "
+                              f"{electronic_float + business_line:,.2f} on the line. Say why they differ (for example money taken out or brought in "
+                              "overnight), or record commission Safaricom paid into the float.")
     session = MpesaSession.objects.create(outlet=outlet, operator=operator, opening_cash=cash, opening_float=electronic_float, opened_at=timezone.now(), notes=notes,
                                      opening_cash_count=count, carried_cash=carried_cash, carried_float=carried_float,
-                                     opening_difference_reason=difference_reason, opening_commission_balance=reading)
+                                     opening_difference_reason=difference_reason, opening_commission_balance=reading,
+                                     business_cash_at_open=business_cash, business_line_at_open=business_line)
     audit("MPESA_SESSION_OPENED", session, operator, after={"cash": str(cash), "float": str(electronic_float), "carried_cash": str(carried_cash),
                                                            "carried_float": str(carried_float), "reason": difference_reason,
                                                            "commission_balance": None if reading is None else str(reading)})
@@ -383,6 +402,13 @@ def reconcile_session(*, session, user, actual_cash, actual_float, reason="", no
     actual_float = Decimal(str(actual_float))
     if actual_cash < 0 or actual_float < 0:
         raise ValidationError("Actual cash and float cannot be negative.")
+    # A shift that counted everything closes the same way: the business's own money now is taken out of the count, so
+    # the difference is the whole drawer's and line's, and the agency's figures stay the agency's.
+    business_cash = business_line = None
+    if session.business_cash_at_open is not None:
+        from .combined import business_money
+        business_cash, business_line = business_money(session.organization)
+        actual_cash, actual_float = actual_cash - business_cash, actual_float - business_line
     cash_variance, float_variance = actual_cash - expected_cash, actual_float - expected_float
     if (cash_variance or float_variance) and not reason.strip():
         raise ValidationError("A reason is required when reconciliation has a variance.")
@@ -390,6 +416,7 @@ def reconcile_session(*, session, user, actual_cash, actual_float, reason="", no
         session=session, expected_cash=expected_cash, actual_cash=actual_cash, cash_variance=cash_variance,
         expected_float=expected_float, actual_float=actual_float, float_variance=float_variance,
         reason=reason, operator=user, reviewed_by=user if is_business_manager(user) else None, notes=notes, cash_count=count,
+        business_cash=business_cash, business_line=business_line,
     )
     session.status = MpesaSession.CLOSED
     session.closing_cash_actual = actual_cash

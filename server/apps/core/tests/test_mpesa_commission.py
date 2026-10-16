@@ -16,7 +16,7 @@ D = Decimal
 @pytest.fixture
 def agency():
     owner = User.objects.create_user("agent-owner", password="Safe-pass-1848")
-    org = Organization.objects.create(name="Agent shop", slug="agent", owner=owner)
+    org = Organization.objects.create(name="Agent shop", slug="agent", owner=owner, settings={"money_mode": "SEPARATE_CASH"})  # the agency keeps its own drawer
     Membership.objects.create(user=owner, organization=org, role="OWNER")
     OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
     with organization_context(org):

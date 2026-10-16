@@ -507,14 +507,16 @@ class SettingsInput(serializers.Serializer):
     money_mode = serializers.ChoiceField(choices=["ONE_DRAWER", "SEPARATE_CASH"], required=False)
     structure = serializers.ChoiceField(choices=["SINGLE", "PARTS"], required=False)
     part_names = PartNames(required=False)
+    sale_mpesa_to = serializers.ChoiceField(choices=["AGENT_LINE", "TILL"], required=False)
     validate_timezone = BusinessInput.validate_timezone
 
 def settings_data(organization, store):
     from apps.accounting.money_mode import money_mode, part_names, structure
     from .billing import plan_modules
     own_names = (organization.settings or {}).get("part_names") or {}
+    from apps.mpesa.combined import combined, sale_mpesa_to
     return {"money_mode": money_mode(organization), "structure": structure(organization), "part_names": part_names(organization),
-            "own_part_names": own_names, "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
+            "own_part_names": own_names, "sale_mpesa_to": sale_mpesa_to(organization), "combined_shift": combined(organization), "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
             "sector": organization.sector, "business_size": organization.business_size, "phone": organization.phone,
             "email": organization.email, "address": organization.address, "currency": organization.currency,
             "timezone": organization.timezone, "country": organization.country,
@@ -556,7 +558,7 @@ def business_settings(request):
     before = settings_data(organization, store)
     footer = values.pop("receipt_footer", None)
     # How the money is kept, whether the business has parts and what they are called live in the business's settings.
-    kept = {key: values.pop(key) for key in ("money_mode", "structure", "part_names") if key in values}
+    kept = {key: values.pop(key) for key in ("money_mode", "structure", "part_names", "sale_mpesa_to") if key in values}
     with transaction.atomic():
         for field, value in values.items():
             setattr(organization, field, value)

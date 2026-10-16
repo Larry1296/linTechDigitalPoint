@@ -162,3 +162,30 @@ it("records the commission balance during a shift that opened without one", asyn
   fireEvent.click(within(main).getByRole("button", { name: "Record commission balance" }));
   await waitFor(() => expect(api.recordMpesaCommissionBalance).toHaveBeenCalledWith(8, "2,400"));
 });
+
+// One drawer for the whole business: the shift counts everything and expects the agency's money plus the sales money.
+const combined = { sale_mpesa_to: "AGENT_LINE", business_cash: "1200.00", business_line: "500.00", business_cash_at_open: "1000.00",
+  business_line_at_open: "500.00", since_open: [{ label: "Shop received from customers", cash: "300.00", line: "0" }, { label: "Shop spent on running costs", cash: "-100.00", line: "0" }] };
+
+it("opens a combined shift from everything expected: the agency's last close plus the business's sales money", async () => {
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { cash: "10000.00", float: "20000.00", total: "30000.00", updated_on: "2026-09-26",
+    due: true, combined: { sale_mpesa_to: "AGENT_LINE", business_cash: "1000.00", business_line: "500.00" } })]);
+  render(<MpesaDashboardPage />);
+  expect(await screen.findByLabelText("Opening: all the money on the agent line")).toHaveValue(20500);
+  expect(screen.getByText(/Expected now: cash/)).toHaveTextContent("KSh 11,000");
+  expect(screen.getByText(/Count all the money, the agency's and the business's together/)).toHaveTextContent("KSh 1,000 in the drawer, KSh 500 on the agent line");
+});
+
+it("closes a combined shift against the agency's money plus the sales since opening, line by line", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 5, outlet: 1, opening_cash: "10000", opening_float: "20000" },
+    cash: "12000.00", float: "18000.00", in_operation: { total: 30000, opening: 30000 }, combined });
+  api.reconcileMpesaSession.mockResolvedValue({});
+  render(<MpesaDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: /Close & reconcile shift/ }));
+  const table = screen.getByRole("table", { name: "What to expect at closing" });
+  expect(within(table).getByRole("row", { name: /Shop received from customers, since opening/ })).toHaveTextContent("+KSh 300");
+  expect(within(table).getByRole("row", { name: /Shop spent on running costs/ })).toHaveTextContent("−KSh 100");
+  expect(within(table).getByRole("row", { name: /^Expected now/ })).toHaveTextContent("KSh 13,200" + "KSh 18,500");
+  fireEvent.change(screen.getByLabelText("All the money on the agent line"), { target: { value: "18500" } });
+  expect(screen.getByText(/Agent line: entered vs expected/).nextSibling).toHaveTextContent("KSh 18,500 vs KSh 18,500");
+});

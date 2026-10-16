@@ -15,7 +15,7 @@ D = Decimal
 
 def test_net_worth_adds_shop_money_live_agency_money_and_investments_less_what_is_owed():
     owner = User.objects.create_user("worth-owner", password="Safe-pass-1848")
-    org = Organization.objects.create(name="Worth shop", slug="worth", owner=owner)
+    org = Organization.objects.create(name="Worth shop", slug="worth", owner=owner, settings={"money_mode": "SEPARATE_CASH"})  # the agency keeps its own drawer
     Membership.objects.create(user=owner, organization=org, role="OWNER")
     OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
     client = APIClient()

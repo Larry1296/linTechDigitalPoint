@@ -52,6 +52,10 @@ class MpesaSession(TimeStamped):
     # Readings taken while the shift ran, apart from any transaction: [{"at": ISO moment, "balance": "1250.50", "by": user id}].
     # Each is a fresh starting point, like the opening one.
     commission_readings = models.JSONField(default=list, blank=True)
+    # A shift that counts the whole business's money (combined.py): the business's own cash in the drawer and money on
+    # the agent line when it opened. The count was these plus opening_cash and opening_float, which are the agency's part.
+    business_cash_at_open = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    business_line_at_open = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
 
     def balance_readings(self):
         """Every commission balance read in this shift apart from its transactions, oldest first: [(moment, balance)]."""
@@ -174,6 +178,10 @@ class MpesaReconciliation(TenantModel):
     float_variance = models.DecimalField(max_digits=14, decimal_places=2)
     # Notes and coins counted at closing, in the same shape as MpesaSession.opening_cash_count.
     cash_count = models.JSONField(default=dict, blank=True)
+    # A combined shift: the business's own money in the drawer and on the line at closing. The count was these plus
+    # actual_cash and actual_float (the agency's part); expected likewise.
+    business_cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    business_line = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     reason = models.TextField(blank=True)
     operator = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="mpesa_reconciliations", on_delete=models.PROTECT)
     reviewed_by = models.ForeignKey(

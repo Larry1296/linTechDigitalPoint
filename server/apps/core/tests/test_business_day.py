@@ -18,6 +18,9 @@ from apps.mpesa.services import open_session, post_transaction, record_commissio
 @pytest.mark.django_db
 def test_full_business_day_keeps_retail_cyber_and_mpesa_principal_distinct():
     owner = User.objects.create_superuser("business-owner", "owner@example.test", "test")
+    from apps.tenancy.models import Organization
+    # The agency keeps its own drawer here: its shift counts the agency's money only.
+    Organization.objects.filter(slug="lintech-digital-point").update(settings={"money_mode": "SEPARATE_CASH"})
     store = Store.objects.create(name="LinTech Digital Point")
     category = Category.objects.create(name="Business Day", slug="business-day")
     zone = Zone.objects.create(store=store, code="SHOP", name="Shop")
