@@ -478,6 +478,7 @@ label:where(:has(> input[type="radio"])) {
   @apply tw:flex;
   @apply tw:justify-between;
   @apply tw:items-center;
+  @apply tw:gap-[16px];
   @apply tw:[padding:20px];
   background: var(--primary2);
   @apply tw:[border:1px_solid_var(--primary)];
@@ -1255,7 +1256,13 @@ button:disabled {
 button + button:not(nav *, .tabs *, .workflowSteps *) {
   margin-left: 10px;
 }
-:is(label, fieldset, details, textarea, select, p, table, .tableWrap, .callout) + button {
+/* A button, or a row of buttons, keeps 12px from the text, fields, lists and tables above and below it. Flex and grid
+   containers space their children with gap instead: these rules carry no specificity (:where), so any container's
+   own margin: 0 rule wins over them. */
+:where(label, fieldset, details, textarea, select, p, small, table, .tableWrap, .callout, dl, ul, ol, div, form, section) + :where(button, a.button, .actionRow) {
+  margin-top: 12px;
+}
+:where(button, a.button, .actionRow) + :where(label, fieldset, details, p, small, table, .tableWrap, .callout, dl, ul, ol, div, form, section, h2, h3) {
   margin-top: 12px;
 }
 /* The Back button sits on its own line above the page heading. */
@@ -1283,6 +1290,11 @@ form a:not(.button, .pageBackLink),
 .areaToolbar > button {
   margin-left: 0;
   margin-top: 0;
+}
+:is(.dashHeaderLive, .reportPeriod, .loanSummary, .investReminder, .callout, .heading, .receiptCosts, .moneyCount fieldset,
+    .posCart, .mpesaSetupForm) > :is(button, a.button, .actionRow) {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 /* Shelf Management: guide, areas and a map that never scrolls sideways. */
@@ -2665,8 +2677,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .investEarningTiles strong { font-size: 18px; }
 .investEarningTiles small, .investMetrics small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .investSource { margin: 0 0 10px; font-size: 14px; }
-.investSource > p { margin: 0 0 6px; }
-.investSource .actionRow { margin: 0; }
+.investSource > p { margin: 0; }
 .investFormTitle { margin: 0; font-size: 15px; }
 .investRates { margin: 4px 0 10px; }
 .investRates summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
@@ -2895,3 +2906,6 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .partsStory li { line-height: 1.5; }
 .ownerSummaryParts, .ownerSummaryAgency { font-size: 14px; }
 .ownerSummaryAgency { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+
+/* The service card's 7px gap suits its name and price; its buttons keep 12px like everywhere else. */
+.serviceGrid article > .actionRow { margin-top: 5px; }

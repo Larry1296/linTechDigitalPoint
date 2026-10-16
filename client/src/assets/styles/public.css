@@ -1019,7 +1019,7 @@
 }
 
 .productSearch { position: relative; width: 100%; max-width: 42rem; min-width: 0; margin: 1.25rem 0; }
-.productSearchControls { display: flex; gap: .5rem; }
+.productSearchControls { display: flex; gap: 10px; }
 .productSearchControls input { flex: 1; width: 0; min-width: 0; }
 .productSearchControls button { flex-shrink: 0; }
 .productSearchPanel { position: absolute; top: calc(100% + .4rem); left: 0; right: 0; z-index: 50; max-height: 26rem; overflow-y: auto; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 12px 32px #0003; }
@@ -1051,7 +1051,6 @@
 .categorySectionHeading a { color: var(--primary); }
 @media (max-width: 600px) {
   .categorySectionHeading { align-items: flex-start; flex-direction: column; }
-  .productSearchControls { gap: .35rem; }
   .productSearchControls button { padding-inline: .8rem; }
 }
 
@@ -1073,5 +1072,5 @@ main.homePage { width:min(100% - 32px,1180px); margin:0 auto; gap:18px; color:va
 .homePage .categoryGrid > a,.homePage .serviceCardGrid article,.homePage .benefits article { min-height:118px; padding:18px; border-radius:16px; background:var(--surface); box-shadow:0 8px 22px color-mix(in srgb,var(--primary) 7%,transparent); transition:transform .2s ease,border-color .2s ease; }.homePage .categoryGrid > a { border:1px solid var(--line); }.homePage .categoryGrid > a:hover,.homePage .serviceCardGrid article:hover,.homePage .benefits article:hover { transform:translateY(-3px); border-color:var(--accent); }.homePage .benefits { padding:22px 0; gap:14px; }.homePage .benefits article { border:1px solid var(--line); }.homePage .benefits svg,.serviceCardGrid svg { color:var(--primary); }.serviceCardGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }.serviceCardGrid article { display:flex; align-items:flex-start; gap:14px; border:1px solid var(--line); }.serviceCardGrid p { margin:7px 0 0; color:var(--muted); line-height:1.5; }.homePage .contactSection { margin:10px 0 26px; padding:24px; border:1px solid color-mix(in srgb,var(--primary) 35%,var(--line)); background:linear-gradient(135deg,var(--primary2),color-mix(in srgb,var(--accent) 25%,var(--surface))); }
 @keyframes carouselIn { from { opacity:.25; transform:scale(.96); } to { opacity:1; transform:scale(1); } }
 @media(max-width:900px) { .homePage .hero { grid-template-columns:minmax(0, 1fr); }.featuredGrid,.categoryProductGrid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-@media(max-width:640px) { main.homePage { width:min(100% - 20px,560px); }.homePage .hero { min-height:0; padding:22px; border-radius:18px; }.homePage .hero h1 { font-size:40px; }.homePage .hero p { font-size:15px; }.heroActions { flex-wrap:wrap; }.heroActions .button { flex:1; justify-content:center; }.featuredGrid,.categoryProductGrid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.homePage .productCard { min-height:285px; padding:10px; }.homePage .productCard .productImage { height:120px; }.serviceCardGrid { grid-template-columns:minmax(0, 1fr); }.sectionHeading,.categorySectionHeading { align-items:flex-start; flex-direction:column; gap:4px; }.homePage .benefits { grid-template-columns:minmax(0, 1fr); }.homePage .contactSection { grid-template-columns:minmax(0, 1fr); } }
+@media(max-width:640px) { main.homePage { width:min(100% - 20px,560px); }.homePage .hero { min-height:0; padding:22px; border-radius:18px; }.homePage .hero h1 { font-size:40px; }.homePage .hero p { font-size:15px; }.heroActions { flex-wrap:wrap; }.heroActions .button { flex:1; justify-content:center; }.featuredGrid,.categoryProductGrid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.homePage .productCard { min-height:285px; padding:10px; }.homePage .productCard .productImage { height:120px; }.serviceCardGrid { grid-template-columns:minmax(0, 1fr); }.sectionHeading,.categorySectionHeading { align-items:flex-start; flex-direction:column; gap:10px; }.homePage .benefits { grid-template-columns:minmax(0, 1fr); }.homePage .contactSection { grid-template-columns:minmax(0, 1fr); } }
 @media(prefers-reduced-motion:reduce) { .carouselMedia .productImage,.homePage .productCard,.homePage .categoryGrid > a,.homePage .serviceCardGrid article,.homePage .benefits article { animation:none; transition:none; } }
