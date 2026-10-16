@@ -218,8 +218,9 @@ def receive_defaults(request, pk):
     purchase=getattr(last,"purchase",None) if last else None
     if purchase:
         paid=purchase.payments.select_related("entry__account").first()
-        method=paid.entry.account.payment_method if paid else ""
-        payment_method=method if method in ("CASH","MPESA","BANK") else ""
+        from apps.accounting.supplier_settlement import _source
+        method=_source(paid.entry) if paid else ""
+        payment_method=method if method in ("CASH","MPESA","BANK","OWNER") else ""
     preferred=getattr(v,"preferred_location",None)
     shelf=preferred.shelf if preferred and preferred.shelf.active else None
     if not shelf:

@@ -33,6 +33,19 @@ function useColumnLabels(root) {
   });
 }
 
+// Stock paid for in the dates, by where the money came from. Profit earned is not changed by buying stock (its cost
+// counts when it is sold); money from the business is profit put back into stock, so what is left in hand is shown.
+function Restocking({ paid, money }) {
+  const business = Number(paid.business), own = Number(paid.own_money), investment = Number(paid.investment);
+  if (!business && !own && !investment) return null;
+  return <div className="restocking" role="note">
+    {business > 0 && <p><b>Paid for stock from the business's money: {money(paid.business)}.</b> Profit left in hand after it: <b>{profitText(paid.profit_left, money)}</b>.
+      The profit is still earned: it is now in the stock, and comes back when that stock is sold.</p>}
+    {own > 0 && <p>Paid for stock from your own pocket: <b>{money(paid.own_money)}</b>. It is money you put into the business, so it does not come off the profit.</p>}
+    {investment > 0 && <p>Paid for stock from your investment: <b>{money(paid.investment)}</b>. It came out of the investment, not the profit.</p>}
+  </div>;
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const organizationId = user?.organization?.id;
@@ -166,6 +179,7 @@ export function DashboardPage() {
           {periodForm}
           <p className="muted">Showing {period.start} to {period.end}. {data.financial_scope === "permitted_operations" ? "Only the parts of the business you have access to are included." : ""}</p>
           {period.profit != null && <p className="profitSum"><b>{profitSum({ sales: period.revenue, cost: period.cogs, expenses: period.expenses, stock: period.stock_corrections, profit: period.profit }, money)}</b></p>}
+          {period.restocking && <Restocking paid={period.restocking} money={money} />}
           {data.mpesa_unpaid && <div className="mpesaUnpaid" role="note">
             <p><b>M-Pesa commission not paid yet: about {money(data.mpesa_unpaid.amount)}</b> earned in {data.mpesa_unpaid.months.join(" and ")}, worked out from the
               commission balance readings. Safaricom pays it early the next month; it is added to the books when you record the payment on the Commission page.</p>

@@ -148,3 +148,23 @@ def test_the_receipts_list_shows_which_receipts_still_owe(shop):
     assert [D(r["owed"]) for r in client.get("/api/v1/inventory/receipts/").json()] == [D("760")]
     client.post(_url(shop, "already-owned/"), {"reason": "Old stock"}, format="json")
     assert [D(r["owed"]) for r in client.get("/api/v1/inventory/receipts/").json()] == [0]
+
+
+def test_stock_paid_from_the_business_is_profit_put_into_stock_and_from_the_owners_pocket_is_money_put_in(shop):
+    client = shop["client"]
+    with organization_context(shop["org"]):
+        from apps.catalog.models import ProductVariant
+        from apps.inventory.services import complete_stock_receipt
+        cover = ProductVariant.objects.get(sku="CV-1")
+        complete_stock_receipt(supplier_name="LYCOM", user=shop["owner"], received_at=timezone.now(), payment={"method": "OWNER", "amount": "500"},
+                               lines=[{"variant_id": cover.pk, "received_quantity": "5", "unit_cost": "100"}])
+    before = client.get("/api/v1/inventory/dashboard/").json()["period_summary"]
+    assert client.post(_url(shop, "pay-supplier/"), {"amount": "760", "source": "CASH", "idempotency_key": "p1"}, format="json").status_code == 201
+    period = client.get("/api/v1/inventory/dashboard/").json()["period_summary"]
+    assert D(str(period["profit"])) == D(str(before["profit"]))  # buying stock does not change the profit earned
+    paid = period["restocking"]
+    assert (D(str(paid["business"])), D(str(paid["own_money"])), D(str(paid["investment"]))) == (D("760"), D("500"), D("0"))
+    assert D(str(paid["profit_left"])) == D(str(period["profit"])) - D("760")
+    _, cash, owing = _books(shop)
+    assert cash["CASH"] == -D("760") and cash["OTHER"] == 0  # the owner's money went in and straight on to the supplier
+    assert owing == []

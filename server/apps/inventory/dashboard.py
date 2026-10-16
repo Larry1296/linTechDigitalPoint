@@ -272,6 +272,13 @@ def dashboard_snapshot(request):
                   purchases=stock_total(purchase_lots) if stock_allowed else None,
                   opening_stock=stock_total(opening_lots) if stock_allowed else None)
     period['money_received'] = money_received(start, end) if visible_units else None
+    # Stock paid for in these dates, by where the money came from. The profit earned is not changed by it; money from
+    # the business is profit put back into stock, so the profit left in hand is shown after it.
+    period['restocking'] = None
+    if stock_allowed and period['profit'] is not None:
+        from apps.accounting.supplier_settlement import restocking
+        paid = restocking(start, end)
+        period['restocking'] = {**paid, 'profit_left': period['profit'] - paid['business']}
     period['basis'] = "accrual"
     data['period_summary'] = period
     # Commission the M-Pesa agency earned in these dates that Safaricom has not paid yet: it is not in the books until it

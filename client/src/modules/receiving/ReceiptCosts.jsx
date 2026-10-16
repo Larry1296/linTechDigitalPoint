@@ -34,6 +34,7 @@ export function paymentSummary(details) {
   if (!details.payment_method) return "Owed to the supplier";
   if (details.payment_method === "INVESTMENT")
     return `${details.payment_amount} paid now from ${details.investment_name || "your investment"} (taken out to ${details.payment_via === "BANK" ? "bank" : "M-Pesa"})`;
+  if (details.payment_method === "OWNER") return `${details.payment_amount} paid now from your own pocket (money you put into the business)`;
   return `${details.payment_amount} paid now (${label(details.payment_method)})`;
 }
 
@@ -103,6 +104,7 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
         <option value="CASH">Yes, in cash</option>
         <option value="MPESA">Yes, by M-Pesa</option>
         <option value="BANK">Yes, by bank</option>
+        <option value="OWNER">Yes, from my own pocket (not the business's money)</option>
         {investments.length > 0 && <option value="INVESTMENT">Yes, from my investment (MMF)</option>}
       </select>
     </label>

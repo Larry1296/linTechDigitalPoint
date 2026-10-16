@@ -308,6 +308,11 @@ def complete_stock_receipt(*, supplier_name="", external_reference="", received_
             from apps.accounting.investments import pay_supplier
             pay_supplier(investment_id=payment.get("investment_id"), purchase=purchase, amount=_d(payment["amount"]), via=payment.get("via"),
                          key=f"receipt:{receipt.receipt_number}", user=user, reference=str(payment.get("reference") or ""))
+        elif method=="OWNER":
+            # Out of the owner's own pocket: owner money put into the business and paid straight on to the supplier.
+            from apps.accounting.supplier_settlement import pay_supplier as settle
+            settle(receipt=receipt, amount=_d(payment["amount"]), source="OWNER", user=user, key=f"receipt:{receipt.receipt_number}",
+                   paid_on=timezone.localtime(receipt.received_at).date(), reference=str(payment.get("reference") or ""))
         else:
             pay_purchase(purchase=purchase, amount=_d(payment["amount"]), method=method,
                          key=f"receipt:{receipt.receipt_number}", user=user, reference=str(payment.get("reference") or ""))

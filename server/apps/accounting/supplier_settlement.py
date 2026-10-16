@@ -12,6 +12,7 @@ Each one can be undone, and every step keeps its journal and audit record.
 from decimal import Decimal
 from uuid import uuid4
 from django.db import transaction
+from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -199,3 +200,23 @@ def real_purchases(queryset=None):
     from apps.inventory.models import StockReceipt
     return (queryset if queryset is not None else SupplierPurchase.objects.all()).exclude(receipt__document_status=StockReceipt.OPENING_BALANCE)
 
+
+
+BUSINESS_MONEY = {"CASH", "MPESA", "BANK"}
+
+
+def restocking(start, end):
+    """Money paid to suppliers for stock between ``start`` and ``end`` (days), by where it came from: the business's
+    own money (cash, M-Pesa, bank: money the profit made), the owner's own pocket, or an investment. Buying stock never
+    changes the profit earned (the stock is still there; its cost counts when it is sold), but money from the business
+    is profit put back into stock, so it is shown taken off the profit in hand. A payment undone in the dates counts back."""
+    totals = {"business": ZERO, "own_money": ZERO, "investment": ZERO}
+    payments = PurchasePayment.objects.select_related("entry__account")
+    sources = {p.entry_id: _source(p.entry) for p in payments}
+    rows = CashEntry.objects.filter(occurred_at__date__range=(start, end), kind="PURCHASE").filter(
+        models.Q(pk__in=sources.keys()) | models.Q(reversal_of_id__in=sources.keys()))
+    for entry in rows.only("pk", "amount", "reversal_of_id"):
+        source = sources.get(entry.reversal_of_id or entry.pk)
+        part = "business" if source in BUSINESS_MONEY else "own_money" if source in {"OWNER", "OTHER"} else "investment"
+        totals[part] -= entry.amount
+    return totals
