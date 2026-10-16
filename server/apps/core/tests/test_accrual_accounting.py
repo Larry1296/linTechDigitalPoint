@@ -717,3 +717,16 @@ def test_products_page_stock_totals_grow_when_stock_arrives_and_shrink_when_it_s
     sold = stock()
     assert Decimal(str(after["units"])) - Decimal(str(sold["units"])) == 2
     assert Decimal(str(after["value_at_cost"])) - Decimal(str(sold["value_at_cost"])) == D("600")  # what the 2 sold cost
+
+
+def test_each_sales_profit_is_what_the_books_have_after_returns_and_adds_up_to_the_report(shop):
+    receive(shop, 5, 400)
+    returned = sell(shop, 3, line={"discount": D("300"), "discount_reason": "Loyal customer"})
+    item = returned.items.get()
+    return_items(sale=returned, lines=[{"item_id": item.pk, "quantity": 1, "restock": True}], reason="Wrong model", user=shop["owner"])
+    kept = sell(shop, 1)
+    figures = statements.sale_profits(Sale.objects.filter(pk__in=[returned.pk, kept.pk]).prefetch_related("returns", "adjustments"))
+    assert figures[returned.pk] == {"sales": D("1800.00"), "cost": D("800.00"), "profit": D("1000.00")}
+    assert figures[kept.pk] == {"sales": D("1000.00"), "cost": D("400.00"), "profit": D("600.00")}
+    retail = statements.profit_and_loss(None, None)["units"][0]
+    assert (sum(f["sales"] for f in figures.values()), sum(f["cost"] for f in figures.values())) == (retail["revenue"], retail["direct_costs"])

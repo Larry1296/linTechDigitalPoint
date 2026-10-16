@@ -337,3 +337,28 @@ def _payment_status(sale):
     if owed <= 0:
         return "PAID"
     return "PARTLY_PAID" if any(p.status == "COMPLETED" for p in payments) else "UNPAID"
+
+
+def sale_profits(sales):
+    """{sale id: {"sales", "cost", "profit"}} for each of ``sales``, as the books have it now: what the sale brought in
+    and what the sold items cost, after returns, price corrections and costs found later (the same journals the
+    reports add up, so the sales here add up to the reports' figures)."""
+    sales = list(sales)
+    owner = {}
+    for sale in sales:
+        owner[f"sale:{sale.pk}"] = owner[f"return-cost:{sale.pk}"] = sale.pk
+        owner.update({f"sale-return:{r.pk}": sale.pk for r in sale.returns.all()})
+        owner.update({f"sale-note:{n.pk}": sale.pk for n in sale.adjustments.all()})
+    result = {sale.pk: {"sales": Decimal("0"), "cost": Decimal("0")} for sale in sales}
+    lines = (JournalLine.objects.filter(account__kind__in=["REVENUE", "COGS"])
+             .filter(Q(entry__source_key__in=owner.keys()) | Q(entry__reversal_of__source_key__in=owner.keys()))
+             .values("entry__source_key", "entry__reversal_of__source_key", "account__kind").annotate(d=Sum("debit"), c=Sum("credit")))
+    for line in lines:
+        sale = owner.get(line["entry__source_key"]) or owner.get(line["entry__reversal_of__source_key"])
+        if line["account__kind"] == "REVENUE":
+            result[sale]["sales"] += line["c"] - line["d"]
+        else:
+            result[sale]["cost"] += line["d"] - line["c"]
+    for figures in result.values():
+        figures["profit"] = figures["sales"] - figures["cost"]
+    return result

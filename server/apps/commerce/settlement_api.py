@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission
 from apps.accounts.models import CustomerProfile
+from apps.tenancy.permissions import has_business_permission
 from .models import Sale, Payment
 from .returns import sale_amounts, sale_balance
 from .settlements import collect, confirm_payment, delete_payment, delete_sale, dismiss_payment, return_sale
@@ -31,8 +32,15 @@ class SalesView(APIView):
         if request.query_params.get('owing') in {'1', 'true'}:
             rows = [s for s in rows.filter(status='COMPLETED') if sale_balance(s) > 0]
         count = len(rows) if isinstance(rows, list) else rows.count()
+        shown = list(rows[(page-1)*50:page*50])
+        # What each sale made, as the books have it now (after returns and price corrections), for those allowed to see profit.
+        profits, profit_visible = {}, has_business_permission(request.user, 'accounting.view_profit')
+        if profit_visible:
+            from apps.accounting.statements import sale_profits
+            profits = sale_profits(Sale.objects.filter(pk__in=[s.pk for s in shown]).prefetch_related('returns', 'adjustments'))
         # 'charged' is the amount after returns and price corrections; 'total' stays the original sale total.
-        return Response({'count':count, 'results':[{'id':s.pk, 'number':s.number, 'total':s.total, 'created_at':s.created_at,
+        return Response({'count':count, 'profit_visible':profit_visible,
+            'results':[{'id':s.pk, 'number':s.number, 'total':s.total, 'created_at':s.created_at, **({'figures':profits[s.pk]} if s.pk in profits else {}),
             'charged':sale_amounts(s)[0] if s.status=='COMPLETED' else Decimal(0),
             'customer':s.customer.get_full_name() or s.customer.username if s.customer else 'Walk-in',
             'customer_id':s.customer_id, 'status':s.status, 'due_date':s.due_date,
@@ -40,7 +48,7 @@ class SalesView(APIView):
             'payments':[{'id':p.pk,'method':p.method,'amount':p.amount,'status':p.status,'reference':p.reference} for p in s.payments.all()],
             'items':[{'id':i.pk,'item':str(i.variant),'quantity':i.quantity,'list_price':i.list_price,'unit_price':i.unit_price,
                       'discount':i.discount,'net_amount':i.net_amount,'tax_amount':i.tax_amount,'returned_quantity':i.returned_quantity} for i in s.items.all()]}
-            for s in rows[(page-1)*50:page*50]]})
+            for s in shown]})
 
 
 class SaleCustomerView(APIView):
