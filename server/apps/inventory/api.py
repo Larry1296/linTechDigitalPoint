@@ -14,6 +14,7 @@ from apps.mpesa.services import session_balances
 from apps.core.permissions import HasLinTechPermission,IsInternalStaff
 from .models import Shelf, ShelfStackCategory,StockBalance,StockLot,StockReceipt,StockReceiptLine,Zone
 from .services import complete_stock_receipt,receive_stock,transfer_stock
+from apps.accounting.supplier_settlement import receipt_balance
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def receive(request):
@@ -50,6 +51,7 @@ def _receipt_data(receipt):
         "id": receipt.id, "receipt_number": receipt.receipt_number,
         "external_reference": receipt.external_reference, "supplier_name": receipt.supplier_name,
         "received_at": receipt.received_at, "notes": receipt.notes, "created_at": receipt.created_at,
+        "document_status": receipt.document_status, "supplier": receipt_balance(receipt),
         "lines": [{
             "id": line.id, "updated_at": line.updated_at, "variant_id": line.variant_id,
             "product_name": line.variant.product.name, "variant_name": line.variant.name,
@@ -73,8 +75,11 @@ def _receipt_data(receipt):
 def receipts(request):
     if request.method=="GET":
         if not has_business_permission(request.user, "inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
-        rows=StockReceipt.objects.prefetch_related("lines").order_by("-received_at", "-pk")[:100]
-        return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count()} for r in rows])
+        from apps.accounting.services import purchase_outstanding
+        rows=StockReceipt.objects.prefetch_related("lines").select_related("purchase").order_by("-received_at", "-pk")[:100]
+        # What each receipt still owes its supplier, so an unpaid one is easy to find and clear.
+        owed=lambda r:purchase_outstanding(r.purchase) if hasattr(r,"purchase") else Decimal("0")
+        return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count(),"owed":owed(r)} for r in rows])
     if not has_business_permission(request.user, "inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
     try:
         receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("external_reference",request.data.get("reference","")),received_at=request.data.get("received_at") or timezone.now(),notes=request.data.get("notes",""),lines=request.data.get("lines",[]),user=request.user,idempotency_key=request.data.get("idempotency_key"),

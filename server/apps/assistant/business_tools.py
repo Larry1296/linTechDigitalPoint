@@ -625,7 +625,8 @@ def purchases_and_suppliers(ctx, args):
     from apps.accounting.models import SupplierPurchase
     from apps.accounting.services import purchase_outstanding
     start, end = _period(args)
-    rows = SupplierPurchase.objects.filter(receipt__received_at__date__range=(start, end)).select_related("supplier", "receipt")
+    from apps.accounting.supplier_settlement import real_purchases
+    rows = real_purchases(SupplierPurchase.objects.filter(receipt__received_at__date__range=(start, end))).select_related("supplier", "receipt")
     by_supplier = defaultdict(lambda: {"bought": ZERO, "unpaid": ZERO, "purchases": 0})
     recent = []
     for p in rows.order_by("-receipt__received_at"):

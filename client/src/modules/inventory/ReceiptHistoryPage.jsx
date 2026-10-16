@@ -5,6 +5,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
+import { ReceiptSupplier } from "./ReceiptSupplier";
 
 const allowed = (user, permission) =>
   Boolean(user?.is_superuser || user?.permissions?.includes(permission));
@@ -54,7 +55,8 @@ export function ReceiptHistoryPage() {
         <>
           <p>
             Latest 100 receipts. Open a receipt to review its lines and
-            correction history.
+            correction history, or to clear what it says is owed to the
+            supplier.
           </p>
           <form
             onSubmit={(e) => {
@@ -86,6 +88,7 @@ export function ReceiptHistoryPage() {
               <p>
                 {r.supplier_name} · {new Date(r.received_at).toLocaleString(undefined, {timeZone: businessTimeZone()})} ·{" "}
                 {r.line_count} lines · {Number(r.total_units)} units
+                {Number(r.owed) > 0 && <> · <strong>owed {money(r.owed)}</strong></>}
               </p>
             </article>
           ))}
@@ -105,6 +108,18 @@ export function ReceiptHistoryPage() {
                 {receipt.external_reference}
               </p>
               {receipt.notes && <p>{receipt.notes}</p>}
+              <ReceiptSupplier
+                receipt={receipt}
+                can={{
+                  pay: allowed(user, "accounting.add_purchasepayment"),
+                  undo: allowed(user, "accounting.reverse_cashentry"),
+                  markOwned: canCorrect,
+                }}
+                onSaved={(data, text) => {
+                  setReceipt(data);
+                  setMessage(text);
+                }}
+              />
               {receipt.lines.map((line) => (
                 <section
                   className="panel"

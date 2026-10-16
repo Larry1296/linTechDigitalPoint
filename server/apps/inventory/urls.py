@@ -11,3 +11,6 @@ urlpatterns += [path("receipts/<int:pk>/lines/<int:line_id>/correct/", receipt_l
 from .api import receipt_return, lot_cost, variant_buying_prices, suppliers
 urlpatterns += [path("receipts/<int:pk>/return/", receipt_return), path("lots/<int:pk>/cost/", lot_cost),
                 path("variants/<int:pk>/buying-prices/", variant_buying_prices), path("suppliers/", suppliers)]
+from .receipt_supplier_api import already_owned, pay_supplier, undo_already_owned, undo_supplier_payment
+urlpatterns += [path("receipts/<int:pk>/pay-supplier/", pay_supplier), path("receipts/<int:pk>/payments/<int:entry_id>/undo/", undo_supplier_payment),
+                path("receipts/<int:pk>/already-owned/", already_owned), path("receipts/<int:pk>/already-owned/undo/", undo_already_owned)]

@@ -173,15 +173,18 @@ def correct_receipt_line(*, receipt_id, line_id, user, data):
                     performed_by=user, notes=values["reason"], receipt_correction=correction,
                 )
     from apps.accounting.ledger import post_journal, paired, money
-    from apps.accounting.models import JournalEntry
-    if JournalEntry.objects.filter(source_key=f'purchase:{line.receipt.purchase.pk}').exists():
+    from apps.accounting.models import JournalEntry, SupplierPurchase
+    purchase = SupplierPurchase.objects.filter(receipt=line.receipt).first()
+    if purchase and JournalEntry.objects.filter(source_key=f'purchase:{purchase.pk}').exists():
+        # A receipt marked as stock already owned has its value in opening equity, not owed to the supplier.
+        other = '3000' if line.receipt.document_status == line.receipt.OPENING_BALANCE else '2000'
         stock_change = money(lot.remaining_quantity * lot.unit_cost - old_stock_value)
         purchase_change = money(line.received_quantity * line.unit_cost - old_receipt_value)
         if purchase_change:
             # What is owed to the supplier follows the corrected invoice.
-            type(line.receipt.purchase).objects.filter(pk=line.receipt.purchase.pk).update(amount=F("amount") + purchase_change)
+            SupplierPurchase.objects.filter(pk=purchase.pk).update(amount=F("amount") + purchase_change)
         if stock_change or purchase_change:
             post_journal(key=f'receipt-correction:{correction.pk}', description=values['reason'],
                 branch=line.receipt.branch_id, user=user,
-                lines=paired('1200','2000',stock_change)+paired('6100','2000',purchase_change-stock_change))
+                lines=paired('1200',other,stock_change)+paired('6100',other,purchase_change-stock_change))
     return line

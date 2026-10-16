@@ -218,9 +218,12 @@ def link_receipt(receipt):
 
 
 def purchase_outstanding(purchase):
-    """What is still owed to the supplier: purchase − returns − payments (reversed payments count back)."""
+    """What is still owed to the supplier: purchase − returns − payments (reversed payments count back).
+    Nothing for a receipt marked as stock the business already owned: it was never bought."""
     from django.db.models import Q
-    from apps.inventory.models import PurchaseReturn
+    from apps.inventory.models import PurchaseReturn, StockReceipt
+    if purchase.receipt.document_status == StockReceipt.OPENING_BALANCE:
+        return Decimal('0')
     paid = -(CashEntry.objects.filter(Q(purchasepayment__purchase=purchase) | Q(reversal_of__purchasepayment__purchase=purchase))
              .aggregate(v=Sum('amount'))['v'] or Decimal('0'))
     returned = PurchaseReturn.objects.filter(receipt=purchase.receipt).aggregate(v=Sum('total_cost'))['v'] or Decimal('0')
@@ -228,7 +231,7 @@ def purchase_outstanding(purchase):
 
 
 @transaction.atomic
-def pay_purchase(*, purchase, amount, method, key, user, reference=''):
+def pay_purchase(*, purchase, amount, method, key, user, reference='', occurred_at=None):
     """Settles what is owed to a supplier. It is not an expense and does not touch inventory."""
     from .models import PurchasePayment
     lock_business()
@@ -244,7 +247,7 @@ def pay_purchase(*, purchase, amount, method, key, user, reference=''):
         raise ValidationError('Payment exceeds what is still owed to the supplier for this receipt.')
     entry = post(unit=purchase.business_unit, method=method, amount=-amount, kind='PURCHASE',
                  reference=(reference or purchase.receipt.receipt_number)[:160], key=f'purchase:{key}', user=user,
-                 branch=purchase.receipt.branch)
+                 branch=purchase.receipt.branch, occurred_at=occurred_at)
     PurchasePayment.objects.create(purchase=purchase, entry=entry, created_by=user)
     return entry
 

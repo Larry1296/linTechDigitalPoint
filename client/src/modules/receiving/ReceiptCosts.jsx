@@ -38,7 +38,7 @@ export function paymentSummary(details) {
 }
 
 // Investments (e.g. an MMF) the supplier can be paid from, for people allowed to take money out of them.
-function usePayableInvestments() {
+export function usePayableInvestments() {
   const { user } = useAuth();
   const allowed = ["accounting.view_investment", "accounting.add_investmentmovement"].every((p) => user?.permissions?.includes(p));
   const [investments, setInvestments] = useState([]);

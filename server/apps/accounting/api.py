@@ -221,7 +221,8 @@ class ReportView(APIView):
         data = summary(request.user, request.query_params)
         entries, filters = filtered_entries(request.query_params)
         data['stock'] = stock_rows(request.user)
-        purchases = SupplierPurchase.objects.select_related('receipt')
+        from .supplier_settlement import real_purchases
+        purchases = real_purchases().select_related('receipt')
         closings = DailyClosing.objects.select_related('account')
         reconciliation = MpesaReconciliation.objects.all()
         sales = SaleItem.objects.select_related('sale', 'variant__product').filter(sale__status='COMPLETED')
