@@ -730,3 +730,12 @@ def test_each_sales_profit_is_what_the_books_have_after_returns_and_adds_up_to_t
     assert figures[kept.pk] == {"sales": D("1000.00"), "cost": D("400.00"), "profit": D("600.00")}
     retail = statements.profit_and_loss(None, None)["units"][0]
     assert (sum(f["sales"] for f in figures.values()), sum(f["cost"] for f in figures.values())) == (retail["revenue"], retail["direct_costs"])
+
+
+def test_each_sale_adds_its_profit_to_where_profit_had_reached(shop):
+    receive(shop, 5, 400)
+    first = sell(shop, 1)
+    second = sell(shop, 1, price=700)
+    reached = statements.running_sale_profits()
+    assert (reached[first.pk]["profit"], reached[first.pk]["profit_so_far"]) == (D("600.00"), D("600.00"))
+    assert (reached[second.pk]["profit"], reached[second.pk]["profit_so_far"]) == (D("300.00"), D("900.00"))

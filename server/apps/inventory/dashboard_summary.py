@@ -93,12 +93,18 @@ def owner_summary(*, visible_units, profit_visible, permits):
     if not units:
         return None
     today = timezone.localdate()
-    rows = pnl_rows(date(1900, 1, 1), today)
+    # Everything ever recorded, records dated ahead included (commission is counted on its month's last day), so the
+    # running total always shows where sales and profit have reached.
+    rows = pnl_rows(date(1900, 1, 1), date(9999, 12, 31))
     rows = [row for row in rows if row['unit'] in units]
     money_allowed = permits('accounting.view_moneycheck')
+    from apps.commerce.models import Sale, SaleItem
+    channels = ([Sale.POS, Sale.ONLINE] if 'SHOP' in units else []) + ([Sale.CYBER] if 'CYBER' in units else [])
+    sold = Sale.objects.filter(status='COMPLETED', channel__in=channels)
     return {'since': min((row['date'] for row in rows), default=None),
             'today': _figures([row for row in rows if row['date'] == today], units, profit_visible),
-            'all_time': _figures(rows, units, profit_visible),
+            'all_time': {**_figures(rows, units, profit_visible), 'count': sold.count(),
+                         'items_sold': SaleItem.objects.filter(sale__in=sold).aggregate(v=Sum('quantity'))['v'] or ZERO},
             'money': _money() if money_allowed else None,
             'agency': agency_money() if money_allowed and 'MPESA' in units else None,
             'customers_owe': _customers_owe() if money_allowed else None}

@@ -28,9 +28,9 @@ export function OwnerSummary({ summary, money, part }) {
     <p>{today.commission != null ? "Every part of the business together. From the M-Pesa agency the commission is the profit. Its cash and float are your business's stock for the agency, like goods on the shelves: they make the commission, they are not profit themselves." : "Every part of the business together."}</p>
     <div className="trendTable"><table>
       <caption>Sales, costs and profit</caption>
-      <thead><tr><th scope="col">What</th><th scope="col">Today</th><th scope="col">Since you started{summary.since ? ` (${summary.since})` : ""}</th></tr></thead>
+      <thead><tr><th scope="col">What</th><th scope="col">So far, since you started{summary.since ? ` (${summary.since})` : ""}</th><th scope="col">Of it, today</th></tr></thead>
       <tbody>{rows.map(([label, day, ever, show, strong]) => <tr key={label} className={strong ? "ownerSummaryTotal" : undefined}>
-        <th scope="row">{label}</th><td>{show(day)}</td><td>{show(ever)}</td></tr>)}</tbody>
+        <th scope="row">{label}</th><td>{show(ever)}</td><td>{show(day)}</td></tr>)}</tbody>
     </table></div></>}
     {cash && held && <div className="ownerSummaryMoney">
       {sales ? <h3>Money you should be holding now</h3> : <h2 id="owner-summary-title-money">Money you should be holding now</h2>}

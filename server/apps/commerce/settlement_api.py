@@ -36,8 +36,8 @@ class SalesView(APIView):
         # What each sale made, as the books have it now (after returns and price corrections), for those allowed to see profit.
         profits, profit_visible = {}, has_business_permission(request.user, 'accounting.view_profit')
         if profit_visible:
-            from apps.accounting.statements import sale_profits
-            profits = sale_profits(Sale.objects.filter(pk__in=[s.pk for s in shown]).prefetch_related('returns', 'adjustments'))
+            from apps.accounting.statements import running_sale_profits
+            profits = running_sale_profits()
         # 'charged' is the amount after returns and price corrections; 'total' stays the original sale total.
         return Response({'count':count, 'profit_visible':profit_visible,
             'results':[{'id':s.pk, 'number':s.number, 'total':s.total, 'created_at':s.created_at, **({'figures':profits[s.pk]} if s.pk in profits else {}),

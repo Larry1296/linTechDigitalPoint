@@ -11,9 +11,9 @@ const sale = (id, number, figures) => ({ id, number, created_at: "2026-10-16T09:
 it("lists every sale with what it cost and the profit it made, page by page", async () => {
   api.mockImplementation(async (path) => path.includes("page=2")
     ? { count: 51, profit_visible: true, results: [sale(3, "S-3", { sales: "100", cost: "120", profit: "-20" })] }
-    : { count: 51, profit_visible: true, results: [sale(1, "S-1", { sales: "400", cost: "190", profit: "210" }), sale(2, "S-2", { sales: "200", cost: "100", profit: "100" })] });
+    : { count: 51, profit_visible: true, results: [sale(1, "S-1", { sales: "400", cost: "190", profit: "210", profit_so_far: "330" }), sale(2, "S-2", { sales: "200", cost: "100", profit: "100", profit_so_far: "120" })] });
   render(<SalesProfits money={money} timezone="Africa/Nairobi" refreshKey="0" />);
-  expect(await screen.findByRole("row", { name: /S-1 Walk-in 2 × Phone cover KSh 400 KSh 190 KSh 210 profit/ })).toBeInTheDocument();
+  expect(await screen.findByRole("row", { name: /S-1 Walk-in 2 × Phone cover KSh 400 KSh 190 KSh 210 profit KSh 330 profit/ })).toBeInTheDocument();
   expect(screen.getByRole("row", { name: /These 2 sales KSh 600 KSh 290 KSh 310 profit/ })).toBeInTheDocument();
   expect(screen.getByText(/51 sales in all · page 1 of 2/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Older sales" }));

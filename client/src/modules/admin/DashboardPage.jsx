@@ -99,12 +99,16 @@ export function DashboardPage() {
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const on = (module) => (data.enabled_modules || []).includes(module);
   const owner = data.owner_summary;
+  const ever = owner?.all_time;
   const mpesaUnit = units.find(unit => unit.key === "MPESA" && !unit.restricted);
   const owed = data.receivables && !data.receivables.restricted ? data.receivables.outstanding : owner?.customers_owe;
   // Today's key figures first, each one a link to where it is dealt with.
   const kpis = [
-    ["Sales today", money(today.revenue), `${count(today.sales)} ${Number(today.sales) === 1 ? "sale" : "sales"} · ${count(today.items_sold)} items`, on("pos") ? "/admin/sales-history" : null],
-    today.profit != null && ["Profit today", profitText(today.profit, money), `After ${money(today.cogs)} for the items and ${money(today.expenses)} running costs`, "/admin/reports", Number(today.profit) < 0 ? "loss" : "profit"],
+    // Where sales and profit have reached since the start, every record counted; today's part is the small line.
+    ever ? ["Sales so far", money(ever.sales), `${count(ever.count)} ${Number(ever.count) === 1 ? "sale" : "sales"} · ${count(ever.items_sold)} items since ${owner.since || "the start"} · today ${money(today.revenue)}`, on("pos") ? "/admin/sales-history" : null]
+      : ["Sales today", money(today.revenue), `${count(today.sales)} ${Number(today.sales) === 1 ? "sale" : "sales"} · ${count(today.items_sold)} items`, on("pos") ? "/admin/sales-history" : null],
+    ever?.profit != null ? ["Profit so far", profitText(ever.profit, money), `After ${money(ever.cost)} for the items and ${money(ever.expenses)} running costs · today ${profitText(owner.today.profit, money)}`, "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"]
+      : today.profit != null && ["Profit today", profitText(today.profit, money), `After ${money(today.cogs)} for the items and ${money(today.expenses)} running costs`, "/admin/reports", Number(today.profit) < 0 ? "loss" : "profit"],
     owner?.money && ["Money you should hold", money(owner.money.expected), owner.money.places.map(place => `${place.label} ${money(place.expected)}`).join(" · "), "/admin/money-check"],
     owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
@@ -163,7 +167,7 @@ export function DashboardPage() {
     {on("inventory") && can("catalog.view_product") && <StockQuickSearch />}
     <InvestmentReminder />
     <CommissionReminder />
-    <section className="dashKpis" aria-label="Today at a glance">
+    <section className="dashKpis" aria-label="Where the business has reached">
       {kpis.map(([label, value, detail, href, tone]) => {
         const body = <><span>{label}</span><strong>{value}</strong><small>{detail}</small></>;
         return href ? <a key={label} href={href} className={`dashKpi${tone ? ` ${tone}` : ""}`}>{body}</a> : <article key={label} className={`dashKpi${tone ? ` ${tone}` : ""}`}>{body}</article>;

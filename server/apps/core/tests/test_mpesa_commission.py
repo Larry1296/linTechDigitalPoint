@@ -417,3 +417,10 @@ def test_a_steady_cut_is_expected_in_the_month_in_progress():
     assert payout_share([row("900", "1000"), row("2000", "2000")]) is None  # not steady
     assert payout_share([row("1000", "1000"), row("2000", "2000")]) is None  # paid it all: nothing to expect differently
     assert payout_share([row("900", "1000")]) is None  # one month is not a pattern
+
+
+def test_the_running_total_counts_commission_dated_at_the_end_of_this_month(agency):
+    client, org, owner, outlet, today, last_month = agency
+    assert _record(client, outlet, today.replace(day=1), "500", "", "CASH", key="this-month", paid_on=str(today)).status_code == 201
+    ever = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["all_time"]
+    assert D(str(ever["commission"])) == D("500") and D(str(ever["profit"])) == D("500")

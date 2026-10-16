@@ -339,22 +339,35 @@ def _payment_status(sale):
     return "PARTLY_PAID" if any(p.status == "COMPLETED" for p in payments) else "UNPAID"
 
 
-def sale_profits(sales):
-    """{sale id: {"sales", "cost", "profit"}} for each of ``sales``, as the books have it now: what the sale brought in
-    and what the sold items cost, after returns, price corrections and costs found later (the same journals the
-    reports add up, so the sales here add up to the reports' figures)."""
-    sales = list(sales)
+def sale_profits(sales=None):
+    """{sale id: {"sales", "cost", "profit"}} for each of ``sales`` (every sale not deleted, when None), as the books
+    have it now: what the sale brought in and what the sold items cost, after returns, price corrections and costs found
+    later (the same journals the reports add up, so the sales here add up to the reports' figures)."""
+    from apps.commerce.models import SaleAdjustment, SaleReturn
+    if sales is None:
+        ids = list(Sale.objects.exclude(status="CANCELLED").values_list("pk", flat=True))
+        returns = SaleReturn.objects.filter(sale_id__in=ids).values_list("pk", "sale_id")
+        notes = SaleAdjustment.objects.filter(sale_id__in=ids).values_list("pk", "sale_id")
+        keys = Q(entry__source_key__regex=r"^(sale|return-cost|sale-return|sale-note):") | Q(entry__reversal_of__source_key__regex=r"^(sale|sale-return|sale-note):")
+    else:
+        sales = list(sales)
+        ids = [sale.pk for sale in sales]
+        returns = [(r.pk, sale.pk) for sale in sales for r in sale.returns.all()]
+        notes = [(n.pk, sale.pk) for sale in sales for n in sale.adjustments.all()]
     owner = {}
-    for sale in sales:
-        owner[f"sale:{sale.pk}"] = owner[f"return-cost:{sale.pk}"] = sale.pk
-        owner.update({f"sale-return:{r.pk}": sale.pk for r in sale.returns.all()})
-        owner.update({f"sale-note:{n.pk}": sale.pk for n in sale.adjustments.all()})
-    result = {sale.pk: {"sales": Decimal("0"), "cost": Decimal("0")} for sale in sales}
-    lines = (JournalLine.objects.filter(account__kind__in=["REVENUE", "COGS"])
-             .filter(Q(entry__source_key__in=owner.keys()) | Q(entry__reversal_of__source_key__in=owner.keys()))
+    for pk in ids:
+        owner[f"sale:{pk}"] = owner[f"return-cost:{pk}"] = pk
+    owner.update({f"sale-return:{pk}": sale for pk, sale in returns})
+    owner.update({f"sale-note:{pk}": sale for pk, sale in notes})
+    if sales is not None:
+        keys = Q(entry__source_key__in=owner.keys()) | Q(entry__reversal_of__source_key__in=owner.keys())
+    result = {pk: {"sales": Decimal("0"), "cost": Decimal("0")} for pk in ids}
+    lines = (JournalLine.objects.filter(account__kind__in=["REVENUE", "COGS"]).filter(keys)
              .values("entry__source_key", "entry__reversal_of__source_key", "account__kind").annotate(d=Sum("debit"), c=Sum("credit")))
     for line in lines:
         sale = owner.get(line["entry__source_key"]) or owner.get(line["entry__reversal_of__source_key"])
+        if sale is None:
+            continue  # a deleted sale's journals
         if line["account__kind"] == "REVENUE":
             result[sale]["sales"] += line["c"] - line["d"]
         else:
@@ -362,3 +375,14 @@ def sale_profits(sales):
     for figures in result.values():
         figures["profit"] = figures["sales"] - figures["cost"]
     return result
+
+
+def running_sale_profits():
+    """{sale id: {"sales", "cost", "profit", "profit_so_far"}} for every sale not deleted: ``profit_so_far`` is the
+    profit of that sale added to every sale before it, so each row shows where the sales' profit had reached."""
+    figures = sale_profits()
+    reached = Decimal("0")
+    for pk in Sale.objects.filter(pk__in=figures.keys()).order_by("created_at", "pk").values_list("pk", flat=True):
+        reached += figures[pk]["profit"]
+        figures[pk]["profit_so_far"] = reached
+    return figures
