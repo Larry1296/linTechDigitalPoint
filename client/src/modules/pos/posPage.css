@@ -48,9 +48,10 @@
 }
 .posTile .posActions { border-top: 1px solid var(--line); }
 
-/* The sale */
+/* The sale. It ends above the assistant's button (fixed bottom-right, 52px high, 20px up), so Complete sale is never
+   under it; the sale scrolls inside instead. */
 .posCart {
-  position: sticky; top: 12px; display: grid; gap: 14px; max-height: calc(100vh - 24px); overflow-y: auto; padding: 16px;
+  position: sticky; top: 12px; display: grid; gap: 14px; max-height: calc(100vh - 100px); overflow-y: auto; padding: 16px;
   border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow);
 }
 .posCartHead { display: flex; align-items: center; gap: 8px; }
