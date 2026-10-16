@@ -69,6 +69,56 @@ def callback_url(setup):
     return f"{base}/api/v1/tenancy/mpesa/express/callback/{setup.callback_token}/" if base else ""
 
 
+def till_url(setup, which):
+    """The till's payment-notification address (which: "confirm" or "accept"). Safaricom refuses callback addresses with
+    words such as M-Pesa, Safaricom, exe, sql or query in them: this one is neutral and its secret is hex."""
+    base = getattr(settings, "MPESA_CALLBACK_BASE_URL", "").rstrip("/")
+    if not base:
+        return ""
+    if not setup.till_token:
+        setup.till_token = token_source.token_hex(24)
+        setup.save(update_fields=["till_token", "updated_at"])
+    return f"{base}/api/v1/tenancy/payments/till/{setup.till_token}/{which}/"
+
+
+def register_till(setup):
+    """Asks Safaricom to tell the business each time a customer pays its till or paybill (C2B URL registration). For a
+    till it is registered with the store number, the same short code prompts use. Live, Safaricom registers an address
+    only once, which is why the address never changes."""
+    if setup.kind == MpesaExpressSetup.NONE or not setup.verified_at:
+        return setup
+    if simulated():
+        setup.till_registered_at, setup.till_detail = timezone.now(), "Simulated till payments (development only)."
+    elif not till_url(setup, "confirm"):
+        setup.till_detail = "The platform's public address is not set (MPESA_CALLBACK_BASE_URL), so Safaricom cannot tell it about till payments."
+    else:
+        try:
+            data = _request(setup, "/mpesa/c2b/v2/registerurl", {"ShortCode": setup.shortcode, "ResponseType": "Completed",
+                                                                  "ConfirmationURL": till_url(setup, "confirm"),
+                                                                  "ValidationURL": till_url(setup, "accept")}, token=_token(setup))
+        except PromptUnavailable as problem:
+            setup.till_detail = str(problem)[:255]
+        else:
+            answer = str(data.get("ResponseDescription") or data.get("errorMessage") or "")
+            if str(data.get("ResponseCode")) == "0" or "already registered" in answer.lower():
+                setup.till_registered_at, setup.till_detail = timezone.now(), ""
+            else:
+                logger.warning("C2B URL registration refused for org %s: %s", setup.organization_id, answer)
+                setup.till_detail = f"Safaricom did not register the till's payment notices: {answer or 'no reason given'}"[:255]
+    setup.save(update_fields=["till_registered_at", "till_detail", "updated_at"])
+    return setup
+
+
+def simulate_till_payment(setup, *, amount, name="Test", phone="254700000000", account=""):
+    """Development only: a customer paying the till, as Safaricom would report it."""
+    from .checkout import mask, till_notice
+    if not simulated():
+        raise ValidationError("Till payments can only be simulated in development.")
+    return till_notice(setup, {"TransID": f"SIM{token_source.token_hex(4).upper()}", "TransAmount": str(amount),
+                               "TransTime": timezone.localtime().strftime("%Y%m%d%H%M%S"), "BusinessShortCode": setup.shortcode,
+                               "BillRefNumber": account, "MSISDN": mask(phone), "FirstName": name})
+
+
 def ready(setup):
     """Prompts can be sent: a till or paybill whose credentials Safaricom accepted (or the development simulator)."""
     if setup.kind == MpesaExpressSetup.NONE:
@@ -80,7 +130,8 @@ def ready(setup):
 
 def view(setup, full=True):
     """What the browser sees. Secrets never leave the server: only whether each one is saved."""
-    data = {"kind": setup.kind, "ready": ready(setup), "simulated": simulated()}
+    data = {"kind": setup.kind, "ready": ready(setup), "simulated": simulated(), "till_number": setup.till_number,
+            "paybill": setup.shortcode if setup.kind == MpesaExpressSetup.PAYBILL else "", "till_notices": bool(setup.till_registered_at)}
     if not full:
         return data
     key = unseal(setup.consumer_key)
@@ -88,7 +139,8 @@ def view(setup, full=True):
             "environment": setup.environment, "consumer_key_hint": f"…{key[-4:]}" if key else "",
             "has_consumer_secret": bool(unseal(setup.consumer_secret)), "has_passkey": bool(unseal(setup.passkey)),
             "verified_at": setup.verified_at, "tested_at": setup.tested_at, "status_detail": setup.status_detail,
-            "callback_ready": simulated() or bool(callback_url(setup)), "requirements": REQUIREMENTS}
+            "callback_ready": simulated() or bool(callback_url(setup)), "requirements": REQUIREMENTS,
+            "till_notices": bool(setup.till_registered_at), "till_detail": setup.till_detail}
 
 
 def _digits(value, label, required=True):
@@ -129,7 +181,7 @@ def save(setup, data, user):
         if missing:
             raise ValidationError(f"Enter the {', '.join(missing)} from your Daraja app.")
         if changed:
-            setup.verified_at = setup.tested_at = None
+            setup.verified_at = setup.tested_at = setup.till_registered_at = None
     setup.updated_by = user
     setup.save()
     AuditLog.objects.create(action="MPESA_EXPRESS_SETUP_SAVED", object_type="MpesaExpressSetup", object_id=str(setup.pk), user=user,
@@ -182,6 +234,8 @@ def verify(setup):
         setup.verified_at = timezone.now()
         setup.status_detail = "Safaricom accepted your keys. Send a test prompt to your own phone to finish." if not setup.tested_at else ""
     setup.save(update_fields=["verified_at", "status_detail", "updated_at"])
+    if setup.verified_at and not setup.till_registered_at:
+        register_till(setup)
     return setup
 
 
@@ -242,16 +296,21 @@ def _finish(push, status, detail, receipt=""):
 
 
 def apply_result(push, code, description="", metadata=None):
-    """Applies Safaricom's answer. Paid: the sale's waiting M-Pesa payment is confirmed with the M-Pesa receipt number."""
+    """Applies Safaricom's answer. Paid: the sale's waiting M-Pesa payment is confirmed with the M-Pesa receipt number, or
+    the checkout the prompt was for is paid (checkout.prompt_answered)."""
+    from .checkout import prompt_answered
     from .settlements import confirm_payment
     code = str(code)
     if code != "0":
-        _finish(push, StkPush.CANCELLED if code == "1032" else StkPush.FAILED, RESULT_MESSAGES.get(code, description or "The payment did not go through."))
+        if _finish(push, StkPush.CANCELLED if code == "1032" else StkPush.FAILED, RESULT_MESSAGES.get(code, description or "The payment did not go through.")):
+            prompt_answered(push)
         return push
     items = {item.get("Name"): item.get("Value") for item in (metadata or {}).get("Item", [])}
     receipt = str(items.get("MpesaReceiptNumber") or "").upper()
     if not _finish(push, StkPush.COMPLETED, f"Paid. M-Pesa code {receipt}.", receipt):
         return push
+    _keep_receipt(push, receipt)
+    prompt_answered(push)
     setup = MpesaExpressSetup.objects.get(organization_id=push.organization_id)
     if not setup.tested_at:
         setup.tested_at, setup.status_detail = timezone.now(), ""
@@ -264,6 +323,19 @@ def apply_result(push, code, description="", metadata=None):
             StkPush.objects.filter(pk=push.pk).update(detail=f"Paid ({receipt}), but the payment could not be confirmed: {message}"[:255])
             push.refresh_from_db()
     return push
+
+
+def _keep_receipt(push, receipt):
+    """Every prompt's payment joins the ledger of M-Pesa payments the business received. One for a sale's payment or the
+    owner's test is marked as already used, so the till's own notice of the same payment is never offered for a sale."""
+    from .checkout import mask, record_incoming
+    from .models import IncomingMpesaPayment as Incoming
+    if not receipt or hasattr(push, "checkout_payment"):
+        return  # a checkout's prompt is kept by prompt_answered, with the checkout
+    incoming, _ = record_incoming(transaction_id=receipt, source=Incoming.PROMPT, amount=push.amount, paid_at=timezone.now(), payer_phone=mask(push.phone))
+    if incoming.status == Incoming.UNMATCHED:
+        note = f"Sale {push.payment.sale.number}" if push.payment_id else "The owner's test prompt"
+        Incoming.objects.filter(pk=incoming.pk).update(status=Incoming.USED if push.payment_id else Incoming.SETTLED, used_amount=incoming.amount, note=note)
 
 
 def check(push):
@@ -292,8 +364,9 @@ def check(push):
                 return push
             return apply_result(push, "0", metadata={"Item": [{"Name": "MpesaReceiptNumber", "Value": push.checkout_request_id}]})
         return apply_result(push, data["ResultCode"], data.get("ResultDesc", ""))
-    if age > GIVE_UP_AFTER:
-        _finish(push, StkPush.FAILED, "No answer from M-Pesa. Check the till's M-Pesa messages, and confirm the payment by hand with its code if it came.")
+    if age > GIVE_UP_AFTER and _finish(push, StkPush.FAILED, "No answer from M-Pesa. Check the till's M-Pesa messages, and confirm the payment by hand with its code if it came."):
+        from .checkout import prompt_answered
+        prompt_answered(push)
     return push
 
 

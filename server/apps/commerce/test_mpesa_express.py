@@ -1,4 +1,5 @@
 """M-Pesa prompts to the customer's phone, from each business's own till or paybill (mpesa_express.py)."""
+import re
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -52,6 +53,8 @@ def safaricom(*answers):
 
 
 TOKEN = {"access_token": "tok"}
+# After the keys are accepted, the till is registered for Safaricom's payment notices: a token, then the registration.
+REGISTERED = (TOKEN, {"ResponseCode": "0", "ResponseDescription": "Success"})
 
 
 def test_a_business_without_a_till_takes_manual_payments_only(shop):
@@ -65,13 +68,19 @@ def test_a_business_without_a_till_takes_manual_payments_only(shop):
 
 def test_only_the_owner_sets_where_the_money_goes_and_the_keys_are_checked_with_safaricom(shop):
     assert shop.cashier.put(SETUP, TILL, format="json").status_code == 403
-    assert shop.cashier.get(SETUP).json() == {"kind": "NONE", "ready": False, "simulated": False, "can_change": False}
+    assert shop.cashier.get(SETUP).json() == {"kind": "NONE", "ready": False, "simulated": False, "can_change": False, "till_number": "",
+                                              "paybill": "", "till_notices": False}
     with safaricom({"errorMessage": "Invalid credentials"}):
         refused = shop.owner.put(SETUP, TILL, format="json").json()
     assert refused["ready"] is False and "did not accept the Consumer Key and Secret for live" in refused["status_detail"]
-    with safaricom(TOKEN):
+    with safaricom(TOKEN, *REGISTERED) as calls:
         data = shop.owner.put(SETUP, {**TILL, "consumer_key": "key-abcd9999"}, format="json").json()
     assert data["ready"] is True and data["consumer_key_hint"] == "…9999" and data["has_passkey"] is True
+    # Safaricom is asked to tell the business about payments to the till, at an address free of words it refuses.
+    path, registration = calls.call_args_list[-1].args[1], calls.call_args_list[-1].args[2]
+    assert path == "/mpesa/c2b/v2/registerurl" and registration["ShortCode"] == "5123456" and data["till_notices"] is True
+    assert registration["ConfirmationURL"].startswith("https://duka.example.com/api/v1/tenancy/payments/till/")
+    assert not re.search(r"mpesa|safaricom|exe|sql|query|cmd", registration["ConfirmationURL"].split("/api/v1/")[1], re.I)
     assert "test prompt" in data["status_detail"]
     stored = MpesaExpressSetup.objects.get(organization=shop.org)
     assert "secret-xyz" not in stored.consumer_secret and "pass-key-123" not in stored.passkey  # encrypted at rest
@@ -85,7 +94,7 @@ def test_only_the_owner_sets_where_the_money_goes_and_the_keys_are_checked_with_
 
 
 def test_a_sale_paid_by_prompt_is_confirmed_with_the_m_pesa_code(shop):
-    with safaricom(TOKEN):
+    with safaricom(TOKEN, *REGISTERED):
         shop.owner.put(SETUP, TILL, format="json")
     sent = {"ResponseCode": "0", "CheckoutRequestID": "ws_CO_1", "MerchantRequestID": "m1", "CustomerMessage": "Success. Request accepted"}
     with safaricom(TOKEN, sent) as calls:
@@ -110,7 +119,7 @@ def test_a_sale_paid_by_prompt_is_confirmed_with_the_m_pesa_code(shop):
 
 
 def test_a_cancelled_prompt_leaves_the_payment_waiting_and_can_be_sent_again(shop):
-    with safaricom(TOKEN):
+    with safaricom(TOKEN, *REGISTERED):
         shop.owner.put(SETUP, {**TILL, "kind": "PAYBILL", "account_reference": "DUKA"}, format="json")
     with safaricom(TOKEN, {"ResponseCode": "0", "CheckoutRequestID": "ws_CO_2"}) as calls:
         sale = shop.cashier.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": shop.charger.pk, "quantity": 1}],
@@ -129,7 +138,7 @@ def test_a_cancelled_prompt_leaves_the_payment_waiting_and_can_be_sent_again(sho
 
 def test_the_callback_needs_the_business_secret_and_a_late_one_is_asked_for(shop):
     assert APIClient().post("/api/v1/tenancy/mpesa/express/callback/wrong/", {}, format="json").status_code == 403
-    with safaricom(TOKEN):
+    with safaricom(TOKEN, *REGISTERED):
         shop.owner.put(SETUP, TILL, format="json")
     with safaricom(TOKEN, {"ResponseCode": "0", "CheckoutRequestID": "ws_CO_4"}):
         sale = shop.cashier.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": shop.charger.pk, "quantity": 1}],

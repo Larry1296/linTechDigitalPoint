@@ -205,6 +205,11 @@ class MpesaExpressSetup(models.Model):
     consumer_secret = models.TextField(blank=True)  # encrypted
     passkey = models.TextField(blank=True)  # encrypted
     callback_token = models.CharField(max_length=64, unique=True)
+    # The secret in the till's payment-notification address. Hex, so the address never spells a word Safaricom refuses in
+    # callback addresses; it never changes, because Safaricom registers a live address only once.
+    till_token = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    till_registered_at = models.DateTimeField(null=True, blank=True)  # Safaricom accepted the till's notification address
+    till_detail = models.CharField(max_length=255, blank=True)
     verified_at = models.DateTimeField(null=True, blank=True)  # Safaricom accepted the consumer key and secret
     tested_at = models.DateTimeField(null=True, blank=True)  # a prompt went through end to end
     status_detail = models.CharField(max_length=255, blank=True)

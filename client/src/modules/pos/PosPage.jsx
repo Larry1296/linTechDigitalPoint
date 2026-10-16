@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CreditCard, Landmark, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
+import { Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
 import { businessCurrency } from "../../core/organization/presentation";
-import { label } from "../../core/ui/labels";
 import { useAuth } from "../../core/auth/AuthContext";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
@@ -12,17 +11,12 @@ import { ProductActions } from "../products/ProductActions";
 import { ProductSearch } from "../storefront/components/ProductSearch";
 import { VariantSummary, stockLimit } from "../products/VariantSummary";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
-import { PromptStatus, SendPrompt, shownPhone, useMpesaExpress, usePrompt } from "./MpesaPrompt";
+import { useMpesaExpress } from "./MpesaPrompt";
+import { CheckoutPanel } from "./CheckoutPanel";
 import "../admin/pos.css";
 import "./posPage.css";
 
 const ALL = "All";
-const METHODS = [
-  { id: "CASH", name: "Cash", icon: Banknote },
-  { id: "MPESA", name: "M-Pesa", icon: Smartphone },
-  { id: "BANK", name: "Bank", icon: Landmark },
-  { id: "OTHER", name: "Other", icon: CreditCard },
-];
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const groupOf = (p) => (p.product_type === "SERVICE" ? "Services" : p.category_name || "Uncategorised");
 // Services last, the rest alphabetically.
@@ -103,31 +97,8 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
   </article>;
 }
 
-// What happened to the sale just recorded: its total, change, profit, and the M-Pesa payment until it is confirmed.
-function SaleDone({ result, setResult, express, canConfirmPayment, onReceipt, onNewSale }) {
-  const [confirmBusy, setConfirmBusy] = useState(false);
-  const [confirmError, setConfirmError] = useState("");
-  const [sent, setSent] = useState(result.prompt);
-  // Paid on the phone: the server confirmed the payment with the M-Pesa code.
-  const prompt = usePrompt(sent, (done) => {
-    if (done.status === "COMPLETED" && !done.detail?.includes("could not be confirmed")) setResult((r) => ({ ...r, waiting_payment: undefined, confirmed_reference: done.receipt_number }));
-  });
-  const waiting = result.waiting_payment;
-  // M-Pesa taken at the till waits until someone checks the money arrived and enters its code.
-  const confirmPayment = async (e) => {
-    e.preventDefault();
-    if (confirmBusy) return;
-    const reference = String(new FormData(e.currentTarget).get("reference") || "").trim();
-    setConfirmBusy(true); setConfirmError("");
-    try {
-      await api(`/api/v1/commerce/payments/${waiting.id}/confirm/`, { method: "POST", body: JSON.stringify({ reference }) });
-      setResult((r) => ({ ...r, waiting_payment: undefined, confirmed_reference: reference }));
-    } catch (err) {
-      setConfirmError(err.message);
-    } finally { setConfirmBusy(false); }
-  };
-  const canPrompt = express?.ready && waiting?.method === "MPESA";
-  const pending = prompt?.status === "PENDING";
+// The sale just made: its total, the change to give, and its profit for those allowed to see it.
+function SaleDone({ result, onReceipt, onNewSale }) {
   return <section className="posDone" aria-label="Sale complete">
     <header>
       <div>
@@ -147,24 +118,6 @@ function SaleDone({ result, setResult, express, canConfirmPayment, onReceipt, on
         <button type="button" className="secondary" onClick={onNewSale}>New sale</button>
       </div>
     </header>
-    {(prompt || result.prompt_error) && <div className="posPromptBox">
-      <PromptStatus prompt={prompt} />
-      {result.prompt_error && !prompt && <p className="mpesaPrompt failed" role="status"><span><b>The prompt was not sent.</b> {result.prompt_error}</span></p>}
-    </div>}
-    {waiting && <div className="paymentConfirm" role="group" aria-label="Confirm M-Pesa payment">
-      <p className="formNotice" role="status">{label(waiting.method)} {businessCurrency()} {Number(waiting.amount).toLocaleString()} is waiting for
-        confirmation. It is not counted as received until it is confirmed.</p>
-      {canPrompt && !pending && <SendPrompt paymentId={waiting.id} defaultPhone={shownPhone(prompt?.phone || result.mpesa_phone)}
-        label={prompt ? "Send the prompt again" : "Send M-Pesa prompt"} onSent={setSent} />}
-      {canConfirmPayment ? <form onSubmit={confirmPayment} className="manualConfirm">
-        <label>{canPrompt ? "Or enter the M-Pesa code from the confirmation message" : "M-Pesa code from the confirmation message"}
-          <input name="reference" required maxLength={120} defaultValue={waiting.reference || ""} />
-        </label>
-        <button className={canPrompt ? "secondary" : undefined} disabled={confirmBusy}>{confirmBusy ? "Confirming…" : "Confirm money received"}</button>
-        <FormError title="Could not confirm the payment." message={confirmError} />
-      </form> : !canPrompt && <p className="muted">Ask someone allowed to confirm payments to confirm it under Sales.</p>}
-    </div>}
-    {result.confirmed_reference && <p role="status" className="posConfirmed">Payment confirmed ({result.confirmed_reference}).</p>}
   </section>;
 }
 
@@ -182,14 +135,13 @@ export function PosPage() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [method, setMethod] = useState("CASH");
-  const [cashGiven, setCashGiven] = useState("");
-  const [mpesaPhone, setMpesaPhone] = useState("");
   const [discount, setDiscount] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
+  // The basket charged and waiting for the customer to pay (see CheckoutPanel); nothing is sold until it is paid.
+  const [checkout, setCheckout] = useState(null);
   const canChangePrice = user?.permissions?.includes("commerce.change_sale");
   const canSellAtLoss = user?.permissions?.includes("commerce.sell_below_cost");
   const canAddCustomer = user?.permissions?.includes("accounts.add_customerprofile");
-  const canConfirmPayment = user?.permissions?.includes("commerce.change_payment");
   const [customerId, setCustomerId] = useState("");
   const [newCustomer, setNewCustomer] = useState(null);
   const [customerError, setCustomerError] = useState("");
@@ -206,12 +158,7 @@ export function PosPage() {
       setCustomerError(e.message);
     }
   };
-  // A named customer's phone is the obvious number to prompt.
-  const chooseCustomer = (id, known) => {
-    setCustomerId(id);
-    const phone = (known || customers.find((c) => String(c.id) === id))?.phone;
-    if (phone && !mpesaPhone) setMpesaPhone(phone);
-  };
+  const chooseCustomer = (id) => setCustomerId(id);
   const setLine = (id, changes) => setCart((c) => c.map((y) => (y.p.id === id ? { ...y, ...changes } : y)));
   const removeLine = (id) => setCart((c) => c.filter((y) => y.p.id !== id));
   // Line amount at the agreed price less its discount; this is what the customer is charged before any sale discount.
@@ -223,6 +170,11 @@ export function PosPage() {
   useEffect(() => {
     void search();
     if (user?.permissions?.includes("accounts.view_customerprofile")) api("/api/v1/commerce/customers/").then(setCustomers).catch(() => {});
+    // A reloaded till picks up the cashier's own checkout that is still waiting for payment.
+    api("/api/v1/commerce/pos/checkouts/").then((data) => {
+      const mine = (data?.checkouts || []).find((row) => row.cashier_id === user?.id);
+      if (mine) setCheckout(mine);
+    }).catch(() => {});
   }, []);
   // Stock and prices change as others sell or receive: keep the till's list current (the cart is untouched).
   useLiveRefresh(search);
@@ -240,53 +192,58 @@ export function PosPage() {
   const items = cart.reduce((sum, x) => sum + x.q, 0);
   const subtotal = cart.reduce((sum, x) => sum + lineAmount(x), 0);
   const total = Math.max(0, subtotal - Number(discount || 0));
-  const change = method === "CASH" && cashGiven !== "" ? Number(cashGiven) - total : null;
-  const prompting = method === "MPESA" && express?.ready;
-  const clear = () => { setCart([]); setDiscount(""); setCashGiven(""); setMpesaPhone(""); setCustomerId(""); setError(""); };
+  const clear = () => { setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); };
 
-  const complete = async (e) => {
+  // Charging freezes the basket and its amount; the customer then pays on the checkout panel.
+  const charge = async (e) => {
     e.preventDefault();
     if (saleBusy || !cart.length) return;
-    const form = Object.fromEntries(new FormData(e.currentTarget));
-    const promptPhone = prompting ? mpesaPhone.trim() : "";
-    if (!(await confirmAction({
-      title: "Complete this sale?",
-      text: `Charge ${businessCurrency()} ${total.toFixed(2)} and update stock?${promptPhone ? ` An M-Pesa prompt goes to ${promptPhone}.` : ""}`,
-      confirmButtonText: "Complete sale",
-    }))) return;
     const lines = cart.map((x) => ({ variant_id: x.p.id, quantity: x.q,
       ...(x.price !== undefined && x.price !== "" && Number(x.price) !== Number(x.p.selling_price) ? { unit_price: x.price } : {}),
       ...(Number(x.discount || 0) ? { discount: x.discount } : {}),
       ...(x.reason ? { discount_reason: x.reason } : {}) }));
-    const signature = JSON.stringify({ ...form, lines, promptPhone });
+    const terms = { discount: discount || 0, discount_reason: discountReason, ...(customerId ? { customer_id: customerId } : {}) };
+    const signature = JSON.stringify({ terms, lines });
     if (saleRequest.current.signature !== signature) saleRequest.current = { signature, key: crypto.randomUUID() };
     setError("");
     setSaleBusy(true);
-    const submit = (allowBelowCost) => api("/api/v1/commerce/pos/complete/", {
+    const submit = (allowBelowCost) => api("/api/v1/commerce/pos/checkouts/", {
       method: "POST",
-      body: JSON.stringify({ ...form, items: lines, idempotency_key: saleRequest.current.key,
-        ...(promptPhone ? { mpesa_phone: promptPhone } : {}), ...(allowBelowCost ? { allow_below_cost: true } : {}) }),
+      body: JSON.stringify({ ...terms, items: lines, idempotency_key: saleRequest.current.key, ...(allowBelowCost ? { allow_below_cost: true } : {}) }),
     });
     try {
-      let sale;
+      let charged;
       try {
-        sale = await submit(false);
+        charged = await submit(false);
       } catch (err) {
         // Selling below buying cost is allowed only for someone permitted to, after a clear warning.
         if (err.data?.code !== "below_cost" || !canSellAtLoss) throw err;
         const lines = [].concat(err.data.below_cost || []).join("\n");
         if (!(await confirmAction({ title: "Sell at a loss?", text: `${lines}\n\nThis sale will be recorded as a LOSS.`, confirmButtonText: "Sell at a loss" }))) return;
-        sale = await submit(true);
+        charged = await submit(true);
       }
-      setResult({ ...sale, change: change > 0 ? change : 0, mpesa_phone: promptPhone });
-      saleRequest.current = { signature: null, key: null };
-      clear();
-      window.scrollTo?.({ top: 0, behavior: "smooth" });
-      await search();
+      setResult(undefined);
+      setCheckout(charged);
     } catch (err) {
       setError(err.message);
     } finally { setSaleBusy(false); }
   };
+  // Paid: the server made the sale. Show it like any finished sale and start the next one.
+  const finished = async (done) => {
+    const change = done.payments.reduce((sum, p) => sum + Number(p.change || 0), 0);
+    setResult({ ...done.receipt, change });
+    setCheckout(null);
+    saleRequest.current = { signature: null, key: null };
+    clear();
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+    await search();
+  };
+  const backToBasket = ({ keepBasket }) => {
+    setCheckout(null);
+    saleRequest.current = { signature: null, key: null };
+    if (!keepBasket) clear();
+  };
+  const customerPhone = customers.find((c) => String(c.id) === String(checkout?.customer_id || customerId))?.phone;
 
   return (
     <div className="posPage">
@@ -295,12 +252,11 @@ export function PosPage() {
           <span className="eyebrow">Counter selling</span>
           <h1>Point of Sale</h1>
         </div>
-        {express && <span className={`posExpressBadge${express.ready ? " on" : ""}`}>
-          <Smartphone size={15} aria-hidden="true" /> {express.ready ? "M-Pesa prompts on" : "M-Pesa by code"}
+        {express && <span className={`posExpressBadge${express.till_notices || express.ready ? " on" : ""}`}>
+          <Smartphone size={15} aria-hidden="true" /> {express.till_notices ? "Till payments checked with Safaricom" : express.ready ? "M-Pesa prompts on" : "M-Pesa by code"}
         </span>}
       </header>
-      {result && <SaleDone result={result} setResult={setResult} express={express} canConfirmPayment={canConfirmPayment}
-        onReceipt={() => setShowReceipt(true)} onNewSale={() => setResult(undefined)} />}
+      {result && <SaleDone result={result} onReceipt={() => setShowReceipt(true)} onNewSale={() => setResult(undefined)} />}
       {showReceipt && result && <ReceiptPanel saleId={result.sale_id} onClose={() => setShowReceipt(false)} />}
       {loadError && <FormError title="Could not load products." message={loadError} />}
       <div className="posLayout">
@@ -323,7 +279,10 @@ export function PosPage() {
           ))}
         </section>
 
-        <form className="posCart" onSubmit={complete} ref={cartRef}>
+        {checkout ? <aside className="posCart" ref={cartRef}>
+          <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={setCheckout}
+            onDone={finished} onBack={backToBasket} />
+        </aside> : <form className="posCart" onSubmit={charge} ref={cartRef}>
           <div className="posCartHead">
             <h2>Current sale</h2>
             {cart.length > 0 && <>
@@ -343,43 +302,15 @@ export function PosPage() {
               <label>Discount on the whole sale
                 <input name="discount" type="number" min="0" step="0.01" value={discount} placeholder="0" onChange={(e) => setDiscount(e.target.value)} />
               </label>
-              <label>Reason for sale discount<input name="discount_reason" maxLength={160} /></label>
+              <label>Reason for sale discount<input name="discount_reason" maxLength={160} value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
             </details>
             <div className="posGrandTotal"><span>Total</span><strong>{money(total)}</strong></div>
           </div>
 
-          <fieldset className="posMethods">
-            <legend>Payment</legend>
-            {METHODS.map(({ id, name, icon: Icon }) => (
-              <label key={id} className={method === id ? "on" : ""}>
-                <input type="radio" name="payment_method" value={id} checked={method === id} onChange={() => setMethod(id)} />
-                <Icon size={18} aria-hidden="true" /> {name}
-              </label>
-            ))}
-          </fieldset>
-          {method === "CASH" && <div className="posPayDetail">
-            <label>Cash received
-              <input type="number" min="0" step="0.01" inputMode="decimal" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} placeholder={total ? total.toFixed(2) : "0"} />
-            </label>
-            {change !== null && (change >= 0 ? <p className="posChange">Change: <b>{money(change)}</b></p>
-              : <p className="formNotice" role="status">{money(-change)} short. Take the rest, or record it as a part payment below.</p>)}
-          </div>}
-          {method === "MPESA" && <div className="posPayDetail">
-            {prompting ? <>
-              <label>Customer's M-Pesa number
-                <input value={mpesaPhone} onChange={(e) => setMpesaPhone(e.target.value)} inputMode="tel" placeholder="0712 345 678" maxLength={16} />
-              </label>
-              <p className="muted">{mpesaPhone.trim() ? "When you complete the sale, the customer gets a prompt on this phone to enter their M-Pesa PIN." : "Enter the number to send a prompt, or leave it empty to enter the M-Pesa code yourself."}</p>
-            </> : <p className="muted">Take the payment on your till, then enter the code from the M-Pesa message.{express?.can_change ? " To send prompts to customers' phones, set up M-Pesa payments in Settings." : ""}</p>}
-            {!mpesaPhone.trim() || !prompting ? <label>M-Pesa code (optional)<input name="payment_reference" maxLength={100} placeholder="e.g. SJK4H7XQ2P" /></label> : null}
-          </div>}
-          {(method === "BANK" || method === "OTHER") && <div className="posPayDetail">
-            <label>Payment reference<input name="payment_reference" maxLength={100} /></label>
-          </div>}
-
-          <details className="posCredit"><summary>Credit sale or partial payment</summary>
-            <p className="muted">Leave amount blank for full payment. Enter zero for credit. Unconfirmed mobile money is not counted as received.</p>
-            <label>Customer (needed if anything is left to pay)<select name="customer_id" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}</select></label>
+          <details className="posCustomer" open={Boolean(customerId) || undefined}>
+            <summary>Customer{customerId ? `: ${customers.find((c) => String(c.id) === customerId)?.name || ""}` : " (optional)"}</summary>
+            <p className="muted">Walk-in customers need nothing. Choose a customer to put the sale on their record, or to let them owe part of it.</p>
+            <label>Customer<select name="customer_id" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}</select></label>
             {canAddCustomer && (newCustomer ? <div className="inlineCreate" role="group" aria-label="New customer">
               <label>Customer name<input value={newCustomer.name} maxLength={150} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} /></label>
               <label>Phone<input value={newCustomer.phone} maxLength={30} inputMode="tel" onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} /></label>
@@ -387,18 +318,16 @@ export function PosPage() {
               <button type="button" className="secondary" onClick={() => { setNewCustomer(null); setCustomerError(""); }}>Cancel</button>
               <FormError title="Could not add the customer." message={customerError} />
             </div> : <button type="button" className="secondary" onClick={() => setNewCustomer({ name: "", phone: "" })}>+ New customer</button>)}
-            <label>Amount paid now<input name="paid_amount" type="number" min="0" step="0.01" /></label>
-            <label>Balance due date<input name="due_date" type="date" /></label>
           </details>
 
           <button className="posCharge" disabled={!cart.length || saleBusy}>
-            <span>{saleBusy ? "Recording…" : prompting && mpesaPhone.trim() ? "Complete sale & send prompt" : "Complete sale"}</span>
+            <span>{saleBusy ? "Charging…" : "Charge"}</span>
             {!saleBusy && cart.length > 0 && <strong>{money(total)}</strong>}
           </button>
-          <FormError title="Could not complete the sale." message={error} />
-        </form>
+          <FormError title="Could not charge the sale." message={error} />
+        </form>}
       </div>
-      {cart.length > 0 && <button type="button" className="posMobileBar" onClick={() => cartRef.current?.scrollIntoView({ behavior: "smooth" })}>
+      {cart.length > 0 && !checkout && <button type="button" className="posMobileBar" onClick={() => cartRef.current?.scrollIntoView({ behavior: "smooth" })}>
         <ShoppingCart size={18} aria-hidden="true" /> {items} {items === 1 ? "item" : "items"} · <strong>{money(total)}</strong><span>Review sale</span>
       </button>}
     </div>

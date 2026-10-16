@@ -43,9 +43,10 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByRole('button',{name:'Receive stock',exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:'Stock recorded'})).toBeVisible();
   await page.goto('/admin/pos');
-  await page.locator('.posCatalogue button').filter({hasText:'Test charger'}).first().click();
-  await page.getByRole('button',{name:'Complete sale',exact:true}).click();
-  await page.locator('.swal2-confirm').click();
+  await page.getByRole('button',{name:/^Test charger/}).first().click();
+  // Charging sells nothing yet; the cash taken on the checkout completes the sale.
+  await page.getByRole('button',{name:/^Charge/}).click();
+  await page.getByRole('button',{name:/^Take .* cash$/}).click();
   await expect(page.getByText(/Sale complete/)).toBeVisible();
   await page.goto('/admin/expenses');
   await page.getByLabel('What was it for?').fill('Rent');

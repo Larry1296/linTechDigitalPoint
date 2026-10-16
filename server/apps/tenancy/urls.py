@@ -1,4 +1,4 @@
-from apps.commerce.mpesa_express_api import callback as express_callback
+from apps.commerce.mpesa_express_api import callback as express_callback, till_accept, till_confirm
 from django.urls import path
 from . import api, billing_api
 urlpatterns = [
@@ -22,6 +22,9 @@ urlpatterns = [
     path("billing/mpesa/callback/<str:token>/", billing_api.mpesa_callback),
     # Safaricom posts each business's own M-Pesa prompt results here (commerce/mpesa_express.py); public, like billing's.
     path("mpesa/express/callback/<str:token>/", express_callback),
+    # Safaricom's notices of payments to each business's own till or paybill (C2B). The path avoids words Safaricom refuses.
+    path("payments/till/<str:token>/confirm/", till_confirm),
+    path("payments/till/<str:token>/accept/", till_accept),
     path("platform-admin/overview/", billing_api.platform_overview),
     path("platform-admin/businesses/<int:pk>/", billing_api.platform_business),
     path("platform-admin/plans/<int:pk>/", billing_api.platform_plan),

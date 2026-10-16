@@ -238,6 +238,9 @@ MPESA_TRANSACTION_TYPE = config("MPESA_TRANSACTION_TYPE", default="CustomerPayBi
 MPESA_PARTY_B = config("MPESA_PARTY_B", default="")  # the till number when it differs from the shortcode
 MPESA_CALLBACK_BASE_URL = config("MPESA_CALLBACK_BASE_URL", default=SITE_URL)  # public https address Safaricom can reach
 MPESA_CALLBACK_TOKEN = config("MPESA_CALLBACK_TOKEN", default="")  # long random secret placed in the callback address
+# Optional: the addresses Safaricom posts payment notices from. When set, notices from anywhere else are refused (on top of
+# the secret in each address). Comma separated, e.g. Safaricom's published callback IPs.
+MPESA_CALLBACK_IPS = config("MPESA_CALLBACK_IPS", default="", cast=lambda value: [ip.strip() for ip in value.split(",") if ip.strip()])
 # Each business's own Daraja secrets (M-Pesa prompts at the till) are stored encrypted with this Fernet key; when it is
 # empty a key derived from SECRET_KEY is used. Changing it makes the stored secrets unreadable (owners re-enter them).
 FIELD_ENCRYPTION_KEY = config("FIELD_ENCRYPTION_KEY", default="")

@@ -149,3 +149,85 @@ class StkPush(TenantModel):
     class Meta:
         base_manager_name = "objects"
         default_manager_name = "objects"
+
+
+class IncomingMpesaPayment(TimeStamped):
+    """Every M-Pesa payment Safaricom reported reaching the business's own till or paybill: a customer paying the till
+    (Safaricom's payment notification) or answering a prompt. Kept apart from checkouts and sales: each one is real money
+    with Safaricom's own transaction code, used for at most one sale (``CheckoutPayment.incoming`` is one to one), and one
+    that no sale claims stays here for the owner to match or settle. The M-Pesa agency's float and its customers'
+    deposits never come here; they belong to the agency desk."""
+    TILL_NOTICE, PROMPT = "TILL_NOTICE", "PROMPT"
+    UNMATCHED, USED, SETTLED = "UNMATCHED", "USED", "SETTLED"
+    transaction_id = models.CharField(max_length=40)  # Safaricom's code, e.g. RKTQDM7W6S
+    source = models.CharField(max_length=12, choices=[(TILL_NOTICE, "Paid to the till"), (PROMPT, "Prompt answered")])
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    paid_at = models.DateTimeField()
+    shortcode = models.CharField(max_length=12, blank=True)
+    account_reference = models.CharField(max_length=40, blank=True)  # paybill account number the customer typed
+    payer_phone = models.CharField(max_length=20, blank=True)  # masked by Safaricom, e.g. 25470****149
+    payer_name = models.CharField(max_length=120, blank=True)
+    status = models.CharField(max_length=10, choices=[(UNMATCHED, "Not matched to a sale"), (USED, "Used for a sale"), (SETTLED, "Settled by the owner")], default=UNMATCHED)
+    used_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)  # less than amount when the customer paid more
+    note = models.CharField(max_length=255, blank=True)
+    settled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        ordering = ["-paid_at", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["organization", "transaction_id"], name="one_incoming_mpesa_per_code")]
+
+
+class Checkout(TimeStamped):
+    """A basket the cashier has charged: its items, prices and exact amount are frozen while the customer pays. Nothing
+    is sold yet: no stock leaves and nothing reaches the books. Once the payments cover the amount, the sale is made from
+    the frozen basket by the same complete_sale as any sale, exactly once (``sale`` is one to one)."""
+    AWAITING, PART_PAID, PAID, COMPLETED, CANCELLED, EXPIRED = "AWAITING", "PART_PAID", "PAID", "COMPLETED", "CANCELLED", "EXPIRED"
+    STATUSES = [(AWAITING, "Waiting for payment"), (PART_PAID, "Partly paid"), (PAID, "Paid, sale not made yet"), (COMPLETED, "Completed"),
+                (CANCELLED, "Cancelled"), (EXPIRED, "Expired")]
+    OPEN = (AWAITING, PART_PAID, PAID)
+    number = models.CharField(max_length=40)  # becomes the sale's receipt number
+    status = models.CharField(max_length=10, choices=STATUSES, default=AWAITING)
+    branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT)
+    cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="checkouts")
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    basket = models.JSONField()  # the lines with their agreed prices, discount and options, as charged
+    total = models.DecimalField(max_digits=14, decimal_places=2)
+    sale = models.OneToOneField(Sale, null=True, blank=True, on_delete=models.PROTECT, related_name="checkout")
+    idempotency_key = models.CharField(max_length=120)
+    problem = models.CharField(max_length=255, blank=True)  # why a paid checkout could not become a sale yet
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    cancel_reason = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [models.UniqueConstraint(fields=["organization", "number"], name="one_checkout_number"),
+                       models.UniqueConstraint(fields=["organization", "idempotency_key"], name="one_checkout_per_request")]
+
+
+class CheckoutPayment(TimeStamped):
+    """One way the customer pays towards a checkout; several make a split payment (KSh 400 cash and KSh 600 M-Pesa).
+
+    Cash and bank are confirmed by the cashier. Till payments are confirmed by attaching the payment Safaricom reported
+    (``incoming``), never by an amount alone. A prompt is confirmed by Safaricom's answer to that very prompt. OWED is the
+    part a named customer takes on credit."""
+    CASH, TILL, PROMPT, BANK, OWED = "CASH", "TILL", "PROMPT", "BANK", "OWED"
+    PENDING, CONFIRMED, FAILED, VOID = "PENDING", "CONFIRMED", "FAILED", "VOID"
+    checkout = models.ForeignKey(Checkout, on_delete=models.PROTECT, related_name="payments")
+    method = models.CharField(max_length=6, choices=[(CASH, "Cash"), (TILL, "Paid to the till"), (PROMPT, "M-Pesa prompt"), (BANK, "Bank"), (OWED, "Owed by the customer")])
+    amount = models.DecimalField(max_digits=14, decimal_places=2)  # what it pays towards the checkout
+    status = models.CharField(max_length=10, choices=[(x, x.title()) for x in (PENDING, CONFIRMED, FAILED, VOID)], default=PENDING)
+    cash_given = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # cash handed over; change is the rest
+    reference = models.CharField(max_length=100, blank=True)
+    prompt = models.OneToOneField(StkPush, null=True, blank=True, on_delete=models.PROTECT, related_name="checkout_payment")
+    incoming = models.OneToOneField(IncomingMpesaPayment, null=True, blank=True, on_delete=models.PROTECT, related_name="checkout_payment")
+    payment = models.OneToOneField(Payment, null=True, blank=True, on_delete=models.PROTECT, related_name="checkout_payment")  # on the sale
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    detail = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"

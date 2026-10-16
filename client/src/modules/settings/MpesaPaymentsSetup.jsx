@@ -51,18 +51,33 @@ export function MpesaPaymentsSetup({ intro = true }) {
       setTesting(await api("/api/v1/commerce/mpesa-express/test/", { method: "POST", body: JSON.stringify({ phone: testPhone }) }));
     } catch (e) { setTestError(e.message); }
   };
+  const connectTill = async () => {
+    setBusy(true); setError("");
+    try {
+      const data = await api("/api/v1/commerce/till-payments/register/", { method: "POST" });
+      load({ ...setup, ...data });
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
   const saved = setup.kind !== "NONE";
   const savedNumber = setup.kind === "TILL" ? `Till ${setup.till_number}` : `Paybill ${setup.shortcode}`;
 
   return <div className="mpesaSetup">
-    {intro && <p className="muted">Send customers an M-Pesa prompt from the point of sale: they enter their PIN on their own phone, the
-      money goes straight to your till or paybill, and the sale is marked paid by itself.</p>}
+    {intro && <p className="muted">Take M-Pesa at the point of sale the way a supermarket does: customers pay your till (each payment shows up
+      at the till as Safaricom reports it), or get a prompt on their phone and enter their PIN. Either way the money goes straight to you and
+      the sale is paid only with Safaricom's own record of the payment.</p>}
     {setup.ready ? <p className="mpesaSetupState on" role="status"><CheckCircle2 size={18} aria-hidden="true" />
       <span><b>Prompts are on</b> · {savedNumber}{setup.environment === "SANDBOX" ? " (testing)" : ""}{setup.tested_at ? " · test prompt paid" : ""}</span></p>
       : saved ? <p className="mpesaSetupState" role="status"><CircleAlert size={18} aria-hidden="true" />
         <span><b>Not working yet.</b> {setup.status_detail || "Check the details below and save again."}</span></p>
       : <p className="mpesaSetupState none" role="status"><Smartphone size={18} aria-hidden="true" /><span><b>Manual M-Pesa only.</b> Payments are confirmed with the code from the customer's message.</span></p>}
     {setup.ready && setup.status_detail && <p className="muted">{setup.status_detail}</p>}
+    {saved && setup.verified_at && (setup.till_notices
+      ? <p className="mpesaSetupState on" role="status"><CheckCircle2 size={18} aria-hidden="true" />
+        <span><b>Till payments are reported</b> · each payment to {savedNumber} appears at the till for the cashier to match.</span></p>
+      : <div className="mpesaSetupState" role="status"><CircleAlert size={18} aria-hidden="true" />
+        <span><b>Till payments are not reported yet.</b> {setup.till_detail || "Safaricom has not confirmed the till's payment notices."}
+          {" "}Until then cashiers type the code from the customer's message, which cannot be checked.</span>
+        {setup.can_change && <button type="button" className="secondary" disabled={busy} onClick={() => void connectTill()}>Try again</button>}</div>)}
     {saved && !setup.callback_ready && <p className="formNotice" role="status">The platform's public web address is not set yet, so Safaricom
       cannot report payments back. Ask the platform team to set it (MPESA_CALLBACK_BASE_URL).</p>}
 
@@ -78,6 +93,8 @@ export function MpesaPaymentsSetup({ intro = true }) {
       {form.kind !== "NONE" && <>
         <section className="mpesaNeeds" aria-labelledby="mpesa-needs">
           <h3 id="mpesa-needs">What you need from Safaricom</h3>
+          <p className="muted">For till payments to show up at the till, your Daraja app also needs Safaricom's C2B (Customer to Business) API, taken live
+            with the same number.</p>
           <ol>{setup.requirements.map((item) => <li key={item.id}><b>{item.label}</b><span>{item.help}</span></li>)}</ol>
           <p className="muted">The rest is done for you: the address Safaricom reports payments to, checking your keys, and matching each payment to its sale.</p>
         </section>
