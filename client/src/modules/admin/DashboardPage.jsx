@@ -94,7 +94,12 @@ export function DashboardPage() {
     owner?.money && ["Money you should hold", money(owner.money.expected), owner.money.places.map(place => `${place.label} ${money(place.expected)}`).join(" · "), "/admin/money-check"],
     owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
-    mpesaUnit && ["M-Pesa cash and float", money(Number(mpesa.cash || 0) + Number(mpesa.float || 0)), `Cash ${money(mpesa.cash)} · Float ${money(mpesa.float)}`, "/admin/mpesa"],
+    // Between shifts it shows what the last shift closed with, never 0.
+    mpesaUnit && ["M-Pesa money in operation", money(mpesa.in_operation ?? Number(mpesa.cash || 0) + Number(mpesa.float || 0)),
+      [`Cash ${money(mpesa.cash)} · Float ${money(mpesa.float)}`,
+        mpesa.commission_balance != null && `Commission balance ${money(mpesa.commission_balance)} (worked out)`,
+        mpesa.live ? "Shift open now" : mpesa.as_of && `As the last shift closed, ${new Date(mpesa.as_of).toLocaleString(undefined, { timeZone: organization.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
+      ].filter(Boolean).join(" · "), "/admin/mpesa"],
   ].filter(Boolean);
   const actions = [
     on("pos") && can("commerce.add_sale") && ["/admin/pos", "Record a sale", true],

@@ -64,3 +64,23 @@ def test_interest_earned_on_an_investment_is_not_products_sold():
     assert (D(str(summary["products"])), D(str(summary["sales"])), D(str(summary["profit"]))) == (D("0"), D("0"), D("0"))
     report = client.get("/api/v1/accounting/reports/").json()
     assert D(str(report["totals"]["revenue"])) == 0
+
+
+def test_m_pesa_card_shows_the_last_shift_closed_with_between_shifts():
+    owner = User.objects.create_user("between-shifts", password="Safe-pass-1848")
+    org = Organization.objects.create(name="Agency shop", slug="between", owner=owner, enabled_modules=["mpesa", "reports"])
+    Membership.objects.create(user=owner, organization=org, role="OWNER")
+    OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
+    client = APIClient()
+    client.force_login(owner)
+    with organization_context(org):
+        from apps.mpesa.models import MpesaOutlet
+        from apps.mpesa.services import open_session, post_transaction, reconcile_session
+        outlet = MpesaOutlet.objects.create(store=Store.objects.create(name="Main"), display_name="Agent till")
+        session = open_session(outlet=outlet, operator=owner, opening_cash="5000", opening_float="20000", commission_balance="100")
+        post_transaction(session=session, transaction_type="CUSTOMER_DEPOSIT", transaction_amount="1000", user=owner, idempotency_key="d1")
+        reconcile_session(session=session, user=owner, actual_cash="6000", actual_float="19000")
+    mpesa = client.get("/api/v1/inventory/dashboard/").json()["mpesa"]
+    assert mpesa["open_sessions"] == 0 and mpesa["live"] is False and mpesa["as_of"]
+    assert (D(str(mpesa["cash"])), D(str(mpesa["float"])), D(str(mpesa["in_operation"]))) == (D("6000"), D("19000"), D("25000"))
+    assert D(str(mpesa["commission_balance"])) >= D("100")

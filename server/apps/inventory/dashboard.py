@@ -11,7 +11,6 @@ from apps.catalog.models import ProductVariant
 from apps.commerce.models import Order, Sale, SaleItem
 from apps.cyber.models import CyberJob
 from apps.mpesa.models import MpesaSession, MpesaTransaction
-from apps.mpesa.services import session_balances
 from apps.tenancy.middleware import effective_modules
 from apps.tenancy.permissions import has_business_permission
 from .models import StockBalance, StockLot, StockReceipt, Movement
@@ -209,13 +208,18 @@ def dashboard_snapshot(request):
                              'ready_jobs': jobs.filter(status='READY').count() if allowed else None,
                              'jobs_today': jobs.filter(created_at__date=today).count() if allowed else None, 'restricted': not allowed}
         else:
-            shifts = list(MpesaSession.objects.filter(status='OPEN').prefetch_related('transactions')) if allowed else []
-            balances = [session_balances(shift) for shift in shifts]
+            from .dashboard_summary import agency_money
+            shifts = MpesaSession.objects.filter(status='OPEN').count() if allowed else 0
+            # The open shifts as they stand; between shifts, what the last shift closed with, so it never reads 0.
+            agency = (agency_money(with_commission=True) if allowed else None) or {}
             transactions = MpesaTransaction.objects.filter(occurred_at__date=today, occurred_at__lte=now, status='POSTED', reversal_of__isnull=True, reversal__isnull=True)
             data['mpesa'] = {'restricted': not allowed, 'commission': unit['revenue'], 'principal_revenue': 0,
-                             'cash': sum((cash for cash, _ in balances), ZERO) if allowed else None,
-                             'float': sum((float_ for _, float_ in balances), ZERO) if allowed else None,
-                             'open_sessions': len(shifts) if allowed else None,
+                             'cash': agency.get('cash', ZERO) if allowed else None,
+                             'float': agency.get('float', ZERO) if allowed else None,
+                             'in_operation': agency.get('total', ZERO) if allowed else None,
+                             'live': agency.get('live', False), 'as_of': agency.get('as_of'),
+                             'commission_balance': agency.get('commission_balance'),
+                             'open_sessions': shifts if allowed else None,
                              'transaction_count': transactions.count() if allowed else None,
                              'deposits': (transactions.filter(transaction_type='CUSTOMER_DEPOSIT').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None,
                              'withdrawals': (transactions.filter(transaction_type='CUSTOMER_WITHDRAWAL').aggregate(v=Sum('amount'))['v'] or ZERO) if allowed else None,

@@ -45,25 +45,40 @@ def _money():
             'by_part': [{'unit': unit, 'label': money_names().get(unit, unit), 'amount': amount} for unit, amount in brought.items()]}
 
 
-def agency_money():
+def agency_money(with_commission=False):
     """The M-Pesa agency's money in operation (cash in its drawer and float on its line), as last recorded on each
-    outlet: the agency's working money, not the owner's. None when the business has no agency."""
+    outlet: the open shift as it stands, or else what the last shift closed with. The agency's working money, not the
+    owner's. ``live`` is whether a shift is open; ``as_of`` is when the last closed shift closed when none is.
+    ``with_commission`` adds the commission balance the app works out for each outlet. None when the business has no agency."""
+    from apps.mpesa.commission_learning import balance_now
     from apps.mpesa.models import MpesaOutlet, MpesaSession
     from apps.mpesa.services import session_balances
     cash = electronic_float = ZERO
     outlets = list(MpesaOutlet.objects.filter(active=True))
     if not outlets:
         return None
+    live, as_of, commission = False, None, None
     for outlet in outlets:
         session = outlet.sessions.order_by('-opened_at', '-pk').first()
+        if with_commission:
+            value = balance_now(outlet.pk)['value']
+            if value is not None:
+                commission = (commission or ZERO) + value
         if not session:
             continue
         if session.status == MpesaSession.OPEN:
             in_drawer, on_line = session_balances(session)
+            live = True
         else:
             in_drawer, on_line = session.closing_cash_actual or ZERO, session.closing_float_actual or ZERO
+            if session.closed_at and (as_of is None or session.closed_at > as_of):
+                as_of = session.closed_at
         cash, electronic_float = cash + in_drawer, electronic_float + on_line
-    return {'cash': cash, 'float': electronic_float, 'total': cash + electronic_float}
+    result = {'cash': cash, 'float': electronic_float, 'total': cash + electronic_float, 'live': live,
+              'as_of': None if live or as_of is None else timezone.localtime(as_of)}
+    if with_commission:
+        result['commission_balance'] = commission
+    return result
 
 
 def _customers_owe():
