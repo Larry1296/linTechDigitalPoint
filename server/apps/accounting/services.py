@@ -62,12 +62,15 @@ def expense_outstanding(expense):
 
 
 @transaction.atomic
-def record_expense(*, user, category, unit, method, amount, description, key, paid=True, incurred_on=None, due_date=None):
+def record_expense(*, user, category, unit, method, amount, description, key, paid=True, incurred_on=None, due_date=None, shares=None):
     """An operating expense in the period it relates to (``incurred_on``), paid now or owed.
 
     The cost is always booked as Dr expense category / Cr accrued expenses on the incurred date;
     a payment then moves it out of accrued expenses: Dr accrued expenses / Cr cash. So an expense is
     counted once in profit whether it is paid today, later, or in instalments.
+
+    ``shares`` ({part: amount}, see expense_shares.py) shares the cost between the parts of the business. With one drawer
+    the part carrying most of it pays; with a drawer for each part, ``unit`` is the drawer the money came from.
     """
     from .ledger import expense_account, paired, post_journal, resolve_branch
     lock_business()
@@ -80,13 +83,21 @@ def record_expense(*, user, category, unit, method, amount, description, key, pa
     if not amount.is_finite() or amount <= 0:
         raise ValidationError('Expense amount must be positive.')
     amount = amount.quantize(Decimal('0.01'))
+    shares = shares or {}
+    if len(shares) == 1:
+        unit, shares = next(iter(shares)), {}  # all of it is one part's cost
+    elif shares:
+        from .expense_shares import main_part
+        from .money_mode import separate_cash
+        if not separate_cash():
+            unit = main_part(shares, unit)
     incurred_on = incurred_on or timezone.localdate()
     branch = resolve_branch()
     entry = None
     if paid:
         entry = post(unit=unit, method=method, amount=-amount, kind='EXPENSE', reference=description[:160],
                      key=f'expense:{key}', user=user, reason=description, branch=branch, journal=False)
-    expense = Expense.objects.create(category=category, business_unit=unit, description=description, created_by=user,
+    expense = Expense.objects.create(category=category, business_unit=unit, unit_shares=shares, description=description, created_by=user,
                                      entry=entry, amount=amount, incurred_on=incurred_on, due_date=due_date, branch=branch, idempotency_key=key)
     post_journal(key=f'expense:{expense.pk}', description=f'{category.name}: {description}'[:240], branch=branch, date=incurred_on,
                  user=user, lines=paired(expense_account(category), '2150', amount))

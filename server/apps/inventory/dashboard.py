@@ -24,7 +24,7 @@ UNITS = [('SHOP', 'Products / sales', 'pos', 'commerce.view_sale'),
 
 
 # Accrual figures come from posted journals. Each P&L account belongs to a business unit; an expense
-# belongs to the unit it was recorded for; stock losses belong to the shop.
+# belongs to the unit it was recorded for, or is shared between the parts it names; stock losses belong to the shop.
 REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4020': 'CYBER', '4010': 'MPESA'}
 COST_UNIT = {'5000': 'SHOP', '5010': 'CYBER'}
 # Interest earned on investments (e.g. a CIC money market fund) is not a sale of anything: it is kept apart from
@@ -46,7 +46,7 @@ def pnl_rows(start, end):
                 expense_ids.add(int(ident))
             elif prefix == 'cash':
                 cash_ids.add(int(ident))
-    expense_units = dict(Expense.objects.filter(pk__in=expense_ids).values_list('pk', 'business_unit'))
+    expense_units = {pk: (unit, shares) for pk, unit, shares in Expense.objects.filter(pk__in=expense_ids).values_list('pk', 'business_unit', 'unit_shares')}
     cash_units = dict(CashEntry.objects.filter(pk__in=cash_ids).values_list('pk', 'business_unit'))
     rows = []
     for line in lines:
@@ -61,7 +61,13 @@ def pnl_rows(start, end):
         else:
             number = int(ident) if ident.isdigit() else None
             if prefix in ('expense', 'expense-cancel'):
-                unit = expense_units.get(number)
+                unit, shares = expense_units.get(number, (None, None))
+                if shares:
+                    # A cost shared between the parts: each part carries its share (a cancellation takes it back the same way).
+                    for part, amount in shared(line['d'] - line['c'], shares).items():
+                        rows.append({'date': line['entry__posting_date'], 'unit': part, 'field': 'expenses', 'amount': amount,
+                                     'account': line['account__name'], 'code': code})
+                    continue
             elif prefix == 'cash':
                 unit = cash_units.get(number)
             else:
@@ -73,6 +79,13 @@ def pnl_rows(start, end):
         rows.append({'date': line['entry__posting_date'], 'unit': unit, 'field': field, 'amount': amount,
                      'account': line['account__name'], 'code': code})
     return rows
+
+
+def shared(amount, shares):
+    """{part: amount} for one journal line of a shared expense, in proportion to the expense's shares."""
+    from apps.accounting.expense_shares import divide
+    parts = divide(abs(amount), {part: Decimal(str(value)) for part, value in shares.items()})
+    return {part: value if amount >= 0 else -value for part, value in parts.items()}
 
 
 def accrual_totals(rows, units):
@@ -87,16 +100,19 @@ def accrual_totals(rows, units):
 def unit_series(trend_rows, period_rows, units, profit_visible, first_month, start, end):
     """Each part of the business side by side over time, for the dashboard's comparison charts: month by month for the
     last twelve months, and day by day over the chosen dates (when they span at most two months). Each point carries
-    ``<PART>_sales`` and ``<PART>_profit`` (profit None when the viewer may not see it)."""
+    ``<PART>_sales``, ``<PART>_costs`` (running costs, shared ones by each part's share) and ``<PART>_profit``, and the
+    same for ``TOTAL``, the whole business, which the parts add up to (costs and profit None when the viewer may not
+    see them)."""
     keys = [key for key, _, _, _ in UNITS if key in units]
     if len(keys) < 2:
         return [], []
 
     def point(rows, **label):
         values = {}
-        for key in keys:
-            totals = accrual_totals(rows, [key])
+        for key, part in [*((key, [key]) for key in keys), ('TOTAL', keys)]:
+            totals = accrual_totals(rows, part)
             values[f'{key}_sales'] = totals['revenue']
+            values[f'{key}_costs'] = totals['expenses'] if profit_visible else None
             values[f'{key}_profit'] = totals['profit'] if profit_visible else None
         return {**label, **values}
 
@@ -263,7 +279,10 @@ def dashboard_snapshot(request):
         if coming['amount']:
             data['mpesa_unpaid'] = {**coming, 'profit_with': period['profit'] + coming['amount']}
     # Each part of the business over the same dates, for the dashboard's "where the sales came from".
-    data['unit_period'] = [{'key': key, 'name': name, **{field: value if profit_visible or field == 'revenue' else None
+    from apps.accounting.money_mode import has_parts, part_names
+    names = part_names()
+    data['has_parts'] = has_parts()
+    data['unit_period'] = [{'key': key, 'name': names.get(key, name), **{field: value if profit_visible or field == 'revenue' else None
                             for field, value in accrual_totals(period_rows, [key]).items()}}
                            for key, name, _, _ in UNITS if key in visible_units]
     data['expense_breakdown'] = []

@@ -31,7 +31,7 @@ def _figures(rows, units, profit_visible):
 
 def _money():
     from apps.accounting.money_check import PARTS, places
-    from apps.accounting.money_mode import MONEY_NAMES, money_mode
+    from apps.accounting.money_mode import money_mode, money_names
     found = places()
     parts = {key: sum((next(p['amount'] for p in place['parts'] if p['key'] == key) for place in found), ZERO) for _, key, _ in PARTS}
     brought = {}
@@ -42,7 +42,7 @@ def _money():
             'places': [{'key': place['key'], 'method': place['method'], 'unit': place['unit'], 'label': place['label'],
                         'expected': place['expected']} for place in found],
             'parts': [{'key': key, 'label': label, 'amount': parts[key]} for _, key, label in PARTS],
-            'by_part': [{'unit': unit, 'label': MONEY_NAMES.get(unit, unit), 'amount': amount} for unit, amount in brought.items()]}
+            'by_part': [{'unit': unit, 'label': money_names().get(unit, unit), 'amount': amount} for unit, amount in brought.items()]}
 
 
 def agency_money():

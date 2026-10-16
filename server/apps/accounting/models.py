@@ -1,6 +1,7 @@
 from apps.tenancy.base import TenantModel
 """Internal operating books. Posted records are append-only; corrections reverse them."""
 from django.conf import settings
+from decimal import Decimal
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
@@ -80,7 +81,11 @@ class CashEntry(PostedRecord):
 class Expense(PostedRecord):
     """An operating cost in the period it relates to, whether paid at once or owed (accrued)."""
     category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT)
+    # The part whose money pays it (its drawer, when each part keeps its own cash).
     business_unit = models.CharField(max_length=5, choices=BusinessUnit.choices)
+    # A running cost shared by the parts of the business, e.g. rent: {"SHOP": "3000.00", "CYBER": "1500.00"}, adding up
+    # to the amount. Empty when the whole cost belongs to business_unit. Profit counts each part's share against it.
+    unit_shares = models.JSONField(default=dict, blank=True)
     # The payment made when the expense was recorded as already paid; unpaid expenses have none.
     entry = models.OneToOneField(CashEntry, null=True, blank=True, on_delete=models.PROTECT)
     description = models.TextField()
@@ -92,6 +97,12 @@ class Expense(PostedRecord):
     class Meta:
         base_manager_name = "objects"
         default_manager_name = "objects"
+
+    def shares(self):
+        """{part: Decimal amount} that this expense costs each part."""
+        if self.unit_shares:
+            return {unit: Decimal(str(amount)) for unit, amount in self.unit_shares.items()}
+        return {self.business_unit: self.amount}
 
 
 class Supplier(TenantModel):

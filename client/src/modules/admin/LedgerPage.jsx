@@ -3,7 +3,7 @@ import { useTranslation } from "../../core/i18n";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
-import { businessParts } from "../../core/organization/MoneyModeChoice";
+import { businessParts, hasParts } from "../../core/organization/MoneyModeChoice";
 import { ErrorState, Loading } from "../../components/States";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
@@ -50,10 +50,50 @@ export function LedgerPage() {
 }
 
 const EXPENSE_STATUS = { PAID: "Paid", PARTLY_PAID: "Partly paid", UNPAID: "Unpaid", CANCELLED: "Cancelled" };
+const SHARE_WAYS = [
+  { id: "INCOME", label: "By what each part earned in the last 30 days", hint: "A part that brings in more carries more of the cost." },
+  { id: "EVEN", label: "Equally between the parts" },
+  { id: "AMOUNTS", label: "I will enter each part's share" },
+];
+
+// Who an expense is for, in a business made of parts: one part, or shared between them (rent, electricity, a guard).
+function ExpenseParts({ parts, amount, separateCash, value, onChange }) {
+  const set = (changes) => onChange({ ...value, ...changes });
+  const entered = parts.reduce((sum, part) => sum + (Number(value.amounts[part.key]) || 0), 0);
+  const left = Math.round(((Number(amount) || 0) - entered) * 100) / 100;
+  return <>
+    <fieldset className="checkList">
+      <legend>Which part of the business is it for?</legend>
+      {parts.map((part) => <label key={part.key}><input type="radio" name="expense_for" checked={value.for === part.key}
+        onChange={() => set({ for: part.key })} /> {part.name}</label>)}
+      <label><input type="radio" name="expense_for" checked={value.for === "SHARED"} onChange={() => set({ for: "SHARED" })} /> Shared by
+        {" "}{parts.map((part) => part.name).join(", ").replace(/, ([^,]*)$/, " and $1")}, such as rent or electricity</label>
+    </fieldset>
+    {value.for === "SHARED" && <fieldset className="shareWays">
+      <legend>How is it shared?</legend>
+      {SHARE_WAYS.map((way) => <label key={way.id} className="checkRow"><input type="radio" name="share_way" checked={value.how === way.id}
+        onChange={() => set({ how: way.id })} /><span>{way.label}{way.hint && <small className="muted"> · {way.hint}</small>}</span></label>)}
+    </fieldset>}
+    {value.for === "SHARED" && value.how === "AMOUNTS" && <div className="shareAmounts">
+        {parts.map((part) => <label key={part.key}>{part.name}'s share<input type="number" min="0" step="0.01" inputMode="decimal"
+          value={value.amounts[part.key] ?? ""} onChange={(e) => set({ amounts: { ...value.amounts, [part.key]: e.target.value } })} /></label>)}
+        <p className={left ? "formWarning" : "muted"} role="status">{left > 0 ? `${businessCurrency()} ${left.toFixed(2)} still to share.`
+          : left < 0 ? `The shares are ${businessCurrency()} ${(-left).toFixed(2)} more than the expense.` : "The shares make the whole amount."}</p>
+      </div>}
+    {value.for === "SHARED" && <p className="muted">Profit is worked out on the whole business; each part's share shows what this cost takes from its contribution.</p>}
+    {value.for === "SHARED" && separateCash && <label>Paid from which drawer?<select value={value.payer} onChange={(e) => set({ payer: e.target.value })}>
+      {parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select></label>}
+  </>;
+}
 
 export function ExpensesPage() {
   const { user: viewer } = useAuth();
   const parts = businessParts(viewer?.organization);
+  const sharing = hasParts(viewer?.organization);
+  const partName = (key) => parts.find((part) => part.key === key)?.name || key;
+  const freshFor = () => ({ for: parts[0].key, how: "INCOME", amounts: {}, payer: parts[0].key });
+  const [expenseFor, setExpenseFor] = useState(freshFor);
+  const [amount, setAmount] = useState("");
   const { t } = useTranslation();
   const [rows, setRows] = useState([]), [categories, setCategories] = useState([]);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
@@ -74,10 +114,13 @@ export function ExpensesPage() {
     try {
       let category = categories.find(c => c.name.toLowerCase() === values.category_name.trim().toLowerCase());
       if (!category) category = await api('/api/v1/accounting/categories/', { method: 'POST', body: JSON.stringify({ name: values.category_name.trim() }) });
-      await api('/api/v1/accounting/expenses/', { method: 'POST', body: JSON.stringify({ category: category.id, business_unit: values.business_unit || 'SHOP',
+      const shared = sharing && expenseFor.for === "SHARED";
+      const unit = !sharing ? values.business_unit || 'SHOP' : shared ? expenseFor.payer : expenseFor.for;
+      await api('/api/v1/accounting/expenses/', { method: 'POST', body: JSON.stringify({ category: category.id, business_unit: unit,
         payment_method: values.payment_method || 'CASH', amount: values.amount, description: values.description, idempotency_key: key, paid,
-        incurred_on: values.incurred_on || null, due_date: paid ? null : values.due_date || null }) });
-      setKey(crypto.randomUUID()); form.reset(); setPaid(true); await load();
+        incurred_on: values.incurred_on || null, due_date: paid ? null : values.due_date || null,
+        ...(shared ? { split: expenseFor.how, shares: expenseFor.how === "AMOUNTS" ? expenseFor.amounts : {} } : {}) }) });
+      setKey(crypto.randomUUID()); form.reset(); setPaid(true); setAmount(""); setExpenseFor(freshFor()); await load();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   const act = async (event) => {
@@ -101,9 +144,9 @@ export function ExpensesPage() {
     <form onSubmit={submit}>
     <label>What was it for?<input name="description" required maxLength="160" /></label>
     <label>Category<input name="category_name" list="expense-categories" required maxLength="120" placeholder="Rent, transport, electricity…" /></label><datalist id="expense-categories">{categories.map(c => <option key={c.id} value={c.name} />)}</datalist>
-    <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required /></label>
+    <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
     <label>Which period is it for?<input name="incurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label>
-    {parts.length > 1 ? <label>Part of the business<select name="business_unit">{parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select></label>
+    {sharing ? <ExpenseParts parts={parts} amount={amount} separateCash={viewer?.organization?.money_mode === "SEPARATE_CASH"} value={expenseFor} onChange={setExpenseFor} />
       : <input type="hidden" name="business_unit" value={parts[0].key} />}
     <fieldset className="checkList"><legend>Has it been paid?</legend>
       <label><input type="radio" name="paid_choice" checked={paid} onChange={() => setPaid(true)} /> Yes, paid now</label>
@@ -117,7 +160,10 @@ export function ExpensesPage() {
     {!rows.length ? <p>No expenses recorded yet.</p> : <div className="tableWrap"><table>
       <thead><tr><th>Date</th><th>Expense</th><th>Amount</th><th>Paid</th><th>Still owed</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.id}>
-        <td>{row.incurred_on}</td><td>{row.description}<br /><small className="muted">{row.category}</small></td>
+        <td>{row.incurred_on}</td><td>{row.description}<br /><small className="muted">{row.category}
+          {sharing && (Object.keys(row.shares || {}).length > 1
+            ? ` · shared: ${Object.entries(row.shares).map(([part, share]) => `${partName(part)} ${Number(share).toLocaleString()}`).join(" · ")}`
+            : ` · ${partName(row.business_unit)}`)}</small></td>
         <td>{Number(row.amount).toFixed(2)}</td><td>{Number(row.paid).toFixed(2)}</td><td>{Number(row.outstanding).toFixed(2)}{row.due_date ? <><br /><small className="muted">due {row.due_date}</small></> : null}</td>
         <td>{EXPENSE_STATUS[row.status] || row.status}</td>
         <td>{row.status !== 'CANCELLED' && <>

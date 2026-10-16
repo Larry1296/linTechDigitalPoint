@@ -13,7 +13,7 @@ from rest_framework.exceptions import ValidationError
 from apps.tenancy.transactions import lock_business
 from .ledger import money, resolve_branch
 from .models import CashEntry, MoneyCheck
-from .money_mode import MONEY_NAMES, NAMES, business_parts, separate_cash
+from .money_mode import business_parts, money_names, part_names, separate_cash
 from .services import post
 
 # The owner's own places. The agency's cash and float (AGENCY_CASH, AGENCY_FLOAT) are never one of them.
@@ -39,7 +39,7 @@ def by_part(method, unit=None):
     """How much of what is expected in a place each part of the business brought (what it took in less what it paid
     out from there): [{"unit", "label", "amount"}], so a shared drawer still says whose money is whose."""
     rows = dict(_entries(method, unit).values_list("business_unit").annotate(v=Sum("amount")))
-    return [{"unit": key, "label": MONEY_NAMES.get(key, key), "amount": rows.get(key) or ZERO}
+    return [{"unit": key, "label": money_names().get(key, key), "amount": rows.get(key) or ZERO}
             for key in [*business_parts(), *sorted(set(rows) - set(business_parts()))] if key in rows or key in business_parts()]
 
 
@@ -63,7 +63,7 @@ def places():
     for method, label in PLACES:
         if method == "CASH" and separate_cash():
             for unit in _cash_units():
-                name = "M-Pesa commission cash" if unit == "MPESA" else f"{NAMES.get(unit, unit)} cash drawer"
+                name = "M-Pesa commission cash" if unit == "MPESA" else f"{part_names().get(unit, unit)} cash drawer"
                 result.append(_place(method, name, unit))
             continue
         place = _place(method, label)

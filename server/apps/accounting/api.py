@@ -94,6 +94,9 @@ class ExpenseInput(serializers.Serializer):
     paid = serializers.BooleanField(default=True)
     incurred_on = serializers.DateField(required=False, allow_null=True)
     due_date = serializers.DateField(required=False, allow_null=True)
+    # Sharing the cost between the parts of the business: by what each earned, evenly, or the amounts in ``shares``.
+    split = serializers.ChoiceField(choices=["", "INCOME", "EVEN", "AMOUNTS"], required=False, default="")
+    shares = serializers.DictField(child=serializers.CharField(max_length=20, allow_blank=True), required=False, default=dict)
 
 
 def expense_row(expense):
@@ -102,7 +105,7 @@ def expense_row(expense):
     cancelled = JournalEntry.objects.filter(source_key=f'expense-cancel:{expense.pk}').exists()
     status = 'CANCELLED' if cancelled else 'PAID' if outstanding <= 0 else 'PARTLY_PAID' if paid > 0 else 'UNPAID'
     return {'id': expense.pk, 'description': expense.description, 'category': expense.category.name, 'business_unit': expense.business_unit,
-            'amount': expense.amount, 'paid': paid, 'outstanding': max(Decimal('0'), outstanding), 'status': status,
+            'amount': expense.amount, 'shares': expense.unit_shares, 'paid': paid, 'outstanding': max(Decimal('0'), outstanding), 'status': status,
             'incurred_on': expense.incurred_on, 'due_date': expense.due_date, 'entry': expense.entry_id,
             # Kept for older clients: "reversed" means the expense no longer counts.
             'date': expense.incurred_on, 'reversed': cancelled}
@@ -121,9 +124,10 @@ class ExpenseViewSet(ReadBook):
     def create(self, request):
         form = ExpenseInput(data=request.data); form.is_valid(raise_exception=True)
         d = form.validated_data
+        from .expense_shares import split
         obj = record_expense(user=request.user, category=d['category'], unit=d['business_unit'], method=d['payment_method'],
             amount=d['amount'], description=d['description'], key=d['idempotency_key'], paid=d['paid'],
-            incurred_on=d.get('incurred_on'), due_date=d.get('due_date'))
+            incurred_on=d.get('incurred_on'), due_date=d.get('due_date'), shares=split(d['amount'], d['split'], d['shares']))
         return Response(expense_row(obj), status=201)
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):

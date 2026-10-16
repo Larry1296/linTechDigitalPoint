@@ -10,7 +10,7 @@ import "./platform.css";
 import { ChamaSetupFields, emptyChama, chamaPayload, chamaProblem } from "../chama/ChamaSetupFields";
 import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleProblem, searchSectors, timeZones, toggleModule, useBusinessProfiles } from "./businessSetupData";
 import { MpesaPaymentsSetup } from "../settings/MpesaPaymentsSetup";
-import { MONEY_MODES, MONEY_PARTS, MoneyModeChoice } from "../../core/organization/MoneyModeChoice";
+import { BusinessPartsChoice, MONEY_MODES, MONEY_PARTS, STRUCTURES, defaultPartName } from "../../core/organization/MoneyModeChoice";
 
 const STEP_LABELS = { business: "Your business", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Money", review: "Review" };
@@ -59,7 +59,8 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [newCategory, setNewCategory] = useState("");
   const [services, setServices] = useState(draft.services ?? []);
   const [details, setDetails] = useState(draft.details ?? { branch_name: "Main branch", phone: user.phone || "", email: user.email || "", address: "", country: "KE", currency: "KES", timezone: "Africa/Nairobi" });
-  const [money, setMoney] = useState({ opening_cash: "", opening_bank: "", money_mode: "ONE_DRAWER", ...draft.money });
+  // structure stays unset until the owner answers whether the business is one business or several under one name.
+  const [money, setMoney] = useState({ opening_cash: "", opening_bank: "", money_mode: "ONE_DRAWER", structure: "", part_names: {}, ...draft.money });
   const [plan, setPlan] = useState(draft.plan ?? "BASIC");
   const [chama, setChama] = useState(() => draft.chama ?? emptyChama(user));
   const [plans, setPlans] = useState(null);
@@ -125,6 +126,8 @@ function SetupWizard({ catalogue, user, refresh }) {
   // The parts of the business that take money of their own (shop, services, M-Pesa agency): with more than one, the
   // owner chooses whether their cash sits in one drawer or a drawer each.
   const earningParts = MONEY_PARTS.filter((part) => chosen.has(part.module));
+  const withParts = earningParts.length > 1 && money.structure === "PARTS";
+  const partName = (key) => money.part_names[key]?.trim() || defaultPartName(key, sectorId);
   const problem = {
     business: () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
     kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Name your kind of business." : "",
@@ -136,7 +139,8 @@ function SetupWizard({ catalogue, user, refresh }) {
       || (services.some((service) => service.selling_price !== "" && Number(service.selling_price) < 0) ? "Service prices cannot be negative." : ""),
     chama: () => chamaProblem(chama),
     place: () => !details.branch_name.trim() ? "Enter the name of your first branch or shop." : "",
-    money: () => [money.opening_cash, money.opening_bank].some((value) => value !== "" && Number(value) < 0) ? "Opening amounts cannot be negative." : "",
+    money: () => [money.opening_cash, money.opening_bank].some((value) => value !== "" && Number(value) < 0) ? "Opening amounts cannot be negative."
+      : earningParts.length > 1 && !money.structure ? "Say whether this is one business or several businesses under one name." : "",
     review: () => "",
   }[current]();
   const next = () => {
@@ -155,7 +159,8 @@ function SetupWizard({ catalogue, user, refresh }) {
         starter_services: modules.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
           ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
-        money_mode: earningParts.length > 1 ? money.money_mode : "ONE_DRAWER",
+        ...(withParts ? { structure: "PARTS", money_mode: money.money_mode, part_names: Object.fromEntries(earningParts.map((part) => [part.key, money.part_names[part.key]?.trim() || ""])) }
+          : { structure: "SINGLE", money_mode: "ONE_DRAWER" }),
         chama: chosen.has("chama") ? chamaPayload(chama) : null,
       }) });
       clearDraft(user);
@@ -321,8 +326,8 @@ function SetupWizard({ catalogue, user, refresh }) {
       <p className="muted wide">Enter only money your business already holds today. Leave blank if unsure; an accountant can add verified opening balances later.</p>
       <label>Cash in the till ({details.currency || "—"})<input type="number" min="0" step="0.01" value={money.opening_cash} onChange={(e) => setMoney((m) => ({ ...m, opening_cash: e.target.value }))} placeholder="0" /></label>
       <label>Bank balance ({details.currency || "—"})<input type="number" min="0" step="0.01" value={money.opening_bank} onChange={(e) => setMoney((m) => ({ ...m, opening_bank: e.target.value }))} placeholder="0" /></label>
-      {earningParts.length > 1 && <MoneyModeChoice className="wide" parts={earningParts} value={money.money_mode}
-        onChange={(mode) => setMoney((m) => ({ ...m, money_mode: mode }))} />}
+      {earningParts.length > 1 && <BusinessPartsChoice className="wide" parts={earningParts} sector={sectorId}
+        value={money} onChange={(next) => setMoney((m) => ({ ...m, ...next }))} />}
     </section>}
 
     {current === "review" && <section className="setupPanel">
@@ -337,7 +342,9 @@ function SetupWizard({ catalogue, user, refresh }) {
         <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Country & money</dt><dd>{country?.name || details.country} · {details.currency} · {details.timezone.replaceAll("_", " ")}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
-        {earningParts.length > 1 && <div><dt>Keeping the money</dt><dd>{MONEY_MODES.find((mode) => mode.id === money.money_mode)?.label}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>}
+        {earningParts.length > 1 && <div><dt>Parts of the business</dt><dd>{withParts
+          ? `${earningParts.map((part) => partName(part.key)).join(", ")} · ${MONEY_MODES.find((mode) => mode.id === money.money_mode)?.label}`
+          : STRUCTURES.find((item) => item.id === "SINGLE").label}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>}
         <div><dt>Opening money</dt><dd>{Number(money.opening_cash || 0) || Number(money.opening_bank || 0) ? `Cash ${money.opening_cash || 0} · Bank ${money.opening_bank || 0}` : "None"}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>
       </dl>
       {user.platform_admin && <p className="muted">As the platform administrator, your business gets every Pro feature for free, with no expiry.</p>}

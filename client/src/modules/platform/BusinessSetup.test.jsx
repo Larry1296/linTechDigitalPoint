@@ -85,6 +85,7 @@ it("sets up a barbershop with its price list and never mentions stock or shelves
     starter_services: [{ name: "Haircut", selling_price: "200", billing_unit: "FIXED", requires_job: false },
       { name: "Shave", selling_price: "100", billing_unit: "FIXED", requires_job: false }] });
   expect(createBody().enabled_modules.sort()).toEqual(["expenses", "pos", "reports", "services"]);
+  expect(createBody()).toMatchObject({ structure: "SINGLE", money_mode: "ONE_DRAWER" });  // a barber's till sells services: one part
   expect(refresh).toHaveBeenCalled();
   expect(screen.getByRole("heading", { name: "Add your logo" })).toBeInTheDocument();
 }, 20000);  // a whole multi-step set-up: slow when every test file runs at once
@@ -119,11 +120,20 @@ it("sets up a business that does both, with its own description, categories and 
   expect(screen.getByLabelText("Currency")).toHaveValue("UGX");
   next();
   fireEvent.change(screen.getByLabelText(/Cash in the till/), { target: { value: "15000" } });
+  // Products and services: the owner says whether these are one business or several, and names the parts.
   next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Say whether this is one business or several businesses under one name.");
+  fireEvent.click(screen.getByRole("button", { name: /Several businesses under one name/ }));
+  expect(screen.getByLabelText("Services you offer")).toHaveAttribute("placeholder", "Services");
+  fireEvent.change(screen.getByLabelText("Services you offer"), { target: { value: "Vet clinic" } });
+  expect(screen.getByRole("group", { name: /How do you keep the money of Shop and Vet clinic/ })).toBeInTheDocument();
+  next();
+  expect(screen.getByText(/Shop, Vet clinic · One drawer and bank account for everything/)).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   expect(createBody()).toMatchObject({ business_model: "MIXED", sector: "other_mixed", business_type: "Agrovet and vet clinic",
     starter_categories: ["Animal feeds"], starter_services: [], branch_name: "Kiandas market stall", country: "UG",
-    currency: "UGX", timezone: "Africa/Kampala", opening_cash: "15000" });
+    currency: "UGX", timezone: "Africa/Kampala", opening_cash: "15000",
+    structure: "PARTS", money_mode: "ONE_DRAWER", part_names: { SHOP: "", CYBER: "Vet clinic" } });
   expect(createBody().enabled_modules).toContain("investments");
   expect(createBody().enabled_modules).not.toContain("mpesa");
 }, 20000);  // the same multi-step set-up as above

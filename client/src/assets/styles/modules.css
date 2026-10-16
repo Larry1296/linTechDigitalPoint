@@ -2909,3 +2909,19 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 
 /* The service card's 7px gap suits its name and price; its buttons keep 12px like everywhere else. */
 .serviceGrid article > .actionRow { margin-top: 5px; }
+
+/* A business made of parts: what each part contributed, its names at setup, and an expense shared between the parts. */
+.partsContribution { margin: 0 0 16px; }
+.partsContribution .seriesSwatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 3px; vertical-align: 0; }
+.partsContribution td.loss { color: var(--danger, #b42318); font-weight: 700; }
+.partsContribution tfoot th, .partsContribution tfoot td { font-weight: 800; }
+.businessParts { display: grid; gap: 22px; }
+.businessParts > fieldset { margin: 0; }
+.businessParts .partNames { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.businessParts .partNames > legend { margin-bottom: 10px; }
+.businessParts .partNames > label { display: grid; gap: 6px; align-content: start; }
+.partsContribution .partName { display: inline-flex; align-items: center; }
+.shareWays { display: grid; gap: 8px; }
+.shareWays small { font-weight: 400; }
+.shareAmounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 10px; }
+.shareAmounts > p { grid-column: 1 / -1; margin: 0; }

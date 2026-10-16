@@ -20,7 +20,7 @@ import calendar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -327,11 +327,13 @@ def monthly_profit(months=12, today=None):
     earned = earned_by_month(first)
     cancelled = set(JournalEntry.objects.filter(source_key__startswith="expense-cancel:").values_list("source_key", flat=True))
     costs = {}
-    for expense in Expense.objects.filter(business_unit="MPESA", incurred_on__gte=first).only("pk", "amount", "incurred_on"):
+    # The agency's own costs, and its share of costs shared with the other parts of the business (such as rent).
+    agency = Q(business_unit="MPESA", unit_shares={}) | Q(unit_shares__has_key="MPESA")
+    for expense in Expense.objects.filter(agency, incurred_on__gte=first).only("pk", "amount", "incurred_on", "business_unit", "unit_shares"):
         if f"expense-cancel:{expense.pk}" in cancelled:
             continue
         month = month_start(expense.incurred_on)
-        costs[month] = costs.get(month, Decimal("0")) + expense.amount
+        costs[month] = costs.get(month, Decimal("0")) + expense.shares().get("MPESA", Decimal("0"))
     rows, month = [], first
     while month <= month_start(today):
         commission, cost = earned.get(month, Decimal("0")), costs.get(month, Decimal("0"))
