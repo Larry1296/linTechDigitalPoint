@@ -193,6 +193,26 @@ function MonthlyProfit({ months }) {
   );
 }
 
+// Once Safaricom has paid a month: how the app's figure was made up, why it differs from what was paid, and what to do
+// so the next months come out closer (server mpesa/commission_check.py).
+function PaidCheck({ label, check }) {
+  const parts = [["measured from a reading", check.measured], ["from rates learned before", check.learned], ["guessed at the average", check.guessed]]
+    .filter(([, part]) => part.count > 0);
+  const gap = Number(check.difference);
+  return (
+    <details className="commissionCheck" open={!check.same}>
+      <summary><b>{label}: {check.same ? "matched what Safaricom paid" : `Safaricom paid ${gap > 0 ? "more" : "less"} by ${money(Math.abs(gap))}`}</b></summary>
+      <p className="muted">The app worked out {money(check.worked_out)}: {parts.length
+        ? parts.map(([words, part]) => `${money(part.amount)} ${words} (${part.count} ${part.count === 1 ? "transaction" : "transactions"})`).join(", ")
+        : "no transactions recorded"}. Safaricom paid {money(check.paid)}.</p>
+      {check.reasons.length > 0 && <><h3>Why they may differ</h3>
+        <ul>{check.reasons.map((reason) => <li key={reason.key}>{reason.text}</li>)}</ul></>}
+      <h3>{check.same ? "Keep it this way" : "To make the next months closer"}</h3>
+      <ul>{check.advice.map((line) => <li key={line}>{line}</li>)}</ul>
+    </details>
+  );
+}
+
 // What the app works out from the commission balance read after each transaction: the month so far, set against what
 // Safaricom paid, and the rates it has learned so they can be checked.
 function Learned({ estimates, learned, forecast }) {
@@ -201,7 +221,9 @@ function Learned({ estimates, learned, forecast }) {
       <h2>Commission worked out from your readings</h2>
       {forecast && <p className="commissionForecast"><b>{forecast.label}: expected {money(forecast.forecast)}</b>{" "}
         <span className="muted">{money(forecast.so_far)} so far, about {money(forecast.daily)} a working day, {forecast.days_left} working {forecast.days_left === 1 ? "day" : "days"} until
-        the month closes (Sundays closed). Worked out again after every transaction.</span></p>}
+        the month closes (Sundays closed). Worked out again after every transaction.</span>
+        {forecast.expected_paid != null && <span className="muted"> Safaricom has paid about {Math.round(Number(forecast.payout_share) * 100)}% of
+          the app's figure in recent months, so expect about <b>{money(forecast.expected_paid)}</b> to be paid.</span>}</p>}
       <p className="muted">After each deposit, withdrawal or airtime sale, enter the commission balance on the agent line. The rise is what that
         transaction earned, and the app learns from it. Once an amount has earned the same twice, the box stops showing for it and its
         commission is worked out by itself. Amounts other agents using the app have already confirmed are worked out from the start, so
@@ -218,6 +240,7 @@ function Learned({ estimates, learned, forecast }) {
             <td>{m.difference == null ? "—" : Math.abs(Number(m.difference)) < 0.5 ? "Same" : `${Number(m.difference) > 0 ? "Paid more" : "Paid less"} by ${money(Math.abs(Number(m.difference)))}`}</td>
           </tr>))}</tbody>
       </table></div>
+      {estimates.filter((m) => m.check).map((m) => <PaidCheck key={m.month} label={m.label} check={m.check} />)}
       {learned.length ? <div className="trendTable"><table className="loanRepayments">
         <caption>What the app has learned</caption>
         <thead><tr><th scope="col">Transaction</th><th scope="col">Amounts seen</th><th scope="col">Commission each</th></tr></thead>

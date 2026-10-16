@@ -100,3 +100,22 @@ it("compares Safaricom's payment with the app's figure and records what was spen
   const body = JSON.parse(api.mock.calls.find(([path, options]) => path === "/api/v1/mpesa/commission/" && options?.method === "POST")[1].body);
   expect(body).toMatchObject({ amount: "4200", settlement_method: "AGENCY_FLOAT", spent: [{ category: "Rent", description: "Shop rent", amount: "3000", unit: "SHOP" }] });
 });
+
+it("once paid, explains the difference and says how to make the next months closer", async () => {
+  vi.resetModules();
+  const auth = await import("../../core/auth/AuthContext");
+  vi.spyOn(auth, "useAuth").mockReturnValue({ user: { permissions: ["mpesa.view_mpesacommissionentry"] } });
+  const check = { worked_out: "36", paid: "72", difference: "36", same: false, measured: { amount: "24", count: 2 }, learned: { amount: "12", count: 1 },
+    guessed: { amount: "0", count: 0 }, reversed: 0,
+    reasons: [{ key: "not_entered", amount: "36", text: "The commission balance rose 36.00 more than the transactions in the app explain (1 reading)." }],
+    advice: ["Enter every deposit, withdrawal and airtime sale done on the agent line."] };
+  api.mockImplementation(async (path) => path.includes("accounting/categories") ? []
+    : listing({ estimates: [{ month: "2026-09-01", label: "September 2026", current: false, earned: "36", expected: "36", unknown: 0, paid: "72", difference: "36", check }],
+      learned: [], forecast: { label: "October 2026", forecast: "1000", so_far: "500", daily: "40", days_left: 12, expected_paid: "900.00", payout_share: "0.900" } }));
+  render(<MpesaCommissionPage />);
+  expect(await screen.findByText(/September 2026: Safaricom paid more by KSh 36/)).toBeInTheDocument();
+  expect(screen.getByText(/KSh 24 measured from a reading \(2 transactions\), KSh 12 from rates learned before \(1 transaction\)/)).toBeInTheDocument();
+  expect(screen.getByText(/rose 36.00 more than the transactions/)).toBeInTheDocument();
+  expect(screen.getByText(/Enter every deposit/)).toBeInTheDocument();
+  expect(screen.getByText(/paid about 90%/)).toHaveTextContent("expect about KSh 900 to be paid");
+});

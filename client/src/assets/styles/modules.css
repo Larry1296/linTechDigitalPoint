@@ -2763,6 +2763,11 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .shiftChartTable :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .shiftChart { padding: 14px 12px; } .shiftChart dd { font-size: 17px; } }
 .commissionForecast { margin: 4px 0 12px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--chart-commission) 10%, var(--surface)); }
+.commissionCheck { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.commissionCheck summary { cursor: pointer; }
+.commissionCheck h3 { margin: 10px 0 4px; font-size: 1rem; }
+.commissionCheck ul { margin: 0; padding-left: 20px; }
+.commissionCheck li { margin: 2px 0; }
 
 /* M-Pesa commission: Safaricom's payment next to the app's figure, and what was spent straight from it. */
 .commissionCompare { display: grid; gap: 4px; margin: -4px 0 4px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px;

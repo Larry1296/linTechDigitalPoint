@@ -289,7 +289,9 @@ def opening_shifts(outlet, opening_room):
 
 def commission_estimates(months=6):
     """The last few months' commission as the app works it out from the readings, next to what Safaricom paid for each
-    month and the difference, newest first. The current month is the forecast to its end."""
+    month and the difference, newest first. The current month is the forecast to its end. A paid month carries the
+    check: why the two differ and what to do (commission_check.py)."""
+    from .commission_check import check
     from .commission_learning import forecast, learn
     learned = learn()
     first = timezone.localdate().replace(day=1)
@@ -307,7 +309,8 @@ def commission_estimates(months=6):
             continue  # nothing recorded for that month: nothing to compare
         expected = result["forecast"]
         rows.append({"month": begin, "label": begin.strftime("%B %Y"), "current": begin == first, "earned": result["so_far"], "expected": expected,
-                     "unknown": result["unknown"], "paid": paid.get(begin), "difference": None if paid.get(begin) is None else paid[begin] - expected})
+                     "unknown": result["unknown"], "paid": paid.get(begin), "difference": None if paid.get(begin) is None else paid[begin] - expected,
+                     "check": check(begin, paid.get(begin), learned)})
     return rows
 
 
@@ -333,15 +336,22 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request):
         from .commission import PLACES, due_month, monthly_profit, opening_room
         from .commission_learning import forecast, learn
+        from .commission_check import payout_share
         due = due_month()
         rows = monthly_profit()
+        estimates = commission_estimates()
+        # Safaricom has paid the same share of the app's figure for months: the month in progress is expected to be paid that share too.
+        share, month = payout_share(estimates), forecast()
+        if share is not None:
+            month = {**month, "payout_share": share, "expected_paid": (month["forecast"] * share).quantize(Decimal("0.01"))}
         return Response({"entries": [commission_row(e) for e in self.get_queryset()[:60]],
                          "months": [{**row, "label": row["month"].strftime("%B %Y")} for row in rows],
                          "totals": {key: sum((row[key] for row in rows), Decimal("0")) for key in ["commission", "expenses", "profit"]},
                          "due_month": due, "due_label": due.strftime("%B %Y") if due else None, "places": PLACES,
                          "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first(),
                                       "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()],
-                         "estimates": commission_estimates(), "learned": learn()[2].bands(), "forecast": forecast()})
+                         "estimates": estimates, "learned": learn()[2].bands(), "forecast": month,
+                         "payout_share": share})
 
     @action(detail=False)
     def due(self, request):

@@ -386,3 +386,34 @@ def test_commission_recorded_as_paid_out_comes_off_the_commission_balance(agency
     client.post(f"/api/v1/mpesa/commission/{made.json()['id']}/undo/", {"reason": "Entered by mistake"}, format="json")
     with organization_context(org):
         assert money_in_operation(outlet)["commission_balance"] == D("1020.00")  # undone: back as it was
+
+
+def test_once_paid_the_difference_is_explained_and_says_what_to_do(agency):
+    client, org, owner, outlet, today, last_month = agency
+    with organization_context(org):
+        from apps.mpesa.services import open_session, post_transaction, reconcile_session
+        shift = open_session(outlet=outlet, operator=owner, opening_cash="20000", opening_float="20000", commission_balance="100")
+        for n, reading in enumerate(["112", "124"]):
+            post_transaction(session=shift, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount="1000", user=owner,
+                             idempotency_key=f"x{n}", commission_balance=reading)
+        reconcile_session(session=shift, user=owner, actual_cash="18000", actual_float="22000")
+        # The next morning's reading is 36 higher: three withdrawals were done on the line but never entered.
+        nextshift = open_session(outlet=outlet, operator=owner, opening_cash="18000", opening_float="22000", commission_balance="160")
+        post_transaction(session=nextshift, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount="1000", user=owner, idempotency_key="x3")
+    assert _record(client, outlet, today.replace(day=1), "72", "", "CASH", key="paid", paid_on=str(today)).status_code == 201
+    row = client.get("/api/v1/mpesa/commission/").json()["estimates"][0]
+    found = row["check"]
+    assert (D(str(found["worked_out"])), D(str(found["paid"])), D(str(found["difference"]))) == (D("36"), D("72"), D("36"))
+    assert (found["measured"]["count"], found["learned"]["count"], found["guessed"]["count"]) == (2, 1, 0)
+    reasons = {reason["key"]: reason for reason in found["reasons"]}
+    assert D(str(reasons["not_entered"]["amount"])) == D("36")
+    assert any("Enter every deposit" in line for line in found["advice"])
+
+
+def test_a_steady_cut_is_expected_in_the_month_in_progress():
+    from apps.mpesa.commission_check import payout_share
+    row = lambda paid, expected, current=False: {"paid": paid, "expected": expected, "current": current}
+    assert payout_share([row(None, "50", True), row("900", "1000"), row("1800", "2000")]) == D("0.900")
+    assert payout_share([row("900", "1000"), row("2000", "2000")]) is None  # not steady
+    assert payout_share([row("1000", "1000"), row("2000", "2000")]) is None  # paid it all: nothing to expect differently
+    assert payout_share([row("900", "1000")]) is None  # one month is not a pattern
