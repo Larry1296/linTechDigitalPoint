@@ -350,6 +350,13 @@ export function MpesaDashboardPage() {
   useLiveRefresh(load, { pollMs: 20000 });
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
+  // The commission balance the app works out for each active outlet (last reading, plus commission since, less paid out), added up.
+  const reading = outlets.filter((outlet) => outlet.active && outlet.money_in_operation).map((outlet) => outlet.money_in_operation);
+  const known = reading.filter((money) => money.commission_balance != null);
+  const commissionNow = reading.length ? {
+    value: known.length ? known.reduce((sum, money) => sum + Number(money.commission_balance), 0) : null,
+    detail: known.length === 1 && reading.length === 1 ? commissionSince(known[0]) : known.length && known.length < reading.length ? `${reading.length - known.length} ${reading.length - known.length === 1 ? "outlet" : "outlets"} not read yet` : "",
+  } : null;
   // Only the open shift's transactions are shown; closing it starts the desk afresh. Closed shifts stay on record (Past shifts).
   // A reversed transaction and its reversal cancel out, so neither is listed (both stay on record and in the monthly report).
   const reversedIds = new Set(transactions.filter((entry) => entry.reversal_of).map((entry) => entry.reversal_of));
@@ -447,6 +454,10 @@ export function MpesaDashboardPage() {
         </MetricCard>
         <MetricCard label="Current cash">{businessCurrency()} {dashboard.cash}</MetricCard>
         <MetricCard label="Current float">{businessCurrency()} {dashboard.float}</MetricCard>
+        {commissionNow && <MetricCard label="Commission balance">
+          {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
+          {commissionNow.detail && <small className="muted"> · {commissionNow.detail}</small>}
+        </MetricCard>}
         <MetricCard label="Today's deposits">
           {businessCurrency()} {dashboard.deposits}
         </MetricCard>

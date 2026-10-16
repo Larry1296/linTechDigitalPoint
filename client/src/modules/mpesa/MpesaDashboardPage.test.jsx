@@ -189,3 +189,14 @@ it("closes a combined shift against the agency's money plus the sales since open
   fireEvent.change(screen.getByLabelText("All the money on the agent line"), { target: { value: "18500" } });
   expect(screen.getByText(/Agent line: entered vs expected/).nextSibling).toHaveTextContent("KSh 18,500 vs KSh 18,500");
 });
+
+it("shows the worked-out commission balance in the top figures, added up over the outlets", async () => {
+  api.getMpesaOutlets.mockResolvedValue([
+    outlet(1, "Main till", { cash: "3000.00", float: "7000.00", total: "10000.00", updated_on: "2026-10-16", due: false, commission_balance: "1250.50" }),
+    outlet(2, "Market till", { cash: "2000.00", float: "5000.00", total: "7000.00", updated_on: "2026-10-16", due: false, commission_balance: "300.00" }),
+  ]);
+  render(<MpesaDashboardPage />);
+  await screen.findByRole("heading", { name: "Main till" });
+  const card = screen.getByText("Commission balance", { selector: ".metrics *" }).closest("article");
+  expect(card).toHaveTextContent("1,550.5");
+});
