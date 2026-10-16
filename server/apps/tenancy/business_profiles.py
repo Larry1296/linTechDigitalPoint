@@ -31,6 +31,20 @@ MODULES = {
     "chama": {"label": "Chama management",
               "description": "Run a chama you are treasurer of: members, contributions, fines, excuses and whose turn it is. "
                              "Its money is kept apart from the shop's."},
+    "investments": {"label": "Investments", "description": "Money you keep in an investment such as a money market fund (MMF): "
+                                                           "what you put in, take out and earn, and what it is worth now."},
+}
+
+# Not every owner does these, whatever their kind of business, so setup asks about each one in plain words
+# instead of switching it on for them.
+EXTRAS = {
+    "mpesa": {"question": "Do you run an M-Pesa agency?",
+              "hint": "You do deposits and withdrawals for customers from your own float and earn commission. "
+                      "Customers paying you by M-Pesa for your goods or services is not this; you set that up after sign-up."},
+    "chama": {"question": "Are you the treasurer of a chama?",
+              "hint": "You keep the chama's records: members, contributions, fines and whose turn it is. Its money stays apart from the business's."},
+    "investments": {"question": "Do you keep money in an investment, such as an MMF?",
+                    "hint": "Record what you put in and take out, the interest it earns, and pay suppliers from it when you need to."},
 }
 
 # A tool that only works alongside another. Each entry lists alternatives: any one of them will do.
@@ -44,14 +58,14 @@ BUSINESS_MODELS = {
         "label": "I sell goods",
         "phrase": "only sell goods",
         "hint": "You buy, grow or make products and sell them: a duka, kibanda, hardware or farm produce.",
-        "modules": ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama"],
+        "modules": ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
         "requires": ["inventory"],
     },
     SERVICES: {
         "label": "I provide services",
         "phrase": "only provide services",
         "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
-        "modules": ["services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama"],
+        "modules": ["services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
         "requires": ["services", "mpesa"],  # at least one: an M-Pesa agent sells no priced services
     },
     MIXED: {
@@ -290,6 +304,7 @@ def catalogue():
         "models": [{"id": key, **value} for key, value in BUSINESS_MODELS.items()],
         "sizes": [{"id": key, "label": value["label"], "hint": value["hint"]} for key, value in SIZES.items()],
         "modules": [{"id": key, **value, "needs": list(MODULE_NEEDS.get(key, ()))} for key, value in MODULES.items()],
+        "extras": [{"id": key, **value} for key, value in EXTRAS.items()],
         "sectors": {model: [{**sector, "modules": {size: suggested_modules(model, sector, size) for size in SIZES}}
                             for sector in sectors] for model, sectors in _sectors_with_listed_kinds().items()},
         "other_sectors": sorted(OTHER_SECTORS),

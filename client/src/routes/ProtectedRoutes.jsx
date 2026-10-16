@@ -26,7 +26,7 @@ export function StaffProtectedRoute({ children }) {
   if (!user.organization && !user.memberships?.length && user.switched_off_businesses?.length) return <SwitchedOff names={user.switched_off_businesses} />;
   if (!user.organization) return <Navigate to={user.memberships?.length ? "/select-business" : "/onboarding"} replace />;
   const area = location.pathname.split("/")[2];
-  const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", reports:"reports", analytics:"reports"};
+  const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", investments:"investments", reports:"reports", analytics:"reports"};
   if (modules[area] && !user.organization.enabled_modules.includes(modules[area])) return <p role="alert">This module is not enabled for your business.</p>;
   return children;
 }

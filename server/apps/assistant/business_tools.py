@@ -882,7 +882,7 @@ TOOLS = {
     "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
                       _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
     "investments": (investments, "Investments such as money market funds: value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
-                    _schema(), "accounting.view_investment", None),
+                    _schema(), "accounting.view_investment", "investments"),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),
     "chama_members": (chama_members, "One chama's members (by chama name; optional when there is only one): role, joined, paid in, "

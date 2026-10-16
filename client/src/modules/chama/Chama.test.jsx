@@ -47,9 +47,14 @@ it("adds a chama step to registration when chama management is chosen", async ()
   fireEvent.click(screen.getByRole("button", { name: /Duka \/ general shop/ }));
   next();
   expect(screen.queryByRole("heading", { name: "Your chama" })).not.toBeInTheDocument();
-  const tool = screen.getByRole("button", { name: /^Chama management/ });
-  expect(within(tool).getByText("Pro plan")).toBeInTheDocument();
-  fireEvent.click(tool);
+  const question = screen.getByRole("group", { name: /Are you the treasurer of a chama\?/ });
+  expect(within(question).getByText("Pro plan")).toBeInTheDocument();
+  fireEvent.click(within(question).getByRole("button", { name: /^Yes/ }));
+  fireEvent.click(screen.getByRole("button", { name: "No: Do you run an M-Pesa agency?" }));
+  fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
+  next();
+  // Chama management is a question, not one of the tools.
+  expect(screen.queryByRole("button", { name: /^Chama management/ })).not.toBeInTheDocument();
   next();
 
   expect(screen.getByRole("heading", { name: "Your chama" })).toBeInTheDocument();

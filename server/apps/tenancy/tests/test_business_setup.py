@@ -130,6 +130,31 @@ def test_the_business_catalogue_is_public_and_every_suggestion_is_valid(client):
                 assert not sector["services"] and "services" not in sector["modules"]["MEDIUM"]
 
 
+def test_setup_asks_about_agency_chama_and_investments_instead_of_assuming_them(client):
+    data = client.get("/api/v1/tenancy/business-profiles/").json()
+    assert [extra["id"] for extra in data["extras"]] == ["mpesa", "chama", "investments"]
+    for model in data["models"]:
+        assert {"mpesa", "chama", "investments"} <= set(model["modules"]), model["id"]
+    # A kind of business never switches on a chama or investments for the owner; only an M-Pesa kind brings the agency.
+    for sectors in data["sectors"].values():
+        for sector in sectors:
+            assert not {"chama", "investments"} & set(sector["modules"]["MEDIUM"]), sector["id"]
+            if "mpesa" in sector["modules"]["SOLO"]:
+                assert sector["id"] in {"mpesa_agent", "cyber_shop"}
+
+
+def test_investments_open_only_for_a_business_that_chose_them(owner):
+    response = create(owner, name="Duka la Juma", business_model="GOODS", sector="duka", plan="PRO", enabled_modules=["inventory", "pos"])
+    assert response.status_code == 201, response.content
+    assert "investments" not in response.json()["enabled_modules"]
+    refused = owner.get("/api/v1/accounting/investments/")
+    assert refused.status_code == 403 and refused.json()["detail"] == "This module is not enabled for your business."
+    # Juma opens an MMF later and turns the tool on in Settings.
+    response = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["inventory", "pos", "investments"]}, format="json")
+    assert response.status_code == 200, response.content
+    assert owner.get("/api/v1/accounting/investments/").json().get("detail") != "This module is not enabled for your business."
+
+
 def test_the_frontend_test_fixture_matches_the_catalogue():
     """The client tests run against a copy of the catalogue; regenerate it when the catalogue changes (see docs/business-profiles.md)."""
     import json

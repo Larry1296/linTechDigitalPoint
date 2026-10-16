@@ -5,7 +5,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 // On the dashboard: a nudge when an investment's monthly rate (and statement balance) has not been recorded this month.
 export function InvestmentReminder() {
   const { user } = useAuth();
-  const allowed = Boolean(user?.permissions?.includes("accounting.view_investment"));
+  const allowed = Boolean(user?.permissions?.includes("accounting.view_investment") && user?.organization?.enabled_modules?.includes("investments"));
   const [reminder, setReminder] = useState(null);
   useEffect(() => {
     if (!allowed) return undefined;

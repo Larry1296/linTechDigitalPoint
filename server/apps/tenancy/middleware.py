@@ -12,6 +12,8 @@ MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "
 def module_for_path(relative):
     if relative in {"inventory/dashboard", "chama/setup"}:
         return None  # chama/setup turns chama management on, within the plan
+    if relative.startswith("accounting/investments"):
+        return "investments"
     if relative.startswith("accounting/expenses") or relative.startswith("accounting/categories"):
         return "expenses"
     if relative == "accounting/administration/users":

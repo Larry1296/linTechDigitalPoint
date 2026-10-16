@@ -3,7 +3,8 @@ import { useState } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 let permissions = [];
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions } }) }));
+let modules = ["investments"];
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions, organization: { enabled_modules: modules } } }) }));
 import { api } from "../../core/api/client";
 import { NEW_RECEIPT_COSTS, ReceiptCostFields, paymentSummary, receiptCostsPayload, receiptCostsProblem } from "./ReceiptCosts";
 

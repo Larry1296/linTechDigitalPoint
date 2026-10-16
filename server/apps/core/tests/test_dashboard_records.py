@@ -13,7 +13,7 @@ D = Decimal
 
 def test_everything_recorded_so_far_leaves_out_what_was_undone():
     owner = User.objects.create_user("records-owner", password="Safe-pass-1848")
-    org = Organization.objects.create(name="Records shop", slug="records", owner=owner, enabled_modules=["inventory", "pos", "services", "mpesa", "reports"])
+    org = Organization.objects.create(name="Records shop", slug="records", owner=owner, enabled_modules=["inventory", "pos", "services", "mpesa", "reports", "investments"])
     Membership.objects.create(user=owner, organization=org, role="OWNER")
     OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
     client = APIClient()

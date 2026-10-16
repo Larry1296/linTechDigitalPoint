@@ -20,6 +20,9 @@ beforeEach(() => {
 });
 const createBody = () => JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
 const next = () => fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+// The "Other things you do" step: No to each question unless told otherwise.
+const answer = (yes = []) => profiles.extras.forEach((extra) =>
+  fireEvent.click(screen.getByRole("button", { name: `${yes.includes(extra.id) ? "Yes" : "No"}: ${extra.question}` })));
 
 it("keeps tools that need each other together, within what the business can use", () => {
   const on = toggleModule(profiles, "SERVICES", new Set(["reports"]), "pos");
@@ -53,7 +56,14 @@ it("sets up a barbershop with its price list and never mentions stock or shelves
   fireEvent.click(screen.getByRole("button", { name: /Barbershop/ }));
   next();
 
+  expect(screen.getByRole("heading", { name: "Other things you do" })).toBeInTheDocument();
+  next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Do you run an M-Pesa agency?");
+  answer();
+  next();
+
   expect(screen.getByRole("button", { name: /^Services & jobs/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("button", { name: /^M-Pesa agency/ })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: /^Point of sale/ })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByRole("button", { name: /Products & stock/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Shelves/ })).not.toBeInTheDocument();
@@ -89,6 +99,8 @@ it("sets up a business that does both, with its own description, categories and 
   expect(screen.getByRole("alert")).toHaveTextContent("Name your kind of business.");
   fireEvent.change(screen.getByLabelText("Name your kind of business"), { target: { value: "Agrovet and vet clinic" } });
   next();
+  answer(["investments"]);
+  next();
 
   expect(screen.getByRole("button", { name: /^Shelves & locations/ })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("New category"), { target: { value: "Animal feeds" } });
@@ -112,6 +124,8 @@ it("sets up a business that does both, with its own description, categories and 
   expect(createBody()).toMatchObject({ business_model: "MIXED", sector: "other_mixed", business_type: "Agrovet and vet clinic",
     starter_categories: ["Animal feeds"], starter_services: [], branch_name: "Kiandas market stall", country: "UG",
     currency: "UGX", timezone: "Africa/Kampala", opening_cash: "15000" });
+  expect(createBody().enabled_modules).toContain("investments");
+  expect(createBody().enabled_modules).not.toContain("mpesa");
 }, 20000);  // the same multi-step set-up as above
 
 it("resumes where the owner stopped after the page reloads, and forgets the draft once the business exists", async () => {
@@ -121,6 +135,8 @@ it("resumes where the owner stopped after the page reloads, and forgets the draf
   fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
   next();
   fireEvent.click(screen.getByRole("button", { name: /Barbershop/ }));
+  next();
+  answer();
   next();
   fireEvent.change(screen.getByLabelText("Price for Haircut"), { target: { value: "200" } });
   first.unmount();
@@ -146,5 +162,28 @@ it("lets an owner whose business is not listed create it straight from the searc
   expect(screen.getByLabelText("Name your kind of business")).toHaveValue("music studio");
   expect(screen.getByRole("button", { name: /Other service provider/ })).toHaveAttribute("aria-pressed", "true");
   next();
+  answer();
+  next();
   expect(screen.getByText(/usual tools for a/)).toHaveTextContent("music studio");
 });
+
+it("starts an M-Pesa agent at Yes for the agency and still asks about the chama and investments", async () => {
+  render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
+  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Juma Agency" } });
+  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
+  next();
+  fireEvent.click(screen.getByRole("button", { name: /M-Pesa \/ mobile money agent/ }));
+  next();
+  expect(screen.getByRole("button", { name: "Yes: Do you run an M-Pesa agency?" })).toHaveAttribute("aria-pressed", "true");
+  next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Are you the treasurer of a chama?");
+  fireEvent.click(screen.getByRole("button", { name: "No: Are you the treasurer of a chama?" }));
+  fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
+  next();
+  expect(screen.getByRole("heading", { name: "Tools & starter list" })).toBeInTheDocument();
+  next(); next(); next();
+  expect(screen.getByText("M-Pesa agency", { selector: "dd" })).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
+  expect(createBody().enabled_modules.sort()).toEqual(["expenses", "mpesa", "reports", "staff"]);
+  expect(createBody().chama).toBeNull();
+}, 20000);

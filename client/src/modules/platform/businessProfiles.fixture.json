@@ -15,7 +15,8 @@
     "reports",
     "branches",
     "staff",
-    "chama"
+    "chama",
+    "investments"
    ],
    "requires": [
     "inventory"
@@ -35,7 +36,8 @@
     "reports",
     "branches",
     "staff",
-    "chama"
+    "chama",
+    "investments"
    ],
    "requires": [
     "services",
@@ -58,7 +60,8 @@
     "reports",
     "branches",
     "staff",
-    "chama"
+    "chama",
+    "investments"
    ],
    "requires": [
     "inventory",
@@ -154,6 +157,29 @@
    "label": "Chama management",
    "description": "Run a chama you are treasurer of: members, contributions, fines, excuses and whose turn it is. Its money is kept apart from the shop's.",
    "needs": []
+  },
+  {
+   "id": "investments",
+   "label": "Investments",
+   "description": "Money you keep in an investment such as a money market fund (MMF): what you put in, take out and earn, and what it is worth now.",
+   "needs": []
+  }
+ ],
+ "extras": [
+  {
+   "id": "mpesa",
+   "question": "Do you run an M-Pesa agency?",
+   "hint": "You do deposits and withdrawals for customers from your own float and earn commission. Customers paying you by M-Pesa for your goods or services is not this; you set that up after sign-up."
+  },
+  {
+   "id": "chama",
+   "question": "Are you the treasurer of a chama?",
+   "hint": "You keep the chama's records: members, contributions, fines and whose turn it is. Its money stays apart from the business's."
+  },
+  {
+   "id": "investments",
+   "question": "Do you keep money in an investment, such as an MMF?",
+   "hint": "Record what you put in and take out, the interest it earns, and pay suppliers from it when you need to."
   }
  ],
  "sectors": {

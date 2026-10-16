@@ -2,11 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 let permissions = [];
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions } }) }));
+let modules = ["investments"];
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions, organization: { enabled_modules: modules } } }) }));
 import { api } from "../../core/api/client";
 import { InvestmentReminder } from "./InvestmentReminder";
 
-beforeEach(() => { vi.clearAllMocks(); permissions = ["accounting.view_investment"]; });
+beforeEach(() => { vi.clearAllMocks(); permissions = ["accounting.view_investment"]; modules = ["investments"]; });
 
 it("reminds the owner on the dashboard when this month's check is due", async () => {
   api.mockResolvedValue({ month: "October 2026", due: [{ id: 3, name: "CIC MMF" }] });
@@ -22,6 +23,11 @@ it("says nothing when every check is done or the person cannot see investments",
   expect(container).toBeEmptyDOMElement();
   permissions = [];
   vi.clearAllMocks();
+  render(<InvestmentReminder />);
+  expect(api).not.toHaveBeenCalled();
+  // A business that does not keep investments is not asked about them either.
+  permissions = ["accounting.view_investment"];
+  modules = ["pos"];
   render(<InvestmentReminder />);
   expect(api).not.toHaveBeenCalled();
 });

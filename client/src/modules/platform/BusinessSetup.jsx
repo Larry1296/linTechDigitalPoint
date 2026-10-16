@@ -12,7 +12,7 @@ import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleP
 import { MpesaPaymentsSetup } from "../settings/MpesaPaymentsSetup";
 import { MONEY_MODES, MONEY_PARTS, MoneyModeChoice } from "../../core/organization/MoneyModeChoice";
 
-const STEP_LABELS = { business: "Your business", kind: "Kind of business", tools: "Tools & starter list", chama: "Your chama",
+const STEP_LABELS = { business: "Your business", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Money", review: "Review" };
 const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item" };
 
@@ -48,7 +48,11 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [sectorId, setSectorId] = useState(draft.sectorId ?? "");
   const [sectorQuery, setSectorQuery] = useState(draft.sectorQuery ?? "");
   const [otherText, setOtherText] = useState(draft.otherText ?? "");
-  const [modules, setModules] = useState(() => new Set(draft.modules ?? []));
+  // Running an M-Pesa agency, being a chama's treasurer or keeping an investment depend on the owner, not on the kind of
+  // business, so each is asked as a question (extras) and kept apart from the tools the kind suggests (modules).
+  const extraIds = catalogue.extras.map((extra) => extra.id);
+  const [modules, setModules] = useState(() => new Set((draft.modules ?? []).filter((id) => !extraIds.includes(id))));
+  const [extras, setExtras] = useState(draft.extras ?? {});
   const [modulesEdited, setModulesEdited] = useState(draft.modulesEdited ?? false);
   const [moduleNotes, setModuleNotes] = useState([]);
   const [categories, setCategories] = useState(draft.categories ?? []);
@@ -65,24 +69,29 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [created, setCreated] = useState(null);
   const zones = useMemo(() => timeZones(), []);
   useEffect(() => {
-    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], modulesEdited, categories, services, details, money, plan, chama });
-  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, modulesEdited, categories, services, details, money, plan, chama]);
+    if (!created) saveDraft(user, { step, name, model, size, sectorId, sectorQuery, otherText, modules: [...modules], extras, modulesEdited, categories, services, details, money, plan, chama });
+  }, [user, created, step, name, model, size, sectorId, sectorQuery, otherText, modules, extras, modulesEdited, categories, services, details, money, plan, chama]);
   const toDashboard = () => navigate("/admin/dashboard", { replace: true });
   // After the logo, a business that sells at a counter sets up M-Pesa prompts (or says it takes M-Pesa by hand).
   if (created && created.paymentsStep) return <PaymentsStep business={created} onDone={toDashboard} />;
   if (created) return <LogoStep business={created} onUploaded={refresh}
     onDone={() => (modules.has("pos") ? setCreated({ ...created, paymentsStep: true }) : toDashboard())} />;
 
-  // The chama step appears only when chama management is one of the chosen tools.
-  const steps = ["business", "kind", "tools", ...(modules.has("chama") ? ["chama"] : []), "place", "money", "review"];
+  const sector = sectorId ? findSector(catalogue, sectorId) : null;
+  // Unanswered, a question starts at Yes only when the kind of business is that work, such as an M-Pesa agent.
+  const answer = (id) => extras[id] ?? (sector?.modules[size]?.includes(id) ? true : undefined);
+  const chosen = new Set([...modules, ...extraIds.filter((id) => answer(id))]);
+  // The chama step appears only when the owner runs a chama.
+  const steps = ["business", "kind", "extras", "tools", ...(chosen.has("chama") ? ["chama"] : []), "place", "money", "review"];
   const current = steps[Math.min(step, steps.length - 1)];
   const goTo = (id) => setStep(steps.indexOf(id));
-  const sector = sectorId ? findSector(catalogue, sectorId) : null;
   const isOther = catalogue.other_sectors.includes(sectorId);
   const allowed = model ? allowedModules(catalogue, model) : [];
   const typeLabel = isOther ? otherText.trim() : sector?.label || "";
   // Until the owner edits the tools themselves, they follow the kind of business and its size.
-  const suggest = (nextSector, nextSize) => { if (!modulesEdited && nextSector) setModules(new Set(nextSector.modules[nextSize])); };
+  const suggest = (nextSector, nextSize) => {
+    if (!modulesEdited && nextSector) setModules(new Set(nextSector.modules[nextSize].filter((id) => !extraIds.includes(id))));
+  };
   const chooseModel = (id) => {
     if (id === model) return;
     setModel(id); setSectorId(""); setSectorQuery(""); setModules(new Set()); setModulesEdited(false); setModuleNotes([]);
@@ -115,11 +124,15 @@ function SetupWizard({ catalogue, user, refresh }) {
   };
   // The parts of the business that take money of their own (shop, services, M-Pesa agency): with more than one, the
   // owner chooses whether their cash sits in one drawer or a drawer each.
-  const earningParts = MONEY_PARTS.filter((part) => modules.has(part.module));
+  const earningParts = MONEY_PARTS.filter((part) => chosen.has(part.module));
   const problem = {
     business: () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
     kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Name your kind of business." : "",
-    tools: () => moduleProblem(catalogue, model, modules)
+    extras: () => {
+      const open = catalogue.extras.find((extra) => answer(extra.id) === undefined);
+      return open ? `Answer Yes or No: ${open.question}` : "";
+    },
+    tools: () => moduleProblem(catalogue, model, chosen)
       || (services.some((service) => service.selling_price !== "" && Number(service.selling_price) < 0) ? "Service prices cannot be negative." : ""),
     chama: () => chamaProblem(chama),
     place: () => !details.branch_name.trim() ? "Enter the name of your first branch or shop." : "",
@@ -137,13 +150,13 @@ function SetupWizard({ catalogue, user, refresh }) {
     try {
       const business = await api("/api/v1/tenancy/create/", { method: "POST", body: JSON.stringify({
         name: name.trim(), business_model: model, sector: sectorId, business_size: size, business_type: typeLabel.slice(0, 100), plan,
-        enabled_modules: [...modules],
+        enabled_modules: [...chosen],
         starter_categories: modules.has("inventory") ? chosenCategories : [],
         starter_services: modules.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
           ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
         money_mode: earningParts.length > 1 ? money.money_mode : "ONE_DRAWER",
-        chama: modules.has("chama") ? chamaPayload(chama) : null,
+        chama: chosen.has("chama") ? chamaPayload(chama) : null,
       }) });
       clearDraft(user);
       // Load the new business into the session before the logo step, so leaving it opens that business's dashboard.
@@ -158,7 +171,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   const country = COUNTRIES.find((item) => item.code === details.country);
   const basicModules = plans?.find((item) => item.code === "BASIC")?.enabled_modules;
   const proOnly = (id) => Boolean(basicModules && !basicModules.includes(id));
-  const lockedOnBasic = !user.platform_admin && plan === "BASIC" ? [...modules].filter(proOnly) : [];
+  const lockedOnBasic = !user.platform_admin && plan === "BASIC" ? [...chosen].filter(proOnly) : [];
   const modelLabel = catalogue.models.find((item) => item.id === model)?.label;
   // "Other" stays in view whatever the search, so a business that is not listed can always create its own kind.
   const otherSector = model ? catalogue.sectors[model].find((item) => catalogue.other_sectors.includes(item.id)) : null;
@@ -217,10 +230,24 @@ function SetupWizard({ catalogue, user, refresh }) {
       </fieldset>
       {isOther && <>
         <label>Name your kind of business<input value={otherText} onChange={(e) => setOtherText(e.target.value)} maxLength={100} placeholder="e.g. Poultry farm, Car hire, Music studio" /></label>
-        <p className="muted">You start with the usual tools for a business that {catalogue.models.find((item) => item.id === model)?.phrase}, and choose your own on the next step.
+        <p className="muted">You start with the usual tools for a business that {catalogue.models.find((item) => item.id === model)?.phrase}, and choose your own on the next steps.
           Once reviewed, your kind of business is added to this list so others like you find it.</p>
       </>}
       {model !== "MIXED" && <p className="muted">Doing more than this? Go back and choose <strong>Both goods and services</strong>.</p>}
+    </section>}
+
+    {current === "extras" && <section className="setupPanel">
+      <p className="muted">Not every owner does these, so tell us which you do. Each adds its own pages; you can change your answers later in Settings.</p>
+      {catalogue.extras.filter((extra) => allowed.includes(extra.id)).map((extra) => <fieldset className="choiceGroup" key={extra.id}>
+        <legend>{extra.question}{proOnly(extra.id) && <small className="proTag">Pro plan</small>}</legend>
+        <p className="muted">{extra.hint}</p>
+        <div className="choiceGrid">
+          {[[true, "Yes"], [false, "No"]].map(([value, label]) => <button type="button" key={label} className={`choiceCard compact${answer(extra.id) === value ? " selected" : ""}`}
+            aria-pressed={answer(extra.id) === value} aria-label={`${label}: ${extra.question}`} onClick={() => setExtras((current) => ({ ...current, [extra.id]: value }))}>
+            <strong>{label}</strong>
+          </button>)}
+        </div>
+      </fieldset>)}
     </section>}
 
     {current === "tools" && <section className="setupPanel">
@@ -228,7 +255,7 @@ function SetupWizard({ catalogue, user, refresh }) {
       <fieldset className="choiceGroup">
         <legend>Tools</legend>
         <div className="choiceGrid">
-          {catalogue.modules.filter((module) => allowed.includes(module.id)).map((module) => <button type="button" key={module.id}
+          {catalogue.modules.filter((module) => allowed.includes(module.id) && !extraIds.includes(module.id)).map((module) => <button type="button" key={module.id}
             className={`choiceCard module${modules.has(module.id) ? " selected" : ""}`} aria-pressed={modules.has(module.id)} onClick={() => chooseModule(module.id)}>
             <strong>{module.label}</strong><span>{module.description}</span>
             {proOnly(module.id) && <small className="proTag">Pro plan</small>}
@@ -302,10 +329,11 @@ function SetupWizard({ catalogue, user, refresh }) {
       <dl className="setupReview">
         <div><dt>Business</dt><dd>{name} · {catalogue.sizes.find((item) => item.id === size)?.label}</dd><button type="button" className="linkButton" onClick={() => goTo("business")}>Change</button></div>
         <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => goTo("kind")}>Change</button></div>
+        <div><dt>Also does</dt><dd>{catalogue.modules.filter((m) => extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ") || "None of these"}</dd><button type="button" className="linkButton" onClick={() => goTo("extras")}>Change</button></div>
         <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => modules.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
         {modules.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
         {modules.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
-        {modules.has("chama") && <div><dt>Chama</dt><dd>{chama.name} · {details.currency} {Number(chama.contribution_amount || 0).toLocaleString()} each · {chamaPayload(chama).members.length} members · treasurer {chama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("chama")}>Change</button></div>}
+        {chosen.has("chama") && <div><dt>Chama</dt><dd>{chama.name} · {details.currency} {Number(chama.contribution_amount || 0).toLocaleString()} each · {chamaPayload(chama).members.length} members · treasurer {chama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("chama")}>Change</button></div>}
         <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Country & money</dt><dd>{country?.name || details.country} · {details.currency} · {details.timezone.replaceAll("_", " ")}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>

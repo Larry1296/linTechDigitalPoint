@@ -20,6 +20,9 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByRole('button',{name:/I sell goods/}).click();
   await page.getByRole('button',{name:'Continue'}).click();
   await page.getByRole('button',{name:/Duka \/ general shop/}).click();
+  await page.getByRole('button',{name:'Continue'}).click();
+  for (const question of ['Do you run an M-Pesa agency?', 'Are you the treasurer of a chama?', 'Do you keep money in an investment, such as an MMF?'])
+    await page.getByRole('button',{name:`No: ${question}`}).click();
   for (let step = 0; step < 4; step += 1) await page.getByRole('button',{name:'Continue'}).click();
   await page.getByRole('button',{name:'Create business workspace'}).click();
   await page.getByRole('button',{name:'Skip for now'}).click();
