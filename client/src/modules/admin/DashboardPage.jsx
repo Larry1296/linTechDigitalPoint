@@ -220,6 +220,13 @@ export function DashboardPage() {
               .map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
           <p className="muted">The extra is not profit until the items are actually sold.</p>
+          {mpesaUnit && mpesa.in_operation != null && <>
+            <dl className="dashList">
+              <div><dt>M-Pesa money in operation (cash and float)</dt><dd>{money(mpesa.in_operation)}</dd></div>
+              <div><dt>All your stock (shelves at cost and M-Pesa)</dt><dd>{money(Number(inventory.cost || 0) + Number(mpesa.in_operation))}</dd></div>
+            </dl>
+            <p className="muted">The M-Pesa cash and float are stock too: they make the commission, the way an item on the shelf makes its profit when sold.</p>
+          </>}
         </section>}
         {!orders.restricted && (Number(orders.awaiting_payment) > 0 || Number(orders.awaiting_fulfillment) > 0) && <section className="dashCard"><h2>Online orders needing attention</h2>
           <dl className="dashList"><div><dt>Waiting for payment</dt><dd>{count(orders.awaiting_payment)}</dd></div><div><dt>Paid, to pack or collect</dt><dd>{count(orders.awaiting_fulfillment)}</dd></div></dl>

@@ -47,8 +47,8 @@ def _money():
 
 def agency_money(with_commission=False):
     """The M-Pesa agency's money in operation (cash in its drawer and float on its line), as last recorded on each
-    outlet: the open shift as it stands, or else what the last shift closed with. The agency's working money, not the
-    owner's. ``live`` is whether a shift is open; ``as_of`` is when the last closed shift closed when none is.
+    outlet: the open shift as it stands, or else what the last shift closed with. The business's stock for the agency
+    (like goods on the shelves): never profit; the commission it earns is. ``live`` is whether a shift is open; ``as_of`` is when the last closed shift closed when none is.
     ``with_commission`` adds the commission balance the app works out for each outlet. None when the business has no agency."""
     from apps.mpesa.commission_learning import balance_now
     from apps.mpesa.models import MpesaOutlet, MpesaSession

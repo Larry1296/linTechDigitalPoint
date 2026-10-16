@@ -27,7 +27,7 @@ it("says in words which part carries the business, which made a loss and how eac
 it("compares the parts side by side and leaves the agency's cash and float out", () => {
   render(<PartsAnalysis data={data} money={money} />);
   expect(screen.getByRole("heading", { name: "How each part of the business is doing" })).toBeInTheDocument();
-  expect(screen.getByText(/its cash and float are the agency's working money/)).toBeInTheDocument();
+  expect(screen.getByText(/its cash and float are the business's stock for the agency/)).toBeInTheDocument();
   expect(screen.getByText("Income, costs and profit of each part")).toBeInTheDocument();
   expect(screen.getByText("Share of the profit")).toBeInTheDocument();
   expect(screen.getByText("Profit each month, part by part")).toBeInTheDocument();

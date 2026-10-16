@@ -3,8 +3,8 @@ import { profitText, stockText } from "./plainMoney";
 // The first thing on the dashboard: every part of the business together. Products, services and M-Pesa commission, what
 // the sold items really cost, running costs and the profit or loss, today and since the start; then the money the owner
 // should be holding, added up step by step from the cash book with what each part brought into it, and the M-Pesa
-// agency's own cash and float beside it (the agency's working money, never the owner's). Parts the viewer may not see
-// are left out.
+// agency's cash and float beside it: the business's stock for the agency, like goods on the shelves, whose profit is
+// the commission. Parts the viewer may not see are left out.
 // ``part`` shows only "sales" (the table) or "money" (what should be held); without it, both.
 export function OwnerSummary({ summary, money, part }) {
   if (!summary) return null;
@@ -25,7 +25,7 @@ export function OwnerSummary({ summary, money, part }) {
   if (!sales && !held) return null;
   return <section className={`ownerSummary${part ? ` ownerSummary-${part}` : ""}`} aria-labelledby={`owner-summary-title${part ? `-${part}` : ""}`}>
     {sales && <><h2 id={`owner-summary-title${part ? `-${part}` : ""}`}>Your business at a glance</h2>
-    <p>{today.commission != null ? "Every part of the business together. From the M-Pesa agency only the commission counts: its cash and float are the agency's working money, not yours." : "Every part of the business together."}</p>
+    <p>{today.commission != null ? "Every part of the business together. From the M-Pesa agency the commission is the profit. Its cash and float are your business's stock for the agency, like goods on the shelves: they make the commission, they are not profit themselves." : "Every part of the business together."}</p>
     <div className="trendTable"><table>
       <caption>Sales, costs and profit</caption>
       <thead><tr><th scope="col">What</th><th scope="col">Today</th><th scope="col">Since you started{summary.since ? ` (${summary.since})` : ""}</th></tr></thead>
@@ -46,7 +46,7 @@ export function OwnerSummary({ summary, money, part }) {
       {Number(summary.customers_owe) > 0 && <p>Customers still owe you <strong>{money(summary.customers_owe)}</strong> for things already sold. That is part of your sales but not yet in your hands.</p>}
       <p>Count your money under <a href="/admin/money-check">Money check</a> to see if anything is missing.</p>
       {summary.agency && <p className="ownerSummaryAgency"><b>M-Pesa money in operation: {money(summary.agency.total)}</b> (cash {money(summary.agency.cash)} ·
-        float {money(summary.agency.float)}). This belongs to the M-Pesa agency, so it is not in the total above. What the agency earns for you is its commission.</p>}
+        float {money(summary.agency.float)}). It is your business's stock for the agency, like goods on the shelves: counted on the M-Pesa desk, so it is not in the total above. The profit it makes is its commission.</p>}
     </div>}
   </section>;
 }

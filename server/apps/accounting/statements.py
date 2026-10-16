@@ -129,7 +129,7 @@ def cash_flow(start, end):
         totals[_cash_flow_group(lines)] += amount
     rows = [{"key": key, "label": labels[key], "amount": totals[key]} for key in labels if totals[key]]
     return {"rows": rows, "net": sum(totals.values(), ZERO),
-            "note": "M-Pesa agency cash and float are customers' money held for them; they are reported with the agency, not here."}
+            "note": "M-Pesa agency cash and float are the business's stock for the agency, like goods on the shelves; they are reported with the agency, not here."}
 
 
 def stock_valuation():

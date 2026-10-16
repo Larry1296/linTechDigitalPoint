@@ -42,7 +42,7 @@ export function partsStory(parts, trend, money, names = NAMES) {
 // "How each part of the business is doing": the shop, cyber and M-Pesa agency side by side, so the owner sees which
 // part carries the business and what each contributes to the whole business's profit. Shown only when the owner runs
 // the business as several parts. M-Pesa counts by its commission and its running costs; its cash and float are the
-// agency's working money and are never part of these figures. Costs shared between the parts count by each part's share.
+// business's stock for the agency (like goods on the shelves) and are never part of these figures. Costs shared between the parts count by each part's share.
 export function PartsAnalysis({ data, money }) {
   if (data.has_parts === false) return null;
   const parts = (data.unit_period || []).map((unit) => ({ key: unit.key, name: unit.name || NAMES[unit.key],
@@ -65,7 +65,7 @@ export function PartsAnalysis({ data, money }) {
   return (
     <section className="businessAnalysis partsAnalysis" aria-labelledby="parts-analysis-title">
       <h2 id="parts-analysis-title">How each part of the business is doing</h2>
-      <p className="muted">For {period}. {keys.includes("MPESA") ? "M-Pesa counts by the commission it earns for you, less its running costs; its cash and float are the agency's working money and are not in these figures." : ""}</p>
+      <p className="muted">For {period}. {keys.includes("MPESA") ? "M-Pesa counts by the commission it earns for you, less its running costs; its cash and float are the business's stock for the agency, like goods on the shelves, and are not in these figures." : ""}</p>
       {story.length > 0 && <ul className="partsStory">{story.map((line) => <li key={line}>{line}</li>)}</ul>}
       <div className="trendTable partsContribution"><table>
         <caption>What each part contributed to the whole business</caption>

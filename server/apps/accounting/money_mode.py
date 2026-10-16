@@ -6,8 +6,9 @@ is set up and changeable in Settings.
 - SEPARATE_CASH: each part keeps its own cash drawer, counted on its own; the Lipa na M-Pesa till and the bank stay
   shared, with each part's share shown.
 
-Either way the M-Pesa agency's cash and float are the agency's money in operation, never the owner's; only the
-commission it earns is the owner's, and it counts as the M-Pesa part's contribution.
+Either way the M-Pesa agency's cash and float are its money in operation: the business's stock for the agency, like
+goods on the shelves, counted on the M-Pesa desk rather than in the cash book. The commission it earns is its profit
+(as a charger bought at 100 and sold at 200 makes 100), and it counts as the M-Pesa part's contribution.
 
 Whether the business is made of parts at all is the owner's answer too (``structure``): a salon that also sells hair
 products is one business, while a cyber with a shop and an M-Pesa agency is several under one name. Only a business

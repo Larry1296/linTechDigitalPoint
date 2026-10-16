@@ -165,7 +165,7 @@ export function MoneyCheckPage() {
       <p className="formNotice formNoticeInfo">{data.mode === "SEPARATE_CASH"
         ? "Each part of the business keeps its own cash drawer, counted on its own. The Lipa na M-Pesa till and the bank are shared; each shows how much of it belongs to each part."
         : "All your cash is in one drawer. Each place shows how much of it each part of the business brought in."}{" "}
-        M-Pesa commission paid out to you is your money and is counted here. The M-Pesa agency's own cash and float are not yours: they are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
+        M-Pesa commission paid out to you is your money and is counted here. The M-Pesa agency's cash and float are your business's stock for the agency, like goods on the shelves: they are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
       {result && <p className={Math.abs(Number(result.difference)) < 0.005 ? "formNotice formNoticeSuccess" : "formNotice formNoticeInfo"} role="status">
         Saved. You have {money(result.actual)}; the app expected {money(result.expected)}. {differenceText(result.difference)}</p>}
       <div className="moneyPlaces">{data.places.map((place) => (

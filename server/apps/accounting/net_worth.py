@@ -88,7 +88,7 @@ def snapshot(*, stock=None, receivables=None, payables=None, save=True):
     shop, agency, investments = _shop_money(), _agency_money(), _investments()
     groups = [
         {"key": "money", "label": "Shop money (drawer, till, bank)", "side": "OWNS", "amount": sum((r["amount"] for r in shop), ZERO), "items": shop},
-        {"key": "agency", "label": "M-Pesa agency cash and float", "side": "OWNS", "amount": sum((r["amount"] for r in agency), ZERO), "items": agency},
+        {"key": "agency", "label": "M-Pesa money in operation (agency stock)", "side": "OWNS", "amount": sum((r["amount"] for r in agency), ZERO), "items": agency},
         {"key": "investments", "label": "Investments", "side": "OWNS", "amount": sum((r["amount"] for r in investments), ZERO), "items": investments},
         {"key": "loans", "label": "Money lent out", "side": "OWNS", "amount": _loans(), "items": []},
         {"key": "commission", "label": "Commission Safaricom still owes", "side": "OWNS", "amount": max(_commission_due(), ZERO), "items": []},

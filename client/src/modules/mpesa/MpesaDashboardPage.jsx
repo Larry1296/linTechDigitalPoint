@@ -444,8 +444,9 @@ export function MpesaDashboardPage() {
       <span className="eyebrow">Agent money (kept separate from the shop)</span>
       <h1>M-Pesa Agent</h1>
       <p className="privacyNotice">
-        Agency deposits, withdrawals and airtime sales move cash and electronic float. Their
-        principal is never sales revenue; only commission is.
+        Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
+        business's stock for the agency, like goods on the shelves, and the amounts customers deposit or withdraw are
+        never sales. The commission is the profit, the way a charger bought at 100 and sold at 200 makes 100.
       </p>
       <div className="metrics">
         <MetricCard label="Money in operation">
