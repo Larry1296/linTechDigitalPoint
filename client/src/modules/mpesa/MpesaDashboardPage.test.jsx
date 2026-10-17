@@ -200,3 +200,15 @@ it("shows the worked-out commission balance in the top figures, added up over th
   const card = screen.getByText("Commission balance", { selector: ".metrics *" }).closest("article");
   expect(card).toHaveTextContent("1,550.5");
 });
+
+it("with one drawer shows all the cash and float, split into the agency's part the forms use and the shop's sales money", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 5, outlet: 1, opening_cash: "10000", opening_float: "20000" },
+    cash: "12000.00", float: "18000.00", in_operation: { total: 31700, opening: 31500 }, combined });
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { cash: "12000.00", float: "18000.00", total: "31700.00", updated_on: "2026-09-26",
+    due: false, combined })]);
+  render(<MpesaDashboardPage />);
+  const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
+  expect(main).toHaveTextContent("KSh 13,200 · agency KSh 12,000 + shop sales KSh 1,200");
+  expect(main).toHaveTextContent("KSh 18,500 · agency KSh 18,000 + shop sales KSh 500");
+  expect(screen.getByText("Current cash").closest("article")).toHaveTextContent("agency KSh 12,000 + shop sales KSh 1,200");
+});

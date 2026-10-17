@@ -140,8 +140,8 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
                 <div><dt>Agent number</dt><dd>{outlet.agent_reference || "—"}</dd></div>
                 <div><dt>Store number</dt><dd>{outlet.store_number || "—"}</dd></div>
                 <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
-                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
-                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
+                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : <Split total={money.cash} agency={money.agencyCash} />}</dd></div>
+                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : <Split total={money.float} agency={money.agencyFloat} />}</dd></div>
                 <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
               </dl>
               {commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
@@ -167,6 +167,14 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
 // Closing: count the drawer, enter the float from the M-Pesa line, and compare the full amount with the opening.
 // One drawer for the whole business (server mpesa/combined.py): the shift counts all the cash in the drawer and all the
 // money on the agent line. What to expect is the agency's part plus the business's own money from sales.
+// With one drawer: all the money there, and under it the agency's own part (what deposits, withdrawals and airtime can
+// use, as the forms show) and the shop's sales money.
+function Split({ total, agency }) {
+  if (agency == null) return amount(total);
+  const shop = Number(total) - Number(agency);
+  return <>{amount(total)}<small className="muted"> · agency {amount(agency)}{shop ? ` + shop sales ${amount(shop)}` : ""}</small></>;
+}
+
 export function expectedCount(money) {
   const combined = money?.combined;
   if (!combined || money.cash == null) return money;
@@ -457,8 +465,8 @@ export function MpesaDashboardPage() {
           {dashboard.combined && <small className="muted"> · one drawer with the shop, so every sale adds to it: {amount(dashboard.combined.business_cash)} in
             cash{dashboard.combined.sale_mpesa_to === "AGENT_LINE" ? ` and ${amount(dashboard.combined.business_line)} on the line` : ""} is from sales, less what was spent</small>}
         </MetricCard>
-        <MetricCard label="Current cash">{amount(whole.cash)}</MetricCard>
-        <MetricCard label="Current float">{amount(whole.float)}</MetricCard>
+        <MetricCard label="Current cash"><Split total={whole.cash} agency={whole.agencyCash} /></MetricCard>
+        <MetricCard label="Current float"><Split total={whole.float} agency={whole.agencyFloat} /></MetricCard>
         {commissionNow && <MetricCard label="Commission balance">
           {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
           {commissionNow.detail && <small className="muted"> · {commissionNow.detail}</small>}
