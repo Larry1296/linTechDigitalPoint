@@ -4,7 +4,8 @@
   compares against a count. The last count is shown next to it, so a gap is visible rather than hidden.
 - M-Pesa agency: the money in operation now. With a shift open that is its opening cash and float plus everything
   since; with none open, what was counted when the last shift closed. The agency's cash book lines are not used: they
-  only hold the day's movements, not the money the shift started with.
+  only hold the day's movements, not the money the shift started with. With one drawer for the whole business the
+  shop's drawer (and agent line) money is counted with it at the shift, so it is shown inside this one figure.
 - Investments at their recorded value (estimated interest is not counted until a statement confirms it), money lent
   and not yet repaid, commission Safaricom still owes, what customers owe and stock at what it cost.
 - Owed: suppliers for stock received and running costs recorded but not yet paid.
@@ -28,8 +29,23 @@ def _shop_money():
         last = place["last_check"]
         rows.append({"key": f"shop-{place['key'].lower().replace(':', '-')}", "label": place["label"], "amount": place["expected"], "method": place["method"],
                      "counted": last["actual"] if last else None, "counted_at": last["created_at"] if last else None,
-                     "difference": last["difference"] if last else None})
+                     "difference": last["difference"] if last else None, "at_shift": bool(place.get("counted_at_shift"))})
     return rows
+
+
+def _one_drawer(shop, agency):
+    """One drawer for the whole business: the shop's money in the drawer (and on the agent line, when sales go there) is
+    counted with the agency's at the shift, so it is shown as one figure, the M-Pesa money in operation, the way the
+    desk shows it. Moved, not added: the total owned is the same."""
+    shared = [row for row in shop if row["at_shift"]]
+    if not shared or not agency:
+        return shop, agency, False
+    cash = sum((row["amount"] for row in shared if row["method"] == "CASH"), ZERO)
+    line = sum((row["amount"] for row in shared if row["method"] != "CASH"), ZERO)
+    first = agency[0]
+    agency = [{**first, "amount": first["amount"] + cash + line, "cash": first["cash"] + cash, "float": first["float"] + line,
+               "business_cash": cash, "business_line": line}, *agency[1:]]
+    return [row for row in shop if not row["at_shift"]], agency, True
 
 
 def _agency_money():
@@ -85,10 +101,12 @@ def _commission_due():
 
 def snapshot(*, stock=None, receivables=None, payables=None, save=True):
     """The net worth now. ``stock``, ``receivables`` and ``payables`` are passed in by the dashboard (None = not allowed to see)."""
-    shop, agency, investments = _shop_money(), _agency_money(), _investments()
+    shop, agency, one = _one_drawer(_shop_money(), _agency_money())
+    investments = _investments()
     groups = [
-        {"key": "money", "label": "Shop money (drawer, till, bank)", "side": "OWNS", "amount": sum((r["amount"] for r in shop), ZERO), "items": shop},
-        {"key": "agency", "label": "M-Pesa money in operation (agency stock)", "side": "OWNS", "amount": sum((r["amount"] for r in agency), ZERO), "items": agency},
+        {"key": "money", "label": "Shop money (till, bank)" if one else "Shop money (drawer, till, bank)", "side": "OWNS", "amount": sum((r["amount"] for r in shop), ZERO), "items": shop},
+        {"key": "agency", "label": "M-Pesa money in operation (one drawer with the shop)" if one else "M-Pesa money in operation (agency stock)", "side": "OWNS",
+         "amount": sum((r["amount"] for r in agency), ZERO), "items": agency},
         {"key": "investments", "label": "Investments", "side": "OWNS", "amount": sum((r["amount"] for r in investments), ZERO), "items": investments},
         {"key": "loans", "label": "Money lent out", "side": "OWNS", "amount": _loans(), "items": []},
         {"key": "commission", "label": "Commission Safaricom still owes", "side": "OWNS", "amount": max(_commission_due(), ZERO), "items": []},

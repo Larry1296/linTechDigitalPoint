@@ -143,3 +143,18 @@ def test_every_sale_adds_to_money_in_operation_with_one_drawer(lintech):
     shop.client.post(f"/api/v1/mpesa/sessions/{shift['id']}/reconcile/", {"actual_cash": "11300", "actual_float": "20200"}, format="json")
     sell(shop, 100)
     assert D(str(shop.client.get("/api/v1/inventory/dashboard/").json()["mpesa"]["in_operation"])) == D("31600.00")
+
+
+def test_net_worth_shows_the_one_drawer_as_one_figure(lintech):
+    shop = lintech
+    sell(shop, 1000)
+    open_shift(shop, 11000, 20000)
+    sell(shop, 300)
+    sell(shop, 200, "MPESA", "SKD4444444")
+    home = shop.client.get("/api/v1/inventory/dashboard/").json()
+    groups = {g["key"]: g for g in home["net_worth"]["groups"]}
+    # The same figure as the desk: the agency's 30,000 and the shop's 1,500 together; the drawer and line are not shop money too.
+    assert D(str(groups["agency"]["amount"])) == D(str(home["mpesa"]["in_operation"])) == D("31500.00")
+    assert not any(item["method"] in ("CASH", "MPESA") for item in groups["money"]["items"])
+    item = groups["agency"]["items"][0]
+    assert (D(str(item["business_cash"])), D(str(item["business_line"]))) == (D("1300.00"), D("200.00"))
