@@ -29,6 +29,7 @@ import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
+import { OneDrawerShare } from "../accounting/OneDrawerShare";
 import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
@@ -462,8 +463,6 @@ export function MpesaDashboardPage() {
         <MetricCard label="Money in operation">
           {amount(dashboard.in_operation.total)}
           {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
-          {dashboard.combined && <small className="muted"> · one drawer with the shop, so every sale adds to it: {amount(dashboard.combined.business_cash)} in
-            cash{dashboard.combined.sale_mpesa_to === "AGENT_LINE" ? ` and ${amount(dashboard.combined.business_line)} on the line` : ""} is from sales, less what was spent</small>}
         </MetricCard>
         <MetricCard label="Current cash"><Split total={whole.cash} agency={whole.agencyCash} /></MetricCard>
         <MetricCard label="Current float"><Split total={whole.float} agency={whole.agencyFloat} /></MetricCard>
@@ -492,6 +491,7 @@ export function MpesaDashboardPage() {
           <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "working day" : "working days"} left</small>
         </MetricCard>}
       </div>
+      {dashboard.combined && <OneDrawerShare />}
       {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
       <MpesaAnalysis refreshKey={dashboard.transaction_count} />
       <MonthlyReport />

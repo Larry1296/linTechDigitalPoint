@@ -35,3 +35,13 @@ class StartingMoneyView(APIView):
         add_starting_money(user=request.user, method=request.data.get("method"), amount=request.data.get("amount"),
                            note=request.data.get("note", ""), key=key, unit=request.data.get("unit") or None)
         return Response({"places": places()}, status=201)
+
+
+class OneDrawerView(APIView):
+    """With one drawer for the whole business: all the money it holds and what each part contributed (combined.shares)."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.view_moneycheck"
+
+    def get(self, request):
+        from apps.mpesa.combined import shares
+        return Response({"shares": shares(profit_visible=has_business_permission(request.user, "accounting.view_profit"))})

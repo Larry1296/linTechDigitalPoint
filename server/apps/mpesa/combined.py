@@ -103,3 +103,35 @@ def view(session=None, organization=None):
         data.update(business_cash_at_open=session.business_cash_at_open, business_line_at_open=session.business_line_at_open,
                     since_open=business_since(session.opened_at, organization))
     return data
+
+
+def shares(organization=None, profit_visible=True):
+    """With one drawer: all the money the business holds (the M-Pesa money in operation, the drawer and the agent line)
+    and each part's contribution to it, adding up to it. The agency's is its own cash and float plus what its part of the
+    cash book did; the shop's and cyber's are what they took in less what they paid out from there. Each part also
+    carries what it sold, what the items cost (their buying price), its running costs and its profit since the start.
+    None when the business keeps its parts' money apart."""
+    if not combined(organization):
+        return None
+    from datetime import date
+    from apps.accounting.money_check import by_part
+    from apps.accounting.money_mode import business_parts, part_names
+    from apps.inventory.dashboard import accrual_totals, pnl_rows
+    from apps.inventory.dashboard_summary import agency_money
+    brought = {}
+    for method in (["CASH", "MPESA"] if sale_mpesa_to(organization) == AGENT_LINE else ["CASH"]):
+        for row in by_part(method):
+            brought[row["unit"]] = brought.get(row["unit"], ZERO) + row["amount"]
+    held = agency_money() or {}
+    own = held.get("total", ZERO) - (held.get("business_cash") or ZERO) - (held.get("business_line") or ZERO)
+    rows = pnl_rows(date(1900, 1, 1), date(9999, 12, 31))
+    names, parts = part_names(organization), []
+    for key in [*business_parts(organization), *sorted(set(brought) - set(business_parts(organization)))]:
+        figures = accrual_totals(rows, [key])
+        part = {"key": key, "label": names.get(key, key), "amount": brought.get(key, ZERO) + (own if key == "MPESA" else ZERO),
+                "sales": figures["revenue"]}
+        if key == "MPESA":
+            part.update(agency_own=own, cash_book=brought.get(key, ZERO))
+        part.update({field: figures[field] if profit_visible else None for field in ("cogs", "expenses", "profit")})
+        parts.append(part)
+    return {"total": sum((part["amount"] for part in parts), ZERO), "parts": parts}

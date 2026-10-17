@@ -158,3 +158,22 @@ def test_net_worth_shows_the_one_drawer_as_one_figure(lintech):
     assert not any(item["method"] in ("CASH", "MPESA") for item in groups["money"]["items"])
     item = groups["agency"]["items"][0]
     assert (D(str(item["business_cash"])), D(str(item["business_line"]))) == (D("1300.00"), D("200.00"))
+
+
+def test_each_part_shows_its_share_of_all_the_money_held(lintech):
+    shop = lintech
+    sell(shop, 1000)                                  # 1 charger bought at 100
+    open_shift(shop, 11000, 20000)
+    sell(shop, 500, "MPESA", "SKE5555555")
+    shares = shop.client.get("/api/v1/accounting/one-drawer/").json()["shares"]
+    parts = {part["key"]: part for part in shares["parts"]}
+    assert D(str(shares["total"])) == D(str(shop.client.get("/api/v1/inventory/dashboard/").json()["mpesa"]["in_operation"])) == D("31500.00")
+    assert D(str(parts["SHOP"]["amount"])) == D("1500.00") and D(str(parts["MPESA"]["amount"])) == D("30000.00")
+    assert (D(str(parts["SHOP"]["sales"])), D(str(parts["SHOP"]["cogs"])), D(str(parts["SHOP"]["profit"]))) == (D("1500.00"), D("200.00"), D("1300.00"))
+    assert sum(D(str(part["amount"])) for part in shares["parts"]) == D(str(shares["total"]))
+
+
+def test_separate_drawers_have_no_shares(lintech):
+    shop = lintech
+    shop.client.patch("/api/v1/tenancy/settings/", {"money_mode": "SEPARATE_CASH"}, format="json")
+    assert shop.client.get("/api/v1/accounting/one-drawer/").json()["shares"] is None
