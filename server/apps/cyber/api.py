@@ -174,9 +174,13 @@ def dashboard(request):
     jobs = CyberJob.objects.filter(created_at__date=today).exclude(sale__status="CANCELLED")
     completed = CyberJob.objects.filter(completed_at__date=today, sale__status="COMPLETED")  # deleted or returned sales are not income
     totals = completed.aggregate(revenue=Sum("total"), jobs=Count("id"), average=Avg("total"), cogs=Sum("sale__cogs"), profit=Sum("sale__gross_profit"))
+    # Revenue since the start, never "today's": the owner follows where income has reached.
+    ever = CyberJob.objects.filter(completed_at__isnull=False, sale__status="COMPLETED").aggregate(revenue=Sum("total"), jobs=Count("id"), average=Avg("total"),
+                                                                                                  cogs=Sum("sale__cogs"), profit=Sum("sale__gross_profit"))
     if not has_business_permission(request.user, "accounting.view_profit"):
-        totals.pop("cogs", None)
-        totals.pop("profit", None)
+        for figures in (totals, ever):
+            figures.pop("cogs", None)
+            figures.pop("profit", None)
     top = CyberJobLine.objects.filter(job__in=completed).values("service_name").annotate(revenue=Sum("line_total"), units=Sum("quantity")).order_by("-revenue").first()
     recent_customers = list(CustomerProfile.objects.select_related("user").filter(user__cyber_jobs__organization_id=request.organization.pk).distinct().values("user_id", "user__first_name", "phone")[:5])
-    return Response({"today": {key: value or 0 for key, value in totals.items()}, "active_jobs": CyberJob.objects.exclude(status__in=["COMPLETED", "CANCELLED"]).count(), "ready_jobs": CyberJob.objects.filter(status="READY").count(), "queued_today": jobs.count(), "top_service": top, "recent_customers": recent_customers})
+    return Response({"today": {key: value or 0 for key, value in totals.items()}, "all_time": {key: value or 0 for key, value in ever.items()}, "active_jobs": CyberJob.objects.exclude(status__in=["COMPLETED", "CANCELLED"]).count(), "ready_jobs": CyberJob.objects.filter(status="READY").count(), "queued_today": jobs.count(), "top_service": top, "recent_customers": recent_customers})

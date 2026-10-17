@@ -177,3 +177,24 @@ def test_separate_drawers_have_no_shares(lintech):
     shop = lintech
     shop.client.patch("/api/v1/tenancy/settings/", {"money_mode": "SEPARATE_CASH"}, format="json")
     assert shop.client.get("/api/v1/accounting/one-drawer/").json()["shares"] is None
+
+
+def test_each_sale_shows_all_the_money_held_right_after_it(lintech):
+    shop = lintech
+    sell(shop, 1000)
+    open_shift(shop, 11000, 20000)                     # 30,000 the agency's, 1,000 the shop's
+    sell(shop, 300)
+    sell(shop, 200, "MPESA", "SKF6666666")
+    sales = shop.client.get("/api/v1/commerce/sales/").json()["results"]   # newest first
+    assert [D(str(sale["held_after"])) for sale in sales] == [D("31500.00"), D("31300.00"), D("1000.00")]  # the first came before the shift opened
+    shop.client.patch("/api/v1/tenancy/settings/", {"money_mode": "SEPARATE_CASH"}, format="json")
+    assert "held_after" not in shop.client.get("/api/v1/commerce/sales/").json()["results"][0]
+
+
+def test_cyber_and_the_dashboard_show_revenue_since_the_start(lintech):
+    shop = lintech
+    sell(shop, 1000)
+    board = shop.client.get("/api/v1/inventory/dashboard/").json()
+    shop_part = next(unit for unit in board["business_units"] if unit["key"] == "SHOP")
+    assert D(str(shop_part["all_time"]["revenue"])) == D("1000.00")
+    assert "all_time" in shop.client.get("/api/v1/cyber/dashboard/").json()

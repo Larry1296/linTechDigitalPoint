@@ -54,15 +54,15 @@ def test_price_options_and_income_per_service_reach_sales_and_the_books(cyber):
     both_id = both.json()["options"][1]["id"]
     first = _record(owner, service, standard, "40", "p1")
     assert first.status_code == 201, first.content
-    assert _record(owner, service, standard, "40", "p1").json()["today"]["times"] == 1  # double click
+    assert _record(owner, service, standard, "40", "p1").json()["all"]["times"] == 1  # double click
     _record(owner, service, both_id, "10", "p2", payment_method="MPESA", payment_reference="sjk4abc123", customer_name="Thesis")
     _record(owner, typing.variant.product_id, typing.pk, "3", "t1")
     detail = owner.get(f"/api/v1/cyber/income/{service}/").json()
-    assert D(detail["today"]["amount"]) == D("550")
+    assert D(detail["all"]["amount"]) == D("550")
     assert {o["name"]: D(o["month"]["amount"]) for o in detail["options"]} == {"Single side": D("400"), "Both sides": D("150")}
     assert detail["history"][0]["option"] == "Both sides" and detail["history"][0]["payment_method"] == "MPESA"
     summary = owner.get("/api/v1/cyber/income/").json()
-    assert D(summary["totals"]["today"]) == D("700") and len(summary["services"]) == 2
+    assert D(summary["totals"]["all"]) == D("700") and len(summary["services"]) == 2
     with organization_context(org):
         from apps.accounting import statements
         services = next(u for u in statements.profit_and_loss(None, None)["units"] if u["key"] == "services")
@@ -110,7 +110,7 @@ def test_new_service_from_the_income_page_and_returned_sales_drop_out(cyber):
     with organization_context(org):
         from apps.commerce.models import Sale
         Sale.objects.filter(pk=sold["history"][0]["sale_id"]).update(status="REFUNDED")
-    assert D(owner.get(f"/api/v1/cyber/income/{printing.variant.product_id}/").json()["today"]["amount"]) == D("0")
+    assert D(owner.get(f"/api/v1/cyber/income/{printing.variant.product_id}/").json()["all"]["amount"]) == D("0")
 
 
 def test_price_list_groups_kinds_of_a_service_as_options_and_regroups_an_earlier_import(cyber, tmp_path):
@@ -195,7 +195,7 @@ def test_one_customer_several_services_is_one_receipt_and_one_payment(cyber):
         sale = Sale.objects.get(pk=made.json()["sale_id"])
         assert sale.items.count() == 2 and sale.payments.get().amount == D("180") and sale.payments.get().reference == "SJK4ABC123"
     summary = {row["name"]: row for row in owner.get("/api/v1/cyber/income/").json()["services"]}
-    assert D(summary["Printing"]["today"]["amount"]) == D("30") and D(summary["Lamination"]["today"]["amount"]) == D("150")
+    assert D(summary["Printing"]["all"]["amount"]) == D("30") and D(summary["Lamination"]["all"]["amount"]) == D("150")
     # A line that breaks its option's rule stops the whole visit, naming the service.
     bad = till.post("/api/v1/cyber/income/record/", {**visit, "idempotency_key": "v2", "lines": [{"option_id": lamination.pk, "quantity": "3", "amount": "100"}]}, format="json")
     assert bad.status_code == 400 and "Lamination: The price for this is fixed at 150.00" in str(bad.json())
@@ -227,7 +227,7 @@ def test_a_service_is_deleted_and_one_with_income_keeps_its_past_income(cyber):
     removed = owner.post(f"/api/v1/cyber/income/{printed}/delete/")
     assert removed.status_code == 200 and removed.json()["result"] == "removed"
     listing = owner.get("/api/v1/cyber/income/").json()
-    assert listing["services"] == [] and D(str(listing["totals"]["today"])) == D("100")
+    assert listing["services"] == [] and D(str(listing["totals"]["all"])) == D("100")
     desk = owner.get("/api/v1/cyber/services/").json()
     assert (desk.get("results") if isinstance(desk, dict) else desk) == []  # gone from the Service Desk too
     assert _record(owner, printed, printing.pk, "1", "d2").status_code == 400
@@ -262,7 +262,7 @@ def test_a_sale_or_payment_recorded_wrongly_is_deleted_and_the_days_figures_are_
     desk = owner.get("/api/v1/cyber/jobs/").json()
     assert (desk.get("results") if isinstance(desk, dict) else desk) == []  # gone from the Service Desk too
     assert D(str(owner.get("/api/v1/cyber/dashboard/").json()["today"].get("revenue") or 0)) == 0
-    assert D(str(owner.get("/api/v1/cyber/income/").json()["totals"]["today"])) == 0
+    assert D(str(owner.get("/api/v1/cyber/income/").json()["totals"]["all"])) == 0
     with organization_context(org):
         from apps.accounting import statements
         balances, pl = statements.balances(None, None), statements.profit_and_loss(None, None)

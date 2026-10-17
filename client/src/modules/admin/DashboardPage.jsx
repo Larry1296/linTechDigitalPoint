@@ -104,11 +104,9 @@ export function DashboardPage() {
   const owed = data.receivables && !data.receivables.restricted ? data.receivables.outstanding : owner?.customers_owe;
   // Today's key figures first, each one a link to where it is dealt with.
   const kpis = [
-    // Where sales and profit have reached since the start, every record counted; today's part is the small line.
-    ever ? ["Sales so far", money(ever.sales), `${count(ever.count)} ${Number(ever.count) === 1 ? "sale" : "sales"} · ${count(ever.items_sold)} items since ${owner.since || "the start"} · today ${money(today.revenue)}`, on("pos") ? "/admin/sales-history" : null]
-      : ["Sales today", money(today.revenue), `${count(today.sales)} ${Number(today.sales) === 1 ? "sale" : "sales"} · ${count(today.items_sold)} items`, on("pos") ? "/admin/sales-history" : null],
-    ever?.profit != null ? ["Profit so far", profitText(ever.profit, money), `After ${money(ever.cost)} for the items and ${money(ever.expenses)} running costs · today ${profitText(owner.today.profit, money)}`, "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"]
-      : today.profit != null && ["Profit today", profitText(today.profit, money), `After ${money(today.cogs)} for the items and ${money(today.expenses)} running costs`, "/admin/reports", Number(today.profit) < 0 ? "loss" : "profit"],
+    // Where sales and profit have reached since the start, every record counted. Never a "today" figure.
+    ever && ["Sales so far", money(ever.sales), `${count(ever.count)} ${Number(ever.count) === 1 ? "sale" : "sales"} · ${count(ever.items_sold)} items since ${owner.since || "the start"}`, on("pos") ? "/admin/sales-history" : null],
+    ever?.profit != null && ["Profit so far", profitText(ever.profit, money), `After ${money(ever.cost)} for the items and ${money(ever.expenses)} running costs`, "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
     owner?.money && ["Money you should hold", money(owner.money.expected), owner.money.places.map(place => `${place.label} ${money(place.expected)}`).join(" · "), "/admin/money-check"],
     owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
@@ -144,7 +142,7 @@ export function DashboardPage() {
       if (preset === "last-month") { end.setUTCDate(0); start.setUTCFullYear(end.getUTCFullYear(), end.getUTCMonth(), 1); }
       event.target.form.elements.start.value = start.toISOString().slice(0, 10);
       event.target.form.elements.end.value = end.toISOString().slice(0, 10);
-    }}><option value="current-month">Current month</option><option value="today">Today</option><option value="last-seven-days">Last 7 days</option><option value="last-month">Last month</option><option value="current-year">Current year</option><option value="custom">Custom dates</option></select></label>
+    }}><option value="current-month">Current month</option><option value="last-seven-days">Last 7 days</option><option value="last-month">Last month</option><option value="current-year">Current year</option><option value="custom">Custom dates</option></select></label>
     <label>From<input type="date" name="start" onChange={event => { event.target.form.querySelector("select").value = "custom"; }} required defaultValue={period.start} max={data.business_date} /></label>
     <label>To<input type="date" name="end" onChange={event => { event.target.form.querySelector("select").value = "custom"; }} required defaultValue={period.end} max={data.business_date} /></label>
     <button type="submit">Apply dates</button>
@@ -174,7 +172,6 @@ export function DashboardPage() {
         return href ? <a key={label} href={href} className={`dashKpi${tone ? ` ${tone}` : ""}`}>{body}</a> : <article key={label} className={`dashKpi${tone ? ` ${tone}` : ""}`}>{body}</article>;
       })}
     </section>
-    {Number(today.revenue) < 0 && <p className="formNotice formNoticeInfo">Sales are below zero today because a price correction or return was recorded today for a sale made on an earlier day. The earlier day's sales are not changed; the correction is counted today.</p>}
 
     <div className="dashColumns">
       <div className="dashMain">
@@ -208,9 +205,9 @@ export function DashboardPage() {
 
       <aside className="dashSide" aria-label="Money and stock now">
         <OwnerSummary summary={owner} money={money} part="money" />
-        <section className="dashCard"><h2>Each part of the business today</h2>
+        <section className="dashCard"><h2>Each part of the business since the start</h2>
           {units.map(unit => <article key={unit.key} className="dashUnit"><h3>{unit.name}</h3>{unit.restricted ? <p>Restricted</p> : <>
-            <p className="dashUnitFigure"><strong>{money(unit.revenue)}</strong> <span>sales · {profitText(unit.profit, money)}</span></p>
+            <p className="dashUnitFigure"><strong>{money(unit.all_time?.revenue)}</strong> <span>{unit.key === "MPESA" ? "commission" : "sales"}{unit.all_time?.profit != null && ` · ${profitText(unit.all_time.profit, money)}`}</span></p>
             {unit.key === "SHOP" && <small>Completed sales: {count(data.retail.sales)}</small>}
             {unit.key === "CYBER" && <small>Jobs in progress: {count(cyber.active_jobs)} · Ready to collect: {count(cyber.ready_jobs)} · New today: {count(cyber.jobs_today)}</small>}
             {unit.key === "MPESA" && <small>Shifts open: {count(mpesa.open_sessions)} · Transactions today: {count(mpesa.transaction_count)} · Deposits {money(mpesa.deposits)} · Withdrawals {money(mpesa.withdrawals)}</small>}

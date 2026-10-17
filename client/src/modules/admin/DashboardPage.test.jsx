@@ -8,7 +8,7 @@ const snapshot = () => ({
   organization: { id: 1, name: "Alpha Services", business_type: "SERVICES", currency: "KES", timezone: "Africa/Nairobi" },
   generated_at: "2026-09-21T09:00:00Z", business_date: "2026-09-21", financial_scope: "enabled_operations",
   today: { revenue: "120", cogs: null, expenses: null, profit: null, sales: 1, items_sold: 2 },
-  business_units: [{ key: "CYBER", name: "Services", enabled: true, revenue: "120", profit: null, expenses: null }],
+  business_units: [{ key: "CYBER", name: "Services", enabled: true, revenue: "120", profit: null, expenses: null, all_time: { revenue: "120", profit: null } }],
   cyber: { active_jobs: 2, ready_jobs: 1, jobs_today: 3 }, inventory: { restricted: true }, orders: { restricted: true }, mpesa: {},
   financial_trend: [{ month: "2026-09", sales: "120", profit: null, purchases: null, cogs: null, expenses: null }],
 });
@@ -29,7 +29,7 @@ it("refreshes figures, reports stale data and recovers", async () => {
   api.mockRejectedValueOnce(new Error("Offline"));
   await act(async () => { vi.advanceTimersByTime(15000); });
   expect(screen.getByRole("status")).toHaveTextContent("Can't update right now");
-  api.mockResolvedValue({ ...snapshot(), today: { ...snapshot().today, revenue: "250" } });
+  api.mockResolvedValue({ ...snapshot(), business_units: [{ ...snapshot().business_units[0], all_time: { revenue: "250", profit: null } }] });
   await act(async () => { vi.advanceTimersByTime(15000); });
   expect(screen.getByRole("status")).not.toHaveTextContent("Can't update right now");
   expect(screen.getByText("KES 250.00")).toBeInTheDocument();

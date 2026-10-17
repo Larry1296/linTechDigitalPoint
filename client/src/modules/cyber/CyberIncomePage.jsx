@@ -18,7 +18,7 @@ const UNITS = [["PER_PAGE", "page", "pages"], ["PER_COPY", "copy", "copies"], ["
   ["PER_HOUR", "hour", "hours"], ["PER_ITEM", "item", "items"], ["FIXED", "", "times"]];
 const unit = (code) => UNITS.find(([value]) => value === code) || UNITS[UNITS.length - 1];
 const per = (code) => (unit(code)[1] ? ` per ${unit(code)[1]}` : "");
-const PERIODS = [["today", "Today"], ["week", "This week"], ["month", "This month"]];
+const PERIODS = [["all", "Since the start"], ["month", "This month"], ["week", "This week"]];
 const when = (value) => new Date(value).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const cents = (value) => Math.round(Number(value || 0) * 100) / 100;
 

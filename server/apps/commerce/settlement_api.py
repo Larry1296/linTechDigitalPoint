@@ -38,9 +38,23 @@ class SalesView(APIView):
         if profit_visible:
             from apps.accounting.statements import running_sale_profits
             profits = running_sale_profits()
+        # One drawer for the whole business: all the money it held right after each sale (the sale's payments included).
+        held = {}
+        if has_business_permission(request.user, 'accounting.view_moneycheck'):
+            from apps.accounting.models import CashEntry
+            from apps.mpesa.combined import held_after
+            from datetime import timedelta
+            paid = {}
+            for key, at in CashEntry.objects.filter(source_key__in=[f'payment:{p.pk}' for s in shown for p in s.payments.all()]).values_list('source_key', 'occurred_at'):
+                paid[key] = at
+            moments = {}
+            for s in shown:
+                at = [paid[f'payment:{p.pk}'] for p in s.payments.all() if f'payment:{p.pk}' in paid and paid[f'payment:{p.pk}'] - s.created_at < timedelta(minutes=5)]
+                moments[s.pk] = max([s.created_at, *at])
+            held = held_after(moments) or {}
         # 'charged' is the amount after returns and price corrections; 'total' stays the original sale total.
         return Response({'count':count, 'profit_visible':profit_visible,
-            'results':[{'id':s.pk, 'number':s.number, 'total':s.total, 'created_at':s.created_at, **({'figures':profits[s.pk]} if s.pk in profits else {}),
+            'results':[{'id':s.pk, 'number':s.number, 'total':s.total, 'created_at':s.created_at, **({'figures':profits[s.pk]} if s.pk in profits else {}), **({'held_after':held[s.pk]} if s.pk in held else {}),
             'charged':sale_amounts(s)[0] if s.status=='COMPLETED' else Decimal(0),
             'customer':s.customer.get_full_name() or s.customer.username if s.customer else 'Walk-in',
             'customer_id':s.customer_id, 'status':s.status, 'due_date':s.due_date,

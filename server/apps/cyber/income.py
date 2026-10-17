@@ -6,7 +6,7 @@ cost and whether its amount varies. Recording income goes through the same job a
 job created and completed in one step), so receipts, materials used, profit and the books stay as for any job.
 """
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.db.models import Count, Sum
@@ -41,7 +41,8 @@ def _earned():
 
 def _periods():
     today = timezone.localdate()
-    return {"today": today, "week": today - timedelta(days=today.weekday()), "month": today.replace(day=1)}
+    # Revenue since the start leads; there is no "today" figure (the owner follows where income has reached).
+    return {"all": date(1900, 1, 1), "month": today.replace(day=1), "week": today - timedelta(days=today.weekday())}
 
 
 def _by_variant(rows):

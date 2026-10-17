@@ -1,7 +1,7 @@
 import { profitText, stockText } from "./plainMoney";
 
 // The first thing on the dashboard: every part of the business together. Products, services and M-Pesa commission, what
-// the sold items really cost, running costs and the profit or loss, today and since the start; then the money the owner
+// the sold items really cost, running costs and the profit or loss since the start (never a "today" figure); then the money the owner
 // should be holding, added up step by step from the cash book with what each part brought into it, and the M-Pesa
 // agency's cash and float beside it: the business's stock for the agency, like goods on the shelves, whose profit is
 // the commission. Parts the viewer may not see are left out.
@@ -9,7 +9,7 @@ import { profitText, stockText } from "./plainMoney";
 export function OwnerSummary({ summary, money, part }) {
   if (!summary) return null;
   const { today, all_time: all, money: held } = summary;
-  const showStock = [today.stock_corrections, all.stock_corrections].some(value => Number(value || 0) !== 0);
+  const showStock = Number(all.stock_corrections || 0) !== 0;
   const rows = [
     today.products != null && ["Products sold", today.products, all.products, money],
     today.services != null && ["Services (printing, charging…)", today.services, all.services, money],
@@ -28,9 +28,9 @@ export function OwnerSummary({ summary, money, part }) {
     <p>{today.commission != null ? "Every part of the business together. From the M-Pesa agency the commission is the profit. Its cash and float are your business's stock for the agency, like goods on the shelves: they make the commission, they are not profit themselves." : "Every part of the business together."}</p>
     <div className="trendTable"><table>
       <caption>Sales, costs and profit</caption>
-      <thead><tr><th scope="col">What</th><th scope="col">So far, since you started{summary.since ? ` (${summary.since})` : ""}</th><th scope="col">Of it, today</th></tr></thead>
-      <tbody>{rows.map(([label, day, ever, show, strong]) => <tr key={label} className={strong ? "ownerSummaryTotal" : undefined}>
-        <th scope="row">{label}</th><td>{show(ever)}</td><td>{show(day)}</td></tr>)}</tbody>
+      <thead><tr><th scope="col">What</th><th scope="col">So far, since you started{summary.since ? ` (${summary.since})` : ""}</th></tr></thead>
+      <tbody>{rows.map(([label, , ever, show, strong]) => <tr key={label} className={strong ? "ownerSummaryTotal" : undefined}>
+        <th scope="row">{label}</th><td>{show(ever)}</td></tr>)}</tbody>
     </table></div></>}
     {cash && held && <div className="ownerSummaryMoney">
       {sales ? <h3>Money you should be holding now</h3> : <h2 id="owner-summary-title-money">Money you should be holding now</h2>}

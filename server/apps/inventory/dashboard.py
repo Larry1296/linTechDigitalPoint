@@ -192,14 +192,18 @@ def dashboard_snapshot(request):
                   'restricted': not bool(visible_units)},
         'business_units': [], 'financial_trend': [],
     }
+    ever_rows = pnl_rows(date(1900, 1, 1), date(9999, 12, 31))  # since the start, records dated ahead included
     for key, name, module, permission in UNITS:
         allowed = key in visible_units
         unit = accrual_totals(daily, [key])
+        ever = accrual_totals(ever_rows, [key]) if allowed else None
+        if ever is not None and not profit_visible:
+            ever.update(cogs=None, expenses=None, stock_corrections=None, profit=None)
         if not allowed:
             unit = {field: None for field in unit}
         elif not profit_visible:
             unit.update(cogs=None, expenses=None, stock_corrections=None, profit=None)
-        data['business_units'].append({'key': key, 'name': name, 'enabled': module in enabled, 'restricted': not allowed, **unit})
+        data['business_units'].append({'key': key, 'name': name, 'enabled': module in enabled, 'restricted': not allowed, **unit, 'all_time': ever})
         if key == 'SHOP':
             data['retail'] = {**unit, 'sales': sales.exclude(channel=Sale.CYBER).count() if allowed else None, 'restricted': not allowed}
         elif key == 'CYBER':

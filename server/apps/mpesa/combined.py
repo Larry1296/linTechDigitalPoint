@@ -135,3 +135,39 @@ def shares(organization=None, profit_visible=True):
         part.update({field: figures[field] if profit_visible else None for field in ("cogs", "expenses", "profit")})
         parts.append(part)
     return {"total": sum((part["amount"] for part in parts), ZERO), "parts": parts}
+
+
+def held_after(moments, organization=None):
+    """With one drawer: all the money the business held (the money in operation) at each of ``moments``, {key: amount}.
+    The business's own money from the cash book up to then, plus the agency's cash and float then: the open shift's
+    opening and its transactions up to then, or what the shift closed with. None when the parts keep their money apart."""
+    if not combined(organization) or not moments:
+        return None
+    from bisect import bisect_right
+    from apps.accounting.models import CashEntry
+    from .models import MpesaOutlet, MpesaSession, MpesaTransaction
+    methods = ["CASH", "MPESA"] if sale_mpesa_to(organization) == AGENT_LINE else ["CASH"]
+    entries = list(CashEntry.objects.filter(account__payment_method__in=methods).order_by("occurred_at", "pk").values_list("occurred_at", "amount"))
+    times, running, total = [at for at, _ in entries], [], ZERO
+    for _, value in entries:
+        total += value
+        running.append(total)
+    shifts = []
+    for outlet in MpesaOutlet.objects.filter(active=True):
+        for session in outlet.sessions.order_by("opened_at", "pk"):
+            moves = list(MpesaTransaction.objects.filter(session=session).order_by("occurred_at", "pk").values_list("occurred_at", "cash_delta", "float_delta"))
+            shifts.append((outlet.pk, session, [at for at, _, _ in moves], moves))
+
+    def agency(moment):
+        held = {}
+        for outlet, session, move_times, moves in shifts:
+            if session.opened_at > moment:
+                continue
+            if session.status == MpesaSession.CLOSED and session.closed_at and session.closed_at <= moment:
+                value = (session.closing_cash_actual or ZERO) + (session.closing_float_actual or ZERO)
+            else:
+                value = session.opening_cash + session.opening_float + sum((cash + line for _, cash, line in moves[:bisect_right(move_times, moment)]), ZERO)
+            held[outlet] = value  # the latest shift opened by then
+        return sum(held.values(), ZERO)
+
+    return {key: (running[index - 1] if (index := bisect_right(times, moment)) else ZERO) + agency(moment) for key, moment in moments.items()}

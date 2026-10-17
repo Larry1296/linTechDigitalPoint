@@ -134,14 +134,14 @@ export function CyberDashboardPage() {
       )}
       {showReceipt && receiptSale && <ReceiptPanel saleId={receiptSale} onClose={() => setShowReceipt(false)} />}
       <div className="metrics">
-        <MetricCard label="Today's revenue">
-          {businessCurrency()} {dashboard.today.revenue}
+        <MetricCard label="Revenue since the start">
+          {businessCurrency()} {dashboard.all_time?.revenue ?? 0}
         </MetricCard>
         <MetricCard label="Active jobs">{dashboard.active_jobs}</MetricCard>
         <MetricCard label="Ready">{dashboard.ready_jobs}</MetricCard>
         <MetricCard label="Completed today">{dashboard.today.jobs}</MetricCard>
         <MetricCard label="Average job">
-          {businessCurrency()} {dashboard.today.average}
+          {businessCurrency()} {Number(dashboard.all_time?.average || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
         </MetricCard>
       </div>
       <div className="deskGrid">

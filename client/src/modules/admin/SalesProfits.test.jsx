@@ -26,3 +26,10 @@ it("stays hidden from someone who may not see profit", async () => {
   await waitFor(() => expect(api).toHaveBeenCalled());
   await waitFor(() => expect(container).toBeEmptyDOMElement());
 });
+
+it("with one drawer shows all the money held right after each sale", async () => {
+  api.mockResolvedValue({ count: 1, profit_visible: true, results: [{ ...sale(1, "S-1", { sales: "500", cost: "200", profit: "300", profit_so_far: "300" }), held_after: "31500" }] });
+  render(<SalesProfits money={money} timezone="Africa/Nairobi" refreshKey="0" />);
+  expect(await screen.findByRole("columnheader", { name: "Money held after" })).toBeInTheDocument();
+  expect(screen.getByRole("row", { name: /S-1 .* KSh 300 profit KSh 31,500/ })).toBeInTheDocument();
+});

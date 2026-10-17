@@ -16,9 +16,9 @@ const summary = {
 it("shows sales, true cost, profit or loss and the money the owner should hold", () => {
   render(<OwnerSummary summary={summary} money={money} />);
   const row = (label) => screen.getByRole("row", { name: new RegExp(label) });
-  expect(row("Services")).toHaveTextContent("KSh 350.00KSh 20.00");
+  expect(row("Services")).toHaveTextContent("KSh 350.00");
+  expect(row("Services")).not.toHaveTextContent("KSh 20.00");  // no "today" figure: only since the start
   expect(row("What the sold items cost you")).toHaveTextContent("KSh 1,552.80");
-  expect(row("Profit or loss")).toHaveTextContent("KSh 30.00 loss");
   expect(row("Profit or loss")).toHaveTextContent("KSh 1,207.20 profit");
   expect(screen.getByText("Spent on running costs").closest("div")).toHaveTextContent("− KSh 50.00");
   expect(screen.queryByText("Paid to suppliers")).toBeNull();

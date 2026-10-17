@@ -13,7 +13,7 @@ const STAFF = ["cyber.view_cyberjob", "cyber.add_cyberjob", "cyber.complete_cybe
 const OWNER = [...STAFF, "cyber.change_cyberjobline", "cyber.add_cyberserviceprofile", "cyber.change_cyberserviceprofile", "catalog.add_product",
   "catalog.add_productvariant", "catalog.change_productvariant", "catalog.change_product", "catalog.add_category", "accounting.view_profit"];
 const p = (amount = "0", units = "0", times = 0) => ({ amount, units, times });
-const periods = (amount, units, times) => ({ today: p(amount, units, times), week: p(amount, units, times), month: p(amount, units, times) });
+const periods = (amount, units, times) => ({ all: p(amount, units, times), week: p(amount, units, times), month: p(amount, units, times) });
 const option = (id, name, extra = {}) => ({ id, name, price: "10.00", minimum_price: "0.00", billing_unit: "PER_PAGE", price_varies: false, active: true,
   cost: "0.00", ...periods(), ...extra });
 const GROUPS = [{ id: 1, name: "Printing & Copying", subgroups: [] }, { id: 3, name: "Finishing & Files", subgroups: [] },
@@ -30,7 +30,7 @@ beforeEach(() => { vi.clearAllMocks(); perms.list = STAFF; });
 
 const overview = async () => {
   api.mockImplementation(async (path, options) => (options?.method === "POST" ? { ...printing } : {
-    services: [printing, lamination, kra], groups: GROUPS, totals: { today: "400.00", week: "400.00", month: "400.00" } }));
+    services: [printing, lamination, kra], groups: GROUPS, totals: { all: "400.00", week: "400.00", month: "400.00" } }));
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   return screen.findByRole("form", { name: "Record income" });
 };
@@ -123,7 +123,7 @@ it("records one customer's visit: colour printing with design for 30 and three A
   const colour = option(43, "Colour with design", { price: "0.00", billing_unit: "FIXED", price_varies: true });
   const withColour = { ...printing, options: [...printing.options, colour] };
   api.mockImplementation(async (path, opts) => (opts?.method === "POST" ? { sale_id: 5, receipt_number: "CYB-5", total: "180.00" } : {
-    services: [withColour, lamination, kra], groups: GROUPS, totals: { today: "0", week: "0", month: "0" } }));
+    services: [withColour, lamination, kra], groups: GROUPS, totals: { all: "0", week: "0", month: "0" } }));
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
   const first = within(form).getByRole("group", { name: "Service 1" });
@@ -157,7 +157,7 @@ it("lets the owner add a service from the dropdowns; it is then picked on that l
   let services = [printing, lamination, kra];
   api.mockImplementation(async (path, options) => {
     if (options?.method === "POST") { services = [...services, binding]; return binding; }
-    return { services, groups: GROUPS, totals: { today: "0", week: "0", month: "0" } };
+    return { services, groups: GROUPS, totals: { all: "0", week: "0", month: "0" } };
   });
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
