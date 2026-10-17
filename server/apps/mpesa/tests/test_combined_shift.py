@@ -119,3 +119,27 @@ def test_separate_drawers_keep_the_agency_shift_to_the_agencys_money(lintech):
     opened = open_shift(shop, 3000, 5000)
     assert opened.status_code == 201 and opened.json()["business_cash_at_open"] is None
     assert shop.client.get("/api/v1/mpesa/dashboard/").json()["combined"] is None
+
+
+def test_every_sale_adds_to_money_in_operation_with_one_drawer(lintech):
+    shop = lintech
+    sell(shop, 1000)
+    shift = open_shift(shop, 11000, 20000).json()
+    board = shop.client.get("/api/v1/mpesa/dashboard/").json()
+    # All that was counted, the shop's 1,000 included.
+    assert (D(str(board["in_operation"]["total"])), D(str(board["in_operation"]["opening"]))) == (D("31000.00"), D("31000.00"))
+    sell(shop, 300)
+    sell(shop, 200, "MPESA", "SKC3333333")
+    board = shop.client.get("/api/v1/mpesa/dashboard/").json()
+    assert D(str(board["in_operation"]["total"])) == D("31500.00")
+    assert (D(str(board["cash"])), D(str(board["float"]))) == (D("10000.00"), D("20000.00"))  # the agency's part, for closing
+    outlet = shop.client.get("/api/v1/mpesa/outlets/").json()
+    outlet = (outlet["results"] if isinstance(outlet, dict) else outlet)[0]
+    assert D(str(outlet["money_in_operation"]["total"])) == D("31500.00")
+    home = shop.client.get("/api/v1/inventory/dashboard/").json()
+    assert D(str(home["mpesa"]["in_operation"])) == D("31500.00")
+    assert D(str(home["mpesa"]["business_cash"])) == D("1300.00")
+    # Closed, a later sale still adds to it.
+    shop.client.post(f"/api/v1/mpesa/sessions/{shift['id']}/reconcile/", {"actual_cash": "11300", "actual_float": "20200"}, format="json")
+    sell(shop, 100)
+    assert D(str(shop.client.get("/api/v1/inventory/dashboard/").json()["mpesa"]["in_operation"])) == D("31600.00")

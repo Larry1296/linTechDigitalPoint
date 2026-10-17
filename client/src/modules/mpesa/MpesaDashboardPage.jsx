@@ -128,7 +128,7 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
       <FormError title="Could not change the outlet." message={error} />
       <ul className="outletCards">
         {outlets.map((outlet) => {
-          const money = outlet.money_in_operation;
+          const money = expectedCount(outlet.money_in_operation);
           if (editing === outlet.id) return <li key={outlet.id}>
             <OutletForm outlet={outlet} onCancel={() => setEditing(null)}
               onSave={async (body) => { await updateMpesaOutlet(outlet.id, body); setEditing(null); await onChanged(); }} />
@@ -207,7 +207,7 @@ function CloseShift({ dashboard, onClose, onCancel }) {
   const expectedFloat = Number(dashboard.float) + Number(combined?.business_line || 0);
   const cashVariance = cash - expectedCash;
   const floatVariance = (Number(float) || 0) - expectedFloat;
-  const total = cash + (Number(float) || 0) - Number(combined?.business_cash || 0) - Number(combined?.business_line || 0);
+  const total = cash + (Number(float) || 0);
   const opening = Number(dashboard.in_operation.opening);
   const variance = Math.abs(cashVariance) >= 0.005 || (float !== "" && Math.abs(floatVariance) >= 0.005);
   const submit = async (event) => {
@@ -232,7 +232,7 @@ function CloseShift({ dashboard, onClose, onCancel }) {
         <dl className="reportPosition">
           <div><dt>Cash: counted vs expected</dt><dd>{amount(cash)} vs {amount(expectedCash)}{Math.abs(cashVariance) >= 0.005 && ` (${cashVariance > 0 ? "+" : ""}${cashVariance.toLocaleString()})`}</dd></div>
           <div><dt>{combined?.sale_mpesa_to === "AGENT_LINE" ? "Agent line" : "Float"}: entered vs expected</dt><dd>{amount(float)} vs {amount(expectedFloat)}{float !== "" && Math.abs(floatVariance) >= 0.005 && ` (${floatVariance > 0 ? "+" : ""}${floatVariance.toLocaleString()})`}</dd></div>
-          <div><dt>{combined ? "The agency's money in operation now vs at opening" : "Money in operation now vs at opening"}</dt><dd><strong>{amount(total)}</strong> vs {amount(opening)} ({total - opening >= 0 ? "+" : ""}{(total - opening).toLocaleString()})</dd></div>
+          <div><dt>Money in operation now vs at opening</dt><dd><strong>{amount(total)}</strong> vs {amount(opening)} ({total - opening >= 0 ? "+" : ""}{(total - opening).toLocaleString()})</dd></div>
         </dl>
         {variance && <FormField label="Why is there a difference? (required)" name="reason" required value={reason}
           onChange={(event) => setReason(event.target.value)} />}
@@ -370,6 +370,8 @@ export function MpesaDashboardPage() {
   const activeOutlets = outlets.filter((outlet) => outlet.active);
   const openingAt = activeOutlets.find((outlet) => String(outlet.id) === openingOutlet) || activeOutlets[0];
   const lastClose = expectedCount(openingAt?.money_in_operation);
+  // One drawer for the whole business: the cash and float shown are all the money there, the shop's sales included.
+  const whole = expectedCount(dashboard);
   const open = async (event) => {
     event.preventDefault();
     const gaps = openingGaps(lastClose, countTotal(openingCount), openingFloat, opening);
@@ -441,7 +443,7 @@ export function MpesaDashboardPage() {
   };
   return (
     <>
-      <span className="eyebrow">Agent money (kept separate from the shop)</span>
+      <span className="eyebrow">{dashboard.combined ? "Agent money (one drawer with the shop)" : "Agent money (kept separate from the shop)"}</span>
       <h1>M-Pesa Agent</h1>
       <p className="privacyNotice">
         Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
@@ -452,9 +454,11 @@ export function MpesaDashboardPage() {
         <MetricCard label="Money in operation">
           {amount(dashboard.in_operation.total)}
           {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
+          {dashboard.combined && <small className="muted"> · one drawer with the shop, so every sale adds to it: {amount(dashboard.combined.business_cash)} in
+            cash{dashboard.combined.sale_mpesa_to === "AGENT_LINE" ? ` and ${amount(dashboard.combined.business_line)} on the line` : ""} is from sales, less what was spent</small>}
         </MetricCard>
-        <MetricCard label="Current cash">{businessCurrency()} {dashboard.cash}</MetricCard>
-        <MetricCard label="Current float">{businessCurrency()} {dashboard.float}</MetricCard>
+        <MetricCard label="Current cash">{amount(whole.cash)}</MetricCard>
+        <MetricCard label="Current float">{amount(whole.float)}</MetricCard>
         {commissionNow && <MetricCard label="Commission balance">
           {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
           {commissionNow.detail && <small className="muted"> · {commissionNow.detail}</small>}

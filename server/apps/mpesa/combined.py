@@ -64,6 +64,16 @@ def business_money(organization=None):
     return cash, line
 
 
+def with_business(cash, line, organization=None):
+    """Money in operation as the owner sees it: one drawer, so every sale adds to it. In a combined business the
+    agency's cash and float plus the business's own money in the same drawer and on the same line now; otherwise the
+    agency's alone. (cash, line, business_cash, business_line); the business's parts are None when not combined."""
+    if cash is None or not combined(organization):
+        return cash, line, None, None
+    business_cash, business_line = business_money(organization)
+    return cash + business_cash, line + business_line, business_cash, business_line
+
+
 def business_since(since, organization=None):
     """What the business's own money in the drawer and on the line did since ``since``, part by part:
     [{"label", "cash", "line"}], e.g. Shop received from customers +8,500 cash, +1,200 on the line."""

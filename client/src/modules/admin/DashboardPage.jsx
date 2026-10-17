@@ -115,6 +115,7 @@ export function DashboardPage() {
     // Between shifts it shows what the last shift closed with, never 0.
     mpesaUnit && ["M-Pesa money in operation", money(mpesa.in_operation ?? Number(mpesa.cash || 0) + Number(mpesa.float || 0)),
       [`Cash ${money(mpesa.cash)} · Float ${money(mpesa.float)}`,
+        mpesa.business_cash != null && `One drawer with the shop: ${money(Number(mpesa.business_cash) + Number(mpesa.business_line || 0))} of it is from sales`,
         mpesa.commission_balance != null && `Commission balance ${money(mpesa.commission_balance)} (worked out)`,
         mpesa.live ? "Shift open now" : mpesa.as_of && `As the last shift closed, ${new Date(mpesa.as_of).toLocaleString(undefined, { timeZone: organization.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
       ].filter(Boolean).join(" · "), "/admin/mpesa"],

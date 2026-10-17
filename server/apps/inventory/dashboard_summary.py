@@ -49,7 +49,9 @@ def agency_money(with_commission=False):
     """The M-Pesa agency's money in operation (cash in its drawer and float on its line), as last recorded on each
     outlet: the open shift as it stands, or else what the last shift closed with. The business's stock for the agency
     (like goods on the shelves): never profit; the commission it earns is. ``live`` is whether a shift is open; ``as_of`` is when the last closed shift closed when none is.
-    ``with_commission`` adds the commission balance the app works out for each outlet. None when the business has no agency."""
+    ``with_commission`` adds the commission balance the app works out for each outlet. None when the business has no agency.
+    With one drawer for the whole business it is all the money in the drawer and on the line (``business_cash`` and
+    ``business_line`` say how much of it is the business's own, from sales)."""
     from apps.mpesa.commission_learning import balance_now
     from apps.mpesa.models import MpesaOutlet, MpesaSession
     from apps.mpesa.services import session_balances
@@ -74,8 +76,12 @@ def agency_money(with_commission=False):
             if session.closed_at and (as_of is None or session.closed_at > as_of):
                 as_of = session.closed_at
         cash, electronic_float = cash + in_drawer, electronic_float + on_line
+    # One drawer for the whole business: the shop's money is in the same drawer and on the same line, so every sale adds to it.
+    from apps.mpesa.combined import with_business
+    cash, electronic_float, business_cash, business_line = with_business(cash, electronic_float)
     result = {'cash': cash, 'float': electronic_float, 'total': cash + electronic_float, 'live': live,
-              'as_of': None if live or as_of is None else timezone.localtime(as_of)}
+              'as_of': None if live or as_of is None else timezone.localtime(as_of),
+              'business_cash': business_cash, 'business_line': business_line}
     if with_commission:
         result['commission_balance'] = commission
     return result

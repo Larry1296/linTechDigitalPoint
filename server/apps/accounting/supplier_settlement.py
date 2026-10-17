@@ -36,7 +36,7 @@ def _supplier(purchase):
 
 def _source(entry):
     """Where a supplier payment's money came from, from the entries recorded beside it."""
-    key = entry.source_key.split(":", 1)[1]
+    key = entry.source_key.partition(":")[2] or entry.source_key  # older payments were saved without a "kind:" prefix
     if CashEntry.objects.filter(source_key=f"owner-pays:{key}").exists():
         return "OWNER"
     from .models import InvestmentMovement

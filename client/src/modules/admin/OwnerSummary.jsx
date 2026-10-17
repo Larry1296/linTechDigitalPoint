@@ -46,7 +46,9 @@ export function OwnerSummary({ summary, money, part }) {
       {Number(summary.customers_owe) > 0 && <p>Customers still owe you <strong>{money(summary.customers_owe)}</strong> for things already sold. That is part of your sales but not yet in your hands.</p>}
       <p>Count your money under <a href="/admin/money-check">Money check</a> to see if anything is missing.</p>
       {summary.agency && <p className="ownerSummaryAgency"><b>M-Pesa money in operation: {money(summary.agency.total)}</b> (cash {money(summary.agency.cash)} ·
-        float {money(summary.agency.float)}). It is your business's stock for the agency, like goods on the shelves: counted on the M-Pesa desk, so it is not in the total above. The profit it makes is its commission.</p>}
+        float {money(summary.agency.float)}). {summary.agency.business_cash != null
+          ? `All the money in the one drawer and on the agent line, so every sale adds to it; the ${money(Number(summary.agency.business_cash) + Number(summary.agency.business_line || 0))} from sales above is part of it, not extra. The rest is your business's stock for the agency, like goods on the shelves; the profit it makes is its commission.`
+          : "It is your business's stock for the agency, like goods on the shelves: counted on the M-Pesa desk, so it is not in the total above. The profit it makes is its commission."}</p>}
     </div>}
   </section>;
 }
