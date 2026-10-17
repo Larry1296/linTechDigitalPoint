@@ -46,7 +46,8 @@ export function CorrectTransaction({ entry, onDone }) {
         {deposit && <label>ID number (optional)<input name="customer_id_number" defaultValue={entry.customer_id_number} /></label>}
         {airtime && <label>Sent to (optional)<input name="customer_phone" type="tel" defaultValue={localPhone(entry.customer_phone)} /></label>}
         {airtime && <label>Paid by<select name="paid_by" defaultValue={entry.paid_by}>{AIRTIME_PAID_BY.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
-        {topUp && <label>Money from<select name="paid_by" defaultValue={entry.paid_by || "DRAWER"}>{TOPUP_SOURCES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>}
+        {topUp && <label>Money from<select name="paid_by" defaultValue={entry.paid_by || "DRAWER"}>{[...TOPUP_SOURCES, ...(entry.paid_by && !TOPUP_SOURCES.some(([id]) => id === entry.paid_by)
+          ? [[entry.paid_by, `Same as before: ${entry.paid_by.replace(":", "'s money, ").toLowerCase()}`]] : [])].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>}
         {(deposit || airtime || entry.transaction_type === "CUSTOMER_WITHDRAWAL") && <label>Commission balance after (optional)
           <input name="commission_balance" type="number" inputMode="decimal" min="0" step="0.01" defaultValue={entry.commission_balance ?? ""} /></label>}
         <label>Transaction ID<input name="provider_reference" defaultValue={entry.provider_reference || ""} placeholder="If known" /></label>

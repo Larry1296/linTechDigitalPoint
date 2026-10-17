@@ -414,7 +414,8 @@ def dashboard(request):
     opening = (session.opening_cash + session.opening_float + (session.business_cash_at_open or 0) + (session.business_line_at_open or 0)) if session else 0
     in_operation = {"total": whole_cash + whole_line, "opening": opening}
     from .commission_learning import for_shift, forecast
-    return Response({"combined": combined_view(session), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    from .services import agency_sources
+    return Response({"sources": agency_sources(), "combined": combined_view(session), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):

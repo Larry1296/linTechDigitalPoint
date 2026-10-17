@@ -111,7 +111,9 @@ class MpesaTransaction(TenantModel):
     paid_by = models.CharField(max_length=12, blank=True, choices=[("CASH", "Cash"), ("MPESA_FLOAT", "M-Pesa to this agent line"),
                                                                    ("MPESA_OTHER", "M-Pesa to another number"),
                                                                    ("DRAWER", "Cash from the agency drawer"),
-                                                                   ("OUTSIDE", "Money from outside the agency")])
+                                                                   ("OUTSIDE", "Money from outside the business"),
+                                                                   *[(f"{part}:{place}", f"{part.title()} money: {place.lower()}") for part in ("SHOP", "CYBER")
+                                                                     for place in ("CASH", "MPESA", "BANK", "OTHER")]])
     # Safaricom's commission balance on the agent line right after a deposit, withdrawal or airtime sale, as the
     # operator read it. The rise from the previous reading is what the transaction earned. Optional: never blocks a customer.
     commission_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)

@@ -23,7 +23,8 @@ from django.db.models import Sum
 ZERO = Decimal("0")
 AGENT_LINE, TILL = "AGENT_LINE", "TILL"
 KIND_WORDS = {"INCOME": "received from customers", "EXPENSE": "spent on running costs", "PURCHASE": "paid to suppliers",
-              "LOAN": "lent, less repaid", "INVESTMENT": "put into investments, less taken out", "OPENING": "starting money"}
+              "LOAN": "lent, less repaid", "INVESTMENT": "put into investments, less taken out", "OPENING": "starting money",
+              "TRANSFER": "moved to the M-Pesa agency"}
 
 
 def _organization(organization=None):

@@ -208,6 +208,10 @@ def post_cash_entry(entry):
         lines = paired('2000', account, -entry.amount)
     elif entry.kind == 'OPENING':
         lines = paired(account, '3000', entry.amount)
+    elif entry.kind == 'TRANSFER':
+        # Moved to the M-Pesa agency: the agency's own journal adds its float or cash against equity, this takes it
+        # out of the part's place the same way, so overall the money only moved (place -> agency float or cash).
+        lines = paired('3000', account, -entry.amount)
     else:
         return None  # Sales and agency have their own source posting policies.
     return post_journal(key=f'cash:{entry.pk}', description=entry.reference, lines=lines, branch=entry.branch_id,

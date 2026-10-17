@@ -34,7 +34,7 @@ import { PartBooks } from "../admin/PartBooks";
 import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
-import { TOPUP_SOURCES } from "./topUp";
+import { sourceChoices } from "./topUp";
 
 const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Money in shows as +, money out as −, no change as —.
@@ -418,15 +418,15 @@ export function MpesaDashboardPage() {
     const values = await askForm({
       title: topUp ? "Record float top-up" : "Record cash rebalance",
       text: topUp
-        ? "Electronic float added to the agent line. Say where the money came from: cash from the drawer turned into float lowers the cash by the same amount; money from outside the agency only adds float."
-        : "Cash brought into the agency drawer from outside (for example from the bank or the owner).",
+        ? "Electronic float added to the agent line. Say where the money came from: the agency's own drawer cash turned into float lowers its cash; another part's money goes down by the same amount; money from outside the business is the owner's money put in."
+        : "Cash brought into the agency drawer. Say where it came from: another part's money goes down by the same amount; money from outside the business is the owner's money put in.",
       confirmButtonText: "Record transaction",
       fields: [
-        ...(topUp ? [{ name: "source", label: "Where the money came from", type: "select", required: true,
-          options: [["", "Choose…"], ...TOPUP_SOURCES] }] : []),
+        { name: "source", label: "Where the money came from", type: "select", required: true,
+          options: sourceChoices(dashboard.sources, amount, { withDrawer: topUp }) },
         { name: "amount", label: topUp ? "Float bought" : "Cash received", type: "number", required: true },
         { name: "reference", label: "Reference, e.g. the M-Pesa code" },
-        { name: "notes", label: "Source or notes", placeholder: topUp ? "e.g. bought from the bank agent" : "e.g. from the owner" },
+        { name: "notes", label: "Notes", placeholder: topUp ? "e.g. bought from the bank agent" : "e.g. brought from the shop" },
       ],
     });
     if (!values) return;
@@ -435,7 +435,7 @@ export function MpesaDashboardPage() {
         session: dashboard.session.id,
         transaction_type: type,
         amount: values.amount,
-        ...(topUp ? { paid_by: values.source } : {}),
+        paid_by: values.source,
         provider_reference: values.reference || undefined,
         notes: values.notes,
         idempotency_key: crypto.randomUUID(),

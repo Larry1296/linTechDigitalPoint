@@ -63,7 +63,7 @@ class CashEntry(PostedRecord):
     account = models.ForeignKey(CashAccount, on_delete=models.PROTECT)
     business_unit = models.CharField(max_length=5, choices=BusinessUnit.choices)
     occurred_at = models.DateTimeField(default=timezone.now)
-    kind = models.CharField(max_length=20, choices=[(x, x) for x in ['INCOME', 'EXPENSE', 'PURCHASE', 'PRINCIPAL', 'OPENING', 'LOAN', 'INVESTMENT']])
+    kind = models.CharField(max_length=20, choices=[(x, x) for x in ['INCOME', 'EXPENSE', 'PURCHASE', 'PRINCIPAL', 'OPENING', 'LOAN', 'INVESTMENT', 'TRANSFER']])
     amount = models.DecimalField(max_digits=16, decimal_places=2)
     cogs = models.DecimalField(max_digits=16, decimal_places=2, default=0)
     reference = models.CharField(max_length=160)

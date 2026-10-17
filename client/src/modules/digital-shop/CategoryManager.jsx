@@ -140,7 +140,7 @@ export function CategoryManager({ categories, onSaved, onDeleted, canAdd = true,
             <option key={category.id} value={category.id}>{pathOf.get(category.id)}{category.active ? "" : " (inactive)"}</option>
           ))}
         </select></label>
-        {editing && <label><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />Active category</label>}
+        {editing && <label className="checkRow"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} /> Active category</label>}
         <button type="submit" className="categorySubmit" disabled={!name.trim()}>{saving ? "Saving…" : editing ? "Save category" : "Create category"}</button>
         {(editing || parent) && <button type="button" className="secondary" onClick={reset}>Cancel</button>}
       </fieldset>

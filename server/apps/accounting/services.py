@@ -155,7 +155,7 @@ def cancel_expense(*, expense, user, reason):
 
 
 @transaction.atomic
-def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False):
+def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False, allow_transfer=False):
     lock_business()
     entry = CashEntry.objects.select_for_update().get(pk=entry.pk)
     if not reason.strip():
@@ -164,6 +164,8 @@ def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False):
         raise ValidationError('This entry has already been reversed or is a reversal.')
     if entry.kind == 'PRINCIPAL':
         raise ValidationError('Reverse agency principal from the M-Pesa desk so cash and float stay in sync.')
+    if entry.kind == 'TRANSFER' and not allow_transfer:
+        raise ValidationError('Money moved to the M-Pesa agency is corrected on the M-Pesa desk, so both sides stay right.')
     # These cash entries are one side of a larger journal; reversing only the cash would leave the books disagreeing.
     if entry.source_key.startswith('refund:'):
         raise ValidationError('Correct a customer refund from the sale it belongs to, not from the cash book.')

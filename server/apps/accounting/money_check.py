@@ -20,7 +20,8 @@ from .services import post
 PLACES = [("CASH", "Cash in the drawer"), ("MPESA", "Lipa na M-Pesa till"), ("BANK", "Bank"), ("OTHER", "Other")]
 PARTS = [("OPENING", "starting", "Starting money"), ("INCOME", "received", "Received from customers (less refunds)"),
          ("EXPENSE", "expenses", "Spent on running costs"), ("PURCHASE", "suppliers", "Paid to suppliers"),
-         ("LOAN", "loans", "Money lent, less repayments"), ("INVESTMENT", "invested", "Put into investments, less taken out")]
+         ("LOAN", "loans", "Money lent, less repayments"), ("INVESTMENT", "invested", "Put into investments, less taken out"),
+         ("TRANSFER", "to_agency", "Moved to the M-Pesa agency (float or cash)")]
 ZERO = Decimal("0")
 
 

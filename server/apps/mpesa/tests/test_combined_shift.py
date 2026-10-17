@@ -210,3 +210,31 @@ def test_each_part_keeps_its_own_books(lintech):
     agency = shop.client.get("/api/v1/inventory/parts/MPESA/").json()
     assert D(str(agency["money"]["amount"])) == D("30000.00") and D(str(agency["money"]["of"])) == D("31000.00")
     assert shop.client.get("/api/v1/inventory/parts/NOPE/").status_code == 403
+
+
+def test_float_or_cash_from_another_part_comes_out_of_that_parts_money(lintech):
+    shop = lintech
+    shop.client.patch("/api/v1/tenancy/settings/", {"money_mode": "SEPARATE_CASH"}, format="json")
+    sell(shop, 1000)                                   # the shop's cash drawer: 1,000
+    shift = open_shift(shop, 2000, 5000).json()
+    board = shop.client.get("/api/v1/mpesa/dashboard/").json()
+    assert {row["value"]: D(str(row["available"])) for row in board["sources"]}["SHOP:CASH"] == D("1000.00")
+
+    def add(kind, value, source, key):
+        return shop.client.post("/api/v1/mpesa/transactions/", {"session": shift["id"], "transaction_type": kind, "amount": str(value),
+                                                                 "paid_by": source, "idempotency_key": key}, format="json")
+    assert add("FLOAT_TOPUP", 600, "SHOP:CASH", "t1").status_code == 201
+    refused = add("CASH_REBALANCE", 500, "SHOP:CASH", "t2")          # only 400 left with the shop
+    assert refused.status_code == 400 and "only 400.00" in str(refused.json())
+    assert add("CASH_REBALANCE", 300, "OUTSIDE", "t3").status_code == 201  # the owner's pocket: no part goes down
+    board = shop.client.get("/api/v1/mpesa/dashboard/").json()
+    assert (D(str(board["cash"])), D(str(board["float"]))) == (D("2300.00"), D("5600.00"))
+    assert {row["value"]: D(str(row["available"])) for row in board["sources"]}["SHOP:CASH"] == D("400.00")
+    # Reversed on the desk: the shop gets its money back.
+    from apps.mpesa.models import MpesaTransaction
+    with organization_context(shop.org):
+        topup = MpesaTransaction.objects.get(idempotency_key="t1")
+    assert shop.client.post(f"/api/v1/mpesa/transactions/{topup.pk}/reverse/", {"reason": "wrong", "idempotency_key": "r1"}, format="json").status_code in (200, 201)
+    board = shop.client.get("/api/v1/mpesa/dashboard/").json()
+    assert {row["value"]: D(str(row["available"])) for row in board["sources"]}["SHOP:CASH"] == D("1000.00")
+    assert D(str(board["float"])) == D("5000.00")
