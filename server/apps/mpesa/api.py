@@ -10,7 +10,6 @@ from rest_framework.response import Response
 from apps.core.permissions import HasLinTechPermission
 
 from .models import MpesaCommissionEntry, MpesaOutlet, MpesaReconciliation, MpesaSession, MpesaTransaction
-from .combined import view as combined_view, with_business
 from .services import (add_provider_reference, correct_transaction, open_session, post_transaction, reconcile_session, record_commission_balance,
                        reverse_transaction, session_balances)
 
@@ -34,15 +33,11 @@ def money_in_operation(outlet):
     else:
         cash, electronic_float, updated = session.closing_cash_actual, session.closing_float_actual, timezone.localdate(session.closed_at)
         count = getattr(MpesaReconciliation.objects.filter(session=session).first(), "cash_count", None) or {}
-    # One drawer: the total is all the money there, sales included; cash and float stay the agency's (the desk adds the rest).
-    whole_cash, whole_line, _, _ = with_business(cash, electronic_float, outlet.organization)
-    return {"cash": cash, "float": electronic_float, "total": None if cash is None else whole_cash + whole_line,
+    return {"cash": cash, "float": electronic_float, "total": None if cash is None else cash + electronic_float,
             "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
             "commission_balance": commission["value"], "commission_read": commission["read"],
             "commission_worked_out": commission["worked_out"], "commission_paid_out": commission["paid_out"], "commission_unknown": commission["unknown"],
-            "open_session": session.pk if session and session.status == MpesaSession.OPEN else None,
-            # One drawer for the whole business: the next count includes the business's own money, so it is offered too.
-            "combined": combined_view(organization=outlet.organization)}
+            "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
 
 
 class OutletSerializer(serializers.ModelSerializer):
@@ -409,13 +404,11 @@ def dashboard(request):
     commission = MpesaCommissionEntry.objects.filter(recognized_at__date=today).aggregate(value=Sum("amount"))["value"] or 0
     # Deposits, withdrawals, airtime paid in cash and float bought with cash only swap cash for float, so this total
     # stays put; cash brought in (rebalance), manager adjustments and airtime paid to another number change it.
-    # One drawer for the whole business: all the money there, so every sale adds to it, against all that was counted at opening.
-    whole_cash, whole_line, _, _ = with_business(cash, electronic_float)
-    opening = (session.opening_cash + session.opening_float + (session.business_cash_at_open or 0) + (session.business_line_at_open or 0)) if session else 0
-    in_operation = {"total": whole_cash + whole_line, "opening": opening}
+    # Only the agency's own money, even with one drawer: the shop's and cyber's money is on their own pages.
+    in_operation = {"total": cash + electronic_float, "opening": (session.opening_cash + session.opening_float) if session else 0}
     from .commission_learning import for_shift, forecast
     from .services import agency_sources
-    return Response({"sources": agency_sources(), "combined": combined_view(session), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    return Response({"sources": agency_sources(), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):

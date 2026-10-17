@@ -90,7 +90,7 @@ export function NetWorthPanel({ worth, money }) {
         <thead><tr><th scope="col">Where</th><th scope="col">Now</th><th scope="col">How it is known</th><th scope="col"><span className="visuallyHidden">Action</span></th></tr></thead>
         <tbody>{places.map((item) => (
           <tr key={item.key}>
-            <th scope="row">{item.label}{item.group === "agency" && <small> · M-Pesa agency{item.business_cash != null && `, one drawer with the shop: ${money(Number(item.business_cash) + Number(item.business_line || 0))} of it is from sales`}</small>}</th>
+            <th scope="row">{item.label}{item.group === "agency" && <small> · M-Pesa agency</small>}</th>
             <td className={Number(item.amount) < 0 ? "negative" : undefined}>{money(item.amount)}</td>
             <td>{placeNote(item, money)}{Number(item.amount) < 0 && item.method && " · below zero: money paid out of here was recorded without the money that came in"}</td>
             <td>{item.method || item.group !== "money" ? <a href={LINKS[item.group][0]}>{LINKS[item.group][1]}</a> : null}</td>

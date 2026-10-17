@@ -29,7 +29,6 @@ import { MpesaWithdrawalForm } from "./MpesaWithdrawalForm";
 import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
-import { OneDrawerShare } from "../accounting/OneDrawerShare";
 import { PartBooks } from "../admin/PartBooks";
 import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
@@ -40,7 +39,6 @@ const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimum
 // Money in shows as +, money out as −, no change as —.
 const signedFigure = (value) => (Number(value) > 0 ? `+${figure(value)}` : Number(value) < 0 ? `−${figure(-Number(value))}` : "—");
 const amount = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
-const signedAmount = (value) => `${Number(value) < 0 ? "−" : "+"}${amount(Math.abs(Number(value)))}`;
 
 // How the commission balance was reached since the last reading: commission the app worked out, less what was paid out.
 function commissionSince(money) {
@@ -130,7 +128,7 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
       <FormError title="Could not change the outlet." message={error} />
       <ul className="outletCards">
         {outlets.map((outlet) => {
-          const money = expectedCount(outlet.money_in_operation);
+          const money = outlet.money_in_operation;
           if (editing === outlet.id) return <li key={outlet.id}>
             <OutletForm outlet={outlet} onCancel={() => setEditing(null)}
               onSave={async (body) => { await updateMpesaOutlet(outlet.id, body); setEditing(null); await onChanged(); }} />
@@ -142,8 +140,8 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
                 <div><dt>Agent number</dt><dd>{outlet.agent_reference || "—"}</dd></div>
                 <div><dt>Store number</dt><dd>{outlet.store_number || "—"}</dd></div>
                 <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
-                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : <Split total={money.cash} agency={money.agencyCash} />}</dd></div>
-                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : <Split total={money.float} agency={money.agencyFloat} />}</dd></div>
+                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
+                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
                 <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
               </dl>
               {commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
@@ -167,44 +165,6 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
 }
 
 // Closing: count the drawer, enter the float from the M-Pesa line, and compare the full amount with the opening.
-// One drawer for the whole business (server mpesa/combined.py): the shift counts all the cash in the drawer and all the
-// money on the agent line. What to expect is the agency's part plus the business's own money from sales.
-// With one drawer: all the money there, and under it the agency's own part (what deposits, withdrawals and airtime can
-// use, as the forms show) and the shop's sales money.
-function Split({ total, agency }) {
-  if (agency == null) return amount(total);
-  const shop = Number(total) - Number(agency);
-  return <>{amount(total)}<small className="muted"> · agency {amount(agency)}{shop ? ` + shop sales ${amount(shop)}` : ""}</small></>;
-}
-
-export function expectedCount(money) {
-  const combined = money?.combined;
-  if (!combined || money.cash == null) return money;
-  return { ...money, agencyCash: money.cash, agencyFloat: money.float,
-    cash: Number(money.cash) + Number(combined.business_cash), float: Number(money.float) + Number(combined.business_line) };
-}
-
-function CombinedExpected({ dashboard }) {
-  const combined = dashboard.combined;
-  return <div className="combinedExpected">
-    <p className="muted">This shift counts all the money: the agency's and the business's own sales money, together in the drawer
-      {combined.sale_mpesa_to === "AGENT_LINE" ? " and on the agent line" : ""}.</p>
-    <table className="combinedTable">
-      <caption>What to expect at closing</caption>
-      <thead><tr><th scope="col">Expected</th><th scope="col">Drawer</th>{combined.sale_mpesa_to === "AGENT_LINE" && <th scope="col">Agent line</th>}</tr></thead>
-      <tbody>
-        <tr><th scope="row">The agency's (opening, deposits and withdrawals)</th><td>{amount(dashboard.cash)}</td>{combined.sale_mpesa_to === "AGENT_LINE" && <td>{amount(dashboard.float)}</td>}</tr>
-        <tr><th scope="row">The business's at opening</th><td>{amount(combined.business_cash_at_open)}</td>{combined.sale_mpesa_to === "AGENT_LINE" && <td>{amount(combined.business_line_at_open)}</td>}</tr>
-        {(combined.since_open || []).map((row) => <tr key={row.label}><th scope="row">{row.label}, since opening</th>
-          <td>{Number(row.cash) ? signedAmount(row.cash) : "—"}</td>{combined.sale_mpesa_to === "AGENT_LINE" && <td>{Number(row.line) ? signedAmount(row.line) : "—"}</td>}</tr>)}
-      </tbody>
-      <tfoot><tr><th scope="row">Expected now</th><td>{amount(Number(dashboard.cash) + Number(combined.business_cash))}</td>
-        {combined.sale_mpesa_to === "AGENT_LINE" ? <td>{amount(Number(dashboard.float) + Number(combined.business_line))}</td> : null}</tr></tfoot>
-    </table>
-    {combined.sale_mpesa_to !== "AGENT_LINE" && <p className="muted">M-Pesa paid for sales goes to the business's own till, so the agent line holds the agency's float only.</p>}
-  </div>;
-}
-
 function CloseShift({ dashboard, onClose, onCancel }) {
   const [count, setCount] = useState(emptyCount);
   const [float, setFloat] = useState("");
@@ -212,9 +172,8 @@ function CloseShift({ dashboard, onClose, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const cash = countTotal(count);
-  const combined = dashboard.combined;
-  const expectedCash = Number(dashboard.cash) + Number(combined?.business_cash || 0);
-  const expectedFloat = Number(dashboard.float) + Number(combined?.business_line || 0);
+  const expectedCash = Number(dashboard.cash);
+  const expectedFloat = Number(dashboard.float);
   const cashVariance = cash - expectedCash;
   const floatVariance = (Number(float) || 0) - expectedFloat;
   const total = cash + (Number(float) || 0);
@@ -235,13 +194,12 @@ function CloseShift({ dashboard, onClose, onCancel }) {
     <form className="formCard shiftForm" onSubmit={(event) => void submit(event)}>
       <h2>Close & reconcile shift</h2>
       <fieldset disabled={busy}>
-        {combined && <CombinedExpected dashboard={dashboard} />}
-        <CashCounter count={count} onChange={setCount} legend={combined ? "Count all the cash in the drawer" : "Count the cash in the drawer"} />
-        <FormField label={combined?.sale_mpesa_to === "AGENT_LINE" ? "All the money on the agent line" : "Float on the M-Pesa line"} name="actual_float" type="number" min="0" step="0.01" required
+        <CashCounter count={count} onChange={setCount} legend="Count the agency's own cash" />
+        <FormField label="The agency's float on the M-Pesa line" name="actual_float" type="number" min="0" step="0.01" required
           value={float} onChange={(event) => setFloat(event.target.value)} />
         <dl className="reportPosition">
           <div><dt>Cash: counted vs expected</dt><dd>{amount(cash)} vs {amount(expectedCash)}{Math.abs(cashVariance) >= 0.005 && ` (${cashVariance > 0 ? "+" : ""}${cashVariance.toLocaleString()})`}</dd></div>
-          <div><dt>{combined?.sale_mpesa_to === "AGENT_LINE" ? "Agent line" : "Float"}: entered vs expected</dt><dd>{amount(float)} vs {amount(expectedFloat)}{float !== "" && Math.abs(floatVariance) >= 0.005 && ` (${floatVariance > 0 ? "+" : ""}${floatVariance.toLocaleString()})`}</dd></div>
+          <div><dt>Float: entered vs expected</dt><dd>{amount(float)} vs {amount(expectedFloat)}{float !== "" && Math.abs(floatVariance) >= 0.005 && ` (${floatVariance > 0 ? "+" : ""}${floatVariance.toLocaleString()})`}</dd></div>
           <div><dt>Money in operation now vs at opening</dt><dd><strong>{amount(total)}</strong> vs {amount(opening)} ({total - opening >= 0 ? "+" : ""}{(total - opening).toLocaleString()})</dd></div>
         </dl>
         {variance && <FormField label="Why is there a difference? (required)" name="reason" required value={reason}
@@ -327,7 +285,7 @@ export function MpesaDashboardPage() {
   const prefilledFor = useRef(null);
   const prefill = (outlet) => {
     prefilledFor.current = outlet?.id ?? null;
-    const money = expectedCount(outlet?.money_in_operation);
+    const money = outlet?.money_in_operation;
     setOpeningCount(money?.cash == null ? emptyCount() : countFrom(money.cash_count, money.cash));
     setOpeningFloat(money?.float == null ? "" : String(Number(money.float)));
     setOpeningCommission(money?.commission_balance == null ? "" : String(Number(money.commission_balance)));
@@ -379,9 +337,8 @@ export function MpesaDashboardPage() {
   };
   const activeOutlets = outlets.filter((outlet) => outlet.active);
   const openingAt = activeOutlets.find((outlet) => String(outlet.id) === openingOutlet) || activeOutlets[0];
-  const lastClose = expectedCount(openingAt?.money_in_operation);
+  const lastClose = openingAt?.money_in_operation;
   // One drawer for the whole business: the cash and float shown are all the money there, the shop's sales included.
-  const whole = expectedCount(dashboard);
   const open = async (event) => {
     event.preventDefault();
     const gaps = openingGaps(lastClose, countTotal(openingCount), openingFloat, opening);
@@ -453,7 +410,7 @@ export function MpesaDashboardPage() {
   };
   return (
     <>
-      <span className="eyebrow">{dashboard.combined ? "Agent money (one drawer with the shop)" : "Agent money (kept separate from the shop)"}</span>
+      <span className="eyebrow">The agency's own money only</span>
       <h1>M-Pesa Agent</h1>
       <p className="privacyNotice">
         Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
@@ -465,8 +422,8 @@ export function MpesaDashboardPage() {
           {amount(dashboard.in_operation.total)}
           {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
         </MetricCard>
-        <MetricCard label="Current cash"><Split total={whole.cash} agency={whole.agencyCash} /></MetricCard>
-        <MetricCard label="Current float"><Split total={whole.float} agency={whole.agencyFloat} /></MetricCard>
+        <MetricCard label="Current cash">{amount(dashboard.cash)}</MetricCard>
+        <MetricCard label="Current float">{amount(dashboard.float)}</MetricCard>
         {commissionNow && <MetricCard label="Commission balance">
           {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
           {commissionNow.detail && <small className="muted"> · {commissionNow.detail}</small>}
@@ -492,7 +449,6 @@ export function MpesaDashboardPage() {
           <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "working day" : "working days"} left</small>
         </MetricCard>}
       </div>
-      {dashboard.combined && <OneDrawerShare />}
       {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
       <PartBooks part="MPESA" refreshKey={dashboard.transaction_count} />
       <MpesaAnalysis refreshKey={dashboard.transaction_count} />
@@ -531,12 +487,9 @@ export function MpesaDashboardPage() {
               ))}
             </select>
           </label>
-          {lastClose?.combined && <p className="muted">Count all the money, the agency's and the business's together: the app knows from
-            the sales how much of it is the business's ({amount(lastClose.combined.business_cash)} in the drawer
-            {lastClose.combined.sale_mpesa_to === "AGENT_LINE" ? `, ${amount(lastClose.combined.business_line)} on the agent line` : ""}).</p>}
-          <CashCounter count={openingCount} onChange={setOpeningCount} legend={lastClose?.combined ? "Opening cash: count all the cash in the drawer" : "Opening cash: count the drawer"} />
+          <CashCounter count={openingCount} onChange={setOpeningCount} legend="Opening cash: the agency's own cash" />
           <FormField
-            label={lastClose?.combined?.sale_mpesa_to === "AGENT_LINE" ? "Opening: all the money on the agent line" : "Opening float"}
+            label="Opening float: the agency's own float"
             name="opening_float"
             type="number"
             min="0"

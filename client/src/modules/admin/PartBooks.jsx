@@ -8,10 +8,10 @@ const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleStr
 const monthLabel = { header: "Month", short: (p) => new Date(`${p.month}-15T12:00:00`).toLocaleDateString(undefined, { month: "short" }),
   full: (p) => new Date(`${p.month}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
 const WORDS = { SHOP: { sold: "Sales", count: "sales" }, CYBER: { sold: "Income from services", count: "services done" },
-  MPESA: { sold: "Commission earned", count: "transactions" } };
+  MPESA: { sold: "Commission paid by Safaricom", count: "transactions" } };
 
 // One part of the business on its own (server inventory/part_books.py): what it sold, what the items cost, its running
-// costs and its profit or loss since the start, month by month, and its money. The dashboard adds the parts together.
+// costs and its profit or loss since the start, month by month, and its own money. The dashboard adds up only the profit.
 export function PartBooks({ part, refreshKey }) {
   const [books, setBooks] = useState(null);
   const [error, setError] = useState("");
@@ -34,11 +34,12 @@ export function PartBooks({ part, refreshKey }) {
   const points = books.months.map((p) => ({ ...p, revenue: Number(p.revenue), profit: p.profit == null ? null : Number(p.profit) }));
   return <section className="businessAnalysis partBooks" aria-labelledby={`part-books-${part}`}>
     <h2 id={`part-books-${part}`}>{books.label} on its own</h2>
-    <p className="muted">Since {books.since || "the start"}: {Number(books.count).toLocaleString()} {words.count}. Only {books.label}'s own figures; the dashboard adds every part together.</p>
+    <p className="muted">Since {books.since || "the start"}: {Number(books.count).toLocaleString()} {words.count}. Only {books.label}'s own figures and money; the dashboard adds up only the parts' profit.</p>
     <dl className="dashList">
       {steps.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       {seen && <div className="ownerSummaryTotal"><dt>Profit or loss</dt><dd className={Number(ever.profit) < 0 ? "negative" : undefined}>{profitText(ever.profit, money)}</dd></div>}
-      {books.money && <div><dt>{books.label}'s money now</dt><dd>{money(books.money.amount)}{books.money.of != null && ` of ${money(books.money.of)} the business holds (one drawer)`}</dd></div>}
+      {books.money && <div><dt>{books.label}'s own money now</dt><dd>{money(books.money.amount)}{books.money.places?.length > 0 &&
+        <small className="muted"> · {books.money.places.map(place => `${place.label} ${money(place.amount)}`).join(" · ")}</small>}</dd></div>}
     </dl>
     {points.length > 0 && <ColumnChart title={`${books.label} month by month`} points={points} label={monthLabel} format={money}
       note={seen ? "Profit or loss is after the items' cost and its running costs." : undefined}

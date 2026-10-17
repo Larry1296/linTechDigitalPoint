@@ -514,9 +514,9 @@ def settings_data(organization, store):
     from apps.accounting.money_mode import money_mode, part_names, structure
     from .billing import plan_modules
     own_names = (organization.settings or {}).get("part_names") or {}
-    from apps.mpesa.combined import combined, sale_mpesa_to
+    from apps.mpesa.combined import sale_mpesa_to
     return {"money_mode": money_mode(organization), "structure": structure(organization), "part_names": part_names(organization),
-            "own_part_names": own_names, "sale_mpesa_to": sale_mpesa_to(organization), "combined_shift": combined(organization), "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
+            "own_part_names": own_names, "sale_mpesa_to": sale_mpesa_to(organization), "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
             "sector": organization.sector, "business_size": organization.business_size, "phone": organization.phone,
             "email": organization.email, "address": organization.address, "currency": organization.currency,
             "timezone": organization.timezone, "country": organization.country,

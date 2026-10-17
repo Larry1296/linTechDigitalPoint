@@ -1,5 +1,4 @@
 import { BestSellers, CollectionsPanel, InShort, OwedPanels, PeriodComparison, RecentEntries } from "./AccountingPanels";
-import { NetWorthPanel } from "./NetWorthPanel";
 import { profitSum, profitText, stockText } from "./plainMoney";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
@@ -10,7 +9,7 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InvestmentReminder } from "../investments/InvestmentReminder";
 import { CommissionReminder } from "../mpesa/CommissionReminder";
 import { RecordsSummary } from "./RecordsSummary";
-import { OwnerSummary } from "./OwnerSummary";
+import { PartsProfit } from "./PartsProfit";
 import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
 import { BusinessAnalysis } from "./BusinessAnalysis";
 import { StockQuickSearch } from "./StockQuickSearch";
@@ -86,7 +85,7 @@ export function DashboardPage() {
   useLiveRefresh(() => refresh.current());
   const data = snapshot?.organization.id === organizationId ? snapshot : null;
   if (!data) return error ? <ErrorState message={error} retry={() => refresh.current()} /> : <Loading />;
-  const { organization, today, inventory, mpesa, orders, period_summary: period } = data;
+  const { organization, today, inventory, orders, period_summary: period } = data;
   const money = (value) => value == null ? "Restricted" : `${organization.currency} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const count = (value) => value == null ? "Restricted" : Number(value).toLocaleString();
   const units = data.business_units.filter(unit => unit.enabled);
@@ -99,23 +98,15 @@ export function DashboardPage() {
   const on = (module) => (data.enabled_modules || []).includes(module);
   const owner = data.owner_summary;
   const ever = owner?.all_time;
-  const mpesaUnit = units.find(unit => unit.key === "MPESA" && !unit.restricted);
   const owed = data.receivables && !data.receivables.restricted ? data.receivables.outstanding : owner?.customers_owe;
   // Today's key figures first, each one a link to where it is dealt with.
   const kpis = [
-    // Where sales and profit have reached since the start, every record counted. Never a "today" figure.
-    ever && ["Sales so far", money(ever.sales), `${count(ever.count)} ${Number(ever.count) === 1 ? "sale" : "sales"} · ${count(ever.items_sold)} items since ${owner.since || "the start"}`, on("pos") ? "/admin/sales-history" : null],
-    ever?.profit != null && ["Profit so far", profitText(ever.profit, money), `After ${money(ever.cost)} for the items and ${money(ever.expenses)} running costs`, "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
-    owner?.money && ["Money you should hold", money(owner.money.expected), owner.money.places.map(place => `${place.label} ${money(place.expected)}`).join(" · "), "/admin/money-check"],
+    // The dashboard brings together only each part's profit since the start; each part's money is on its own page.
+    ever?.profit != null && ["Profit so far, every part together", profitText(ever.profit, money),
+      [units.filter(unit => !unit.restricted && unit.all_time?.profit != null).map(unit => `${unit.name} ${profitText(unit.all_time.profit, money)}`).join(" · "),
+        "money spent lowers it"].filter(Boolean).join(" · "), "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
     owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
-    // Between shifts it shows what the last shift closed with, never 0.
-    mpesaUnit && ["M-Pesa money in operation", money(mpesa.in_operation ?? Number(mpesa.cash || 0) + Number(mpesa.float || 0)),
-      [`Cash ${money(mpesa.cash)} · Float ${money(mpesa.float)}`,
-        mpesa.business_cash != null && `One drawer with the shop: ${money(Number(mpesa.business_cash) + Number(mpesa.business_line || 0))} of it is from sales`,
-        mpesa.commission_balance != null && `Commission balance ${money(mpesa.commission_balance)} (worked out)`,
-        mpesa.live ? "Shift open now" : mpesa.as_of && `As the last shift closed, ${new Date(mpesa.as_of).toLocaleString(undefined, { timeZone: organization.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
-      ].filter(Boolean).join(" · "), "/admin/mpesa"],
   ].filter(Boolean);
   const actions = [
     on("pos") && can("commerce.add_sale") && ["/admin/pos", "Record a sale", true],
@@ -174,7 +165,7 @@ export function DashboardPage() {
 
     <div className="dashColumns">
       <div className="dashMain">
-        <OwnerSummary summary={owner} money={money} part="sales" />
+        <PartsProfit units={units} total={ever?.profit} money={money} />
         {period && <section className="financialTrend" aria-labelledby="profit-loss-title">
           <h2 id="profit-loss-title">How the business is doing</h2>
           <p className="muted">Pick the dates to look at. A sale counts on the day you make it, even if the customer pays later.</p>
@@ -198,14 +189,12 @@ export function DashboardPage() {
         <PeriodComparison data={data} money={money} />
         <BusinessAnalysis data={data} money={money} />
         {data.performance && <CollectionsPanel data={data} money={money} />}
-        {data.net_worth && <NetWorthPanel worth={data.net_worth} money={money} />}
       </div>
 
       <aside className="dashSide" aria-label="Money and stock now">
-        <OwnerSummary summary={owner} money={money} part="money" />
-        {/* The dashboard is the whole business, every part added together; each part's own books are on its page. */}
+        {/* Only the parts' profit is brought together here; each part's own money, sales and costs are on its page. */}
         {units.length > 1 && <section className="dashCard"><h2>Each part's own figures</h2>
-          <p className="muted">The figures here are the whole business, every part added together. Each part's own sales, costs, profit or loss and money are on its page.</p>
+          <p className="muted">Each part keeps its own money, sales and costs on its page. Only their profit is added up here.</p>
           <ul className="dashPartLinks">{units.filter(unit => !unit.restricted).map(unit => <li key={unit.key}>
             <a href={{ SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa" }[unit.key]}>{unit.name}</a></li>)}</ul>
         </section>}
@@ -218,13 +207,6 @@ export function DashboardPage() {
               .map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
           <p className="muted">The extra is not profit until the items are actually sold.</p>
-          {mpesaUnit && mpesa.in_operation != null && <>
-            <dl className="dashList">
-              <div><dt>M-Pesa money in operation (cash and float)</dt><dd>{money(mpesa.in_operation)}</dd></div>
-              <div><dt>All your stock (shelves at cost and M-Pesa)</dt><dd>{money(Number(inventory.cost || 0) + Number(mpesa.in_operation))}</dd></div>
-            </dl>
-            <p className="muted">The M-Pesa cash and float are stock too: they make the commission, the way an item on the shelf makes its profit when sold.</p>
-          </>}
         </section>}
         {!orders.restricted && (Number(orders.awaiting_payment) > 0 || Number(orders.awaiting_fulfillment) > 0) && <section className="dashCard"><h2>Online orders needing attention</h2>
           <dl className="dashList"><div><dt>Waiting for payment</dt><dd>{count(orders.awaiting_payment)}</dd></div><div><dt>Paid, to pack or collect</dt><dd>{count(orders.awaiting_fulfillment)}</dd></div></dl>

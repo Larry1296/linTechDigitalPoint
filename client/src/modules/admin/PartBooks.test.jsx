@@ -8,7 +8,7 @@ import { PartBooks } from "./PartBooks";
 const books = { key: "SHOP", label: "Shop", since: "2026-09-01", count: 2,
   all_time: { revenue: "1500", cogs: "500", expenses: "200", stock_corrections: "0", profit: "800" },
   months: [{ month: "2026-10", revenue: "1500", cogs: "500", expenses: "200", stock_corrections: "0", profit: "800" }],
-  money: { amount: "1300", of: "31300", one_drawer: true } };
+  money: { amount: "1300", places: [{ label: "Cash in the drawer", amount: "1100" }, { label: "Lipa na M-Pesa till", amount: "200" }] } };
 
 it("shows the part's own sales, the items' buying price, running costs, its profit and its money", async () => {
   api.mockResolvedValue(books);
@@ -18,7 +18,7 @@ it("shows the part's own sales, the items' buying price, running costs, its prof
   expect(screen.getByText("Sales", { selector: "dt" }).nextSibling).toHaveTextContent("KSh 1,500");
   expect(screen.getByText("− What the sold items cost (buying price)").nextSibling).toHaveTextContent("KSh 500");
   expect(screen.getByText("Profit or loss", { selector: "dt" }).nextSibling).toHaveTextContent("KSh 800 profit");
-  expect(screen.getByText("Shop's money now").nextSibling).toHaveTextContent("KSh 1,300 of KSh 31,300 the business holds (one drawer)");
+  expect(screen.getByText("Shop's own money now").nextSibling).toHaveTextContent("KSh 1,300 · Cash in the drawer KSh 1,100 · Lipa na M-Pesa till KSh 200");
 });
 
 it("shows a loss as a loss and hides costs from someone who may not see profit", async () => {

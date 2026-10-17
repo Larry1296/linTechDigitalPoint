@@ -59,13 +59,6 @@ def _cash_units():
     return [*business_parts(), *sorted(used - set(business_parts()))]
 
 
-def _at_shift(method):
-    """With one drawer for the business and its M-Pesa agency, the drawer (and the agent line, when sales are paid to it)
-    holds the agency's money too, so it is counted whole at the M-Pesa shift (mpesa/combined.py), not here."""
-    from apps.mpesa.combined import AGENT_LINE, combined, sale_mpesa_to
-    return combined() and (method == "CASH" or (method == "MPESA" and sale_mpesa_to() == AGENT_LINE))
-
-
 def places():
     result = []
     for method, label in PLACES:
@@ -74,8 +67,7 @@ def places():
                 name = "M-Pesa commission cash" if unit == "MPESA" else f"{part_names().get(unit, unit)} cash drawer"
                 result.append(_place(method, name, unit))
             continue
-        place = _place(method, "M-Pesa sales on the agent line" if method == "MPESA" and _at_shift(method) else label)
-        place["counted_at_shift"] = _at_shift(method)
+        place = _place(method, label)
         if method in {"BANK", "OTHER"} and not place["expected"] and not place["last_check"] and not any(p["amount"] for p in place["parts"]):
             continue  # not used by this business
         result.append(place)
@@ -94,8 +86,6 @@ def record_check(*, user, method, actual=None, cash_count=None, note="", unit=No
     lock_business()
     if method not in dict(PLACES):
         raise ValidationError("Choose where the money is kept.")
-    if _at_shift(method):
-        raise ValidationError("This money is kept together with the M-Pesa agency's, so it is counted when the M-Pesa shift opens and closes.")
     unit = _drawer(method, unit)
     if cash_count and method != "CASH":
         raise ValidationError("Notes and coins are counted for the cash drawer only.")

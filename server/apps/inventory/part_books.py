@@ -1,9 +1,9 @@
 """Each part of the business on its own: the shop, cyber and the M-Pesa agency each keep their own books.
 
 What it sold (for the agency, the commission it earned), what the sold items cost, its running costs (a cost shared
-between the parts counts by each part's share), its profit or loss, month by month, and its money: with one drawer its
-share of all the money the business holds, otherwise what it brought into the owner's places (and, for the agency, its
-own cash and float). The dashboard adds the parts together for the whole business; each part's page shows these.
+between the parts counts by each part's share), its profit or loss, month by month, and its own money: what it brought into
+the owner's places, less what it paid out from there (for the agency, its own cash and float). The dashboard brings
+together only the parts' profit. The dashboard adds the parts together for the whole business; each part's page shows these.
 """
 from datetime import date
 from decimal import Decimal
@@ -16,18 +16,37 @@ FIELDS = ("revenue", "cogs", "expenses", "stock_corrections", "profit")
 
 
 def part_money(key):
-    """{"amount", "of", "one_drawer"}: the part's money now. ``of`` is all the money the business holds (one drawer)."""
-    from apps.mpesa.combined import shares
-    found = shares()
-    if found:
-        part = next((row for row in found["parts"] if row["key"] == key), None)
-        return {"amount": part["amount"] if part else ZERO, "of": found["total"], "one_drawer": True}
+    """{"amount", "places"}: the part's own money now, and where it is ([{"label", "amount"}])."""
     from apps.accounting.money_check import places
     from .dashboard_summary import agency_money
-    amount = sum((row["amount"] for place in places() for row in place["by_part"] if row["unit"] == key), ZERO)
-    if key == "MPESA":
-        amount += (agency_money() or {}).get("total", ZERO)
-    return {"amount": amount, "of": None, "one_drawer": False}
+    where = [{"label": place["label"], "amount": row["amount"]} for place in places() for row in place["by_part"]
+             if row["unit"] == key and row["amount"]]
+    if key == "MPESA" and (agency := agency_money()):
+        where = [{"label": "Agency cash", "amount": agency["cash"]}, {"label": "Agency float", "amount": agency["float"]}, *where]
+    return {"amount": sum((row["amount"] for row in where), ZERO), "places": where}
+
+
+def money_after(moments):
+    """Each part's own money right after each moment, from the cash book: {key: amount} for ``moments`` given as
+    {key: (part, moment)}, e.g. the shop's money right after a sale and its payments."""
+    from bisect import bisect_right
+    from apps.accounting.models import CashEntry
+    from apps.accounting.money_check import PLACES
+    series = {}
+    for unit in {unit for unit, _ in moments.values()}:
+        entries = CashEntry.objects.filter(business_unit=unit, account__payment_method__in=[method for method, _ in PLACES])
+        times, running, total = [], [], ZERO
+        for at, value in entries.order_by("occurred_at", "pk").values_list("occurred_at", "amount"):
+            total += value
+            times.append(at)
+            running.append(total)
+        series[unit] = (times, running)
+    result = {}
+    for key, (unit, moment) in moments.items():
+        times, running = series[unit]
+        index = bisect_right(times, moment)
+        result[key] = running[index - 1] if index else ZERO
+    return result
 
 
 def _count(key):

@@ -178,9 +178,7 @@ export function MoneyCheckPage() {
           </tbody></table>
           <WhoseMoney place={place} />
           {place.last_check && <p className="muted">Last counted {when(place.last_check.created_at)}: {money(place.last_check.actual)} ({differenceText(place.last_check.difference)})</p>}
-          {place.counted_at_shift ? <p className="muted">Kept together with the M-Pesa agency's money, so it is counted when the M-Pesa shift opens and
-            closes, with the agency's.{" "}<a href="/admin/mpesa">Go to the M-Pesa desk</a></p>
-          : can("accounting.add_moneycheck") && <CountForm place={place} onSaved={async (saved) => { setResult(saved); await load(); }}
+          {can("accounting.add_moneycheck") && <CountForm place={place} onSaved={async (saved) => { setResult(saved); await load(); }}
             canAddStarting={can("accounting.add_cashentry")} onStartingAdded={load} />}
         </section>
       ))}</div>

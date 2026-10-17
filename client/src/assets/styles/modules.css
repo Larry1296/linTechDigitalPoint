@@ -1152,15 +1152,6 @@ label:where(:has(> input[type="radio"])) {
 .ownerSummary { padding:20px; border:2px solid var(--line); border-radius:16px; background:var(--surface); }
 .ownerSummary > h2 { margin:0 0 6px; }
 .ownerSummary .ownerSummaryTotal th, .ownerSummary .ownerSummaryTotal td { font-weight:800; }
-.ownerSummaryMoney { margin-top:16px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; }
-.ownerSummaryMoney h3 { margin:0; font-size:15px; }
-.ownerSummaryHeld strong { font-size:28px; font-variant-numeric:tabular-nums; }
-.ownerSummaryMoney dl { margin:8px 0; display:grid; gap:6px; max-width:520px; }
-.ownerSummaryMoney dl > div { display:flex; justify-content:space-between; gap:12px; font-size:14px; }
-.ownerSummaryMoney dt { color:var(--muted); }
-.ownerSummaryMoney dd { margin:0; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
-.ownerSummaryMoney dl > .ownerSummaryTotal { border-top:1px solid var(--line); padding-top:6px; }
-.ownerSummaryMoney dl > .ownerSummaryTotal dt { color:var(--text); font-weight:800; }
 @media(max-width:760px) { .ownerSummary { padding:16px; } }
 .businessDashboard .trendTable th:first-child { text-align:left; }
 .businessDashboard .trendTable caption { text-align:left; padding:12px; color:var(--muted); }
@@ -2849,7 +2840,6 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .dashCard { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .dashCard > h2, .dashSide .accountingPanel h2, .dashSide .ownerSummary h2 { margin: 0 0 10px; font-size: 17px; }
 .dashSide .accountingPanel, .dashSide .ownerSummary { padding: 18px 20px; }
-.dashSide .ownerSummaryMoney { margin-top: 0; padding: 0; border: 0; }
 .dashSide .ownerSummary { border-width: 1px; }
 .dashUnit { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
 .dashUnit:first-of-type { border-top: 0; padding-top: 0; }
@@ -2909,8 +2899,6 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 @media (hover: none) { .stockQuickSearchBox kbd { display: none; } }
 
 /* "How each part of the business is doing": the plain sentences above the charts. */
-.ownerSummaryParts, .ownerSummaryAgency { font-size: 14px; }
-.ownerSummaryAgency { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
 
 /* The service card's 7px gap suits its name and price; its buttons keep 12px like everywhere else. */
 .serviceGrid article > .actionRow { margin-top: 5px; }

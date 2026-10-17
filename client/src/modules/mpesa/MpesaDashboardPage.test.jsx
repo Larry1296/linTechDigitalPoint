@@ -132,7 +132,7 @@ it("opens a shift filled in with what the outlet last recorded, commission balan
   expect(main).toHaveTextContent("Commission balance");
   expect(main).toHaveTextContent("1,250.5");
   expect(main).toHaveTextContent("Last read KSh 1,214.5 · + KSh 36 worked out since · 1 transaction not worked out yet");
-  await waitFor(() => expect(screen.getByLabelText("Opening float")).toHaveValue(7000));
+  await waitFor(() => expect(screen.getByLabelText("Opening float: the agency's own float")).toHaveValue(7000));
   expect(screen.getByLabelText("Number of 1000 notes")).toHaveValue(3);
   expect(screen.getByLabelText("Physical cash total")).toHaveTextContent("3,050");
   expect(screen.getByLabelText(/Commission balance now/)).toHaveValue(1250.5);
@@ -142,7 +142,7 @@ it("opens a shift filled in with what the outlet last recorded, commission balan
   await waitFor(() => expect(api.openMpesaSession).toHaveBeenCalledWith(expect.objectContaining({
     outlet: 1, opening_cash: "3050.00", opening_float: "7000", commission_balance: "0" })));
   fireEvent.change(screen.getByRole("combobox", { name: "Outlet" }), { target: { value: "2" } });
-  expect(screen.getByLabelText("Opening float")).toHaveValue(null);
+  expect(screen.getByLabelText("Opening float: the agency's own float")).toHaveValue(null);
   expect(screen.getByLabelText(/Commission balance now/)).toHaveValue(null);
 });
 
@@ -163,31 +163,20 @@ it("records the commission balance during a shift that opened without one", asyn
   await waitFor(() => expect(api.recordMpesaCommissionBalance).toHaveBeenCalledWith(8, "2,400"));
 });
 
-// One drawer for the whole business: the shift counts everything and expects the agency's money plus the sales money.
-const combined = { sale_mpesa_to: "AGENT_LINE", business_cash: "1200.00", business_line: "500.00", business_cash_at_open: "1000.00",
-  business_line_at_open: "500.00", since_open: [{ label: "Shop received from customers", cash: "300.00", line: "0" }, { label: "Shop spent on running costs", cash: "-100.00", line: "0" }] };
-
-it("opens a combined shift from everything expected: the agency's last close plus the business's sales money", async () => {
-  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { cash: "10000.00", float: "20000.00", total: "30000.00", updated_on: "2026-09-26",
-    due: true, combined: { sale_mpesa_to: "AGENT_LINE", business_cash: "1000.00", business_line: "500.00" } })]);
-  render(<MpesaDashboardPage />);
-  expect(await screen.findByLabelText("Opening: all the money on the agent line")).toHaveValue(20500);
-  expect(screen.getByText(/Expected now: cash/)).toHaveTextContent("KSh 11,000");
-  expect(screen.getByText(/Count all the money, the agency's and the business's together/)).toHaveTextContent("KSh 1,000 in the drawer, KSh 500 on the agent line");
-});
-
-it("closes a combined shift against the agency's money plus the sales since opening, line by line", async () => {
+// Each part keeps its own money: the agency's page and shift are its own cash and float, never the shop's sales money.
+it("counts and shows only the agency's own money, even with one drawer", async () => {
   api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 5, outlet: 1, opening_cash: "10000", opening_float: "20000" },
-    cash: "12000.00", float: "18000.00", in_operation: { total: 30000, opening: 30000 }, combined });
+    cash: "12000.00", float: "18000.00", in_operation: { total: 30000, opening: 30000 } });
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { cash: "12000.00", float: "18000.00", total: "30000.00", updated_on: "2026-09-26", due: false })]);
   api.reconcileMpesaSession.mockResolvedValue({});
   render(<MpesaDashboardPage />);
-  fireEvent.click(await screen.findByRole("button", { name: /Close & reconcile shift/ }));
-  const table = screen.getByRole("table", { name: "What to expect at closing" });
-  expect(within(table).getByRole("row", { name: /Shop received from customers, since opening/ })).toHaveTextContent("+KSh 300");
-  expect(within(table).getByRole("row", { name: /Shop spent on running costs/ })).toHaveTextContent("−KSh 100");
-  expect(within(table).getByRole("row", { name: /^Expected now/ })).toHaveTextContent("KSh 13,200" + "KSh 18,500");
-  fireEvent.change(screen.getByLabelText("All the money on the agent line"), { target: { value: "18500" } });
-  expect(screen.getByText(/Agent line: entered vs expected/).nextSibling).toHaveTextContent("KSh 18,500 vs KSh 18,500");
+  const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
+  expect(main).not.toHaveTextContent("shop sales");
+  expect(screen.getByText("Current cash").closest("article")).toHaveTextContent("KSh 12,000");
+  expect(screen.getByText("Money in operation", { selector: ".metrics *" }).closest("article")).toHaveTextContent("KSh 30,000 · opened with KSh 30,000");
+  fireEvent.click(screen.getByRole("button", { name: /Close & reconcile shift/ }));
+  fireEvent.change(screen.getByLabelText("The agency's float on the M-Pesa line"), { target: { value: "18000" } });
+  expect(screen.getByText(/Float: entered vs expected/).nextSibling).toHaveTextContent("KSh 18,000 vs KSh 18,000");
 });
 
 it("shows the worked-out commission balance in the top figures, added up over the outlets", async () => {
@@ -199,16 +188,4 @@ it("shows the worked-out commission balance in the top figures, added up over th
   await screen.findByRole("heading", { name: "Main till" });
   const card = screen.getByText("Commission balance", { selector: ".metrics *" }).closest("article");
   expect(card).toHaveTextContent("1,550.5");
-});
-
-it("with one drawer shows all the cash and float, split into the agency's part the forms use and the shop's sales money", async () => {
-  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 5, outlet: 1, opening_cash: "10000", opening_float: "20000" },
-    cash: "12000.00", float: "18000.00", in_operation: { total: 31700, opening: 31500 }, combined });
-  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { cash: "12000.00", float: "18000.00", total: "31700.00", updated_on: "2026-09-26",
-    due: false, combined })]);
-  render(<MpesaDashboardPage />);
-  const main = (await screen.findByRole("heading", { name: "Main till" })).closest("li");
-  expect(main).toHaveTextContent("KSh 13,200 · agency KSh 12,000 + shop sales KSh 1,200");
-  expect(main).toHaveTextContent("KSh 18,500 · agency KSh 18,000 + shop sales KSh 500");
-  expect(screen.getByText("Current cash").closest("article")).toHaveTextContent("agency KSh 12,000 + shop sales KSh 1,200");
 });

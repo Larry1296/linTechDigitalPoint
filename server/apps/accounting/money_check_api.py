@@ -37,11 +37,3 @@ class StartingMoneyView(APIView):
         return Response({"places": places()}, status=201)
 
 
-class OneDrawerView(APIView):
-    """With one drawer for the whole business: all the money it holds and what each part contributed (combined.shares)."""
-    permission_classes = [HasLinTechPermission]
-    permission_required = "accounting.view_moneycheck"
-
-    def get(self, request):
-        from apps.mpesa.combined import shares
-        return Response({"shares": shares(profit_visible=has_business_permission(request.user, "accounting.view_profit"))})

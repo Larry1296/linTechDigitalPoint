@@ -26,12 +26,12 @@ export function SalesProfits({ money, timezone, refreshKey }) {
   const pages = Math.max(1, Math.ceil((data?.count || 0) / PAGE));
   const total = (key) => rows.reduce((sum, sale) => sum + Number(sale.figures?.[key] || 0), 0);
   const when = (value) => new Date(value).toLocaleString(undefined, { timeZone: timezone, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  // One drawer for the whole business: all the money it held right after the sale (the M-Pesa money in operation).
+  // The money of the part that made the sale (the shop, or cyber for a service) right after it, never the agency's.
   const held = rows.some(sale => sale.held_after != null);
   const items = (sale) => sale.items.map(item => `${Number(item.quantity)} × ${item.item}`).join(", ");
   return <section className="accountingPanel salesProfits" aria-labelledby="sales-profits-title">
     <h2 id="sales-profits-title">Every sale and its profit</h2>
-    <p className="muted">All sales ever made, newest first. Profit is what the sale brought in less what the items cost you, after any return or price correction. "Profit so far" adds each sale's profit to all the sales before it, before running costs.{held ? " \"Money held after\" is all the money the business held right after the sale, in the one drawer and on the agent line, the agency's included: the money in operation then." : ""}</p>
+    <p className="muted">All sales ever made, newest first. Profit is what the sale brought in less what the items cost you, after any return or price correction. "Profit so far" adds each sale's profit to all the sales before it, before running costs.{held ? " \"Its part's money after\" is the money of the part that made the sale (the shop, or cyber for a service) right after it, its payment included. The M-Pesa agency's money is never in it." : ""}</p>
     <label>Find a sale<input type="search" value={query} placeholder="Sale number, customer or item"
       onChange={event => { setQuery(event.target.value); setPage(1); }} /></label>
     {error && <p className="formNotice formNoticeError" role="alert">Can't load the sales right now: {error}</p>}
@@ -39,7 +39,7 @@ export function SalesProfits({ money, timezone, refreshKey }) {
       <div className="trendTable"><table>
         <caption>{data.count.toLocaleString()} {data.count === 1 ? "sale" : "sales"}{query ? " found" : " in all"} · page {page} of {pages}</caption>
         <thead><tr><th scope="col">When</th><th scope="col">Sale</th><th scope="col">Customer</th><th scope="col">What was sold</th>
-          <th scope="col">Sold for</th><th scope="col">Items cost</th><th scope="col">Profit</th><th scope="col">Profit so far</th>{held && <th scope="col">Money held after</th>}</tr></thead>
+          <th scope="col">Sold for</th><th scope="col">Items cost</th><th scope="col">Profit</th><th scope="col">Profit so far</th>{held && <th scope="col">Its part's money after</th>}</tr></thead>
         <tbody>{rows.map(sale => <tr key={sale.id} className={Number(sale.figures?.profit) < 0 ? "loss" : undefined}>
           <td>{when(sale.created_at)}</td><th scope="row">{sale.number}</th><td>{sale.customer}</td><td>{items(sale)}</td>
           <td>{money(sale.figures?.sales)}</td><td>{money(sale.figures?.cost)}</td><td>{profitText(sale.figures?.profit, money)}</td><td>{profitText(sale.figures?.profit_so_far, money)}</td>

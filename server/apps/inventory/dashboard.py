@@ -222,7 +222,6 @@ def dashboard_snapshot(request):
                              'float': agency.get('float', ZERO) if allowed else None,
                              'in_operation': agency.get('total', ZERO) if allowed else None,
                              'live': agency.get('live', False), 'as_of': agency.get('as_of'),
-                             'business_cash': agency.get('business_cash'), 'business_line': agency.get('business_line'),
                              'commission_balance': agency.get('commission_balance'),
                              'open_sessions': shifts if allowed else None,
                              'transaction_count': transactions.count() if allowed else None,
