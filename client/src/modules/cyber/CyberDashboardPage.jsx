@@ -24,6 +24,7 @@ import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { PartBooks } from "../admin/PartBooks";
 export function CyberDashboardPage() {
   const { user } = useAuth();
   const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
@@ -295,6 +296,7 @@ export function CyberDashboardPage() {
         </div>
         {serviceError?.place === "list" && <FormError title={serviceError.title} message={serviceError.message} />}
       </section>
+      <PartBooks part="CYBER" refreshKey={dashboard.today.jobs} />
       <CyberAnalysis refreshKey={dashboard.today.jobs} />
     </>
   );

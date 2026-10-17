@@ -2909,8 +2909,6 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 @media (hover: none) { .stockQuickSearchBox kbd { display: none; } }
 
 /* "How each part of the business is doing": the plain sentences above the charts. */
-.partsStory { display: grid; gap: 6px; margin: 0 0 16px; padding: 12px 16px 12px 32px; border-radius: 12px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
-.partsStory li { line-height: 1.5; }
 .ownerSummaryParts, .ownerSummaryAgency { font-size: 14px; }
 .ownerSummaryAgency { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
 
@@ -2941,3 +2939,4 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .combinedTable th, .combinedTable td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
 .combinedTable th[scope="row"], .combinedTable thead th:first-child { text-align: left; font-weight: 500; }
 .combinedTable tfoot th, .combinedTable tfoot td { font-weight: 800; border-bottom: 0; }
+.dashPartLinks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; }

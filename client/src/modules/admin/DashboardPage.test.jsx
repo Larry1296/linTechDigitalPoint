@@ -29,10 +29,10 @@ it("refreshes figures, reports stale data and recovers", async () => {
   api.mockRejectedValueOnce(new Error("Offline"));
   await act(async () => { vi.advanceTimersByTime(15000); });
   expect(screen.getByRole("status")).toHaveTextContent("Can't update right now");
-  api.mockResolvedValue({ ...snapshot(), business_units: [{ ...snapshot().business_units[0], all_time: { revenue: "250", profit: null } }] });
+  api.mockResolvedValue({ ...snapshot(), owner_summary: { since: "2026-09-01", today: {}, all_time: { sales: "250", count: 2, items_sold: 3, profit: null }, money: null } });
   await act(async () => { vi.advanceTimersByTime(15000); });
   expect(screen.getByRole("status")).not.toHaveTextContent("Can't update right now");
-  expect(screen.getByText("KES 250.00")).toBeInTheDocument();
+  expect(screen.getAllByText("KES 250.00").length).toBeGreaterThan(0);
   cleanup();
   const calls = api.mock.calls.length;
   await act(async () => { vi.advanceTimersByTime(15000); });
@@ -65,4 +65,12 @@ it("shows profit with the M-Pesa commission Safaricom has not paid yet", async (
   const note = await screen.findByRole("note");
   expect(note).toHaveTextContent("M-Pesa commission not paid yet: about KES 1,250.00 earned in October 2026");
   expect(note).toHaveTextContent("Profit or loss with it: KES 1,220.00 profit");
+});
+
+it("shows the whole business and sends each part's own figures to its page", async () => {
+  api.mockResolvedValue({ ...snapshot(), business_units: [snapshot().business_units[0], { key: "MPESA", name: "M-Pesa agency", enabled: true, revenue: "0" }] });
+  render(<DashboardPage />);
+  expect(await screen.findByRole("heading", { name: "Each part's own figures" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "M-Pesa agency" })).toHaveAttribute("href", "/admin/mpesa");
+  expect(screen.getByRole("link", { name: "Services" })).toHaveAttribute("href", "/admin/cyber");
 });

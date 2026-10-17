@@ -30,6 +30,7 @@ import { MpesaAirtimeForm } from "./MpesaAirtimeForm";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
 import { businessDate, useNewBusinessDay } from "./businessDay";
 import { OneDrawerShare } from "../accounting/OneDrawerShare";
+import { PartBooks } from "../admin/PartBooks";
 import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./CashCounter";
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
@@ -493,6 +494,7 @@ export function MpesaDashboardPage() {
       </div>
       {dashboard.combined && <OneDrawerShare />}
       {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
+      <PartBooks part="MPESA" refreshKey={dashboard.transaction_count} />
       <MpesaAnalysis refreshKey={dashboard.transaction_count} />
       <MonthlyReport />
       <PastShifts />

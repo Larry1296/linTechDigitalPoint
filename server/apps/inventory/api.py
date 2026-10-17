@@ -132,6 +132,19 @@ def dashboard(request):
     return Response(dashboard_snapshot(request))
 
 
+@api_view(["GET"])
+@permission_classes([IsInternalStaff])
+def part_books(request, key):
+    """One part of the business on its own (part_books.py), for that part's page."""
+    from .dashboard import UNITS
+    from .part_books import part_books as books
+    unit = next((u for u in UNITS if u[0] == key), None)
+    if not unit or not has_business_permission(request.user, unit[3]):
+        return Response({"detail": "You don't have access to this part of the business."}, status=403)
+    return Response(books(key, profit_visible=has_business_permission(request.user, "accounting.view_profit"),
+                          money_visible=has_business_permission(request.user, "accounting.view_moneycheck")))
+
+
 @api_view(["POST"])
 @permission_classes([HasLinTechPermission])
 def receipt_return(request, pk):

@@ -198,3 +198,15 @@ def test_cyber_and_the_dashboard_show_revenue_since_the_start(lintech):
     shop_part = next(unit for unit in board["business_units"] if unit["key"] == "SHOP")
     assert D(str(shop_part["all_time"]["revenue"])) == D("1000.00")
     assert "all_time" in shop.client.get("/api/v1/cyber/dashboard/").json()
+
+
+def test_each_part_keeps_its_own_books(lintech):
+    shop = lintech
+    sell(shop, 1000)                                   # a charger bought at 100
+    open_shift(shop, 11000, 20000)
+    books = shop.client.get("/api/v1/inventory/parts/SHOP/").json()
+    assert (D(str(books["all_time"]["revenue"])), D(str(books["all_time"]["cogs"])), D(str(books["all_time"]["profit"]))) == (D("1000.00"), D("100.00"), D("900.00"))
+    assert books["count"] == 1 and books["months"] and D(str(books["money"]["amount"])) == D("1000.00") and books["money"]["one_drawer"]
+    agency = shop.client.get("/api/v1/inventory/parts/MPESA/").json()
+    assert D(str(agency["money"]["amount"])) == D("30000.00") and D(str(agency["money"]["of"])) == D("31000.00")
+    assert shop.client.get("/api/v1/inventory/parts/NOPE/").status_code == 403

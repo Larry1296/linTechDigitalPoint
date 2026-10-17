@@ -13,7 +13,6 @@ import { RecordsSummary } from "./RecordsSummary";
 import { OwnerSummary } from "./OwnerSummary";
 import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
 import { BusinessAnalysis } from "./BusinessAnalysis";
-import { PartsAnalysis } from "./PartsAnalysis";
 import { StockQuickSearch } from "./StockQuickSearch";
 import { SalesProfits } from "./SalesProfits";
 
@@ -87,7 +86,7 @@ export function DashboardPage() {
   useLiveRefresh(() => refresh.current());
   const data = snapshot?.organization.id === organizationId ? snapshot : null;
   if (!data) return error ? <ErrorState message={error} retry={() => refresh.current()} /> : <Loading />;
-  const { organization, today, inventory, cyber, mpesa, orders, period_summary: period } = data;
+  const { organization, today, inventory, mpesa, orders, period_summary: period } = data;
   const money = (value) => value == null ? "Restricted" : `${organization.currency} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const count = (value) => value == null ? "Restricted" : Number(value).toLocaleString();
   const units = data.business_units.filter(unit => unit.enabled);
@@ -196,7 +195,6 @@ export function DashboardPage() {
         </section>}
         {can("commerce.view_sale") && can("accounting.view_profit") && <SalesProfits money={money} timezone={organization.timezone}
           refreshKey={`${today.sales}-${today.revenue}`} />}
-        <PartsAnalysis data={data} money={money} />
         <PeriodComparison data={data} money={money} />
         <BusinessAnalysis data={data} money={money} />
         {data.performance && <CollectionsPanel data={data} money={money} />}
@@ -205,14 +203,12 @@ export function DashboardPage() {
 
       <aside className="dashSide" aria-label="Money and stock now">
         <OwnerSummary summary={owner} money={money} part="money" />
-        <section className="dashCard"><h2>Each part of the business since the start</h2>
-          {units.map(unit => <article key={unit.key} className="dashUnit"><h3>{unit.name}</h3>{unit.restricted ? <p>Restricted</p> : <>
-            <p className="dashUnitFigure"><strong>{money(unit.all_time?.revenue)}</strong> <span>{unit.key === "MPESA" ? "commission" : "sales"}{unit.all_time?.profit != null && ` · ${profitText(unit.all_time.profit, money)}`}</span></p>
-            {unit.key === "SHOP" && <small>Completed sales: {count(data.retail.sales)}</small>}
-            {unit.key === "CYBER" && <small>Jobs in progress: {count(cyber.active_jobs)} · Ready to collect: {count(cyber.ready_jobs)} · New today: {count(cyber.jobs_today)}</small>}
-            {unit.key === "MPESA" && <small>Shifts open: {count(mpesa.open_sessions)} · Transactions today: {count(mpesa.transaction_count)} · Deposits {money(mpesa.deposits)} · Withdrawals {money(mpesa.withdrawals)}</small>}
-          </>}</article>)}
-        </section>
+        {/* The dashboard is the whole business, every part added together; each part's own books are on its page. */}
+        {units.length > 1 && <section className="dashCard"><h2>Each part's own figures</h2>
+          <p className="muted">The figures here are the whole business, every part added together. Each part's own sales, costs, profit or loss and money are on its page.</p>
+          <ul className="dashPartLinks">{units.filter(unit => !unit.restricted).map(unit => <li key={unit.key}>
+            <a href={{ SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa" }[unit.key]}>{unit.name}</a></li>)}</ul>
+        </section>}
         {data.performance && <InShort data={data} money={money} />}
         {data.performance && <OwedPanels data={data} money={money} />}
         {!inventory.restricted && <section className="dashCard"><h2>Stock on your shelves</h2>

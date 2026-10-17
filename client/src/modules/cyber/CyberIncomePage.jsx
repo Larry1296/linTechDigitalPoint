@@ -11,7 +11,6 @@ import { FormField } from "../../components/forms/FormField";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
-import { OneDrawerShare } from "../accounting/OneDrawerShare";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const UNITS = [["PER_PAGE", "page", "pages"], ["PER_COPY", "copy", "copies"], ["PER_SHEET", "sheet", "sheets"], ["PER_DOCUMENT", "document", "documents"],
@@ -492,7 +491,6 @@ export function CyberIncomePage() {
     <>
       <span className="eyebrow">Cyber Services</span>
       <h1>Income by service</h1>
-      <OneDrawerShare part="CYBER" />
       <Totals totals={data.totals} />
       <RecordIncome services={data.services} groups={data.groups} onSaved={load} onServicesChanged={load} />
       <section aria-labelledby="revenue-heading">

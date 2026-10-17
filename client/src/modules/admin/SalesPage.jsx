@@ -9,7 +9,7 @@ import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { label, PAYMENT_METHODS } from "../../core/ui/labels";
 import { askForm } from "../../core/ui/alerts";
 import { PromptForWaiting, useMpesaExpress } from "../pos/MpesaPrompt";
-import { OneDrawerShare } from "../accounting/OneDrawerShare";
+import { PartBooks } from "./PartBooks";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
@@ -89,7 +89,7 @@ export function SalesPage() {
   };
   const problem=(path,title)=>failed?.path===path&&<FormError title={title} message={failed.text} />;
   return <><h1>Sales and customer payments</h1>
-    <OneDrawerShare part="SHOP" />
+    <PartBooks part="SHOP" />
     <div className="salesFilters" role="search">
       <label>Find a sale<input type="search" value={search} onChange={e=>{const value=e.target.value;filter(()=>setSearch(value));}} placeholder="Sale number, customer name or phone, or item" maxLength={80} /></label>
       <label className="checkLabel"><input type="checkbox" checked={owing} onChange={e=>{const value=e.target.checked;filter(()=>setOwing(value));}} /> Only sales that still owe money</label>
