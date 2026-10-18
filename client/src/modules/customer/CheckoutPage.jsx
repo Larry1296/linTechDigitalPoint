@@ -7,6 +7,7 @@ import { useCart } from "../../core/cart/CartContext";
 import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 import { FormError } from "../../components/forms/FormNotice";
+import { TextArea } from "../../components/forms/TextBox";
 export function CheckoutPage() {
   const { cart, refreshCart } = useCart();
   const { user } = useAuth();
@@ -73,7 +74,7 @@ export function CheckoutPage() {
           </label>
           <label>
             Order notes
-            <textarea name="notes" />
+            <TextArea name="notes" />
           </label>
           {!user && (
             <p className="callout">

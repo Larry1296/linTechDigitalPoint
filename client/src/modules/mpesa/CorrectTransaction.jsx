@@ -5,6 +5,7 @@ import { FormError } from "../../components/forms/FormNotice";
 import { correctMpesaTransaction } from "./api";
 import { AIRTIME_PAID_BY } from "./airtime";
 import { TOPUP_SOURCES } from "./topUp";
+import { TextBox } from "../../components/forms/TextBox";
 
 const localPhone = (phone) => (phone && phone.startsWith("254") ? `0${phone.slice(3)}` : phone || "");
 const LABELS = { CUSTOMER_DEPOSIT: "deposit", CUSTOMER_WITHDRAWAL: "withdrawal", AIRTIME_SALE: "airtime sale", FLOAT_TOPUP: "float top-up", CASH_REBALANCE: "cash rebalance" };
@@ -43,15 +44,15 @@ export function CorrectTransaction({ entry, onDone }) {
       <fieldset disabled={busy}>
         <label>Correct amount ({businessCurrency()})<input name="amount" type="number" min="1" step="0.01" required defaultValue={Number(entry.amount)} /></label>
         {deposit && <label>M-Pesa number (optional)<input name="customer_phone" type="tel" defaultValue={localPhone(entry.customer_phone)} /></label>}
-        {deposit && <label>ID number (optional)<input name="customer_id_number" defaultValue={entry.customer_id_number} /></label>}
+        {deposit && <label>ID number (optional)<TextBox name="customer_id_number" defaultValue={entry.customer_id_number} /></label>}
         {airtime && <label>Sent to (optional)<input name="customer_phone" type="tel" defaultValue={localPhone(entry.customer_phone)} /></label>}
         {airtime && <label>Paid by<select name="paid_by" defaultValue={entry.paid_by}>{AIRTIME_PAID_BY.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
         {topUp && <label>Money from<select name="paid_by" defaultValue={entry.paid_by || "DRAWER"}>{[...TOPUP_SOURCES, ...(entry.paid_by && !TOPUP_SOURCES.some(([id]) => id === entry.paid_by)
           ? [[entry.paid_by, `Same as before: ${entry.paid_by.replace(":", "'s money, ").toLowerCase()}`]] : [])].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>}
         {(deposit || airtime || entry.transaction_type === "CUSTOMER_WITHDRAWAL") && <label>Commission balance after (optional)
           <input name="commission_balance" type="number" inputMode="decimal" min="0" step="0.01" defaultValue={entry.commission_balance ?? ""} /></label>}
-        <label>Transaction ID<input name="provider_reference" defaultValue={entry.provider_reference || ""} placeholder="If known" /></label>
-        <label className="correctReason">What was wrong?<input name="reason" required maxLength={240} placeholder="e.g. typed 700, customer deposited 500" /></label>
+        <label>Transaction ID<TextBox name="provider_reference" defaultValue={entry.provider_reference || ""} placeholder="If known" /></label>
+        <label className="correctReason">What was wrong?<TextBox name="reason" required maxLength={240} placeholder="e.g. typed 700, customer deposited 500" /></label>
         <div className="actionRow"><button>Save correction</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Cancel</button></div>
       </fieldset>
       <FormError title="Could not correct it." message={error} />

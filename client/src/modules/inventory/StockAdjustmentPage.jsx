@@ -10,6 +10,7 @@ import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { ProductSearch } from "../storefront/components/ProductSearch";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 
 const reasons = [
   "Opening stock correction",
@@ -348,14 +349,14 @@ export function StockAdjustmentPage() {
           </label>
           <label>
             Notes
-            <textarea
+            <TextArea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
           <label>
             Reference number
-            <input
+            <TextBox
               maxLength={100}
               value={reference}
               onChange={(e) => setReference(e.target.value)}

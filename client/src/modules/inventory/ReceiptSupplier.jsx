@@ -4,6 +4,7 @@ import { businessCurrency, businessTimeZone } from "../../core/organization/pres
 import { askForm, confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { usePayableInvestments } from "../receiving/ReceiptCosts";
+import { TextArea } from "../../components/forms/TextBox";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const day = (value) => new Date(value).toLocaleDateString("en-CA", { timeZone: businessTimeZone() });
@@ -178,7 +179,7 @@ function AlreadyOwnedForm({ receipt, onCancel, onSaved }) {
         <legend>This stock was already mine</legend>
         <p>Use this when the items were yours before you started recording, and you entered them through Receive stock instead of as opening stock. Nothing was bought, so nothing is owed.</p>
         <label>Why
-          <textarea required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <TextArea required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         <button disabled={!reason.trim() || busy}>Review</button>{" "}
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>

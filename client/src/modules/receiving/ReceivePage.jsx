@@ -12,6 +12,7 @@ import { confirmAction } from "../../core/ui/alerts";
 import { NEW_RECEIPT_COSTS, ReceiptCostFields, ReceiptDocumentFields, paymentSummary, receiptCostsPayload, receiptCostsProblem } from "./ReceiptCosts";
 import { FormError } from "../../components/forms/FormNotice";
 import { SupplierPicker } from "./SupplierPicker";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 
 const emptyLine = () => ({
   variant_id: "",
@@ -349,7 +350,7 @@ export function ReceivePage() {
           </label>
           <label>
             General notes
-            <textarea
+            <TextArea
               value={details.notes}
               onChange={(e) =>
                 setDetails({ ...details, notes: e.target.value })
@@ -387,7 +388,7 @@ export function ReceivePage() {
                 </div>
                 <label>
                   Search product, SKU, barcode, brand or category
-                  <input
+                  <TextBox
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search stock items"

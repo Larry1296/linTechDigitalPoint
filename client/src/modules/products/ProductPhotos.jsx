@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../core/api/client";
 import { DisplayImageInput } from "./components/DisplayImageInput";
 import { FormError } from "../../components/forms/FormNotice";
+import { TextBox } from "../../components/forms/TextBox";
 
 export function ProductPhotos({
   product,
@@ -81,11 +82,11 @@ export function ProductPhotos({
             <>
               <label>
                 Variant name
-                <input name="variant_name" required maxLength={120} />
+                <TextBox name="variant_name" required maxLength={120} />
               </label>
               <label>
                 SKU
-                <input name="sku" required maxLength={64} />
+                <TextBox name="sku" required maxLength={64} />
               </label>
               <label>
                 Selling price

@@ -8,6 +8,7 @@ import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker"
 import { api } from "../../core/api/client";
 import { FormError } from "../../components/forms/FormNotice";
 import { useAuth } from "../../core/auth/AuthContext";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 // `defaults` come from where the form was opened (e.g. the category being browsed); every field stays editable.
 export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults = {} }) {
   const { user } = useAuth();
@@ -140,7 +141,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
         {newBrand === null
           ? <button type="button" className="secondary" onClick={() => setNewBrand("")}>New brand</button>
           : <div className="inlineForm">
-              <label>New brand name<input value={newBrand} onChange={(e) => setNewBrand(e.target.value)} maxLength={120} placeholder="e.g. Oraimo" /></label>
+              <label>New brand name<TextBox value={newBrand} onChange={(e) => setNewBrand(e.target.value)} maxLength={120} placeholder="e.g. Oraimo" /></label>
               <button type="button" disabled={!newBrand.trim()} onClick={() => void addBrand()}>Add brand</button>
               <button type="button" className="secondary" onClick={() => { setNewBrand(null); setBrandError(""); }}>Cancel</button>
               <FormError title="Could not add the brand." message={brandError} />
@@ -148,7 +149,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       </div>
       <label>
         Description
-        <textarea name="description" defaultValue={defaults.description || ""} />
+        <TextArea name="description" defaultValue={defaults.description || ""} />
       </label>
       <label>
         Product type
@@ -175,7 +176,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       </fieldset>}
       <label>
         {type === "SERVICE" ? "Service option" : "Variant"}
-        <input
+        <TextBox
           name="variant_name"
           value={variantName}
           onChange={(event) => setVariantName(event.target.value)}

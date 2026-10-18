@@ -11,6 +11,7 @@ import { ChamaSetupFields, emptyChama, chamaPayload, chamaProblem } from "../cha
 import { COUNTRIES, CURRENCIES, allowedModules, findSector, moduleLabel, moduleProblem, searchSectors, timeZones, toggleModule, useBusinessProfiles } from "./businessSetupData";
 import { MpesaPaymentsSetup } from "../settings/MpesaPaymentsSetup";
 import { BusinessPartsChoice, MONEY_MODES, MONEY_PARTS, STRUCTURES, defaultPartName } from "../../core/organization/MoneyModeChoice";
+import { TextBox } from "../../components/forms/TextBox";
 
 const STEP_LABELS = { business: "Your business", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Money", review: "Review" };
@@ -195,7 +196,7 @@ function SetupWizard({ catalogue, user, refresh }) {
     </ol>
 
     {current === "business" && <section className="setupPanel">
-      <label>Business name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="e.g. Fresh Cuts Barbershop" autoFocus /></label>
+      <label>Business name<TextBox value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="e.g. Fresh Cuts Barbershop" autoFocus /></label>
       <fieldset className="choiceGroup">
         <legend>How does your business make money?</legend>
         <div className="choiceGrid wideChoices">
@@ -234,7 +235,7 @@ function SetupWizard({ catalogue, user, refresh }) {
           <button type="button" className="linkButton" onClick={createOwnKind}>Create “{sectorQuery.trim()}” as my kind of business</button></p>}
       </fieldset>
       {isOther && <>
-        <label>Name your kind of business<input value={otherText} onChange={(e) => setOtherText(e.target.value)} maxLength={100} placeholder="e.g. Poultry farm, Car hire, Music studio" /></label>
+        <label>Name your kind of business<TextBox value={otherText} onChange={(e) => setOtherText(e.target.value)} maxLength={100} placeholder="e.g. Poultry farm, Car hire, Music studio" /></label>
         <p className="muted">You start with the usual tools for a business that {catalogue.models.find((item) => item.id === model)?.phrase}, and choose your own on the next steps.
           Once reviewed, your kind of business is added to this list so others like you find it.</p>
       </>}
@@ -273,7 +274,7 @@ function SetupWizard({ catalogue, user, refresh }) {
       {modules.has("services") && <fieldset className="choiceGroup starterList">
         <legend>Your service price list <small>Leave a price blank to skip that service.</small></legend>
         {services.map((service, index) => <div className="starterService" key={index}>
-          <label><span className="sr">Service name</span><input value={service.name} onChange={(e) => setService(index, { name: e.target.value })} maxLength={180} placeholder="Service name" /></label>
+          <label><span className="sr">Service name</span><TextBox value={service.name} onChange={(e) => setService(index, { name: e.target.value })} maxLength={180} placeholder="Service name" /></label>
           <label><span className="sr">Price for {service.name || "this service"}</span>
             <input type="number" min="0" step="0.01" inputMode="decimal" value={service.selling_price} onChange={(e) => setService(index, { selling_price: e.target.value })} placeholder={`${details.currency} ${UNIT_LABELS[service.billing_unit] || ""}`} />
           </label>
@@ -289,7 +290,7 @@ function SetupWizard({ catalogue, user, refresh }) {
             onClick={() => setCategories(categories.map((row, i) => (i === index ? { ...row, on: !row.on } : row)))}>{item.label}</button>)}
         </div>
         <div className="starterService">
-          <label><span className="sr">New category</span><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} maxLength={120} placeholder="Add a category"
+          <label><span className="sr">New category</span><TextBox value={newCategory} onChange={(e) => setNewCategory(e.target.value)} maxLength={120} placeholder="Add a category"
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCategory(); } }} /></label>
           <button type="button" className="secondary" onClick={addCategory}>Add</button>
         </div>
@@ -302,20 +303,20 @@ function SetupWizard({ catalogue, user, refresh }) {
     </section>}
 
     {current === "place" && <section className="setupPanel setupGrid">
-      <label className="wide">First branch or shop name<input value={details.branch_name} onChange={setDetail("branch_name")} maxLength={160} /></label>
+      <label className="wide">First branch or shop name<TextBox value={details.branch_name} onChange={setDetail("branch_name")} maxLength={160} /></label>
       <label>Phone<input value={details.phone} onChange={setDetail("phone")} type="tel" maxLength={40} placeholder="0712 345 678" /></label>
       <label>Email<input value={details.email} onChange={setDetail("email")} type="email" placeholder="hello@yourbusiness.com" /></label>
-      <label className="wide">Address or location<input value={details.address} onChange={setDetail("address")} maxLength={500} placeholder="Street, market or town" /></label>
+      <label className="wide">Address or location<TextBox value={details.address} onChange={setDetail("address")} maxLength={500} placeholder="Street, market or town" /></label>
       <label>Country<select value={country ? details.country : "OTHER"} onChange={setCountry}>
         {COUNTRIES.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
         <option value="OTHER">Another country…</option>
       </select></label>
-      {!country && <label>Country code<input value={details.country === "OTHER" ? "" : details.country} onChange={(e) => setDetails((c) => ({ ...c, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="Two letters, e.g. FR" /></label>}
+      {!country && <label>Country code<TextBox value={details.country === "OTHER" ? "" : details.country} onChange={(e) => setDetails((c) => ({ ...c, country: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="Two letters, e.g. FR" /></label>}
       <label>Currency<select value={CURRENCIES.includes(details.currency) ? details.currency : "OTHER"} onChange={(e) => setDetails((c) => ({ ...c, currency: e.target.value === "OTHER" ? "" : e.target.value }))}>
         {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
         <option value="OTHER">Another currency…</option>
       </select></label>
-      {!CURRENCIES.includes(details.currency) && <label>Currency code<input value={details.currency} onChange={(e) => setDetails((c) => ({ ...c, currency: e.target.value.toUpperCase().slice(0, 3) }))} placeholder="Three letters, e.g. EUR" /></label>}
+      {!CURRENCIES.includes(details.currency) && <label>Currency code<TextBox value={details.currency} onChange={(e) => setDetails((c) => ({ ...c, currency: e.target.value.toUpperCase().slice(0, 3) }))} placeholder="Three letters, e.g. EUR" /></label>}
       <label>Time zone<select value={details.timezone} onChange={setDetail("timezone")}>
         {zones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
       </select></label>

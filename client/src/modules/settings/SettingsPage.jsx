@@ -10,6 +10,7 @@ import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
 import { allowedModules, findSector, fitModules, moduleProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
 import { BusinessPartsChoice, MONEY_PARTS } from "../../core/organization/MoneyModeChoice";
+import { TextBox } from "../../components/forms/TextBox";
 
 const roleLabels = {
   OWNER: "Owner",
@@ -168,7 +169,7 @@ function BusinessSettings() {
       <option value="">Choose…</option>
       {catalogue.sectors[profile.business_model].map((sector) => <option key={sector.id} value={sector.id}>{sector.label}</option>)}
     </select></label>
-    {(isOther || !profile.sector) && <label>Name your kind of business<input value={profile.business_type} onChange={(e) => setProfile({ ...profile, business_type: e.target.value })} maxLength={100} /></label>}
+    {(isOther || !profile.sector) && <label>Name your kind of business<TextBox value={profile.business_type} onChange={(e) => setProfile({ ...profile, business_type: e.target.value })} maxLength={100} /></label>}
     <label>People working in the business<select value={profile.business_size} onChange={(e) => setProfile({ ...profile, business_size: e.target.value })}>
       {catalogue.sizes.map((size) => <option key={size.id} value={size.id}>{size.label}</option>)}
     </select></label>

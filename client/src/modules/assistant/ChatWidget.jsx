@@ -5,6 +5,7 @@ import { MessageActions } from "../platform/messageActions";
 import { useCloseOnOutsideClick, usePromptHistory, useQuestionAtTop } from "./promptHistory";
 import { useResizablePanel } from "./resizablePanel";
 import "../platform/helpChat.css";
+import { TextArea } from "../../components/forms/TextBox";
 
 // Reads the server-sent events from a chat endpoint as they arrive.
 export async function* readEvents(response) {
@@ -145,7 +146,7 @@ export function ChatWidget({
             {messages.map((message, index) => editing?.index === index ? (
               <form key={index} className="helpChatTurn user helpChatEdit" onSubmit={(event) => { event.preventDefault(); resend(); }}>
                 <label className="srOnly" htmlFor={`${inputId}-edit`}>Edit your question</label>
-                <textarea id={`${inputId}-edit`} autoFocus rows={3} value={editing.text} maxLength={maxQuestion}
+                <TextArea id={`${inputId}-edit`} autoFocus rows={3} value={editing.text} maxLength={maxQuestion}
                   onChange={(event) => setEditing({ index, text: event.target.value })}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") { event.stopPropagation(); setEditing(null); }
@@ -174,7 +175,7 @@ export function ChatWidget({
           </div>
           <form className="helpChatForm" onSubmit={(event) => { event.preventDefault(); ask(draft); }}>
             <label className="srOnly" htmlFor={inputId}>Your question</label>
-            <textarea id={inputId} ref={input} rows={1} value={draft} maxLength={maxQuestion} placeholder={placeholder}
+            <TextArea id={inputId} ref={input} rows={1} value={draft} maxLength={maxQuestion} placeholder={placeholder}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (asked.onKeyDown(event)) return;

@@ -5,6 +5,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { askForm, confirmAction, showError, showSuccess } from "../../core/ui/alerts";
 import { ErrorState, Loading } from "../../components/States";
 import "./billing.css";
+import { TextBox } from "../../components/forms/TextBox";
 
 const MODULE_LABELS = { inventory: "Products & stock", locations: "Shelves & locations", services: "Services & jobs", pos: "Point of sale",
   customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff", chama: "Chama" };
@@ -168,12 +169,12 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
       <label>Status<select name="status" defaultValue={["TRIAL", "ACTIVE", "SUSPENDED", "CANCELLED"].includes(row.subscription.stored_status) ? row.subscription.stored_status : "ACTIVE"}>
         <option value="TRIAL">Free month</option><option value="ACTIVE">Active</option><option value="SUSPENDED">Suspended</option><option value="CANCELLED">Cancelled</option>
       </select></label>
-      <label>Note<input name="note" maxLength={255} placeholder="Why (kept in the history)" /></label>
+      <label>Note<TextBox name="note" maxLength={255} placeholder="Why (kept in the history)" /></label>
       <button disabled={busy}>Apply</button>
     </form>
     <form onSubmit={submit((values) => change(`Add ${values.extend_days} days?`, "PATCH", { extend_days: Number(values.extend_days), note: values.note }, "The days were added."))}>
       <label>Add days<input name="extend_days" type="number" min="1" max="3650" defaultValue="30" required /></label>
-      <label>Note<input name="note" maxLength={255} placeholder="e.g. Compensation for downtime" /></label>
+      <label>Note<TextBox name="note" maxLength={255} placeholder="e.g. Compensation for downtime" /></label>
       <button disabled={busy}>Add days</button>
       <button type="button" className="secondary" disabled={busy} onClick={() => void change(row.subscription.complimentary ? "Stop the free platform plan?" : "Make this a free platform plan?", "PATCH",
         { complimentary: !row.subscription.complimentary }, row.subscription.complimentary ? "The business now needs a paid subscription." : "The business now has every feature for free.")}>
@@ -184,7 +185,7 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
     <form onSubmit={submit((values) => change(`Record ${money(values.amount)} for ${values.plan}?`, "POST", values, "The payment was recorded and the subscription extended."))}>
       <label>Plan<select name="plan" defaultValue={row.subscription.plan || plans[0]?.code}>{plans.map((p) => <option key={p.code} value={p.code}>{p.name} · {money(p.price, p.currency)}</option>)}</select></label>
       <label>Amount<input name="amount" type="number" min="1" step="0.01" required /></label>
-      <label>Receipt / reference<input name="receipt_number" maxLength={40} placeholder="M-Pesa code or cash receipt" /></label>
+      <label>Receipt / reference<TextBox name="receipt_number" maxLength={40} placeholder="M-Pesa code or cash receipt" /></label>
       <button disabled={busy}>Record payment</button>
     </form>
 
@@ -229,9 +230,9 @@ function PlanEditor({ plan, onSaved }) {
   const toggle = (id) => setModules((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   return <form onSubmit={(event) => void save(event)} aria-label={`${plan.name} plan`}>
     <h3>{plan.name} <small className="muted">({plan.code})</small></h3>
-    <label>Name<input name="name" defaultValue={plan.name} required maxLength={100} /></label>
+    <label>Name<TextBox name="name" defaultValue={plan.name} required maxLength={100} /></label>
     <label>Price ({plan.currency} per {plan.period_days} days)<input name="price" type="number" min="1" step="1" defaultValue={Number(plan.price)} required /></label>
-    <label>Description<input name="description" defaultValue={plan.description} maxLength={255} /></label>
+    <label>Description<TextBox name="description" defaultValue={plan.description} maxLength={255} /></label>
     <fieldset className="checkList"><legend>Tools included</legend>
       {Object.entries(MODULE_LABELS).map(([id, label]) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {label}</label>)}
     </fieldset>
@@ -284,13 +285,13 @@ function KindEditor({ kind, onSaved }) {
   return <form onSubmit={(event) => void save(event)} aria-label={kind.label}>
     <h3>{kind.label} <span className={`statusPill ${status.tone}`}>{status.label}</span></h3>
     <p className="muted">{MODEL_LABELS[kind.business_model]} · {kind.uses} {kind.uses === 1 ? "business" : "businesses"} · first added by {kind.created_by || "a removed business"} on {dateText(kind.created_at)}</p>
-    <label>Name<input name="label" defaultValue={kind.label} required maxLength={100} /></label>
-    <label>Short description<input name="hint" defaultValue={kind.hint} maxLength={160} placeholder="What these businesses sell or do" /></label>
-    <label>Search words<input name="keywords" defaultValue={kind.keywords} maxLength={255} placeholder="Other names owners might search for" /></label>
+    <label>Name<TextBox name="label" defaultValue={kind.label} required maxLength={100} /></label>
+    <label>Short description<TextBox name="hint" defaultValue={kind.hint} maxLength={160} placeholder="What these businesses sell or do" /></label>
+    <label>Search words<TextBox name="keywords" defaultValue={kind.keywords} maxLength={255} placeholder="Other names owners might search for" /></label>
     <fieldset className="checkList"><legend>Usual tools</legend>
       {kind.allowed_modules.map((id) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {MODULE_LABELS[id]}</label>)}
     </fieldset>
-    {kind.business_model !== "SERVICES" && <label>Product categories<input name="categories" defaultValue={kind.categories.join(", ")} placeholder="Separate with commas" /></label>}
+    {kind.business_model !== "SERVICES" && <label>Product categories<TextBox name="categories" defaultValue={kind.categories.join(", ")} placeholder="Separate with commas" /></label>}
     {kind.business_model !== "GOODS" && <p className="muted">Starter services: {kind.services.map((service) => service.name).join(", ") || "none"}</p>}
     <div className="setupActions">
       <button type="submit" className="secondary" disabled={busy}>Save</button>

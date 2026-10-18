@@ -8,6 +8,7 @@ import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InterestCalculator } from "./InterestCalculator";
+import { TextArea } from "../../components/forms/TextBox";
 
 const BUSINESS = [["MPESA", "Lipa na M-Pesa (till)"], ["CASH", "Cash"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa agency float"]];
@@ -92,7 +93,7 @@ function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
         {!chosen && <FormField label="Yearly interest rate it pays now (%)" name="annual_rate" type="number" min="0" max="100" step="0.001"
           placeholder="e.g. 13.25 — the annual yield in the fund's app or SMS" />}
         <FormField label="Withholding tax on interest (%)" name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue="15" required />
-        <FormField label="Note (optional)"><textarea name="notes" maxLength={500} placeholder="e.g. spare agency cash, withdraw takes 2 days" /></FormField>
+        <FormField label="Note (optional)"><TextArea name="notes" maxLength={500} placeholder="e.g. spare agency cash, withdraw takes 2 days" /></FormField>
       </fieldset>
       <Risk kind={risk} />
       {followed && <p className="muted">The app reads {followed.short}'s rate on its own website{followed.annual_rate == null ? " now" : ""} and checks it

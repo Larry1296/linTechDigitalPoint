@@ -6,6 +6,7 @@ import { CorrectTransaction } from "./CorrectTransaction";
 import { useAuth } from "../../core/auth/AuthContext";
 import { paidByLabel } from "./airtime";
 import { earnedLabel } from "./commissionBalance";
+import { TextBox } from "../../components/forms/TextBox";
 
 // 254712345678 → 0712 345 678, the way customers say their number.
 export const localPhone = (phone) => (phone && phone.startsWith("254") ? `0${phone.slice(3, 6)} ${phone.slice(6, 9)} ${phone.slice(9)}` : phone || "—");
@@ -28,7 +29,7 @@ function AddCode({ entry, onSaved }) {
         setError(err.message);
       }
     }}>
-      <input aria-label={`Transaction ID for the ${Number(entry.amount).toLocaleString()} at ${time(entry)}`} required value={code} onChange={(event) => setCode(event.target.value)} />
+      <TextBox aria-label={`Transaction ID for the ${Number(entry.amount).toLocaleString()} at ${time(entry)}`} required value={code} onChange={(event) => setCode(event.target.value)} />
       <button>Save</button>
       <FormError title="Could not save the transaction ID." message={error} />
     </form>

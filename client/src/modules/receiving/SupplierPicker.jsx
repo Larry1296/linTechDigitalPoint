@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
+import { TextBox } from "../../components/forms/TextBox";
 
 const NEW = "__new__";
 
@@ -19,7 +20,7 @@ export function SupplierPicker({ label = "Supplier", value, onChange }) {
   if (suppliers && (typing || !suppliers.length)) {
     return <>
       <label>{suppliers.length ? "New supplier name" : label}
-        <input maxLength="180" required value={value} autoFocus={typing}
+        <TextBox maxLength="180" required value={value} autoFocus={typing}
           onChange={(e) => onChange(e.target.value)} onBlur={() => { const match = known(value); if (match) onChange(match); }} /></label>
       {suppliers.length > 0 && <button type="button" className="linkButton" onClick={() => { setTyping(false); onChange(known(value) || ""); }}>
         Choose from the list instead</button>}

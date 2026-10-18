@@ -6,6 +6,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
 import { ProductPhotos } from "./ProductPhotos";
 import { hasPermission } from "./VariantSummary";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 
 const labels = {
   name: "Product name",
@@ -211,9 +212,9 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
           <option value="SERVICE">Billable service</option>
         </select>
       );
-    if (field === "description") return <textarea id={id} value={value ?? ""} onChange={(e) => set(e.target.value)} />;
+    if (field === "description") return <TextArea id={id} value={value ?? ""} onChange={(e) => set(e.target.value)} />;
     if (checkboxes.includes(field)) return <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => set(e.target.checked)} />;
-    return <input id={id} type={numeric.includes(field) ? "number" : "text"} min="0" step="any" value={value ?? ""} onChange={(e) => set(e.target.value)} />;
+    return <TextBox id={id} type={numeric.includes(field) ? "number" : "text"} min="0" step="any" value={value ?? ""} onChange={(e) => set(e.target.value)} />;
   };
   return (
     <article className="panel productEditor">
@@ -266,7 +267,7 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
         {(changedBp.length > 0 || changedQty.length > 0) && (
           <label>
             Note (what happened)
-            <input required={changedBp.length > 0} maxLength="200" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="e.g. typed 150 instead of 1500" />
+            <TextBox required={changedBp.length > 0} maxLength="200" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="e.g. typed 150 instead of 1500" />
           </label>
         )}
         <button disabled={saving}>Save changes</button>

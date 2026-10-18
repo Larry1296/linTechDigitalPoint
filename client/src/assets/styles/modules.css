@@ -29,6 +29,18 @@ textarea {
   @apply tw:rounded-[9px];
   @apply tw:[padding:11px];
 }
+/* Text boxes that grow with their text (components/forms/TextBox.jsx): every word shows, nothing scrolls. */
+textarea.autoGrow {
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  overflow-wrap: anywhere;
+}
+textarea.textBox {
+  min-height: 0;
+  line-height: inherit;
+  vertical-align: top;
+}
 input::placeholder,
 textarea::placeholder {
   @apply tw:[color:var(--muted)];
@@ -275,7 +287,7 @@ label:where(:has(> input[type="radio"])) {
   @apply tw:block;
   @apply tw:[color:var(--muted)];
 }
-.list input {
+.list input, .list textarea.textBox {
   @apply tw:w-[80px];
 }
 .danger {
@@ -754,7 +766,7 @@ label:where(:has(> input[type="radio"])) {
   @apply tw:[align-items:start];
   @apply tw:[margin:24px_0];
 }
-.operatorForm input,
+.operatorForm input, .operatorForm textarea.textBox,
 .operatorForm select,
 .operatorForm button {
   @apply tw:min-h-[48px];
@@ -2105,7 +2117,7 @@ form a:not(.button, .pageBackLink),
 .saleCart .lineAdjust summary { color: var(--primary); font-weight: 700; }
 .saleCart .agreedPrice { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 140px); align-items: center; gap: 2px 10px; font-weight: 700; font-size: 14px; }
 .saleCart .agreedPrice small { grid-column: 1; grid-row: 2; color: var(--muted); font-weight: 600; font-size: 12.5px; }
-.saleCart .agreedPrice input { grid-column: 2; grid-row: 1 / span 2; font-size: 16px; font-weight: 700; text-align: right; }
+.saleCart .agreedPrice input, .saleCart .agreedPrice textarea.textBox { grid-column: 2; grid-row: 1 / span 2; font-size: 16px; font-weight: 700; text-align: right; }
 .saleCart .lineDiscount { display: grid; gap: 8px; }
 .receiptCosts { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
 .receiptCosts legend { font-weight: 700; padding: 0 6px; }
@@ -2288,7 +2300,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
 .customerLedger > div { align-items: center; }
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
-.customerLedger .inlineForm input { flex: 1 1 8rem; min-width: 0; }
+.customerLedger .inlineForm input, .customerLedger .inlineForm textarea.textBox { flex: 1 1 8rem; min-width: 0; }
 .customerLedger .inlineForm button { margin: 0; }
 /* On narrow screens the M-Pesa tables keep their columns and scroll sideways, rather than wrapping each
    row onto two lines under headings that no longer match. */
@@ -2353,7 +2365,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .stockCheckSummary span { display: block; color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .stockCheckSummary strong { font-size: 18px; font-variant-numeric: tabular-nums; }
 .stockCheckFilter { display: grid; gap: 4px; max-width: 320px; margin-bottom: 8px; }
-.stockCheckTable input { width: 6rem; min-height: 40px; }
+.stockCheckTable input, .stockCheckTable textarea.textBox { width: 6rem; min-height: 40px; }
 .stockCheckTable tr.stockCheckOff td:nth-child(4) { color: var(--danger, #b42318); font-weight: 700; }
 .stockSettle { margin: 10px 0; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid #d97706; border-radius: 12px; background: var(--surface); }
 .stockSettle p { margin: 0 0 8px; }
@@ -2894,7 +2906,7 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .stockQuickSearch p { margin: 0; }
 .stockQuickSearchBox { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--muted); }
 .stockQuickSearchBox:focus-within { border-color: var(--primary); }
-.stockQuickSearchBox input { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 16px; }
+.stockQuickSearchBox input, .stockQuickSearchBox textarea.textBox { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 16px; }
 .stockQuickSearchBox button { display: grid; place-items: center; min-height: 0; padding: 6px; border: 0; }
 .stockQuickResults { display: grid; gap: 6px; max-height: 420px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .stockQuickResults li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }

@@ -12,6 +12,7 @@ import { FormError } from "../../components/forms/FormNotice";
 import { FREQUENCIES, ChamaSetupFields, ROLES, emptyChama, chamaPayload, chamaProblem, periodWord, roleLabel } from "./ChamaSetupFields";
 import "../platform/platform.css";
 import "./chama.css";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 
 const METHODS = [["CASH", "Cash"], ["MPESA", "M-Pesa"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const methodName = (value) => Object.fromEntries(METHODS)[value] || value;
@@ -235,7 +236,7 @@ function ExcuseForm({ chama, member, setChama, onDone }) {
     <fieldset disabled={busy} className="loanFields">
       <FormField label="Contribution of"><select name="period_date" defaultValue={dates[0]}>{dates.map((d) => <option key={d} value={d}>{date(d)}</option>)}</select></FormField>
       <FormField label="Promises to pay by" name="pay_by" type="date" min={todayText()} required />
-      <FormField label="Reason given"><input name="reason" maxLength={500} required placeholder="e.g. waiting for salary on the 10th" /></FormField>
+      <FormField label="Reason given"><TextBox name="reason" maxLength={500} required placeholder="e.g. waiting for salary on the 10th" /></FormField>
     </fieldset>
     <div className="actionRow"><button disabled={busy}>Accept excuse</button><button type="button" className="secondary" onClick={onDone}>Cancel</button></div>
     <FormError title="Could not record the excuse." message={error} />
@@ -413,7 +414,7 @@ function PayoutForm({ chama, setChama, next, onDone }) {
       <FormField label="Given on" name="paid_on" type="date" max={todayText()} defaultValue={todayText()} required />
       <FormField label="Given by"><select name="method" value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></FormField>
       <FormField label={method === "MPESA" ? "M-Pesa code" : "Reference (optional)"} name="reference" maxLength={120} required={method === "MPESA"} autoComplete="off" />
-      <FormField label="Note (optional)"><input name="notes" maxLength={500} /></FormField>
+      <FormField label="Note (optional)"><TextBox name="notes" maxLength={500} /></FormField>
     </fieldset>
     <p className="muted">The treasurer holds {money(chama.money.held)}.</p>
     <div className="actionRow"><button disabled={busy}>Record payout</button><button type="button" className="secondary" onClick={onDone}>Cancel</button></div>
@@ -444,7 +445,7 @@ function NextReceiver({ chama, setChama, can, next }) {
             <option value="" disabled>Choose the member</option>
             {chama.still_to_receive.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select></FormField>
-          <FormField label="Note (optional)"><input name="note" maxLength={500} placeholder="e.g. agreed at Sunday's meeting" /></FormField>
+          <FormField label="Note (optional)"><TextBox name="note" maxLength={500} placeholder="e.g. agreed at Sunday's meeting" /></FormField>
         </fieldset>
         <div className="actionRow"><button disabled={busy}>Save who receives next</button><button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel</button></div>
         <FormError title="Could not save who receives next." message={error} />
@@ -590,7 +591,7 @@ function Rules({ chama, setChama, can }) {
         <option value="AGREED">The members agree who receives next, each turn</option>
       </select></FormField>}
       <FormField label="Contributions in each turn" name="periods_per_round" type="number" min="1" max="60" step="1" defaultValue={chama.periods_per_round} disabled={chama.turns_locked || chama.payout_mode !== "ROTATION"} />
-      <FormField label="Notes (optional)"><textarea name="notes" maxLength={2000} defaultValue={chama.notes} placeholder="e.g. agreed rules, meeting day, bank account" /></FormField>
+      <FormField label="Notes (optional)"><TextArea name="notes" maxLength={2000} defaultValue={chama.notes} placeholder="e.g. agreed rules, meeting day, bank account" /></FormField>
     </fieldset>
     {chama.schedule_locked && <p className="muted">How often members contribute cannot change once contributions have started, because past records depend on it.</p>}
     {editable && <button disabled={busy}>Save rules</button>}

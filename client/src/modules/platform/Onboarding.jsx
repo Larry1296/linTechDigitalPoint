@@ -9,6 +9,7 @@ import { Loading } from "../../components/States";
 import { usePlatform } from "./PlatformContext";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { PasswordField } from "../../components/forms/PasswordField";
+import { TextBox } from "../../components/forms/TextBox";
 export function RegisterPage() {
   const platform = usePlatform();
   const { signedIn } = useAuth();
@@ -32,8 +33,8 @@ export function RegisterPage() {
       <fieldset>
         <legend>About you</legend>
         <div className="registerRow">
-          <label>First name<input name="first_name" autoComplete="given-name" required maxLength={150} /></label>
-          <label>Last name<input name="last_name" autoComplete="family-name" required maxLength={150} /></label>
+          <label>First name<TextBox name="first_name" autoComplete="given-name" required maxLength={150} /></label>
+          <label>Last name<TextBox name="last_name" autoComplete="family-name" required maxLength={150} /></label>
         </div>
         <label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" required maxLength={20} placeholder="0712 345 678" /></label>
         <label>Email<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" aria-describedby="register-email-hint" /></label>
@@ -41,7 +42,7 @@ export function RegisterPage() {
       </fieldset>
       <fieldset>
         <legend>Sign-in details</legend>
-        <label>Username<input name="username" autoComplete="username" required maxLength={150} pattern="[\w.@+\-]+" title="Letters, numbers and . @ + - _ only, no spaces" aria-describedby="register-username-hint" /></label>
+        <label>Username<TextBox name="username" autoComplete="username" required maxLength={150} pattern="[\w.@+\-]+" title="Letters, numbers and . @ + - _ only, no spaces" aria-describedby="register-username-hint" /></label>
         <small id="register-username-hint">You sign in with this or your email. No spaces.</small>
         <div className="registerRow">
           <PasswordField label="Password" name="password" autoComplete="new-password" minLength={8} required />

@@ -1,3 +1,4 @@
+import { TextBox } from "../../components/forms/TextBox";
 // How the owner keeps the money of the parts of the business: one drawer with each part's money labelled, or a cash
 // drawer for each part. Chosen when the business is set up and changeable in Settings; the money check, "money you
 // should hold" and the dashboard all follow it.
@@ -70,7 +71,7 @@ export function BusinessPartsChoice({ parts, sector, value, onChange, className 
     {withParts && <fieldset className="choiceGroup partNames">
       <legend>What do you call each part? <small>These names appear on the dashboard, the money check and expenses.</small></legend>
       {parts.map((part) => <label key={part.key}>{ROLES[part.key]}
-        <input value={value.part_names?.[part.key] ?? ""} maxLength={40} placeholder={defaultPartName(part.key, sector)}
+        <TextBox value={value.part_names?.[part.key] ?? ""} maxLength={40} placeholder={defaultPartName(part.key, sector)}
           onChange={(event) => set({ part_names: { ...value.part_names, [part.key]: event.target.value } })} />
       </label>)}
     </fieldset>}

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { deleteCategory, saveCategory } from "./api";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
+import { TextBox } from "../../components/forms/TextBox";
 
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
@@ -133,7 +134,7 @@ export function CategoryManager({ categories, onSaved, onDeleted, canAdd = true,
     {(editing ? canChange : canAdd) && <form onSubmit={submit} ref={formRef}>
       <h3>{editing ? "Edit category" : parent ? "Add sub-category" : "Create category"}</h3>
       <fieldset disabled={saving}>
-        <label>Category name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} placeholder="Mobile Accessories" /></label>
+        <label>Category name<TextBox value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} placeholder="Mobile Accessories" /></label>
         <label>Parent category<select value={parent} onChange={(event) => setParent(event.target.value)}>
           <option value="">Root category</option>
           {tree.filter((row) => !isDescendant(row.category)).map(({ category }) => (

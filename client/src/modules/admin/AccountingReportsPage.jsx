@@ -6,6 +6,7 @@ import { ErrorState, Loading } from "../../components/States";
 import { FormError } from "../../components/forms/FormNotice";
 import { stockText } from "./plainMoney";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { TextBox } from "../../components/forms/TextBox";
 
 const VIEWS = [["owner", "Summary"], ["units", "By business"], ["accounting", "Accounts"]];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -112,7 +113,7 @@ function SupplyCost({ row, onDone }) {
   };
   return <form className="inlineForm" onSubmit={submit}>
     <label>Buying price for one<input name="unit_cost" type="number" min="0.01" step="0.01" required /></label>
-    <label>Where does it come from?<input name="reason" required maxLength="200" placeholder="e.g. found the supplier invoice" /></label>
+    <label>Where does it come from?<TextBox name="reason" required maxLength="200" placeholder="e.g. found the supplier invoice" /></label>
     <button disabled={busy}>Save price</button>
     <FormError title="Could not save the price." message={error} />
   </form>;

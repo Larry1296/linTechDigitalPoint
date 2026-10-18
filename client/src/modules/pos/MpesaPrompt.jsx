@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2, Smartphone, XCircle } from "lucide-react";
 import { api } from "../../core/api/client";
 import { businessCurrency } from "../../core/organization/presentation";
 import "./mpesaPrompt.css";
+import { TextBox } from "../../components/forms/TextBox";
 
 const POLL_MS = 3000;
 
@@ -73,7 +74,7 @@ export function SendPrompt({ paymentId, defaultPhone = "", label = "Send M-Pesa 
   };
   return <form className="sendPrompt" onSubmit={send}>
     <label>Customer's M-Pesa number
-      <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" required placeholder="0712 345 678" maxLength={16} />
+      <TextBox value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" required placeholder="0712 345 678" maxLength={16} />
     </label>
     <button disabled={busy || !phone.trim()}><Smartphone size={16} aria-hidden="true" /> {busy ? "Sending…" : label}</button>
     {error && <p className="formNotice error" role="alert">{error}</p>}

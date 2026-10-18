@@ -15,6 +15,7 @@ import { useMpesaExpress } from "./MpesaPrompt";
 import { CheckoutPanel } from "./CheckoutPanel";
 import "../admin/pos.css";
 import "./posPage.css";
+import { TextBox } from "../../components/forms/TextBox";
 
 const ALL = "All";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -90,7 +91,7 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
           <input type="number" min="0" step="0.01" value={x.discount ?? ""} placeholder="0" onChange={(e) => setLine(x.p.id, { discount: e.target.value })} />
         </label>
         <label>Reason for the lower price
-          <input value={x.reason ?? ""} maxLength={160} onChange={(e) => setLine(x.p.id, { reason: e.target.value })} placeholder="e.g. loyal customer, damaged box" />
+          <TextBox value={x.reason ?? ""} maxLength={160} onChange={(e) => setLine(x.p.id, { reason: e.target.value })} placeholder="e.g. loyal customer, damaged box" />
         </label>
       </details>}
     </div>}
@@ -302,7 +303,7 @@ export function PosPage() {
               <label>Discount on the whole sale
                 <input name="discount" type="number" min="0" step="0.01" value={discount} placeholder="0" onChange={(e) => setDiscount(e.target.value)} />
               </label>
-              <label>Reason for sale discount<input name="discount_reason" maxLength={160} value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
+              <label>Reason for sale discount<TextBox name="discount_reason" maxLength={160} value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
             </details>
             <div className="posGrandTotal"><span>Total</span><strong>{money(total)}</strong></div>
           </div>
@@ -312,8 +313,8 @@ export function PosPage() {
             <p className="muted">Walk-in customers need nothing. Choose a customer to put the sale on their record, or to let them owe part of it.</p>
             <label>Customer<select name="customer_id" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}</select></label>
             {canAddCustomer && (newCustomer ? <div className="inlineCreate" role="group" aria-label="New customer">
-              <label>Customer name<input value={newCustomer.name} maxLength={150} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} /></label>
-              <label>Phone<input value={newCustomer.phone} maxLength={30} inputMode="tel" onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} /></label>
+              <label>Customer name<TextBox value={newCustomer.name} maxLength={150} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} /></label>
+              <label>Phone<TextBox value={newCustomer.phone} maxLength={30} inputMode="tel" onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} /></label>
               <button type="button" disabled={!newCustomer.name.trim()} onClick={() => void addCustomer()}>Save customer</button>
               <button type="button" className="secondary" onClick={() => { setNewCustomer(null); setCustomerError(""); }}>Cancel</button>
               <FormError title="Could not add the customer." message={customerError} />

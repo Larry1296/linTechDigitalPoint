@@ -6,6 +6,7 @@ import { confirmAction, showError, showSuccess } from "../../core/ui/alerts";
 import { ErrorState, Loading } from "../../components/States";
 import { FormField } from "../../components/forms/FormField";
 import "./billing.css";
+import { TextArea } from "../../components/forms/TextBox";
 
 const BASE = "/api/v1/assistant/admin";
 const dateText = (value) => (value ? new Date(value).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -77,7 +78,7 @@ function ChatSettings({ data, onSaved }) {
         <label className="checkRow"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Show the chat on the website</label>
         <FormField label="Greeting" value={greeting} maxLength={600} placeholder={data.default_greeting} onChange={(event) => setGreeting(event.target.value)} />
         <label>Suggested questions (one per line, up to 8)
-          <textarea rows={5} value={suggestions} placeholder={data.default_suggestions.join("\n")} onChange={(event) => setSuggestions(event.target.value)} />
+          <TextArea rows={5} value={suggestions} placeholder={data.default_suggestions.join("\n")} onChange={(event) => setSuggestions(event.target.value)} />
         </label>
         <p className="muted">Leave the greeting or questions empty to use the built-in ones (shown faded).</p>
         <button disabled={busy}>Save chat settings</button>
@@ -115,7 +116,7 @@ function ArticleEditor({ audience, article, onDone, onCancel }) {
       <h3>{adding ? "New article" : article.title}</h3>
       <FormField label="Title" required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} />
       <label>Questions and answers
-        <textarea rows={16} required value={body} onChange={(event) => setBody(event.target.value)}
+        <TextArea rows={16} required value={body} onChange={(event) => setBody(event.target.value)}
           placeholder={"## A question people ask?\nThe answer, in plain words.\n\n## Another question?\nIts answer."} />
       </label>
       <p className="muted">Start each question on its own line with "## ". Use **bold** for button and page names. Write {"{platform}"} for the platform's name.</p>

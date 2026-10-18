@@ -3,6 +3,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
 import { label } from "../../core/ui/labels";
+import { TextBox } from "../../components/forms/TextBox";
 
 export const NEW_RECEIPT_COSTS = { document_status: "SUPPLIER_DOCUMENT", landed_costs: [], payment_method: "", payment_amount: "",
   investment_id: "", investment_name: "", payment_via: "MPESA" };
@@ -63,7 +64,7 @@ export function ReceiptDocumentFields({ details, onChange }) {
   const noDocument = details.document_status === "NO_DOCUMENT";
   return <>
     <label>Supplier invoice / delivery note number
-      <input value={details.external_reference} disabled={noDocument} required={!noDocument}
+      <TextBox value={details.external_reference} disabled={noDocument} required={!noDocument}
         onChange={(e) => set({ external_reference: e.target.value })} placeholder={noDocument ? "A reference will be created" : "e.g. INV-2041"} />
     </label>
     <label className="checkRow">
@@ -85,7 +86,7 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
     <legend>Delivery and other costs</legend>
     <p className="muted">Transport, loading or handling paid to get this stock here. They are added to the stock's cost, shared across the items by value.</p>
     {costs.map((cost, index) => <div className="receiptCostRow" key={index}>
-      <label>What for<input value={cost.description} onChange={(e) => setCost(index, { description: e.target.value })} placeholder="e.g. Boda boda from supplier" /></label>
+      <label>What for<TextBox value={cost.description} onChange={(e) => setCost(index, { description: e.target.value })} placeholder="e.g. Boda boda from supplier" /></label>
       <label>Amount<input type="number" min="0.01" step="0.01" value={cost.amount} onChange={(e) => setCost(index, { amount: e.target.value })} /></label>
       <label>How paid<select value={cost.paid_by} onChange={(e) => setCost(index, { paid_by: e.target.value })}>
         {PAID_BY.map(([value, label]) => <option key={value} value={value}>{label}</option>)}

@@ -5,6 +5,7 @@ import { businessCurrency } from "../../core/organization/presentation";
 import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { PromptStatus, shownPhone } from "./MpesaPrompt";
+import { TextBox } from "../../components/forms/TextBox";
 
 const POLL_MS = 2500;
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -142,7 +143,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
           {express?.can_change ? " Connect it in Settings → M-Pesa payments." : ""}</p>}
         <form className="posInline" onSubmit={(e) => { e.preventDefault(); void pay({ method: "TILL", code }); }}>
           <label>{express?.till_notices ? "Or the code from the customer's message" : "Code from the customer's M-Pesa message"}
-            <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} placeholder="e.g. SJK4H7XQ2P" autoCapitalize="characters" /></label>
+            <TextBox value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} placeholder="e.g. SJK4H7XQ2P" autoCapitalize="characters" /></label>
           <button disabled={busy || !code.trim()} className={express?.till_notices ? "secondary" : undefined}>{express?.till_notices ? "Check code" : "Record payment"}</button>
         </form>
         {express?.simulated && <button type="button" className="linkButton" onClick={() => void api("/api/v1/commerce/till-payments/simulate/",
@@ -151,13 +152,13 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
       </div>}
 
       {way === "PROMPT" && <form className="posWay" onSubmit={(e) => { e.preventDefault(); void pay({ method: "PROMPT", phone }); }}>
-        <label>Customer's M-Pesa number<input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="0712 345 678" maxLength={16} autoFocus /></label>
+        <label>Customer's M-Pesa number<TextBox value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="0712 345 678" maxLength={16} autoFocus /></label>
         <p className="muted">The customer gets a prompt for {money(left)} and enters their PIN. The sale completes by itself when Safaricom confirms it.</p>
         <button disabled={busy || !phone.trim()}>{busy ? "Sending…" : "Send prompt"}</button>
       </form>}
 
       {way === "BANK" && <form className="posWay" onSubmit={(e) => { e.preventDefault(); void pay({ method: "BANK", reference }); }}>
-        <label>Bank transfer reference<input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={100} /></label>
+        <label>Bank transfer reference<TextBox value={reference} onChange={(e) => setReference(e.target.value)} maxLength={100} /></label>
         <p className="muted">Check that the money is in the business's bank account before recording it.</p>
         <button disabled={busy || !reference.trim()}>Record {money(left)} by bank</button>
       </form>}

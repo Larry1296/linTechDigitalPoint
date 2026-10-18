@@ -6,6 +6,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { ReceiptSupplier } from "./ReceiptSupplier";
+import { TextArea, TextBox } from "../../components/forms/TextBox";
 
 const allowed = (user, permission) =>
   Boolean(user?.is_superuser || user?.permissions?.includes(permission));
@@ -331,7 +332,7 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
         <legend>Correct receipt line</legend>
         <label>
           Search product variant or SKU
-          <input value={query} onChange={(e) => setQuery(e.target.value)} />
+          <TextBox value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <label>
           Selected product variant
@@ -419,7 +420,7 @@ function CorrectionForm({ receipt, line, onCancel, onSaved }) {
         )}
         <label>
           Correction reason
-          <textarea
+          <TextArea
             required
             maxLength={2000}
             value={reason}

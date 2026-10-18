@@ -6,6 +6,7 @@ import { lookupMpesaCustomer, postMpesaTransaction } from "./api";
 import { readMpesaMessage } from "./mpesaMessage";
 import { localPhone } from "./CustomerTransactionList";
 import { CommissionBalanceField } from "./commissionBalance";
+import { TextArea } from "../../components/forms/TextBox";
 
 const transactionTypes = { CUSTOMER_DEPOSIT: { name: "deposit" }, CUSTOMER_WITHDRAWAL: { name: "withdrawal" } };
 
@@ -118,7 +119,7 @@ export function MpesaCustomerTransactionForm({
       <details className="pasteMessage">
         <summary>Paste the M-Pesa message</summary>
         <label>M-Pesa confirmation message
-          <textarea rows={3} placeholder="Paste the message here: the transaction ID, amount and number are filled in for you"
+          <TextArea rows={3} placeholder="Paste the message here: the transaction ID, amount and number are filled in for you"
             onChange={(event) => readMessage(event.target.value)} />
         </label>
         {pasted && <p className={pasted.empty ? "formNotice formNoticeError" : "muted"} role="status">{pasted.empty

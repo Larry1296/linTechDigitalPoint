@@ -4,6 +4,7 @@ import { api } from "../../core/api/client";
 import { FormError } from "../../components/forms/FormNotice";
 import { PromptStatus, usePrompt } from "../pos/MpesaPrompt";
 import "./mpesaSetup.css";
+import { TextBox } from "../../components/forms/TextBox";
 
 const KINDS = [
   { id: "TILL", name: "Till number", text: "Buy Goods: customers pay to a till number." },
@@ -100,13 +101,13 @@ export function MpesaPaymentsSetup({ intro = true }) {
         </section>
         <div className="mpesaFields">
           {till ? <>
-            <label>Till number<input value={form.till_number} onChange={set("till_number")} inputMode="numeric" required maxLength={10} placeholder="e.g. 9876543" /></label>
-            <label>Store number (head office number)<input value={form.shortcode} onChange={set("shortcode")} inputMode="numeric" required maxLength={10} placeholder="On your till registration letter" /></label>
+            <label>Till number<TextBox value={form.till_number} onChange={set("till_number")} inputMode="numeric" required maxLength={10} placeholder="e.g. 9876543" /></label>
+            <label>Store number (head office number)<TextBox value={form.shortcode} onChange={set("shortcode")} inputMode="numeric" required maxLength={10} placeholder="On your till registration letter" /></label>
           </> : <>
-            <label>Paybill number<input value={form.shortcode} onChange={set("shortcode")} inputMode="numeric" required maxLength={10} placeholder="e.g. 522522" /></label>
-            <label>Account number customers pay to (optional)<input value={form.account_reference} onChange={set("account_reference")} maxLength={12} placeholder="Blank: the sale number" /></label>
+            <label>Paybill number<TextBox value={form.shortcode} onChange={set("shortcode")} inputMode="numeric" required maxLength={10} placeholder="e.g. 522522" /></label>
+            <label>Account number customers pay to (optional)<TextBox value={form.account_reference} onChange={set("account_reference")} maxLength={12} placeholder="Blank: the sale number" /></label>
           </>}
-          <label>Consumer Key<input value={form.consumer_key} onChange={set("consumer_key")} autoComplete="off" spellCheck={false}
+          <label>Consumer Key<TextBox value={form.consumer_key} onChange={set("consumer_key")} autoComplete="off" spellCheck={false}
             required={!setup.consumer_key_hint} placeholder={setup.consumer_key_hint ? `Saved (${setup.consumer_key_hint}). Leave blank to keep` : "From your Daraja app"} /></label>
           <label>Consumer Secret<input type="password" value={form.consumer_secret} onChange={set("consumer_secret")} autoComplete="new-password"
             required={!setup.has_consumer_secret} placeholder={setup.has_consumer_secret ? "Saved. Leave blank to keep" : "From your Daraja app"} /></label>
@@ -123,7 +124,7 @@ export function MpesaPaymentsSetup({ intro = true }) {
     </form>}
 
     {setup.can_change && setup.ready && <form className="sendPrompt" onSubmit={sendTest}>
-      <label>Send a KES 1 test prompt to your phone<input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} inputMode="tel" required placeholder="0712 345 678" /></label>
+      <label>Send a KES 1 test prompt to your phone<TextBox value={testPhone} onChange={(e) => setTestPhone(e.target.value)} inputMode="tel" required placeholder="0712 345 678" /></label>
       <button className="secondary" disabled={test?.status === "PENDING"}>Send test prompt</button>
       {testError && <p className="formNotice error" role="alert">{testError}</p>}
     </form>}

@@ -7,6 +7,7 @@ import { Empty, ErrorState, Loading } from "../../components/States";
 import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { TextArea } from "../../components/forms/TextBox";
 
 const METHODS = [["CASH", "Cash"], ["MPESA", "Lipa na M-Pesa (till)"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const methodName = (value) => Object.fromEntries(METHODS)[value] || value;
@@ -47,7 +48,7 @@ function LendForm({ onSaved, onCancel }) {
         </FormField>
         <FormField label="Date lent" name="lent_on" type="date" max={today()} defaultValue={today()} required />
         <FormField label="Agreed payback date" name="due_date" type="date" min={today()} required />
-        <FormField label="Note (optional)"><textarea name="notes" maxLength={500} placeholder="e.g. school fees, to be paid back in two parts" /></FormField>
+        <FormField label="Note (optional)"><TextArea name="notes" maxLength={500} placeholder="e.g. school fees, to be paid back in two parts" /></FormField>
       </fieldset>
       <div className="actionRow">
         <button disabled={busy}>Record loan</button>

@@ -3,6 +3,7 @@ import { createStack } from "./api";
 import { api } from "../../core/api/client";
 import { StackPreview } from "./StackPreview";
 import { FormError } from "../../components/forms/FormNotice";
+import { TextBox } from "../../components/forms/TextBox";
 // Adds a rack to an existing area. Areas themselves are created only from Shop areas.
 export function StackBuilder({ zones, initialZone, onCreated, onCancel }) {
   const [step, setStep] = useState(1);
@@ -97,7 +98,7 @@ export function StackBuilder({ zones, initialZone, onCreated, onCancel }) {
           <p className="muted">Area not listed? Click Cancel, then use “Add another area” under Shop areas. Once it is added, select its tab and click “Add rack to” that area.</p>
           <label>
             Rack name
-            <input
+            <TextBox
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Phone Accessories Rack"

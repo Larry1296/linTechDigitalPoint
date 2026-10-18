@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../core/api/client";
 import { FormError } from "../../components/forms/FormNotice";
+import { TextBox } from "../../components/forms/TextBox";
 
 // Every active rack, as "Area — Rack", from the shop areas the product form already has.
 export function activeRacks(zones = []) {
@@ -37,7 +38,7 @@ export function NewCategoryForm({ categories, zones, usesShelves, canAssignRack,
   };
   return (
     <div className="inlineForm newCategory">
-      <label>New category name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. Memory cards" autoFocus /></label>
+      <label>New category name<TextBox value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. Memory cards" autoFocus /></label>
       <label>Inside
         <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
           <option value="">Nothing: a top-level category</option>

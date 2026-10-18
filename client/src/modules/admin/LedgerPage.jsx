@@ -7,6 +7,7 @@ import { businessParts, hasParts } from "../../core/organization/MoneyModeChoice
 import { ErrorState, Loading } from "../../components/States";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { TextBox } from "../../components/forms/TextBox";
 
 export function LedgerPage() {
   const { t } = useTranslation();
@@ -142,8 +143,8 @@ export function ExpensesPage() {
   return <><h1>{t("expenses")}</h1>
     <p>Record running costs such as rent, wages, electricity or transport, paid now or owed. An expense counts once, in the period it relates to. Stock you buy to sell is recorded through Receive stock, not here.</p>
     <form onSubmit={submit}>
-    <label>What was it for?<input name="description" required maxLength="160" /></label>
-    <label>Category<input name="category_name" list="expense-categories" required maxLength="120" placeholder="Rent, transport, electricity…" /></label><datalist id="expense-categories">{categories.map(c => <option key={c.id} value={c.name} />)}</datalist>
+    <label>What was it for?<TextBox name="description" required maxLength="160" /></label>
+    <label>Category<TextBox name="category_name" list="expense-categories" required maxLength="120" placeholder="Rent, transport, electricity…" /></label><datalist id="expense-categories">{categories.map(c => <option key={c.id} value={c.name} />)}</datalist>
     <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
     <label>Which period is it for?<input name="incurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label>
     {sharing ? <ExpenseParts parts={parts} amount={amount} separateCash={viewer?.organization?.money_mode === "SEPARATE_CASH"} value={expenseFor} onChange={setExpenseFor} />
@@ -176,7 +177,7 @@ export function ExpensesPage() {
       {action.kind === "pay" ? <>
         <label>Amount<input name="amount" type="number" min="0.01" step="0.01" max={action.row.outstanding} defaultValue={action.row.outstanding} required /></label>
         <label>Paid from<select name="payment_method"><option value="CASH">Cash</option><option value="BANK">Bank</option><option value="MPESA">Lipa na M-Pesa (till)</option><option value="OTHER">Other confirmed payment</option></select></label>
-      </> : <label>Why cancel it?<input name="reason" required maxLength="200" placeholder="e.g. recorded twice" /></label>}
+      </> : <label>Why cancel it?<TextBox name="reason" required maxLength="200" placeholder="e.g. recorded twice" /></label>}
       <button disabled={busy}>{action.kind === "pay" ? "Record payment" : "Cancel expense"}</button>
       <button type="button" className="secondary" onClick={() => setAction(null)}>Close</button>
     </form>}

@@ -4,6 +4,7 @@ import { removeStack, updateStack } from "./api";
 import { api } from "../../core/api/client";
 import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
+import { TextArea } from "../../components/forms/TextBox";
 export function StackEditor({ stack, zones, onClose, onChanged }) {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -203,7 +204,7 @@ export function StackEditor({ stack, zones, onClose, onChanged }) {
           </div>
           <label>
             Notes
-            <textarea name="notes" defaultValue={stack.notes} />
+            <TextArea name="notes" defaultValue={stack.notes} />
           </label>
           <button disabled={saving}>
             {saving ? "Saving…" : "Save rack position"}

@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { businessCurrency } from "../../core/organization/presentation";
 import "./chama.css";
+import { TextBox } from "../../components/forms/TextBox";
 
 // The chama set-up, shared by business registration and the dashboard so both look and work the same.
 export const FREQUENCIES = [["DAILY", "Every day", "day"], ["WEEKLY", "Every week", "week"], ["MONTHLY", "Every month", "month"]];
@@ -87,7 +88,7 @@ export function ChamaSetupFields({ value, onChange }) {
     <fieldset className="choiceGroup">
       <legend>The chama</legend>
       <div className="setupGrid">
-        <label className="wide">Chama name<input value={value.name} onChange={set("name")} maxLength={120} placeholder="e.g. Umoja Women Group" /></label>
+        <label className="wide">Chama name<TextBox value={value.name} onChange={set("name")} maxLength={120} placeholder="e.g. Umoja Women Group" /></label>
         <label>Each member contributes ({currency})<input type="number" min="1" step="0.01" inputMode="decimal" value={value.contribution_amount} onChange={set("contribution_amount")} placeholder="e.g. 500" /></label>
         <label>How often<select value={value.frequency} onChange={set("frequency")}>
           {FREQUENCIES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
@@ -131,8 +132,8 @@ export function ChamaSetupFields({ value, onChange }) {
       <ol className="chamaMemberRows">
         {value.members.map((member, index) => <li key={index} className="chamaMemberRow">
           <span className="chamaTurn" aria-hidden="true">{index + 1}</span>
-          <label><span>Full name</span><input value={member.full_name} onChange={(e) => setMember(index, { full_name: e.target.value })} maxLength={120} placeholder="e.g. Mary Wanjiku Achieng" autoComplete="off" /></label>
-          <label><span>ID number</span><input value={member.id_number} onChange={(e) => setMember(index, { id_number: e.target.value })} maxLength={20} placeholder="e.g. 12345678" autoComplete="off" /></label>
+          <label><span>Full name</span><TextBox value={member.full_name} onChange={(e) => setMember(index, { full_name: e.target.value })} maxLength={120} placeholder="e.g. Mary Wanjiku Achieng" autoComplete="off" /></label>
+          <label><span>ID number</span><TextBox value={member.id_number} onChange={(e) => setMember(index, { id_number: e.target.value })} maxLength={20} placeholder="e.g. 12345678" autoComplete="off" /></label>
           <label><span>Phone</span><input type="tel" value={member.phone} onChange={(e) => setMember(index, { phone: e.target.value })} maxLength={20} placeholder="0712 345 678" autoComplete="off" /></label>
           <label><span>Role</span><select value={member.role} onChange={(e) => setMember(index, { role: e.target.value })}>
             {ROLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}

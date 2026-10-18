@@ -4,6 +4,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
+import { TextBox } from "../../components/forms/TextBox";
 
 function Notice({ notice, place }) {
   if (notice?.place !== place) return null;
@@ -46,7 +47,7 @@ export function BrandsPage() {
     <p className="muted">Brands label your products, such as Oraimo, Tecno or HP. Choose a product's brand when you add or edit it.</p>
     {(editing ? can("change") : can("add")) && <form key={editing?.id || "new"} className="formCard" onSubmit={(e) => void save(e)}>
       <h2>{editing ? `Edit ${editing.name}` : "Add a brand"}</h2>
-      <label>Brand name<input name="name" required maxLength={120} defaultValue={editing?.name || ""} placeholder="e.g. Oraimo" /></label>
+      <label>Brand name<TextBox name="name" required maxLength={120} defaultValue={editing?.name || ""} placeholder="e.g. Oraimo" /></label>
       {editing && <label className="checkRow"><input type="checkbox" name="active" defaultChecked={editing.active} /> Active (untick to hide it from new products)</label>}
       <button disabled={busy}>{busy ? "Saving…" : editing ? "Save brand" : "Add brand"}</button>
       {editing && <button type="button" className="secondary" onClick={() => setEditing(null)}>Cancel</button>}

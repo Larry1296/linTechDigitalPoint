@@ -2,6 +2,7 @@ import { businessCurrency } from "../../core/organization/presentation";
 import { FormField } from "../../components/forms/FormField";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useState } from "react";
+import { TextArea } from "../../components/forms/TextBox";
 const emptyLine = () => ({ variant_id: 0, quantity: 1, service_details: {} });
 // After a job is created the form clears and shows which job was made, so the same job is not created twice:
 // the button stays off until a service is chosen for the next job.
@@ -119,7 +120,7 @@ export function CyberJobForm({ services, onSave }) {
       />
       <label>
         Operational notes only
-        <textarea
+        <TextArea
           name="notes"
           placeholder="Do not record passwords, PINs, OTPs, or document contents."
         />

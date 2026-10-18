@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../core/api/client";
 import { ProductImage } from "./ProductImage";
+import { TextBox } from "../../../components/forms/TextBox";
 
 export function ProductSearch({
   value,
@@ -133,7 +134,7 @@ export function ProductSearch({
       }}
     >
       <div className="productSearchControls">
-        <input
+        <TextBox
           role="combobox"
           aria-label={label}
           autoComplete="off"
