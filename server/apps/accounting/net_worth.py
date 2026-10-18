@@ -57,7 +57,7 @@ def _investments():
     from .models import Investment
     from .investment_interest import estimate
     rows = []
-    for investment in Investment.objects.all():
+    for investment in Investment.objects.filter(removed_at__isnull=True):
         held = value(investment)
         if held:
             guess = estimate(investment)

@@ -49,13 +49,13 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
 it("puts spare agency cash into the MMF through the open shift", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  fireEvent.click(within(card).getByRole("button", { name: "Put money in" }));
-  const form = within(card).getByRole("form", { name: "Put money in" });
+  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
+  const form = within(card).getByRole("form", { name: "Add money" });
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "10000" } });
   fireEvent.change(within(form).getByLabelText("Taken from"), { target: { value: "AGENCY_CASH" } });
   expect(within(form).getByText(/Main agency now: cash KSh 45,000/)).toBeInTheDocument();
   expect(within(form).queryByLabelText("Date")).toBeNull();
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money put in" })); });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "10000", source: "AGENCY_CASH" }));
 });
@@ -63,12 +63,12 @@ it("puts spare agency cash into the MMF through the open shift", async () => {
 it("puts in the owner's own money from outside, of any amount, without a warning", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  fireEvent.click(within(card).getByRole("button", { name: "Put money in" }));
-  const form = within(card).getByRole("form", { name: "Put money in" });
+  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
+  const form = within(card).getByRole("form", { name: "Add money" });
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "900000" } });
   fireEvent.change(within(form).getByLabelText("Taken from"), { target: { value: "OWNER" } });
   expect(within(form).queryByText(/more than the/)).toBeNull();
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money put in" })); });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "900000", source: "OWNER" }));
 });
@@ -85,19 +85,27 @@ it("records a statement balance and can undo a mistake", async () => {
   expect(JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/movements/8/undo/")[1].body)).toEqual({ reason: "Entered twice" });
 });
 
+it("removes an investment recorded by mistake, undoing everything in it", async () => {
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "Remove this investment" })); });
+  const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/remove/");
+  expect(JSON.parse(options.body)).toEqual({ reason: "Entered twice" });
+});
+
 it("offers the till's spare money for investing, filled in and warned when it is more than expected", async () => {
   render(<InvestmentsPage />);
   const spare = await screen.findByRole("region", { name: "Money you could invest" });
   expect(within(spare).queryByText("Cash in the drawer")).toBeNull();  // nothing there
   expect(within(spare).getByText("Lipa na M-Pesa till").nextSibling).toHaveTextContent("KSh 64,000");
   fireEvent.click(within(spare).getByRole("button", { name: "Invest" }));
-  const form = screen.getByRole("form", { name: "Put money in" });
+  const form = screen.getByRole("form", { name: "Add money" });
   expect(within(form).getByLabelText(/Amount/)).toHaveValue(64000);
   expect(within(form).getByLabelText("Taken from")).toHaveValue("MPESA");
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "70000" } });
   expect(within(form).getByText(/more than the KSh 64,000 the app expects/)).toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "50000" } });
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money put in" })); });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "50000", source: "MPESA" }));
 });

@@ -277,6 +277,9 @@ class Investment(TenantModel):
     fund = models.CharField(max_length=40, blank=True, default='')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
+    # Set when an account recorded by mistake is removed: everything in it was undone and it no longer shows.
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_reason = models.TextField(blank=True)
     class Meta:
         ordering = ['name', 'pk']
         constraints = [models.UniqueConstraint(fields=['organization', 'name'], name='acco_investment_name_org')]

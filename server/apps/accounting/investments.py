@@ -81,8 +81,11 @@ def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal
     name = " ".join(str(name or "").split())
     if len(name) < 2:
         raise ValidationError("Enter the name of the fund or account, e.g. Sanlam MMF.")
-    if Investment.objects.filter(name__iexact=name).exists():
+    if Investment.objects.filter(name__iexact=name, removed_at__isnull=True).exists():
         raise ValidationError("You already have an investment with this name.")
+    # A removed account keeps its history under its old name; the name is freed by renaming it.
+    for old in Investment.objects.filter(name__iexact=name, removed_at__isnull=False):
+        Investment.objects.filter(pk=old.pk).update(name=f"{old.name[:90]} (removed #{old.pk})")
     investment = Investment.objects.create(name=name[:120], account_number=str(account_number or "").strip()[:60],
                                            notes=str(notes or "").strip(), tax_rate=tax_rate, created_by=user)
     audit(investment, user, f"Investment account {name} added")
@@ -97,6 +100,8 @@ def move(*, investment, user, kind, amount, source, key, occurred_on=None, refer
     if existing:
         return existing
     investment = Investment.objects.select_for_update().get(pk=investment.pk)
+    if investment.removed_at:
+        raise ValidationError(f"{investment.name} was removed. Add it again to record money in it.")
     if kind not in {InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL}:
         raise ValidationError("Choose money put in or money taken out.")
     source = str(source or "").upper()
@@ -213,3 +218,27 @@ def undo(*, movement, user, reason):
     InvestmentMovement.objects.filter(pk=movement.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
     movement.refresh_from_db()
     return movement
+
+
+@transaction.atomic
+def remove(*, investment, user, reason):
+    """An investment account recorded by mistake: everything in it is undone, newest first, so each amount goes back
+    where it came from, and the account no longer shows. Its history is kept, never deleted."""
+    lock_business()
+    investment = Investment.objects.select_for_update().get(pk=investment.pk)
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError("Say why this investment is being removed.")
+    if investment.removed_at:
+        return investment
+    live = list(_live(investment).select_related("purchase__receipt").order_by("-occurred_on", "-pk"))
+    paid = next((m for m in live if m.purchase_id), None)
+    if paid:
+        raise ValidationError(f"{investment.name} paid for stock {paid.purchase.receipt.receipt_number}. "
+                              "Undo that supplier payment first, then remove the investment.")
+    for movement in live:
+        undo(movement=movement, user=user, reason=f"{investment.name} removed: {reason}")
+    Investment.objects.filter(pk=investment.pk).update(removed_at=timezone.now(), removed_reason=reason, fund="")
+    investment.refresh_from_db()
+    audit(investment, user, f"Investment account {investment.name} removed: {reason}")
+    return investment

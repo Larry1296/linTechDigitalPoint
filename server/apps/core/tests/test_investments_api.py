@@ -147,6 +147,29 @@ def test_agency_cash_goes_into_the_mmf_through_the_open_shift(shop):
     assert pl["net_profit_before_tax"] == D("0")
 
 
+def test_an_investment_recorded_by_mistake_is_removed_and_everything_in_it_undone(shop):
+    client, org, owner, cashier, _ = shop
+    mmf = _mmf(client)
+    _move(client, mmf, "DEPOSIT", "20000", "MPESA", "in-1", occurred_on=str(timezone.localdate() - timedelta(days=3)))
+    _move(client, mmf, "DEPOSIT", "5000", "OWNER", "in-own")  # more added to what is already in it
+    client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "25100", "idempotency_key": "st"}, format="json")
+    _move(client, mmf, "WITHDRAWAL", "3000", "CASH", "out")
+    assert D(client.get("/api/v1/accounting/investments/").json()["total_value"]) == D("22100")
+    till = APIClient()
+    till.force_login(cashier)
+    assert till.post(f"/api/v1/accounting/investments/{mmf}/remove/", {"reason": "x"}, format="json").status_code == 403
+    assert client.post(f"/api/v1/accounting/investments/{mmf}/remove/", {"reason": ""}, format="json").status_code == 400
+    assert client.post(f"/api/v1/accounting/investments/{mmf}/remove/", {"reason": "Entered twice"}, format="json").status_code == 204
+    listed = client.get("/api/v1/accounting/investments/").json()
+    assert listed["investments"] == [] and D(listed["total_value"]) == 0
+    accounts, checks, pl = _books(org)
+    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1400", "1000", "1020", "3000"))
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == 0
+    assert _move(client, mmf, "DEPOSIT", "100", "MPESA", "late").status_code == 400
+    # The name is free again for the right account.
+    assert client.post("/api/v1/accounting/investments/", {"name": "Sanlam MMF"}, format="json").status_code == 201
+
+
 def test_cashiers_cannot_see_or_move_investments_and_the_cash_book_cannot_undo_them(shop):
     client, org, _, cashier, _ = shop
     mmf = _mmf(client)

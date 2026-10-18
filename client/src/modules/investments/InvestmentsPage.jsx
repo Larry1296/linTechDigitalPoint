@@ -95,9 +95,10 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
       ? (putIn ? "It is your own money put into the business. Your cash, till and bank do not change, and profit does not change."
         : "It goes to you, out of the business. Your cash, till and bank do not change, and profit does not change.")
       : putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`;
-    if (!(await confirmAction({ title: putIn ? `Put ${money(values.amount)} into ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
-      text,
-      confirmButtonText: putIn ? "Record money put in" : "Record money taken out" }))) return;
+    const added = Number(investment.value) > 0 ? ` It is added to the ${money(investment.value)} already in it.` : "";
+    if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
+      text: putIn ? `${text}${added}` : text,
+      confirmButtonText: putIn ? "Record money added" : "Record money taken out" }))) return;
     setBusy(true);
     setError("");
     try {
@@ -110,7 +111,7 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
     }
   };
   return (
-    <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label={putIn ? "Put money in" : "Take money out"}>
+    <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label={putIn ? "Add money" : "Take money out"}>
       <fieldset disabled={busy} className="loanFields">
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
           max={putIn ? undefined : investment.value} value={amount} onChange={(event) => setAmount(event.target.value)} required />
@@ -142,7 +143,7 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
       {!putIn && <p className="muted">Paying a supplier for stock? Record it when you receive the stock: choose
         “Paid the supplier now → from my investment”, so the withdrawal and the stock it paid for are linked.</p>}
       <div className="actionRow">
-        <button disabled={busy}>{putIn ? "Record money put in" : "Record money taken out"}</button>
+        <button disabled={busy}>{putIn ? "Record money added" : "Record money taken out"}</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not record it." message={error} />
@@ -344,7 +345,7 @@ function RateSource({ investment, funds, canMove, onChanged }) {
   );
 }
 
-function InvestmentCard({ investment, funds, sessions, spare, preset, month, canMove, canCorrect, onChanged }) {
+function InvestmentCard({ investment, funds, sessions, spare, preset, month, canMove, canCorrect, canRemove, onChanged }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const card = useRef(null);
@@ -358,6 +359,22 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
   const published = investment.fund?.annual_rate != null ? investment.fund : null;
   // An account following a fund's current rate needs no monthly rate check; its balance is still updated from statements.
   const automatic = Boolean(investment.fund?.fresh);
+  // An account recorded by mistake: everything in it is undone, so each amount goes back where it came from.
+  const removeAll = async () => {
+    const values = await askForm({ title: `Remove ${investment.name}?`,
+      text: Number(investment.value) > 0 || investment.movements.some((m) => !m.reversed_at)
+        ? `Everything recorded in it is undone: ${money(investment.value)} goes back where it came from and it no longer shows here.`
+        : "It no longer shows here.",
+      confirmButtonText: "Remove", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. added by mistake" }] });
+    if (!values) return;
+    setError("");
+    try {
+      await api(`/api/v1/accounting/investments/${investment.id}/remove/`, { method: "POST", body: JSON.stringify({ reason: values.reason }) });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
       text: m.source === OWNER[0] ? "It was your own money, so your cash, till and bank do not change."
@@ -437,11 +454,14 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
           : canMove && <div className="actionRow">
             {!automatic && <button type="button" className={investment.check_due ? undefined : "secondary"} onClick={() => setForm("MONTHLY")}>Monthly check</button>}
-            <button type="button" onClick={() => setForm("DEPOSIT")}>Put money in</button>
+            <button type="button" onClick={() => setForm("DEPOSIT")}>Add money</button>
             <button type="button" className="secondary" disabled={Number(investment.value) <= 0} onClick={() => setForm("WITHDRAWAL")}>Take money out</button>
             <button type="button" className="secondary" onClick={() => setForm("STATEMENT")}>Update from statement</button>
           </div>}
-      <FormError title="Could not undo it." message={error} />
+      {!form && canRemove && <div className="actionRow">
+        <button type="button" className="linkButton" onClick={() => void removeAll()}>Remove this investment</button>
+      </div>}
+      <FormError title="Could not do it." message={error} />
     </li>
   );
 }
@@ -538,7 +558,8 @@ export function InvestmentsPage() {
       {data.investments.length
         ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} sessions={data.agency_sessions}
           spare={spare} preset={preset?.id === i.id ? preset : null} month={data.this_month}
-          canMove={canMove} canCorrect={can("accounting.reverse_cashentry")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
+          canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
+          canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
         : <Empty>No investment accounts yet. Add your MMF to start tracking what you put in, take out and earn.</Empty>}
       <InterestCalculator defaultRate={ratedAt != null ? Number(ratedAt) : ""} defaultTax={rated ? Number(rated.tax_rate) : 15} rateSource={ratedFrom} />
     </>

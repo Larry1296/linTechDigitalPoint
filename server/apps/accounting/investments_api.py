@@ -11,7 +11,7 @@ from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month
-from .investments import SOURCES, move, open_investment, record_statement, totals, undo, value
+from .investments import SOURCES, move, open_investment, record_statement, remove, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -96,7 +96,7 @@ class InvestmentsView(APIView):
     permission_required = "accounting.view_investment"
 
     def get(self, request):
-        rows = [investment_row(i) for i in Investment.objects.prefetch_related("movements")]
+        rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
         return Response({"investments": rows, "total_value": sum((r["value"] for r in rows), Decimal("0")),
                          # What it is all worth today: the recorded value plus the interest estimated since each statement.
                          "worth_today": sum((r["estimate"]["value"] if r["estimate"] else r["value"] for r in rows), Decimal("0")),
@@ -179,6 +179,17 @@ class InvestmentUndoView(APIView):
         return Response(investment_row(movement.investment))
 
 
+class InvestmentRemoveView(APIView):
+    """An investment account recorded by mistake: everything in it is undone and it no longer shows."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.reverse_cashentry"
+
+    def post(self, request, pk):
+        _require(request, "accounting.add_investment")
+        remove(investment=get_object_or_404(Investment, pk=pk), user=request.user, reason=str(request.data.get("reason") or ""))
+        return Response(status=204)
+
+
 class MonthlyInput(serializers.Serializer):
     annual_rate = serializers.DecimalField(max_digits=6, decimal_places=3, min_value=Decimal("0"), max_value=Decimal("100"))
     balance = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
@@ -209,7 +220,7 @@ class InvestmentReminderView(APIView):
     def get(self, request):
         today = timezone.localdate()
         return Response({"month": month_label(today), "month_start": month_of(today),
-                         "due": [{"id": i.pk, "name": i.name} for i in Investment.objects.all() if due(i, today)]})
+                         "due": [{"id": i.pk, "name": i.name} for i in Investment.objects.filter(removed_at__isnull=True) if due(i, today)]})
 
 
 class InvestmentFundView(APIView):

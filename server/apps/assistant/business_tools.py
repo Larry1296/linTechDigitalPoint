@@ -709,7 +709,7 @@ def investments(ctx, args):
     from apps.accounting.investments import totals, value
     from apps.accounting.models import Investment
     rows = []
-    for inv in Investment.objects.all():
+    for inv in Investment.objects.filter(removed_at__isnull=True):
         t = totals(inv)
         guess, rate = estimate(inv), rate_now(inv)
         fund = fund_rates.summary(inv.fund)
