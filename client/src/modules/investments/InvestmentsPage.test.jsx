@@ -11,7 +11,9 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
   interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
-  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26" }, fund: null,
+  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26",
+    daily: [{ date: "2026-10-02", rate: "12.000", moved: "0.00", net: "5.63", value: "20161.26" },
+      { date: "2026-10-01", rate: "12.000", moved: "-1000.00", net: "5.63", value: "20155.63" }] }, fund: null,
   earning: { balance: "20161.26", annual_rate: "12.000", estimated_balance: true, day: { gross: "6.63", tax: "0.99", net: "5.64" },
     month: { gross: "201.61", tax: "30.24", net: "171.37" }, year: { gross: "2554.10", tax: "383.12", net: "2170.98" } }, movements: [
     { id: 8, kind: "INTEREST", amount: "150.00", occurred_on: "2026-09-30", source: "", reference: "", note: "", statement_balance: "20150.00", reversed_at: null },
@@ -21,7 +23,7 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
 const session = { id: 5, outlet: "Main agency", cash: "45000.00", float: "30000.00" };
 
 const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)" }];
-const listing = (investment) => ({ investments: [investment], total_value: "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
+const listing = (investment) => ({ investments: [investment], total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
     funds: FUNDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
     spare_money: [{ method: "CASH", label: "Cash in the drawer", expected: "0.00" }, { method: "MPESA", label: "Lipa na M-Pesa till", expected: "64000.00" }] });
 beforeEach(() => {
@@ -36,7 +38,7 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
   expect(within(card).getByText("Recorded value").nextSibling).toHaveTextContent("KSh 20,150");
   expect(within(card).getByText("Interest earned").nextSibling).toHaveTextContent("KSh 150");
-  const rows = within(card).getAllByRole("row");
+  const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row");
   expect(rows[1]).toHaveTextContent("Interest");
   expect(rows[2]).toHaveTextContent("Taken out · paid for stock INV-77 (Phone Hub)");
   expect(rows[3]).toHaveTextContent("Put in");
@@ -110,6 +112,12 @@ it("shows the rate, the interest estimated since the statement and what the mone
   expect(within(earns).getByText("A day").nextSibling).toHaveTextContent("KSh 5.64KSh 6.63 before 15% tax");
   expect(within(earns).getByText("A month").nextSibling).toHaveTextContent("KSh 171.37");
   expect(within(earns).getByText("A year").nextSibling).toHaveTextContent("KSh 2,170.98");
+  expect(screen.getByText("Worth today, with interest").nextSibling).toHaveTextContent("KSh 20,161.26");
+  const daily = within(card).getByText(/^Day by day/).closest("details");
+  expect(daily).toHaveTextContent("Day by day: KSh 5.63 added today, worth KSh 20,161.26");
+  const rows = within(daily).getAllByRole("row");
+  expect(rows[2]).toHaveTextContent("− KSh 1,000");
+  expect(rows[2]).toHaveTextContent("KSh 20,155.63");
   expect(screen.getByText("Earning now, after tax").nextSibling).toHaveTextContent("KSh 5.64 a day");
   expect(within(card).getByText(/entered by hand/)).toBeInTheDocument();
   expect(screen.queryByRole("status", { name: "Monthly check due" })).toBeNull();

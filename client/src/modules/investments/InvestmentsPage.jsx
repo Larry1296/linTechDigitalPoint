@@ -255,6 +255,30 @@ function Earning({ investment }) {
   );
 }
 
+// The estimate day by day, newest first: money put in or taken out, the interest each day added and the total after it.
+function DayByDay({ investment }) {
+  const days = investment.estimate?.daily || [];
+  if (!days.length) return null;
+  return (
+    <details className="investDaily">
+      <summary>Day by day: {money(days[0].net)} added today, worth {money(days[0].value)}</summary>
+      <table className="loanRepayments">
+        <caption className="visuallyHidden">{investment.name} day by day</caption>
+        <thead><tr><th>Date</th><th>Put in / taken out</th><th>Interest after tax</th><th>Worth</th></tr></thead>
+        <tbody>{days.map((d) => (
+          <tr key={d.date}>
+            <td>{date(d.date)}</td>
+            <td>{Number(d.moved) > 0 ? `+ ${money(d.moved)}` : Number(d.moved) < 0 ? `− ${money(-d.moved)}` : "—"}</td>
+            <td>+ {money(d.net)}</td>
+            <td>{money(d.value)}</td>
+          </tr>))}</tbody>
+      </table>
+      <p className="muted">Interest is worked out each day on what is in the fund that day, at {percent(investment.estimate.rate)} a year, and added
+        at each month end after tax. It is an estimate until the statement confirms it.</p>
+    </details>
+  );
+}
+
 // Where the rate comes from: the fund's published rate, kept up to date by the app, or typed in each month.
 function RateSource({ investment, funds, canMove, onChanged }) {
   const [busy, setBusy] = useState(false);
@@ -369,6 +393,7 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
         {investment.estimate && <div><dt>Estimated value today</dt><dd>{money(investment.estimate.value)}</dd></div>}
       </dl>
       <Earning investment={investment} />
+      <DayByDay investment={investment} />
       <RateSource investment={investment} funds={funds} canMove={canMove} onChanged={onChanged} />
       {investment.check_due && <p className="investWarning">{month}'s check is due: record the rate {investment.name} pays now
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}
@@ -485,6 +510,9 @@ export function InvestmentsPage() {
       <p className="muted">Spare money kept in a money market fund (MMF) or similar. Putting money in or taking it out is still your money,
         so profit does not change; only the interest it earns is income.</p>
       <div className="metrics investMetrics">
+        {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
+          <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
+            <small>Goes up every day as interest builds</small></article>}
         <article><span>Invested now</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>

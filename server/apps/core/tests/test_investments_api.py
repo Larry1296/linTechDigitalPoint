@@ -262,6 +262,20 @@ def test_interest_is_estimated_daily_and_added_after_tax_at_each_month_end(shop)
     later = _estimate(org, mmf, next_month + timedelta(days=9))
     expected = gross + (D("100000") + gross * D("0.85")) * D("0.10") / 365 * 10
     assert later["gross"] == expected.quantize(D("0.01")) and later["rate"] == D("10.000")
+    # Day by day, newest first: what each day added after tax and the total after it.
+    today, yesterday = later["daily"][0], later["daily"][1]
+    assert len(later["daily"]) == 31 and today["date"] == next_month + timedelta(days=9)
+    assert abs(today["net"] - (D("100000") + gross * D("0.85")) * D("0.10") / 365 * D("0.85")) <= D("0.01")
+    assert today["value"] == later["value"] and today["value"] - yesterday["value"] == today["net"]
+    assert next(d for d in later["daily"] if d["date"] == month_end)["rate"] == D("12.000")
+    # Money taken out stops earning from that day: the total drops by it and the interest after is on what is left.
+    _move(client, mmf, "WITHDRAWAL", "40000", "BANK", "out", occurred_on=str(next_month + timedelta(days=5)))
+    after = _estimate(org, mmf, next_month + timedelta(days=9))
+    out_day = next(d for d in after["daily"] if d["date"] == next_month + timedelta(days=5))
+    assert out_day["moved"] == D("-40000") and after["daily"][0]["value"] == after["value"]
+    left = D("60000") + gross * D("0.85")
+    expected = gross + (D("100000") + gross * D("0.85")) * D("0.10") / 365 * 5 + left * D("0.10") / 365 * 5
+    assert after["gross"] == expected.quantize(D("0.01")) and after["value"] == D("60000") + after["net"]
 
 
 def test_monthly_check_records_the_rate_and_the_statement_interest_and_reminds_until_done(shop):

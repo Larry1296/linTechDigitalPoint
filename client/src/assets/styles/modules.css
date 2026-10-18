@@ -2661,6 +2661,9 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .investEarning { margin: 0 0 10px; font-size: 14px; }
 .investEarning > p { margin: 0 0 6px; }
 .investEarning strong { font-variant-numeric: tabular-nums; }
+.investDaily { margin: 0 0 10px; font-size: 14px; }
+.investDaily > summary { cursor: pointer; font-weight: 600; }
+.investDaily td { font-variant-numeric: tabular-nums; }
 .investEarningTiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; margin: 0 0 6px; }
 .investEarningTiles > div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .investEarningTiles dt { font-size: 13px; color: var(--muted); }

@@ -98,6 +98,8 @@ class InvestmentsView(APIView):
     def get(self, request):
         rows = [investment_row(i) for i in Investment.objects.prefetch_related("movements")]
         return Response({"investments": rows, "total_value": sum((r["value"] for r in rows), Decimal("0")),
+                         # What it is all worth today: the recorded value plus the interest estimated since each statement.
+                         "worth_today": sum((r["estimate"]["value"] if r["estimate"] else r["value"] for r in rows), Decimal("0")),
                          "interest_earned": sum((r["interest"] - r["fees"] for r in rows), Decimal("0")),
                          "estimated_interest": sum((r["estimate"]["net"] for r in rows if r["estimate"]), Decimal("0")),
                          "earning": {period: _sum(rows, period) for period in ("day", "month", "year")},

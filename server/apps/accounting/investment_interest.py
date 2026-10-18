@@ -92,10 +92,15 @@ def _rate_for(rates, day):
     return chosen
 
 
+DAILY_DAYS = 31
+
+
 def estimate(investment, today=None):
     """Interest estimated to have built up since the money was last checked against a statement, or None without a rate.
 
-    {since, days, rate, gross, tax, net, value}: value is what the app records now plus the estimated interest after tax.
+    {since, days, rate, gross, tax, net, value, daily}: value is what the app records now plus the estimated interest
+    after tax; daily is the last few days, newest first, each with the money put in (or taken out, below zero) that day,
+    the interest it added after tax and the total after it. Interest is only on what is in the fund each day.
     """
     today = today or timezone.localdate()
     rates = timeline(investment)
@@ -116,12 +121,21 @@ def estimate(investment, today=None):
             changes[m.occurred_on] = changes.get(m.occurred_on, ZERO) + SIGN[m.kind] * m.amount
     keep = 1 - investment.tax_rate / 100
     gross = credited = month_gross = ZERO
+    daily = []
+    worth = balance
     day = since
     while day < today:
         day += timedelta(days=1)
         balance += changes.get(day, ZERO)
+        rate = _rate_for(rates, day)
         if balance + credited > 0:
-            month_gross += (balance + credited) * _rate_for(rates, day) / 100 / 365
+            month_gross += (balance + credited) * rate / 100 / 365
+        # Rounded the way the total is, so each day's interest is exactly what the total rose by (money put in or
+        # taken out that day aside) and the last day's total is the estimated value.
+        before, worth = worth, balance + (((gross + month_gross).quantize(CENT)) * keep).quantize(CENT)
+        if day > today - timedelta(days=DAILY_DAYS):
+            daily.append({"date": day, "rate": rate, "moved": changes.get(day, ZERO),
+                          "net": worth - before - changes.get(day, ZERO), "value": worth})
         if day.day == calendar.monthrange(day.year, day.month)[1]:
             # Interest is added at the end of the month, after tax, and earns interest itself from then on.
             gross += month_gross
@@ -131,7 +145,7 @@ def estimate(investment, today=None):
     gross = gross.quantize(CENT)
     net = (gross * keep).quantize(CENT)
     return {"since": since, "days": (today - since).days, "rate": _rate_for(rates, today), "gross": gross,
-            "tax": gross - net, "net": net, "value": (value(investment) + net).quantize(CENT)}
+            "tax": gross - net, "net": net, "value": (value(investment) + net).quantize(CENT), "daily": daily[::-1]}
 
 
 @transaction.atomic
