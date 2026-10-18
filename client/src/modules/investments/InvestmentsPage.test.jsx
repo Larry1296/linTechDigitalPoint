@@ -7,8 +7,9 @@ vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permis
 import { api } from "../../core/api/client";
 import { InvestmentsPage } from "./InvestmentsPage";
 
+const LOW = { code: "MMF", label: "Money market fund", risk: 1, risk_label: "Low", risk_note: "Short-term loans to the government and banks." };
 const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", value: "20150.00", put_in: "20000.00", taken_out: "0.00",
-  interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false,
+  interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false, kind: LOW,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
   estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26" },
@@ -23,9 +24,11 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
     { id: 7, kind: "DEPOSIT", amount: "20000.00", occurred_on: "2026-09-01", source: "AGENCY_CASH", reference: "", note: "", statement_balance: null, reversed_at: null }] };
 const session = { id: 5, outlet: "Main agency", cash: "45000.00", float: "30000.00" };
 
-const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)" }];
+const KINDS = [LOW, { code: "SACCO", label: "Sacco deposits", risk: 2, risk_label: "Low to medium", risk_note: "Depends on how the Sacco is managed." }];
+const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)", short: "CIC", kind: LOW, annual_rate: "8.120" },
+  { code: "KCB_MMF_KES", name: "KCB Money Market Fund (KES)", short: "KCB", kind: LOW, annual_rate: null }];
 const listing = (investment) => ({ investments: [investment], total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
-    funds: FUNDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
+    funds: FUNDS, kinds: KINDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
     spare_money: [{ method: "CASH", label: "Cash in the drawer", expected: "0.00" }, { method: "MPESA", label: "Lipa na M-Pesa till", expected: "64000.00" }] });
 beforeEach(() => {
   vi.clearAllMocks();
@@ -195,12 +198,52 @@ it("starts a check of CIC's rate on request when it is missing", async () => {
   expect(within(card).getByRole("status")).toHaveTextContent("Checking CIC's current rate. It shows here in a minute or two.");
 });
 
+it("asks whether money goes into an investment already held or a new one", async () => {
+  render(<InvestmentsPage />);
+  fireEvent.click((await screen.findAllByRole("button", { name: "Add money" }))[0]);  // the one at the top
+  const chooser = screen.getByRole("form", { name: "Add money to" });
+  expect(within(chooser).getByLabelText(/Sanlam MMF · KSh 20,161.26 now · 12% a year · low risk/)).toBeChecked();
+  fireEvent.click(within(chooser).getByRole("button", { name: "Continue" }));
+  const card = screen.getByRole("heading", { name: "Sanlam MMF" }).closest("li");
+  expect(within(card).getByRole("form", { name: "Add money" })).toBeInTheDocument();
+  expect(within(card).getByText(/Low risk · 1 of 5/)).toBeInTheDocument();
+});
+
+it("adds money to a new investment in a fund the app follows, its rate and risk shown", async () => {
+  const kcb = { ...mmf, id: 11, name: "KCB MMF", movements: [], daily: [], estimate: null, earning: null };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? kcb : { ...listing(mmf), investments: [mmf, kcb] }));
+  render(<InvestmentsPage />);
+  fireEvent.click((await screen.findAllByRole("button", { name: "Add money" }))[0]);  // the one at the top
+  const chooser = screen.getByRole("form", { name: "Add money to" });
+  fireEvent.click(within(chooser).getByLabelText(/A new investment/));
+  fireEvent.click(within(chooser).getByRole("button", { name: "Continue" }));
+  const form = screen.getByRole("form", { name: "New investment" });
+  expect(within(form).getByRole("option", { name: "CIC Money Market Fund (KES) · 8.12% a year now" })).toBeInTheDocument();
+  fireEvent.change(within(form).getByLabelText("Where are you investing?"), { target: { value: "KCB_MMF_KES" } });
+  expect(within(form).getByLabelText("Name of the fund or account")).toHaveValue("KCB MMF");
+  expect(within(form).getByText(/Low risk/)).toBeInTheDocument();
+  expect(within(form).getByText(/reads KCB's rate on its own website now/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Next: the amount" })); });
+  const [, options] = api.mock.calls.find(([p, o]) => p === "/api/v1/accounting/investments/" && o?.method === "POST");
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ name: "KCB MMF", fund: "KCB_MMF_KES", kind: "MMF", annual_rate: null }));
+  const card = screen.getByRole("heading", { name: "KCB MMF" }).closest("li");
+  expect(within(card).getByRole("form", { name: "Add money" })).toBeInTheDocument();
+});
+
+it("shows the risk of another kind of account, chosen when it is added", async () => {
+  render(<InvestmentsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Add investment account" }));
+  const form = screen.getByRole("form", { name: "New investment" });
+  fireEvent.change(within(form).getByLabelText("What kind is it?"), { target: { value: "SACCO" } });
+  expect(within(form).getByText(/Low to medium risk · 2 of 5/)).toBeInTheDocument();
+});
+
 it("suggests following CIC's rate when a new account is named after it", async () => {
   api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing(mmf)));
   render(<InvestmentsPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Add investment account" }));
   const name = screen.getByLabelText("Name of the fund or account");
-  const rate = screen.getByLabelText("Interest rate");
+  const rate = screen.getByLabelText("Where are you investing?");
   expect(rate).toHaveValue("");
   expect(screen.getByLabelText(/Yearly interest rate it pays now/)).toBeInTheDocument();
   fireEvent.change(name, { target: { value: "CIC MMF" } });

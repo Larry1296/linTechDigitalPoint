@@ -24,6 +24,33 @@ BUSINESS = {"CASH", "MPESA", "BANK", "OTHER"}
 AGENCY = {"AGENCY_CASH", "AGENCY_FLOAT"}
 OWNER = "OWNER"
 SOURCES = BUSINESS | AGENCY | {OWNER}
+# Kinds of investment and how risky each is, from 1 (safest) to 5. A money market fund lends short term to the
+# government and banks, so its value rarely falls; shares can fall a lot. It is the kind's risk, not a rating of the
+# fund manager: a fund's own fact sheet gives its risk profile.
+KINDS = {
+    "MMF": {"label": "Money market fund", "risk": 1, "risk_label": "Low",
+            "risk_note": "Short-term loans to the government and banks. The value rarely falls and you can usually withdraw in a few days."},
+    "TBILL": {"label": "Treasury bills or bonds", "risk": 1, "risk_label": "Low",
+              "risk_note": "Lent to the Government of Kenya. Bills are safe if held to the end; bonds sold early can lose value."},
+    "FIXED_DEPOSIT": {"label": "Bank fixed deposit", "risk": 1, "risk_label": "Low",
+                      "risk_note": "Kept at a bank for a fixed time. Taking it out early can cost the interest."},
+    "SACCO": {"label": "Sacco deposits", "risk": 2, "risk_label": "Low to medium",
+              "risk_note": "Safe in a well-run Sacco licensed by SASRA; it depends on how the Sacco is managed. Deposits are often slow to withdraw."},
+    "FIXED_INCOME": {"label": "Fixed income or bond fund", "risk": 2, "risk_label": "Low to medium",
+                     "risk_note": "Longer loans to the government and companies. The value can dip when interest rates rise."},
+    "BALANCED": {"label": "Balanced fund", "risk": 3, "risk_label": "Medium",
+                 "risk_note": "Part bonds, part shares. The value goes up and down; best left for a few years."},
+    "EQUITY": {"label": "Shares or equity fund", "risk": 4, "risk_label": "High",
+               "risk_note": "Shares in companies. The value can fall a lot in a bad year; only money you will not need for years."},
+    "OTHER": {"label": "Other", "risk": None, "risk_label": "Unknown",
+              "risk_note": "Ask where the money is kept and whether the scheme is licensed by the CMA, CBK or SASRA."},
+}
+
+
+def kind_row(kind):
+    return {"code": kind, **KINDS.get(kind, KINDS["OTHER"])}
+
+
 SIGN = {InvestmentMovement.DEPOSIT: 1, InvestmentMovement.INTEREST: 1, InvestmentMovement.WITHDRAWAL: -1, InvestmentMovement.FEE: -1}
 
 
@@ -76,9 +103,11 @@ def _agency_session(session_id):
 
 
 @transaction.atomic
-def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal("15")):
+def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal("15"), kind="MMF"):
     lock_business()
     name = " ".join(str(name or "").split())
+    if kind not in KINDS:
+        raise ValidationError("Choose what kind of investment it is.")
     if len(name) < 2:
         raise ValidationError("Enter the name of the fund or account, e.g. Sanlam MMF.")
     if Investment.objects.filter(name__iexact=name, removed_at__isnull=True).exists():
@@ -87,7 +116,7 @@ def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal
     for old in Investment.objects.filter(name__iexact=name, removed_at__isnull=False):
         Investment.objects.filter(pk=old.pk).update(name=f"{old.name[:90]} (removed #{old.pk})")
     investment = Investment.objects.create(name=name[:120], account_number=str(account_number or "").strip()[:60],
-                                           notes=str(notes or "").strip(), tax_rate=tax_rate, created_by=user)
+                                           notes=str(notes or "").strip(), tax_rate=tax_rate, kind=kind, created_by=user)
     audit(investment, user, f"Investment account {name} added")
     return investment
 

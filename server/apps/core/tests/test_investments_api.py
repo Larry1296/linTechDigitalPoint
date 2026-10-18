@@ -147,6 +147,16 @@ def test_agency_cash_goes_into_the_mmf_through_the_open_shift(shop):
     assert pl["net_profit_before_tax"] == D("0")
 
 
+def test_each_investment_has_a_kind_and_its_risk(shop):
+    client, *_ = shop
+    sacco = client.post("/api/v1/accounting/investments/", {"name": "Stima Sacco", "kind": "SACCO", "annual_rate": "11"}, format="json").json()
+    assert (sacco["kind"]["label"], sacco["kind"]["risk_label"], sacco["fund"]) == ("Sacco deposits", "Low to medium", None)
+    # Following a fund's published rate makes it that fund's money market fund.
+    kcb = client.post("/api/v1/accounting/investments/", {"name": "KCB MMF", "kind": "EQUITY"}, format="json").json()
+    assert kcb["fund"]["code"] == "KCB_MMF_KES" and kcb["kind"]["code"] == "MMF" and kcb["kind"]["risk_label"] == "Low"
+    assert client.post("/api/v1/accounting/investments/", {"name": "Mystery", "kind": "CRYPTO"}, format="json").status_code == 400
+
+
 def test_an_investment_recorded_by_mistake_is_removed_and_everything_in_it_undone(shop):
     client, org, owner, cashier, _ = shop
     mmf = _mmf(client)

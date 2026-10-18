@@ -1,5 +1,8 @@
 """Money market fund rates the app looks up by itself, so a business invested in the fund never has to type them in.
 
+The funds it can follow are in FUNDS (CIC, KCB, Old Mutual, Cytonn, Etica, NCBA, Britam, Madison: the shilling money
+market fund of each). Only a fund some business follows is ever looked up.
+
 Every 10 days (``manage.py refresh_fund_rates``, run by the scheduler service) Claude reads the rate the fund publishes
 on its own website and reports it through the ``report_rate`` tool. Nothing it reports is trusted as is, because the
 rate decides the interest every business sees:
@@ -41,8 +44,74 @@ FUNDS = {
         "domains": ["cicinsurancegroup.com", "cic.co.ke"],
         "start": "https://ke.cicinsurancegroup.com/investment/",
         "others": "the CIC Dollar Fund, Fixed Income Fund, Wealth Fund, Balanced Fund or Equity Fund",
+        "keywords": ["cic"],
+    },
+    "KCB_MMF_KES": {
+        "name": "KCB Money Market Fund (KES)",
+        "short": "KCB",
+        "manager": "KCB Asset Management (KCB Group, Kenya)",
+        "domains": ["kcbgroup.com"],
+        "start": "https://ke.kcbgroup.com/",
+        "others": "the KCB dollar (USD) fund",
+        "keywords": ["kcb"],
+    },
+    "OLD_MUTUAL_MMF_KES": {
+        "name": "Old Mutual Money Market Fund (KES)",
+        "short": "Old Mutual",
+        "manager": "Old Mutual Investment Group (Kenya)",
+        "domains": ["oldmutual.co.ke"],
+        "start": "https://www.oldmutual.co.ke/fund-prices/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["old", "mutual"],
+    },
+    "CYTONN_MMF_KES": {
+        "name": "Cytonn Money Market Fund (KES)",
+        "short": "Cytonn",
+        "manager": "Cytonn Asset Managers (Kenya)",
+        "domains": ["cytonn.com"],
+        "start": "https://cytonn.com/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["cytonn"],
+    },
+    "ETICA_MMF_KES": {
+        "name": "Etica Money Market Fund (KES)",
+        "short": "Etica",
+        "manager": "Etica Capital (Kenya)",
+        "domains": ["eticacap.com"],
+        "start": "https://eticacap.com/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["etica"],
+    },
+    "NCBA_MMF_KES": {
+        "name": "NCBA Money Market Fund (KES)",
+        "short": "NCBA",
+        "manager": "NCBA Investment Bank (NCBA Group, Kenya)",
+        "domains": ["ncbagroup.com"],
+        "start": "https://investment-bank.ncbagroup.com/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["ncba"],
+    },
+    "BRITAM_MMF_KES": {
+        "name": "Britam Money Market Fund (KES)",
+        "short": "Britam",
+        "manager": "Britam Asset Managers (Kenya)",
+        "domains": ["britam.com"],
+        "start": "https://ke.britam.com/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["britam"],
+    },
+    "MADISON_MMF_KES": {
+        "name": "Madison Money Market Fund (KES)",
+        "short": "Madison",
+        "manager": "Madison Investment Managers (Kenya)",
+        "domains": ["madison.co.ke"],
+        "start": "https://www.madison.co.ke/investmentmanagers/madison-money-market-fund/",
+        "others": "its dollar (USD) fund or any of its other unit trusts (fixed income, balanced, equity)",
+        "keywords": ["madison"],
     },
 }
+# Words that mean an account is one of the manager's other funds, not its shilling money market fund.
+NOT_THE_MMF = {"dollar", "usd", "equity", "fixed", "balanced", "wealth", "global", "bond"}
 REFRESH_DAYS = 10  # a good rate is looked up again after this many days
 RETRY_HOURS = 6  # a failed or unconfirmed look is tried again after this long
 FRESH_DAYS = 2 * REFRESH_DAYS  # a rate this recent counts as current: no monthly check is asked for
@@ -65,13 +134,11 @@ def fund_name(code):
 
 
 def guess_fund(name):
-    """The fund an account's name points to, e.g. "CIC MMF" -> CIC_MMF_KES; empty when unsure."""
-    words = " ".join(str(name or "").lower().replace("-", " ").split()).split()
-    if "cic" not in words:
+    """The fund an account's name points to, e.g. "CIC MMF" -> CIC_MMF_KES, "KCB MMF" -> KCB_MMF_KES; empty when unsure."""
+    words = set(str(name or "").lower().replace("-", " ").split())
+    if words & NOT_THE_MMF:
         return ""
-    if {"dollar", "usd", "equity", "fixed", "balanced", "wealth", "global"} & set(words):
-        return ""
-    return "CIC_MMF_KES"
+    return next((code for code, fund in FUNDS.items() if set(fund["keywords"]) <= words), "")
 
 
 def latest(code, status=FundRateCheck.APPLIED):
@@ -211,9 +278,9 @@ def _instructions(code, today):
     return (
         f"Today is {today:%d %B %Y}. Find the interest rate the {fund['name']}, managed by {fund['manager']}, publishes now.\n\n"
         f"Start from {fund['start']} and use only the fund manager's own website ({', '.join(fund['domains'])}). Search, then "
-        "fetch the page itself to read the figures; search snippets can be out of date. The page usually shows a "
-        "'Current Daily Rate' and a 'Current Effective Annual Rate' for each fund; they are after the fund's fees and before "
-        "withholding tax. Read them for the shilling (KES) money market fund only, not "
+        "fetch the page itself to read the figures; search snippets can be out of date. The page usually shows a daily "
+        "rate or daily yield ('Current Daily Rate', 'Daily Yield') and an effective annual rate or yield for each fund; they "
+        "are after the fund's fees and before withholding tax. Read them for the shilling (KES) money market fund only, not "
         f"{fund['others']}. Do not report averages, highest or lowest yields, or figures from news or comparison sites. "
         "If a fact sheet is newer than the page, the page's current rate still wins; use the fact sheet only if the page "
         "has no rate.\n\n"
@@ -396,8 +463,11 @@ def link(*, investment, user, fund):
         raise ValidationError("Choose a fund the app can follow, or enter the rate yourself.")
     if fund == investment.fund:
         return investment
-    Investment.objects.filter(pk=investment.pk).update(fund=fund)
+    # Every fund followed here is a shilling money market fund.
+    Investment.objects.filter(pk=investment.pk).update(fund=fund, **({"kind": "MMF"} if fund else {}))
     investment.fund = fund
+    if fund:
+        investment.kind = "MMF"
     audit(investment, user, f"{investment.name} now {'follows the published rate of ' + FUNDS[fund]['name'] if fund else 'has its rate entered by hand'}")
     good = latest(fund) if fund else None
     if good:

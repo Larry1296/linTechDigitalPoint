@@ -11,7 +11,7 @@ from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month
-from .investments import SOURCES, move, open_investment, record_statement, remove, totals, undo, value
+from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -45,7 +45,7 @@ def investment_row(investment):
     guess = estimate(investment)
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
-            "fees": sums["FEE"], "tax_rate": investment.tax_rate,
+            "fees": sums["FEE"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
             "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
@@ -85,6 +85,7 @@ class InvestmentInput(serializers.Serializer):
     annual_rate = serializers.DecimalField(max_digits=6, decimal_places=3, min_value=Decimal("0"), max_value=Decimal("100"), required=False, allow_null=True)
     # A fund whose published rate the app follows; left out, it is guessed from the name ("CIC MMF"); "" means typed in.
     fund = serializers.ChoiceField(choices=["", *fund_rates.FUNDS], required=False, allow_null=True, allow_blank=True)
+    kind = serializers.ChoiceField(choices=sorted(KINDS), required=False, default="MMF")
 
 
 def _sum(rows, period):
@@ -103,7 +104,11 @@ class InvestmentsView(APIView):
                          "interest_earned": sum((r["interest"] - r["fees"] for r in rows), Decimal("0")),
                          "estimated_interest": sum((r["estimate"]["net"] for r in rows if r["estimate"]), Decimal("0")),
                          "earning": {period: _sum(rows, period) for period in ("day", "month", "year")},
-                         "funds": [{"code": code, "name": fund["name"]} for code, fund in fund_rates.FUNDS.items()],
+                         # Funds the app can follow, with the rate each publishes now when one is known.
+                         "funds": [{"code": code, "name": fund["name"], "short": fund["short"], "kind": kind_row("MMF"),
+                                    "annual_rate": (fund_rates.latest(code).annual_rate if fund_rates.latest(code) else None)}
+                                   for code, fund in fund_rates.FUNDS.items()],
+                         "kinds": [kind_row(code) for code in KINDS],
                          "this_month": month_label(timezone.localdate()),
                          "spare_money": _spare_money(), "agency_sessions": _agency_sessions()})
 
@@ -119,6 +124,9 @@ class InvestmentsView(APIView):
             fund = fund_rates.guess_fund(investment.name) if fund is None else fund
             if fund:
                 fund_rates.link(investment=investment, user=request.user, fund=fund)
+                if fund_rates.due(fund):
+                    # The fund's rate is not known yet (or is old): look it up now, so the account starts with it.
+                    transaction.on_commit(lambda: fund_rates.start_refresh(fund))
             if rate is not None and not (fund and fund_rates.latest(fund)):
                 first_rate(investment=investment, user=request.user, annual_rate=rate)
         return Response(investment_row(investment), status=201)

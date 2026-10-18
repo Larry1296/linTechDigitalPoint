@@ -275,6 +275,8 @@ class Investment(TenantModel):
     # The published fund whose rate the app keeps up to date by itself (see fund_rates.py), e.g. CIC_MMF_KES; empty when
     # the owner records the rate by hand.
     fund = models.CharField(max_length=40, blank=True, default='')
+    # What kind of investment it is (see investments.KINDS): it says how risky the money is.
+    kind = models.CharField(max_length=20, default='MMF')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     # Set when an account recorded by mistake is removed: everything in it was undone and it no longer shows.

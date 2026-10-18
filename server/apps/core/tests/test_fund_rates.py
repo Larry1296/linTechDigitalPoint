@@ -119,6 +119,8 @@ def test_names_point_to_the_shilling_fund_only():
     assert fund_rates.guess_fund("CIC-MMF 0042") == CIC
     assert fund_rates.guess_fund("CIC Dollar Fund") == "" and fund_rates.guess_fund("Sanlam MMF") == ""
     assert fund_rates.guess_fund("Cicada savings") == ""
+    assert fund_rates.guess_fund("KCB MMF") == "KCB_MMF_KES" and fund_rates.guess_fund("Old Mutual Money Market") == "OLD_MUTUAL_MMF_KES"
+    assert fund_rates.guess_fund("Old savings") == "" and fund_rates.guess_fund("Cytonn USD fund") == ""
 
 
 # When it looks, and who gets the rate
@@ -228,7 +230,11 @@ def test_each_account_shows_what_it_earns_a_day_a_month_and_a_year_after_tax():
     assert {k: D(v) for k, v in listed["earning"].items()} == {"day": D("85.00"), "month": D("2585.42"), "year": D("32262.68")}
     row = listed["investments"][0]
     assert row["fund"]["short"] == "CIC" and row["fund"]["fresh"] and row["check_due"] is False
-    assert listed["funds"] == [{"code": CIC, "name": "CIC Money Market Fund (KES)"}]
+    cic = listed["funds"][0]
+    assert (cic["code"], cic["name"], D(str(cic["annual_rate"])), cic["kind"]["risk_label"]) == (CIC, "CIC Money Market Fund (KES)", D("10"), "Low")
+    assert {"KCB_MMF_KES", "OLD_MUTUAL_MMF_KES"} <= {f["code"] for f in listed["funds"]}
+    assert next(f for f in listed["funds"] if f["code"] == "KCB_MMF_KES")["annual_rate"] is None  # nobody follows it yet
+    assert (row["kind"]["code"], row["kind"]["risk"]) == ("MMF", 1) and len(listed["kinds"]) >= 5
 
 
 # Choosing where the rate comes from

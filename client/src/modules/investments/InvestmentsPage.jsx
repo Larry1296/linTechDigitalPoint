@@ -20,58 +20,120 @@ const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:0
 const today = () => new Date().toLocaleDateString("en-CA");
 const percent = (value) => `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
 
-// The fund an account's name points to, as the server guesses it: "CIC MMF" follows CIC's shilling money market fund.
-export const guessFund = (name) => {
+// The fund an account's name points to, as the server guesses it: "CIC MMF" follows CIC's shilling money market fund,
+// "KCB MMF" KCB's; a dollar, equity or other fund of the same manager follows none.
+const NOT_THE_MMF = ["dollar", "usd", "equity", "fixed", "balanced", "wealth", "global", "bond"];
+export const guessFund = (name, funds) => {
   const words = String(name || "").toLowerCase().replace(/-/g, " ").split(/\s+/);
-  if (!words.includes("cic")) return "";
-  return words.some((w) => ["dollar", "usd", "equity", "fixed", "balanced", "wealth", "global"].includes(w)) ? "" : "CIC_MMF_KES";
+  if (words.some((w) => NOT_THE_MMF.includes(w))) return "";
+  return funds.find((f) => String(f.short || "").toLowerCase().split(/\s+/).every((w) => words.includes(w)))?.code || "";
 };
+const rateOf = (investment) => investment.earning?.annual_rate ?? investment.fund?.annual_rate ?? investment.current_rate?.annual_rate;
 
-function NewInvestmentForm({ funds, onSaved, onCancel }) {
+// How risky the kind of investment is: a money market fund is low risk, shares high.
+function Risk({ kind }) {
+  if (!kind) return null;
+  return (
+    <p className="investRisk">
+      <span className={`investRiskBadge risk${kind.risk ?? 0}`}>{kind.risk_label} risk{kind.risk ? ` · ${kind.risk} of 5` : ""}</span>
+      {" "}{kind.label}: {kind.risk_note}
+    </p>
+  );
+}
+
+// Where the money goes: a fund the app follows (its rate comes in by itself) or another account whose rate is typed in.
+function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [fund, setFund] = useState(null); // null until chosen: follows the name
-  const chosen = fund ?? guessFund(name);
+  const [kind, setKind] = useState("MMF");
+  const chosen = fund ?? guessFund(name, funds);
+  const followed = funds.find((f) => f.code === chosen);
+  const risk = followed ? followed.kind : kinds.find((k) => k.code === kind);
+  const pick = (code) => {
+    setFund(code);
+    const picked = funds.find((f) => f.code === code);
+    if (picked && (!name || funds.some((f) => name === `${f.short} MMF`))) setName(`${picked.short} MMF`);
+  };
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      await api("/api/v1/accounting/investments/", { method: "POST",
-        body: JSON.stringify({ ...values, fund: chosen, annual_rate: chosen ? null : values.annual_rate || null }) });
-      await onSaved();
+      const row = await api("/api/v1/accounting/investments/", { method: "POST",
+        body: JSON.stringify({ ...values, fund: chosen, kind: chosen ? "MMF" : kind, annual_rate: chosen ? null : values.annual_rate || null }) });
+      await onSaved(row);
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   };
   return (
-    <form className="formCard" onSubmit={(event) => void submit(event)}>
-      <h2>Add an investment account</h2>
+    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="New investment">
+      <h2>{thenAdd ? "Add money to a new investment" : "Add an investment account"}</h2>
       <fieldset disabled={busy} className="loanFields">
-        <FormField label="Name of the fund or account" name="name" required minLength={2} maxLength={120} placeholder="e.g. CIC MMF"
-          autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
-        <FormField label="Account number (optional)" name="account_number" maxLength={60} autoComplete="off" />
-        <FormField label="Interest rate">
-          <select value={chosen} onChange={(event) => setFund(event.target.value)}>
-            {funds.map((f) => <option key={f.code} value={f.code}>Follow {f.name}'s published rate (updated automatically)</option>)}
-            <option value="">I'll enter the rate myself</option>
+        <FormField label="Where are you investing?">
+          <select value={chosen} onChange={(event) => pick(event.target.value)}>
+            {funds.map((f) => <option key={f.code} value={f.code}>
+              {f.name}{f.annual_rate != null ? ` · ${percent(f.annual_rate)} a year now` : ""}</option>)}
+            <option value="">Another fund, Sacco, bank or account (I'll enter the rate)</option>
           </select>
         </FormField>
+        <FormField label="Name of the fund or account" name="name" required minLength={2} maxLength={120} placeholder="e.g. CIC MMF"
+          autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
+        {!chosen && <FormField label="What kind is it?">
+          <select value={kind} onChange={(event) => setKind(event.target.value)}>
+            {kinds.map((k) => <option key={k.code} value={k.code}>{k.label}</option>)}
+          </select>
+        </FormField>}
+        <FormField label="Account number (optional)" name="account_number" maxLength={60} autoComplete="off" />
         {!chosen && <FormField label="Yearly interest rate it pays now (%)" name="annual_rate" type="number" min="0" max="100" step="0.001"
           placeholder="e.g. 13.25 — the annual yield in the fund's app or SMS" />}
         <FormField label="Withholding tax on interest (%)" name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue="15" required />
         <FormField label="Note (optional)"><textarea name="notes" maxLength={500} placeholder="e.g. spare agency cash, withdraw takes 2 days" /></FormField>
       </fieldset>
-      {chosen && <p className="muted">The app reads the rate on the fund's own website and checks it again every 10 days, so interest
-        estimates stay right without a monthly check. You still record the balance from your statement now and then.</p>}
+      <Risk kind={risk} />
+      {followed && <p className="muted">The app reads {followed.short}'s rate on its own website{followed.annual_rate == null ? " now" : ""} and checks it
+        again every 10 days, so interest estimates stay right without a monthly check. You still record the balance from your statement now and then.</p>}
       <div className="actionRow">
-        <button disabled={busy}>Add account</button>
+        <button disabled={busy}>{thenAdd ? "Next: the amount" : "Add account"}</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not add the account." message={error} />
+    </form>
+  );
+}
+
+// "Add money": into an investment already held, or a new one.
+function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
+  const [target, setTarget] = useState(investments[0] ? String(investments[0].id) : "new");
+  const submit = (event) => {
+    event.preventDefault();
+    if (target === "new") onNew();
+    else onPick(Number(target));
+  };
+  return (
+    <form className="formCard investChooser" onSubmit={submit} aria-label="Add money to">
+      <h2>Add money to</h2>
+      <fieldset className="loanFields">
+        <legend className="visuallyHidden">Add money to</legend>
+        {investments.map((i) => (
+          <label key={i.id} className="investChoice">
+            <input type="radio" name="target" value={String(i.id)} checked={target === String(i.id)} onChange={() => setTarget(String(i.id))} />
+            <span><b>{i.name}</b> · {money(i.estimate?.value ?? i.value)} now
+              {rateOf(i) != null && ` · ${percent(rateOf(i))} a year`}{i.kind && ` · ${i.kind.risk_label.toLowerCase()} risk`}</span>
+          </label>))}
+        <label className="investChoice">
+          <input type="radio" name="target" value="new" checked={target === "new"} onChange={() => setTarget("new")} />
+          <span><b>A new investment</b> · CIC, KCB, Old Mutual and others, or another account</span>
+        </label>
+      </fieldset>
+      <div className="actionRow">
+        <button>Continue</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
     </form>
   );
 }
@@ -322,7 +384,7 @@ function RateSource({ investment, funds, canMove, onChanged }) {
       setBusy(false);
     }
   };
-  const suggested = !fund && guessFund(investment.name);
+  const suggested = !fund && guessFund(investment.name, funds);
   return (
     <div className="investSource">
       {fund
@@ -403,6 +465,7 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
             ? <span className="loanStatus investRate" title={`Recorded ${date(rate.recorded_on)}`}>{percent(rate.annual_rate)} a year · {rate.label}</span>
             : <span className="loanStatus overdue">No rate recorded</span>}
       </header>
+      <Risk kind={investment.kind} />
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
@@ -501,7 +564,8 @@ export function InvestmentsPage() {
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const [data, setData] = useState();
   const [error, setError] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(false); // true, or "deposit" when money goes in once it is added
+  const [choosing, setChoosing] = useState(false);
   const [preset, setPreset] = useState(null);
   const load = async () => {
     try {
@@ -528,7 +592,10 @@ export function InvestmentsPage() {
     <>
       <div className="loanSummary">
         <h1>Investments</h1>
-        {can("accounting.add_investment") && !adding && <button type="button" onClick={() => setAdding(true)}>Add investment account</button>}
+        {!adding && !choosing && <div className="actionRow">
+          {canMove && <button type="button" onClick={() => setChoosing(true)}>Add money</button>}
+          {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
+        </div>}
       </div>
       <p className="muted">Spare money kept in a money market fund (MMF) or similar. Putting money in or taking it out is still your money,
         so profit does not change; only the interest it earns is income.</p>
@@ -552,7 +619,16 @@ export function InvestmentsPage() {
         {canMove && <button type="button" onClick={() => setPreset({ id: due[0].id, kind: "MONTHLY", nonce: Date.now() })}>
           Do the check{due.length > 1 ? ` for ${due[0].name}` : ""}</button>}
       </section>}
-      {adding && <NewInvestmentForm funds={funds} onCancel={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
+      {choosing && <AddMoneyChooser investments={data.investments} onCancel={() => setChoosing(false)}
+        onPick={(id) => { setChoosing(false); setPreset({ id, kind: "DEPOSIT", nonce: Date.now() }); }}
+        onNew={() => { setChoosing(false); setAdding("deposit"); }} />}
+      {adding && <NewInvestmentForm funds={funds} kinds={data.kinds || []} thenAdd={adding === "deposit"} onCancel={() => setAdding(false)}
+        onSaved={async (row) => {
+          const deposit = adding === "deposit";
+          setAdding(false);
+          await load();
+          if (deposit && row?.id) setPreset({ id: row.id, kind: "DEPOSIT", nonce: Date.now() });
+        }} />}
       {data.investments.length > 0 && <SpareMoney spare={spare} investments={data.investments} canMove={canMove}
         onInvest={(choice) => setPreset({ ...choice, nonce: Date.now() })} />}
       {data.investments.length
