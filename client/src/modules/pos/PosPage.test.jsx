@@ -15,9 +15,9 @@ const catalog = [item(1, "Charger", "300.00", "Power"), item(2, "Earphones", "45
 const payment = (code, amount, name, at = "2026-10-16T10:15:00+03:00") => ({ id: code.length, code, amount, paid_at: at, payer_name: name, payer_phone: "25470****149" });
 
 // A stand-in for the server's checkout: nothing is sold until the payments cover the amount.
-let express, open, checkout, arrivals, promptAnswer;
+let express, open, checkout, arrivals, promptAnswer, customer;
 const fresh = (total) => ({ id: 7, number: "POS-ABC123", status: "AWAITING", total, paid: "0", left: total, open: total, items: 1, cashier_id: 1,
-  customer_id: null, payments: [], till_payments: [] });
+  customer_id: customer, payments: [], till_payments: [] });
 const paid = (payments) => ({ ...checkout, status: "COMPLETED", paid: checkout.total, left: "0", open: "0", payments,
   receipt: { sale_id: 5, receipt_number: checkout.number, total: checkout.total } });
 beforeEach(() => {
@@ -26,6 +26,7 @@ beforeEach(() => {
   open = [];
   arrivals = [];
   promptAnswer = null;
+  customer = null;
   api.mockImplementation(async (path, options = {}) => {
     const body = options.body ? JSON.parse(options.body) : {};
     if (path.startsWith("/api/v1/commerce/pos/catalog/")) return catalog;
@@ -81,6 +82,26 @@ it("adds up the basket, and charging it sells nothing until the customer pays; c
   expect(within(done).getByText(/Sale complete · POS-ABC123/)).toBeInTheDocument();
   expect(within(done).getByText(/Give change/)).toHaveTextContent("250.00");
 }, 20000);  // a whole sale, tap by tap: slow when every test file runs at once
+
+it("records a customer who gave no cash as owing it, once the customer is chosen", async () => {
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
+  await charge();
+  fireEvent.change(within(panel()).getByLabelText("Cash received"), { target: { value: "0" } });
+  expect(within(panel()).getByText(/Choose the customer to leave it owed/)).toBeInTheDocument();
+  expect(within(panel()).getByRole("button", { name: "Leave KSh 300.00 owed by the customer" })).toBeDisabled();
+}, 20000);
+
+it("leaves the whole amount owed when the chosen customer gave no cash", async () => {
+  customer = 12;
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
+  await charge();
+  fireEvent.change(within(panel()).getByLabelText("Cash received"), { target: { value: "0" } });
+  expect(within(panel()).getByText("The customer gave nothing, so KSh 300.00 is left owed by them.")).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(panel()).getByRole("button", { name: "Leave KSh 300.00 owed by the customer" })); });
+  expect(posted("/api/v1/commerce/pos/checkouts/7/pay/")).toEqual([{ method: "OWED", due_date: null }]);
+}, 20000);
 
 it("shows till payments as Safaricom reports them, and the cashier picks the customer's own", async () => {
   express = { kind: "TILL", ready: false, till_number: "9876543", till_notices: true };

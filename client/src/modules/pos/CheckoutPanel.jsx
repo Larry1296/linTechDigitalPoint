@@ -67,6 +67,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
   };
   const given = Number(cashGiven || 0);
   const change = cashGiven !== "" ? given - left : null;
+  const nothingGiven = cashGiven !== "" && given <= 0;
 
   return <section className="posCheckout" aria-label={`Checkout ${checkout.number}`}>
     <header className="posCheckoutHead">
@@ -106,12 +107,21 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
           </button>)}
       </div>
 
-      {way === "CASH" && <form className="posWay" onSubmit={(e) => { e.preventDefault(); void pay({ method: "CASH", cash_given: cashGiven || left }); }}>
+      {way === "CASH" && <form className="posWay" onSubmit={(e) => {
+        e.preventDefault();
+        // The customer gave nothing: what is left is owed by them, not paid in cash.
+        if (nothingGiven) void pay({ method: "OWED", due_date: null });
+        else void pay({ method: "CASH", cash_given: cashGiven || left });
+      }}>
         <label>Cash received<input type="number" min="0" step="0.01" inputMode="decimal" autoFocus value={cashGiven}
           onChange={(e) => setCashGiven(e.target.value)} placeholder={left.toFixed(2)} /></label>
-        {change !== null && (change >= 0 ? <p className="posChange">Give change: <b>{money(change)}</b></p>
-          : <p className="muted">{money(-change)} still to pay after this, by any other way.</p>)}
-        <button disabled={busy}>{busy ? "Recording…" : `Take ${money(Math.min(given || left, left))} cash`}</button>
+        {nothingGiven
+          ? <p className="muted">{checkout.customer_id ? `The customer gave nothing, so ${money(left)} is left owed by them.`
+            : "The customer gave nothing. Choose the customer to leave it owed by them, or pay another way."}</p>
+          : change !== null && (change >= 0 ? <p className="posChange">Give change: <b>{money(change)}</b></p>
+            : <p className="muted">{money(-change)} still to pay after this, by any other way.</p>)}
+        <button disabled={busy || (nothingGiven && !checkout.customer_id)}>{busy ? "Recording…"
+          : nothingGiven ? `Leave ${money(left)} owed by the customer` : `Take ${money(Math.min(given || left, left))} cash`}</button>
       </form>}
 
       {way === "TILL" && <div className="posWay">
