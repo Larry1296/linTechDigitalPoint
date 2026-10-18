@@ -11,7 +11,9 @@ import { InterestCalculator } from "./InterestCalculator";
 
 const BUSINESS = [["MPESA", "Lipa na M-Pesa (till)"], ["CASH", "Cash"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa agency float"]];
-const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY])[value] || value;
+// The owner's own money from outside the business: any amount can go in, and no till, drawer or bank changes.
+const OWNER = ["OWNER", "My own money (from outside the business)"];
+const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY, OWNER])[value] || value;
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -84,12 +86,17 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const agency = source.startsWith("AGENCY_");
+  const own = source === OWNER[0];
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const where = sourceName(values.source).toLowerCase();
+    const text = own
+      ? (putIn ? "It is your own money put into the business. Your cash, till and bank do not change, and profit does not change."
+        : "It goes to you, out of the business. Your cash, till and bank do not change, and profit does not change.")
+      : putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`;
     if (!(await confirmAction({ title: putIn ? `Put ${money(values.amount)} into ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
-      text: putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`,
+      text,
       confirmButtonText: putIn ? "Record money put in" : "Record money taken out" }))) return;
     setBusy(true);
     setError("");
@@ -107,11 +114,12 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
       <fieldset disabled={busy} className="loanFields">
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
           max={putIn ? undefined : investment.value} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        <FormField label={putIn ? "Taken from" : "Paid into"}>
+        <FormField label={putIn ? "Taken from" : "Paid to"}>
           <select name="source" value={source} onChange={(event) => setSource(event.target.value)}>
             {BUSINESS.map(([value, label]) => <option key={value} value={value}>
               {label}{putIn && available(value) != null ? ` · ${money(available(value))} expected` : ""}</option>)}
             {sessions.length > 0 && AGENCY.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            <option value={OWNER[0]}>{putIn ? OWNER[1] : "Me, the owner (out of the business)"}</option>
           </select>
         </FormField>
         {agency && sessions.length > 1 && (
@@ -325,7 +333,8 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
   const automatic = Boolean(investment.fund?.fresh);
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
-      text: m.source ? `The money goes back to your ${sourceName(m.source).toLowerCase()}.` : "The investment's value goes back to what it was.",
+      text: m.source === OWNER[0] ? "It was your own money, so your cash, till and bank do not change."
+        : m.source ? `The money goes back to your ${sourceName(m.source).toLowerCase()}.` : "The investment's value goes back to what it was.",
       confirmButtonText: "Undo", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. entered twice" }] });
     if (!values) return;
     setError("");

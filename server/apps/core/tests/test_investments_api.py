@@ -75,6 +75,25 @@ def test_money_in_interest_and_money_out_keep_the_books_and_profit_right(shop):
     assert D(listed["total_value"]) == D("15150") and listed["agency_sessions"] == []
 
 
+def test_the_owners_own_money_goes_in_without_touching_the_business_money(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    # Far more than the business holds (nothing): it is the owner's money from outside.
+    put = _move(client, mmf, "DEPOSIT", "500000", "OWNER", "own-in")
+    assert put.status_code == 201, put.content
+    assert D(put.json()["value"]) == D("500000") and put.json()["movements"][0]["source"] == "OWNER"
+    out = _move(client, mmf, "WITHDRAWAL", "100000", "OWNER", "own-out")
+    assert out.status_code == 201 and D(out.json()["value"]) == D("400000")
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("400000") and accounts["3000"]["balance"] == D("-400000")
+    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1000", "1010", "1020"))
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == 0
+    first = next(m for m in out.json()["movements"] if m["kind"] == "WITHDRAWAL")["id"]
+    assert client.post(f"/api/v1/accounting/investments/movements/{first}/undo/", {"reason": "Wrong"}, format="json").status_code == 200
+    accounts, *_ = _books(org)
+    assert accounts["1400"]["balance"] == D("500000") and accounts["3000"]["balance"] == D("-500000")
+
+
 def test_a_lower_statement_is_a_fee_and_mistakes_are_undone_in_order(shop):
     client, org, *_ = shop
     mmf = _mmf(client)

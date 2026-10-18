@@ -4,8 +4,10 @@ Putting money in moves it from cash, M-Pesa, bank or the agency's cash or float 
 asset: it is still the business's money, so it is neither an expense nor income and profit does not change.
 Taking it out moves it back. Interest is income (4910) and fees are an expense (6200); both are usually worked
 out from the fund's statement balance. Business money appears in the cash book (kind INVESTMENT); agency money
-goes through the open agency shift (type INVESTMENT) so the desk's cash and float stay right. Mistakes are undone,
-never edited or deleted.
+goes through the open agency shift (type INVESTMENT) so the desk's cash and float stay right. The owner's own money
+from outside the business (OWNER) is owner capital (3000) put straight into the investment, so no till, drawer or
+bank changes and any amount can be put in; taken out to the owner, it is the owner taking capital back. Mistakes are
+undone, never edited or deleted.
 """
 from datetime import datetime, time
 from decimal import Decimal
@@ -20,7 +22,8 @@ from .services import audit, post, reverse as reverse_cash
 
 BUSINESS = {"CASH", "MPESA", "BANK", "OTHER"}
 AGENCY = {"AGENCY_CASH", "AGENCY_FLOAT"}
-SOURCES = BUSINESS | AGENCY
+OWNER = "OWNER"
+SOURCES = BUSINESS | AGENCY | {OWNER}
 SIGN = {InvestmentMovement.DEPOSIT: 1, InvestmentMovement.INTEREST: 1, InvestmentMovement.WITHDRAWAL: -1, InvestmentMovement.FEE: -1}
 
 
@@ -98,7 +101,7 @@ def move(*, investment, user, kind, amount, source, key, occurred_on=None, refer
         raise ValidationError("Choose money put in or money taken out.")
     source = str(source or "").upper()
     if source not in SOURCES:
-        raise ValidationError("Choose cash, M-Pesa, bank, other, agency cash or agency float.")
+        raise ValidationError("Choose cash, M-Pesa, bank, other, agency cash, agency float or your own money.")
     amount, day = _amount(amount), _day(occurred_on)
     putting_in = kind == InvestmentMovement.DEPOSIT
     if not putting_in and amount > value(investment):
@@ -107,7 +110,10 @@ def move(*, investment, user, kind, amount, source, key, occurred_on=None, refer
     reference = str(reference or "").strip().upper()[:120]
     words = f"{'Put into' if putting_in else 'Taken out of'} {investment.name}"
     entry = agency = None
-    if source in AGENCY:
+    if source == OWNER:
+        branch = resolve_branch()
+        lines = paired("1400", "3000", amount) if putting_in else paired("3000", "1400", amount)
+    elif source in AGENCY:
         if day != timezone.localdate():
             raise ValidationError("Agency cash and float can only be moved today, through the open shift.")
         from apps.mpesa.services import post_transaction
