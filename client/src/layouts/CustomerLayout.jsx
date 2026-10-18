@@ -6,12 +6,13 @@ import {
   ShoppingCart,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppFooter, AppNavbar } from "../components/AppChrome";
 import { ThemePicker } from "../components/ThemePicker";
 import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
 import { SidebarAccount } from "../components/navigation/SidebarAccount";
+import { useMediaQuery } from "../core/ui/useMediaQuery";
 
 const sections = [
   {
@@ -31,18 +32,8 @@ const sections = [
   },
 ];
 
-function subscribeToViewport(onChange) {
-  const media = window.matchMedia("(max-width: 760px)");
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
-
 export function CustomerLayout() {
-  const isMobile = useSyncExternalStore(
-    subscribeToViewport,
-    () => window.matchMedia("(max-width: 760px)").matches,
-    () => false,
-  );
+  const isMobile = useMediaQuery("(max-width: 760px)");
   const location = useLocation();
   const sidebarRef = useRef(null);
   const [openLocation, setOpenLocation] = useState(null);

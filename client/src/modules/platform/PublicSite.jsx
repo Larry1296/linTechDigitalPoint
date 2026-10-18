@@ -40,10 +40,15 @@ const faqs = [
   ["How are M-Pesa payments handled?", "Cash and M-Pesa payments are recorded manually alongside each sale, so your payment records sit next to your inventory."],
   ["How much does it cost?", "The first month is free. After that, Basic is KES 500 a month and Pro, with every feature, is KES 1,000 a month, paid by M-Pesa."],
 ];
-export function PublicNavbar() {
+export function PublicNavbar({ accountMenu, accountMenuRef } = {}) {
   const [open, setOpen] = useState(false);
   // While the hamburger shows, the sign-up, login and theme controls live inside its menu.
   const collapsed = useMediaQuery("(max-width: 1250px)");
+  // On a phone in the customer account, the one hamburger opens the account menu instead.
+  if (accountMenu?.mobile) return <header className="saasNav">
+    <Link className="saasBrand" to="/"><PlatformLogo /></Link>
+    <div className="saasNavActions"><button ref={accountMenuRef} type="button" className="saasMenu" aria-expanded={accountMenu.open} aria-controls="customer-sidebar" aria-label={accountMenu.open ? "Close account menu" : "Open account menu"} onClick={accountMenu.toggle}>{accountMenu.open ? <X /> : <Menu />}</button></div>
+  </header>;
   const actions = <><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><span className="saasThemeSlot" onClick={(event) => event.stopPropagation()}><ThemePicker /></span></>;
   return <header className="saasNav">
     <Link className="saasBrand" to="/"><PlatformLogo /></Link>

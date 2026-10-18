@@ -7,7 +7,7 @@ export function BrandLogo({ compact = false }) {
   const business = location.pathname.startsWith('/admin') ? user?.organization : null;
   return business ? <BusinessBrand organization={business} compact={compact} /> : <PlatformLogo compact={compact} />;
 }
-export function AppNavbar() { return <PublicNavbar />; }
+export function AppNavbar(props) { return <PublicNavbar {...props} />; }
 export function AppFooter() {
   const {user} = useAuth();
   if (!user?.organization) return <PublicFooter />;
