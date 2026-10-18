@@ -1,5 +1,6 @@
 import { ThemePicker } from "../../components/ThemePicker";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ArrowDownRight, ArrowUpRight, Boxes, MessageCircle, Building2, ChartNoAxesCombined, CircleCheck, LogIn, Menu, ReceiptText, ShieldCheck, Store, UserPlus, Users, Wrench, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
@@ -40,22 +41,49 @@ const faqs = [
   ["How are M-Pesa payments handled?", "Cash and M-Pesa payments are recorded manually alongside each sale, so your payment records sit next to your inventory."],
   ["How much does it cost?", "The first month is free. After that, Basic is KES 500 a month and Pro, with every feature, is KES 1,000 a month, paid by M-Pesa."],
 ];
+// Opened from the hamburger, the menu covers the whole screen with every link and button
+// stacked in the centre. It is rendered on <body> so the floating home navbar cannot clip it.
+function PublicMenuOverlay({ onClose, returnFocus }) {
+  const overlay = useRef(null);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    overlay.current?.querySelector("nav a")?.focus();
+    const onKey = (event) => { if (event.key === "Escape") { onClose(); returnFocus.current?.focus(); } };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKey); };
+  }, [onClose, returnFocus]);
+  return createPortal(<div ref={overlay} id="saas-navigation" className="saasMenuOverlay" role="dialog" aria-modal="true" aria-label="Menu">
+    <button type="button" className="saasMenuClose" aria-label="Close navigation" onClick={() => { onClose(); returnFocus.current?.focus(); }}><X size={26} aria-hidden="true" /></button>
+    <div className="saasMenuOverlayBody">
+      <nav aria-label="Main navigation" onClick={onClose}><a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a></nav>
+      <div className="saasMenuOverlayActions">
+        <Link className="saasMenuStart" to="/register" onClick={onClose}>Get started <ArrowUpRight size={18} aria-hidden="true" /></Link>
+        <Link className="saasMenuLogin" to="/login" onClick={onClose}><LogIn size={18} aria-hidden="true" />Login</Link>
+        <ThemePicker />
+      </div>
+    </div>
+  </div>, document.body);
+}
 export function PublicNavbar({ accountMenu, accountMenuRef } = {}) {
   const [open, setOpen] = useState(false);
-  // While the hamburger shows, the sign-up, login and theme controls live inside its menu.
+  const menuButton = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  // While the hamburger shows, the links, sign-up, login and theme controls live inside its menu.
   const collapsed = useMediaQuery("(max-width: 1250px)");
   // On a phone in the customer account, the one hamburger opens the account menu instead.
   if (accountMenu?.mobile) return <header className="saasNav">
     <Link className="saasBrand" to="/"><PlatformLogo /></Link>
     <div className="saasNavActions"><button ref={accountMenuRef} type="button" className="saasMenu" aria-expanded={accountMenu.open} aria-controls="customer-sidebar" aria-label={accountMenu.open ? "Close account menu" : "Open account menu"} onClick={accountMenu.toggle}>{accountMenu.open ? <X /> : <Menu />}</button></div>
   </header>;
-  const actions = <><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><span className="saasThemeSlot" onClick={(event) => event.stopPropagation()}><ThemePicker /></span></>;
   return <header className="saasNav">
     <Link className="saasBrand" to="/"><PlatformLogo /></Link>
-    <nav id="saas-navigation" aria-label="Main navigation" className={open ? "isOpen" : ""} onClick={() => setOpen(false)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
-      <a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a>
-      {collapsed && <div className="saasNavMenuActions">{actions}</div>}
-    </nav><div className="saasNavActions">{!collapsed && actions}<button className="saasMenu" aria-expanded={open} aria-controls="saas-navigation" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button></div>
+    {!collapsed && <nav aria-label="Main navigation"><a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a></nav>}
+    <div className="saasNavActions">
+      {!collapsed && <><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><ThemePicker /></>}
+      <button ref={menuButton} type="button" className="saasMenu" aria-expanded={open} aria-controls="saas-navigation" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+    </div>
+    {collapsed && open && <PublicMenuOverlay onClose={close} returnFocus={menuButton} />}
   </header>;
 }
 export function PublicFooter() {
