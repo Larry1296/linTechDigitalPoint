@@ -241,6 +241,13 @@ def _estimate(org, mmf, today):
         return estimate(Investment.objects.get(pk=mmf), today=today)
 
 
+def _days(org, mmf, today):
+    from apps.accounting.investment_interest import day_by_day
+    from apps.accounting.models import Investment
+    with organization_context(org):
+        return day_by_day(Investment.objects.get(pk=mmf), today=today)
+
+
 def test_interest_is_estimated_daily_and_added_after_tax_at_each_month_end(shop):
     client, org, *_ = shop
     mmf = _mmf(client)
@@ -262,20 +269,30 @@ def test_interest_is_estimated_daily_and_added_after_tax_at_each_month_end(shop)
     later = _estimate(org, mmf, next_month + timedelta(days=9))
     expected = gross + (D("100000") + gross * D("0.85")) * D("0.10") / 365 * 10
     assert later["gross"] == expected.quantize(D("0.01")) and later["rate"] == D("10.000")
-    # Day by day, newest first: what each day added after tax and the total after it.
-    today, yesterday = later["daily"][0], later["daily"][1]
-    assert len(later["daily"]) == 31 and today["date"] == next_month + timedelta(days=9)
-    assert abs(today["net"] - (D("100000") + gross * D("0.85")) * D("0.10") / 365 * D("0.85")) <= D("0.01")
-    assert today["value"] == later["value"] and today["value"] - yesterday["value"] == today["net"]
-    assert next(d for d in later["daily"] if d["date"] == month_end)["rate"] == D("12.000")
+    # Day by day from the day the money went in, newest first: invested, what each day added and the total after it.
+    rows = _days(org, mmf, next_month + timedelta(days=9))
+    today, yesterday, first = rows[0], rows[1], rows[-1]
+    assert (first["date"], first["invested"], first["moved"], first["interest"], first["value"]) == (start, D("100000"), D("100000"), 0, D("100000"))
+    assert len(rows) == (next_month + timedelta(days=9) - start).days + 1 and today["value"] == later["value"]
+    assert abs(today["interest"] - (D("100000") + gross * D("0.85")) * D("0.10") / 365 * D("0.85")) <= D("0.01")
+    assert today["value"] - yesterday["value"] == today["interest"] and today["interest_so_far"] == later["net"]
+    assert sum(r["interest"] for r in rows) == later["net"] and next(r for r in rows if r["date"] == month_end)["rate"] == D("12.000")
     # Money taken out stops earning from that day: the total drops by it and the interest after is on what is left.
     _move(client, mmf, "WITHDRAWAL", "40000", "BANK", "out", occurred_on=str(next_month + timedelta(days=5)))
     after = _estimate(org, mmf, next_month + timedelta(days=9))
-    out_day = next(d for d in after["daily"] if d["date"] == next_month + timedelta(days=5))
-    assert out_day["moved"] == D("-40000") and after["daily"][0]["value"] == after["value"]
+    rows = _days(org, mmf, next_month + timedelta(days=9))
+    out_day = next(r for r in rows if r["date"] == next_month + timedelta(days=5))
+    assert (out_day["moved"], out_day["invested"]) == (D("-40000"), D("60000")) and rows[0]["value"] == after["value"]
     left = D("60000") + gross * D("0.85")
     expected = gross + (D("100000") + gross * D("0.85")) * D("0.10") / 365 * 5 + left * D("0.10") / 365 * 5
     assert after["gross"] == expected.quantize(D("0.01")) and after["value"] == D("60000") + after["net"]
+    # A statement: that day takes the statement's figure and the days after build on it, still ending at the estimate.
+    client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "61000", "idempotency_key": "st",
+                "occurred_on": str(next_month + timedelta(days=7))}, format="json")
+    rows = _days(org, mmf, next_month + timedelta(days=9))
+    statement = next(r for r in rows if r["date"] == next_month + timedelta(days=7))
+    assert statement["statement"] and statement["value"] == D("61000") and statement["interest_so_far"] == D("1000")
+    assert rows[0]["value"] == _estimate(org, mmf, next_month + timedelta(days=9))["value"] > D("61000")
 
 
 def test_monthly_check_records_the_rate_and_the_statement_interest_and_reminds_until_done(shop):

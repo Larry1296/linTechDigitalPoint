@@ -11,9 +11,10 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
   interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
-  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26",
-    daily: [{ date: "2026-10-02", rate: "12.000", moved: "0.00", net: "5.63", value: "20161.26" },
-      { date: "2026-10-01", rate: "12.000", moved: "-1000.00", net: "5.63", value: "20155.63" }] }, fund: null,
+  estimate: { since: "2026-09-30", days: 2, rate: "12.000", gross: "13.25", tax: "1.99", net: "11.26", value: "20161.26" },
+  daily: [{ date: "2026-10-02", rate: "12.000", invested: "19000.00", moved: "0.00", interest: "5.63", statement: false, interest_so_far: "1161.26", value: "20161.26" },
+    { date: "2026-10-01", rate: "12.000", invested: "19000.00", moved: "-1000.00", interest: "5.63", statement: false, interest_so_far: "1155.63", value: "20155.63" },
+    { date: "2026-09-01", rate: "12.000", invested: "20000.00", moved: "20000.00", interest: "0.00", statement: false, interest_so_far: "0.00", value: "20000.00" }], fund: null,
   earning: { balance: "20161.26", annual_rate: "12.000", estimated_balance: true, day: { gross: "6.63", tax: "0.99", net: "5.64" },
     month: { gross: "201.61", tax: "30.24", net: "171.37" }, year: { gross: "2554.10", tax: "383.12", net: "2170.98" } }, movements: [
     { id: 8, kind: "INTEREST", amount: "150.00", occurred_on: "2026-09-30", source: "", reference: "", note: "", statement_balance: "20150.00", reversed_at: null },
@@ -114,10 +115,11 @@ it("shows the rate, the interest estimated since the statement and what the mone
   expect(within(earns).getByText("A year").nextSibling).toHaveTextContent("KSh 2,170.98");
   expect(screen.getByText("Worth today, with interest").nextSibling).toHaveTextContent("KSh 20,161.26");
   const daily = within(card).getByText(/^Day by day/).closest("details");
-  expect(daily).toHaveTextContent("Day by day: KSh 5.63 added today, worth KSh 20,161.26");
+  expect(daily).toHaveTextContent(/Day by day since .+: KSh 19,000 invested, worth KSh 20,161.26 today/);
   const rows = within(daily).getAllByRole("row");
-  expect(rows[2]).toHaveTextContent("− KSh 1,000");
-  expect(rows[2]).toHaveTextContent("KSh 20,155.63");
+  expect(rows[1]).toHaveTextContent(/KSh 19,000.*\+ KSh 5.63.*KSh 1,161.26.*KSh 20,161.26/);
+  expect(rows[2]).toHaveTextContent("KSh 19,000 · − KSh 1,000 taken out");
+  expect(rows[3]).toHaveTextContent("KSh 20,000 · + KSh 20,000 put in");
   expect(screen.getByText("Earning now, after tax").nextSibling).toHaveTextContent("KSh 5.64 a day");
   expect(within(card).getByText(/entered by hand/)).toBeInTheDocument();
   expect(screen.queryByRole("status", { name: "Monthly check due" })).toBeNull();

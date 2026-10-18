@@ -92,15 +92,10 @@ def _rate_for(rates, day):
     return chosen
 
 
-DAILY_DAYS = 31
-
-
 def estimate(investment, today=None):
     """Interest estimated to have built up since the money was last checked against a statement, or None without a rate.
 
-    {since, days, rate, gross, tax, net, value, daily}: value is what the app records now plus the estimated interest
-    after tax; daily is the last few days, newest first, each with the money put in (or taken out, below zero) that day,
-    the interest it added after tax and the total after it. Interest is only on what is in the fund each day.
+    {since, days, rate, gross, tax, net, value}: value is what the app records now plus the estimated interest after tax.
     """
     today = today or timezone.localdate()
     rates = timeline(investment)
@@ -121,21 +116,12 @@ def estimate(investment, today=None):
             changes[m.occurred_on] = changes.get(m.occurred_on, ZERO) + SIGN[m.kind] * m.amount
     keep = 1 - investment.tax_rate / 100
     gross = credited = month_gross = ZERO
-    daily = []
-    worth = balance
     day = since
     while day < today:
         day += timedelta(days=1)
         balance += changes.get(day, ZERO)
-        rate = _rate_for(rates, day)
         if balance + credited > 0:
-            month_gross += (balance + credited) * rate / 100 / 365
-        # Rounded the way the total is, so each day's interest is exactly what the total rose by (money put in or
-        # taken out that day aside) and the last day's total is the estimated value.
-        before, worth = worth, balance + (((gross + month_gross).quantize(CENT)) * keep).quantize(CENT)
-        if day > today - timedelta(days=DAILY_DAYS):
-            daily.append({"date": day, "rate": rate, "moved": changes.get(day, ZERO),
-                          "net": worth - before - changes.get(day, ZERO), "value": worth})
+            month_gross += (balance + credited) * _rate_for(rates, day) / 100 / 365
         if day.day == calendar.monthrange(day.year, day.month)[1]:
             # Interest is added at the end of the month, after tax, and earns interest itself from then on.
             gross += month_gross
@@ -145,7 +131,57 @@ def estimate(investment, today=None):
     gross = gross.quantize(CENT)
     net = (gross * keep).quantize(CENT)
     return {"since": since, "days": (today - since).days, "rate": _rate_for(rates, today), "gross": gross,
-            "tax": gross - net, "net": net, "value": (value(investment) + net).quantize(CENT), "daily": daily[::-1]}
+            "tax": gross - net, "net": net, "value": (value(investment) + net).quantize(CENT)}
+
+
+def day_by_day(investment, today=None):
+    """Every day from the first money put in to today, newest first, as the estimate works it out:
+    {date, rate, invested, moved, interest, statement, interest_so_far, value}.
+
+    invested is the money in the fund from you (put in less taken out) and moved what went in (or out, below zero) that
+    day; interest is what the day added after tax, and value the total after it. A day a statement was recorded starts
+    again from the statement's figure (statement is True; interest is then the interest or fees the statement showed),
+    so from the last statement on it is exactly the estimate and today's value is the estimated value.
+    """
+    today = today or timezone.localdate()
+    rates = timeline(investment)
+    live = [m for m in investment.movements.filter(reversed_at__isnull=True).order_by("occurred_on", "pk") if m.occurred_on <= today]
+    if not rates or not live:
+        return []
+    checks = {m.occurred_on for m in live if m.kind in {InvestmentMovement.INTEREST, InvestmentMovement.FEE}}
+    checks |= set(investment.rates.filter(statement_balance__isnull=False).values_list("recorded_on", flat=True))
+    recorded_on, moved_on = {}, {}
+    for m in live:
+        recorded_on[m.occurred_on] = recorded_on.get(m.occurred_on, ZERO) + SIGN[m.kind] * m.amount
+        if m.kind in {InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL}:
+            moved_on[m.occurred_on] = moved_on.get(m.occurred_on, ZERO) + SIGN[m.kind] * m.amount
+    keep = 1 - investment.tax_rate / 100
+    recorded = invested = worth = ZERO
+    rows = []
+    day = live[0].occurred_on
+    while day <= today:
+        recorded += recorded_on.get(day, ZERO)
+        moved = moved_on.get(day, ZERO)
+        invested += moved
+        rate = _rate_for(rates, day)
+        before = worth
+        if not rows or day in checks:
+            # The first day, or a statement: the app's recorded figure, and the estimate starts again from the next day.
+            gross = credited = month_gross = ZERO
+            worth = recorded
+        else:
+            if recorded + credited > 0:
+                month_gross += (recorded + credited) * rate / 100 / 365
+            # Rounded the way the estimate rounds, so each day's interest is exactly what the total rose by.
+            worth = recorded + (((gross + month_gross).quantize(CENT)) * keep).quantize(CENT)
+            if day.day == calendar.monthrange(day.year, day.month)[1]:
+                gross += month_gross
+                credited += month_gross * keep
+                month_gross = ZERO
+        rows.append({"date": day, "rate": rate, "invested": invested, "moved": moved, "interest": worth - before - moved,
+                     "statement": day in checks, "interest_so_far": worth - invested, "value": worth})
+        day += timedelta(days=1)
+    return rows[::-1]
 
 
 @transaction.atomic

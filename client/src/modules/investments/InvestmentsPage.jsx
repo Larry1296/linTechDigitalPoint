@@ -255,26 +255,29 @@ function Earning({ investment }) {
   );
 }
 
-// The estimate day by day, newest first: money put in or taken out, the interest each day added and the total after it.
+// Every day from the first money put in, newest first: what is invested, what the day's interest added and the total after it.
 function DayByDay({ investment }) {
-  const days = investment.estimate?.daily || [];
+  const days = investment.daily || [];
   if (!days.length) return null;
+  const moved = (d) => Number(d.moved) > 0 ? <small> · + {money(d.moved)} put in</small>
+    : Number(d.moved) < 0 ? <small> · − {money(-d.moved)} taken out</small> : null;
   return (
     <details className="investDaily">
-      <summary>Day by day: {money(days[0].net)} added today, worth {money(days[0].value)}</summary>
+      <summary>Day by day since {date(days[days.length - 1].date)}: {money(days[0].invested)} invested, worth {money(days[0].value)} today</summary>
       <table className="loanRepayments">
         <caption className="visuallyHidden">{investment.name} day by day</caption>
-        <thead><tr><th>Date</th><th>Put in / taken out</th><th>Interest after tax</th><th>Worth</th></tr></thead>
+        <thead><tr><th>Date</th><th>Invested</th><th>Interest that day</th><th>Interest so far</th><th>Total</th></tr></thead>
         <tbody>{days.map((d) => (
           <tr key={d.date}>
             <td>{date(d.date)}</td>
-            <td>{Number(d.moved) > 0 ? `+ ${money(d.moved)}` : Number(d.moved) < 0 ? `− ${money(-d.moved)}` : "—"}</td>
-            <td>+ {money(d.net)}</td>
-            <td>{money(d.value)}</td>
+            <td>{money(d.invested)}{moved(d)}</td>
+            <td>{Number(d.interest) < 0 ? `− ${money(-d.interest)}` : `+ ${money(d.interest)}`}{d.statement && <small> · from statement</small>}</td>
+            <td>{money(d.interest_so_far)}</td>
+            <td><strong>{money(d.value)}</strong></td>
           </tr>))}</tbody>
       </table>
-      <p className="muted">Interest is worked out each day on what is in the fund that day, at {percent(investment.estimate.rate)} a year, and added
-        at each month end after tax. It is an estimate until the statement confirms it.</p>
+      <p className="muted">Interest is worked out each day on what is in the fund that day, at the fund's rate for that day, and added
+        at each month end after {percent(investment.tax_rate)} tax. It is an estimate until a statement confirms it.</p>
     </details>
   );
 }
