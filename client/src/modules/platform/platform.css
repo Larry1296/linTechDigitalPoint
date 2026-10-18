@@ -66,19 +66,19 @@ html { scroll-behavior: smooth; }
   .saasNav nav.isOpen { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding-top:12px; border-top:1px solid var(--chrome-line); }
   .saasNav nav a { padding:12px; border-radius:8px; }
   .saasNav nav a:hover { background:rgb(255 255 255 / 5%); }
+  .saasNavMenuActions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px; padding-top:12px; border-top:1px solid var(--chrome-line); }
+  .saasNavMenuActions .saasGetStarted, .saasNavMenuActions .saasLogin { flex:1 1 140px; }
+  .saasThemeSlot { display:flex; }
 }
 @media(max-width:600px) {
   .saasNav { padding:12px 16px; }
-  .saasBrand { max-width:none; font-size:16px; padding-right:52px; }
+  .saasBrand { max-width:none; font-size:16px; }
   .saasBrand .platformMark { width:48px; height:48px; }
   .saasBrand .platformLogoLead { font-size:17px; }
   .saasBrand .platformLogoAccent { font-size:11px; }
   .saasBrand .platformLogoName.joined { font-size:22px; }
-  .saasNavActions { grid-column:1 / -1; grid-row:2; justify-self:stretch; justify-content:flex-end; gap:8px; }
-  .saasNavActions .saasMenu { position:absolute; top:12px; right:16px; }
   .saasNav .saasLogin, .saasNav .saasGetStarted { padding:10px 12px; font-size:14px; }
-  .saasNav nav { grid-row:3; }
-  .saasSite > main { padding-top:136px; }
+  .saasSite > main { padding-top:96px; }
 }
 
 /* Guided business set-up. */

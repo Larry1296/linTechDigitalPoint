@@ -6,7 +6,7 @@
 .saasSite > main { padding-top:104px; }
 @media(max-width:600px) {
   .saasSite .saasNav { top:10px; width:calc(100% - 20px); padding:12px 14px; border-radius:18px; }
-  .saasSite > main { padding-top:146px; }
+  .saasSite > main { padding-top:100px; }
 }
 .saasSite .saasNav nav a,.saasSite .saasNav .theme { color:var(--muted); }
 .saasSite .saasNav nav a:hover,.saasSite .saasBrand { color:var(--primary); }

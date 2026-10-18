@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ArrowDownRight, ArrowUpRight, Boxes, MessageCircle, Building2, ChartNoAxesCombined, CircleCheck, LogIn, Menu, ReceiptText, ShieldCheck, Store, UserPlus, Users, Wrench, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
 import { PlatformLogo } from "../../components/Brand";
+import { useMediaQuery } from "../../core/ui/useMediaQuery";
 import { PhotoCarousel, usePrefersReducedMotion } from "../../components/PhotoCarousel";
 import { HERO_SLIDES, PEOPLE_SLIDES, WORK_TILES } from "./showcase";
 import { HelpChat, openHelpChat } from "./HelpChat";
@@ -41,11 +42,15 @@ const faqs = [
 ];
 export function PublicNavbar() {
   const [open, setOpen] = useState(false);
+  // While the hamburger shows, the sign-up, login and theme controls live inside its menu.
+  const collapsed = useMediaQuery("(max-width: 1250px)");
+  const actions = <><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><span className="saasThemeSlot" onClick={(event) => event.stopPropagation()}><ThemePicker /></span></>;
   return <header className="saasNav">
     <Link className="saasBrand" to="/"><PlatformLogo /></Link>
     <nav id="saas-navigation" aria-label="Main navigation" className={open ? "isOpen" : ""} onClick={() => setOpen(false)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
       <a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a>
-    </nav><div className="saasNavActions"><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><ThemePicker /><button className="saasMenu" aria-expanded={open} aria-controls="saas-navigation" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button></div>
+      {collapsed && <div className="saasNavMenuActions">{actions}</div>}
+    </nav><div className="saasNavActions">{!collapsed && actions}<button className="saasMenu" aria-expanded={open} aria-controls="saas-navigation" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button></div>
   </header>;
 }
 export function PublicFooter() {

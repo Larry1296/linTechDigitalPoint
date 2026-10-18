@@ -2,6 +2,7 @@ import { useTranslation, setLanguage } from "../core/i18n";
 import { BackLink } from "../components/navigation/BackLink";
 import { ThemePicker } from "../components/ThemePicker";
 import "./workspace.css";
+import { useMediaQuery } from "../core/ui/useMediaQuery";
 import { switchBusiness, switchBranch } from "../modules/platform/Onboarding";
 import { Link, useLocation } from "react-router-dom";
 import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
@@ -128,6 +129,7 @@ export function StaffLayout() {
   const { pathname } = useLocation();
   const { user, lock } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const phone = useMediaQuery("(max-width: 760px)");
   const [switchError, setSwitchError] = useState("");
   const mainRef = useRef(null);
   const topbarRef = useRef(null);
@@ -142,6 +144,16 @@ export function StaffLayout() {
   }, []);
   const organization = user.organization;
   const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports"};
+  // On phones the topbar keeps only the menu button and the brand; everything else moves into the menu.
+  const controls = <>
+    {user.memberships.length > 1 && <label className="workspaceBusiness">Organization <select aria-label="Active organization" value={organization.id} onChange={event => switchBusiness(event.target.value).then(() => window.location.assign("/admin/dashboard")).catch(error=>setSwitchError(error.message))}>{user.memberships.map(({organization})=><option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
+    {user.branches?.length > 0 && <label className="workspaceBusiness">Branch <select aria-label="Active branch" value={user.branch?.id || user.branches[0].id} onChange={event => switchBranch(event.target.value).then(() => window.location.assign(window.location.pathname)).catch(error=>setSwitchError(error.message))}>{user.branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>}
+    <div className="workspaceActions"><button type="button" className="workspaceLock" onClick={lock} aria-label="Lock workspace"><LockKeyhole size={18} aria-hidden="true" /><span className="workspaceLockLabel">Lock workspace</span></button>
+      <Link className="workspacePlan" to="/admin/subscription">{organization.subscription?.complimentary ? "Pro" : organization.subscription?.ended ? "Renew" : `${organization.subscription?.plan_name || "Plan"}${organization.subscription?.days_left != null ? ` · ${organization.subscription.days_left}d` : ""}`}</Link>
+      <Link className="workspaceHelp" to="/#contact">Help</Link>
+      <label>Language<select value={locale} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="sw">Kiswahili</option></select></label><ThemePicker />
+    </div>
+  </>;
   return (
     <>
       <header ref={topbarRef} className="workspaceTopbar" aria-label="Business topbar">
@@ -151,13 +163,7 @@ export function StaffLayout() {
         <Link className="workspaceBrand" to="/admin/dashboard">
         <BusinessBrand organization={organization} compact />
         </Link>
-        {user.memberships.length > 1 && <label className="workspaceBusiness">Organization <select aria-label="Active organization" value={organization.id} onChange={event => switchBusiness(event.target.value).then(() => window.location.assign("/admin/dashboard")).catch(error=>setSwitchError(error.message))}>{user.memberships.map(({organization})=><option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
-        {user.branches?.length > 0 && <label className="workspaceBusiness">Branch <select aria-label="Active branch" value={user.branch?.id || user.branches[0].id} onChange={event => switchBranch(event.target.value).then(() => window.location.assign(window.location.pathname)).catch(error=>setSwitchError(error.message))}>{user.branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>}
-        <div className="workspaceActions"><button type="button" className="workspaceLock" onClick={lock} aria-label="Lock workspace"><LockKeyhole size={18} aria-hidden="true" /><span className="workspaceLockLabel">Lock workspace</span></button>
-          <Link className="workspacePlan" to="/admin/subscription">{organization.subscription?.complimentary ? "Pro" : organization.subscription?.ended ? "Renew" : `${organization.subscription?.plan_name || "Plan"}${organization.subscription?.days_left != null ? ` · ${organization.subscription.days_left}d` : ""}`}</Link>
-          <Link className="workspaceHelp" to="/#contact">Help</Link>
-          <label>Language<select value={locale} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="sw">Kiswahili</option></select></label><ThemePicker />
-        </div>
+        {!phone && controls}
         {switchError && <p role="alert">{switchError}</p>}
       </header>
       <div className="admin">
@@ -183,7 +189,7 @@ export function StaffLayout() {
             }))}
             onNavigate={() => setSidebarOpen(false)}
           />
-          <SidebarAccount />
+          <SidebarAccount>{phone && <div className="sidebarTopbarControls">{controls}</div>}</SidebarAccount>
         </aside>
         <main ref={mainRef}>
           {!(["/admin/products", "/admin/product-lookup"].includes(pathname)) && <BackLink />}
