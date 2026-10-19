@@ -5,7 +5,11 @@ compartments, with the same codes, labels, sizes and rack categories.
     python manage.py import_shelf_layout lintech-digital-point shelves.json
 
 Running it again changes nothing. Places are matched by their code: missing ones are made, existing ones are set to
-the layout's values. Nothing is ever deleted, and stock stays where it is.
+the layout's values, so whatever points at them (stock, sales, receipts) stays as it is.
+
+With --replace, every other wall, rack, level and compartment of the business is removed as well, so the business ends
+up with exactly the layout. A place that holds stock or appears in sales, receipts or stock counts is never removed:
+the whole import stops and saves nothing. The automatic "Unplaced stock" place is always kept.
 """
 import json
 from decimal import Decimal
@@ -14,10 +18,12 @@ from django.db import transaction
 from django.utils.text import slugify
 from apps.catalog.models import Category
 from apps.core.models import Store
-from apps.inventory.models import Shelf, ShelfHistory, ShelfLevel, ShelfStack, ShelfStackCategory, Zone
+from apps.commerce.models import SaleAllocation
+from apps.inventory.models import (Movement, Shelf, ShelfHistory, ShelfLevel, ShelfStack, ShelfStackCategory, StockAdjustment,
+                                   StockBalance, StockReceiptPlacement, VariantPreferredLocation, Zone)
 from apps.inventory.services import _audit, _location_history, _shelf_snapshot, _stack_snapshot
 from apps.tenancy.context import organization_context
-from .export_shelf_layout import LEVEL_FIELDS, SHELF_FIELDS, STACK_FIELDS, ZONE_FIELDS, business
+from .export_shelf_layout import UNPLACED, LEVEL_FIELDS, SHELF_FIELDS, STACK_FIELDS, ZONE_FIELDS, business
 
 DECIMALS = {"width", "height", "depth", "x", "y", "rotation", "y_position", "capacity"}
 
@@ -38,24 +44,29 @@ class Command(BaseCommand):
         parser.add_argument("file", help="The layout file written by export_shelf_layout")
         parser.add_argument("--branch", help="The branch to put the shelves in (default: the layout's branch name, "
                                              "or the business's only branch)")
+        parser.add_argument("--replace", action="store_true", help="Also remove every place that is not in the layout")
         parser.add_argument("--dry-run", action="store_true", help="Show what would change without saving anything")
 
     def handle(self, *args, **options):
         with open(options["file"], encoding="utf-8") as handle:
             layout = json.load(handle)
         organization = business(options["business"])
-        self.counts = {"made": 0, "updated": 0, "same": 0}
+        self.counts = {"made": 0, "updated": 0, "same": 0, "removed": 0}
+        self.kept = {Zone: set(), ShelfStack: set(), ShelfLevel: set(), Shelf: set(), ShelfStackCategory: set()}
         try:
             with organization_context(organization), transaction.atomic():
                 for zone in layout["zones"]:
                     self.import_zone(zone, self.branch(options.get("branch") or zone.get("branch")))
+                if options["replace"]:
+                    self.remove_the_rest()
                 if options["dry_run"]:
                     raise DryRun
         except DryRun:
             self.stdout.write(self.style.WARNING("Dry run: nothing was saved."))
         c = self.counts
         self.stdout.write(self.style.SUCCESS(
-            f"{organization.name}: {c['made']} places made, {c['updated']} updated, {c['same']} already matched."))
+            f"{organization.name}: {c['made']} places made, {c['updated']} updated, {c['same']} already matched"
+            + (f", {c['removed']} removed." if options["replace"] else ".")))
 
     def branch(self, name):
         stores = list(Store.objects.order_by("pk"))
@@ -72,9 +83,11 @@ class Command(BaseCommand):
         if row is None:
             row = model(**lookup, **data)
             row.save()
+            self.kept[model].add(row.pk)
             self.counts["made"] += 1
             self.stdout.write(f"  + {label}")
             return row, True
+        self.kept[model].add(row.pk)
         changed = [f for f, v in data.items() if getattr(row, f"{f}_id" if f in ("zone", "level", "stack", "parent") else f)
                    != (v.pk if hasattr(v, "pk") else v)]
         if changed:
@@ -141,3 +154,43 @@ class Command(BaseCommand):
         self.counts["made"] += 1
         self.stdout.write(f"  + category {name}")
         return Category.objects.create(name=name, slug=slug)
+
+    def remove_the_rest(self):
+        """Remove every wall, rack, level and compartment the layout does not have, unless business records use it."""
+        shelves = Shelf.objects.filter(is_virtual=False).exclude(pk__in=self.kept[Shelf]).exclude(zone__code=UNPLACED)
+        ids = list(shelves.values_list("pk", flat=True))
+        used = {
+            "holds stock": StockBalance.objects.filter(shelf__in=ids),
+            "is in sales": SaleAllocation.objects.filter(shelf__in=ids),
+            "is in stock movements": Movement.objects.filter(source__in=ids) | Movement.objects.filter(destination__in=ids),
+            "is in received goods": StockReceiptPlacement.objects.filter(shelf__in=ids),
+            "is in stock counts": StockAdjustment.objects.filter(shelf__in=ids),
+            "has compartments inside it that stay": Shelf.objects.filter(parent__in=ids).exclude(pk__in=ids),
+        }
+        problems = [f"{name} ({query.count()})" for name, query in used.items() if query.exists()]
+        if problems:
+            codes = ", ".join(shelves.values_list("code", flat=True)[:20])
+            raise CommandError("Nothing was changed. These places are not in the layout but cannot be removed because "
+                               f"business records use them: {codes}. Each one {'; '.join(problems)}. Move that stock "
+                               "in the app first, or add those places to the layout.")
+        unshelved = VariantPreferredLocation.objects.filter(shelf__in=ids)
+        if unshelved.exists():
+            self.stdout.write(f"  - usual shelf cleared for {unshelved.count()} products (it is being removed)")
+            unshelved.delete()
+        for shelf in shelves.order_by("zone__code", "code"):
+            self.stdout.write(f"  - compartment {shelf.code} {shelf.physical_label}".rstrip())
+        ShelfHistory.objects.filter(shelf__in=ids).delete()
+        Shelf.objects.filter(pk__in=ids).update(parent=None)
+        self.counts["removed"] += Shelf.objects.filter(pk__in=ids).delete()[1].get(Shelf._meta.label, 0)
+        ShelfStackCategory.objects.filter(stack__in=self.kept[ShelfStack]).exclude(pk__in=self.kept[ShelfStackCategory]).delete()
+        for model, label, rows in [
+            (ShelfLevel, "level", ShelfLevel.objects.exclude(pk__in=self.kept[ShelfLevel]).select_related("stack")),
+            (ShelfStack, "rack", ShelfStack.objects.exclude(pk__in=self.kept[ShelfStack])),
+            (Zone, "wall", Zone.objects.exclude(pk__in=self.kept[Zone]).exclude(code=UNPLACED)),
+        ]:
+            for row in rows:
+                self.stdout.write(f"  - {label} {row.name if model is Zone else row}")
+                if model is ShelfStack:
+                    row.category_assignments.all().delete()
+                row.delete()
+                self.counts["removed"] += 1
