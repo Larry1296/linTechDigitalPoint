@@ -1804,23 +1804,38 @@ form a:not(.button, .pageBackLink),
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* Short screens (phones held sideways): the lock card scrolls from its top instead of being cut off. */
+/* The lock card sits in the middle of the screen at every size, its icon, name, title and message centred above
+   a full-width password box and buttons. "safe" keeps a card taller than the screen scrollable from its top. */
 .sessionLockBackdrop {
   place-items: safe center;
   align-items: safe center;
+  justify-items: center;
 }
-@media (max-height: 560px) {
-  .sessionLockBackdrop {
-    align-items: start;
-  }
-  .sessionLockCard {
-    gap: 12px;
-    padding: 20px;
-  }
-  .sessionLockIcon {
-    width: 44px;
-    height: 44px;
-  }
+.sessionLockCard { justify-items: center; text-align: center; margin: auto; }
+.sessionLockCard > :is(form, button, [role="alert"]) { justify-self: stretch; }
+.sessionLockCard form { text-align: left; }
+.sessionLockCard form button { width: 100%; }
+/* Short screens (phones held sideways, small phones): a compact card that still fits, so it stays centred. */
+@media (max-height: 600px) {
+  .sessionLockBackdrop { padding: 12px; }
+  .sessionLockCard { gap: 10px; padding: 18px 20px; }
+  .sessionLockCard h1 { font-size: 24px; line-height: 1.2; }
+  .sessionLockCard form { gap: 10px; }
+  .sessionLockIcon { width: 40px; height: 40px; border-radius: 12px; }
+  .sessionLockIcon svg { width: 22px; height: 22px; }
+  .sessionLockCard .sessionCountdown { font-size: 32px; }
+  .sessionLockCard > small { display: none; }
+}
+/* Short and wide (a phone held sideways): two columns, the message on the left and the password and buttons on
+   the right, so the card is short enough to sit in the middle. */
+@media (max-height: 600px) and (min-width: 600px) {
+  .sessionLockCard { width: min(100%, 700px); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: row dense; column-gap: 28px; align-items: center; text-align: left; }
+  .sessionLockCard > :is(.sessionLockIcon, .eyebrow, h1, #session-lock-description) { grid-column: 1; justify-self: start; }
+  .sessionLockCard > form { grid-column: 2; grid-row: 1 / span 3; align-self: end; }
+  .sessionLockCard > .sessionCountdown { grid-column: 2; grid-row: 1 / span 2; align-self: end; }
+  .sessionLockCard > button:not(.secondary) { grid-column: 2; grid-row: 3; }
+  .sessionLockCard > button.secondary { grid-column: 2; grid-row: 4; align-self: start; }
+  .sessionLockCard > [role="alert"] { grid-column: 1 / -1; }
 }
 
 /* Customer receipts: one document on screen, in the private link page and on paper. */
