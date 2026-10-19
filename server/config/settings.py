@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
 from decouple import config
 
 
@@ -17,9 +18,22 @@ ALLOWED_HOSTS = config(
     default=f"{SITE_DOMAIN},localhost,127.0.0.1" if SITE_DOMAIN else "localhost,127.0.0.1",
     cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
 )
+# A frontend served apart from the API (the static site https://dukaflow.co.ke calling https://api.dukaflow.co.ke):
+# the only browser origins allowed to call the API with credentials. Empty when the web app and API share one origin
+# (deploy/ with Caddy, or the Vite proxy locally), which needs no CORS.
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="",
+    cast=lambda value: [origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()],
+)
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (*default_headers, "x-organization-id", "x-branch-id")
+CORS_URLS_REGEX = r"^/(api|media)/.*$"
+# Those frontend origins send the forms, so they are trusted for CSRF too, besides the API's own address.
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default=SITE_URL or "http://localhost:5173,http://127.0.0.1:5173",
+    default=",".join(dict.fromkeys([SITE_URL, *CORS_ALLOWED_ORIGINS] if SITE_URL
+                                   else ["http://localhost:5173", "http://127.0.0.1:5173", *CORS_ALLOWED_ORIGINS])),
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
 # Behind the HTTPS proxy (Caddy in deploy/), which ends TLS and tells Django the request was https.
@@ -41,7 +55,7 @@ DJANGO_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
-THIRD_PARTY_APPS = ["rest_framework", "drf_spectacular", "django_filters"]
+THIRD_PARTY_APPS = ["corsheaders", "rest_framework", "drf_spectacular", "django_filters"]
 LOCAL_APPS = [
     "apps.tenancy.apps.TenancyConfig",
     "apps.core.apps.CoreConfig",
@@ -60,6 +74,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # MIDDLEWARE
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",  # first, so its headers reach every API answer (also errors and preflights)
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -160,6 +175,7 @@ CSRF_COOKIE_SECURE = COOKIE_SECURE
 SESSION_COOKIE_SECURE = COOKIE_SECURE
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"  # dukaflow.co.ke and api.dukaflow.co.ke are one site, so Lax cookies still reach the API
 # The HttpOnly cookie identifies the account after idle access locks.
 # Only explicit activity or password unlock renews the shorter access deadline.
 SESSION_COOKIE_AGE = config("SESSION_COOKIE_AGE", default=60 * 60 * 24 * 30, cast=int)
@@ -214,6 +230,9 @@ BUSINESS_ASSISTANT_EFFORT = config("BUSINESS_ASSISTANT_EFFORT", default="medium"
 FUND_RATE_MODEL = config("FUND_RATE_MODEL", default="claude-opus-5-5")
 # Public address of the web app, used in receipt links sent to customers (e.g. https://app.example.com).
 PUBLIC_APP_URL = config("PUBLIC_APP_URL", default=SITE_URL)
+# Public address of the API, for files it serves itself (business logos on receipts); differs from PUBLIC_APP_URL when
+# the web app is a separate static site (https://dukaflow.co.ke with the API at https://api.dukaflow.co.ke).
+PUBLIC_API_URL = config("PUBLIC_API_URL", default=SITE_URL)
 
 # API device sessions are separate from Django admin session authentication.
 JWT_SIGNING_KEY = config('JWT_SIGNING_KEY', default=SECRET_KEY)

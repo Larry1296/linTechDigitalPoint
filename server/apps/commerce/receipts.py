@@ -31,11 +31,17 @@ def app_url(request):
     return request.build_absolute_uri("/").rstrip("/")
 
 
+def api_url(request):
+    """Where the API's own files (logos) are fetched: configured, else the same place as the web app."""
+    configured = getattr(settings, "PUBLIC_API_URL", "")
+    return configured.rstrip("/") if configured else app_url(request)
+
+
 def logo_url(organization, request=None, variant="logo"):
     stored = getattr(organization, variant) or organization.logo
     if stored:
         path = f"/api/v1/tenancy/public/logos/{stored.name.rsplit('/', 1)[-1]}"
-        return f"{app_url(request)}{path}" if request else path
+        return f"{api_url(request)}{path}" if request else path
     return organization.logo_url or ""
 
 

@@ -195,3 +195,29 @@ it("fetches a fresh security token and retries a sign-in the server refused for 
   expect(logins).toBe(2);
   resetCsrfToken();
 });
+
+it("sends every backend request to VITE_API_BASE_URL when the build sets it, with credentials and the CSRF token", async () => {
+  vi.resetModules();
+  vi.stubEnv("VITE_API_BASE_URL", "https://api.dukaflow.co.ke/");
+  try {
+    const client = await import("./client");
+    const fetch = vi.fn(async (url) => response(200, url.endsWith("/csrf/") ? { csrfToken: "t" } : { authenticated: true }));
+    vi.stubGlobal("fetch", fetch);
+    await client.api("/api/v1/auth/login/", { method: "POST", body: "{}" });
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.dukaflow.co.ke/api/v1/auth/csrf/", "https://api.dukaflow.co.ke/api/v1/auth/login/",
+    ]);
+    expect(fetch.mock.calls[1][1]).toMatchObject({ credentials: "include", headers: { "X-CSRFToken": "t" } });
+    expect(client.apiUrl("/media/products/a.webp")).toBe("https://api.dukaflow.co.ke/media/products/a.webp");
+    expect(client.apiUrl("/assets/logo.png")).toBe("/assets/logo.png");
+    expect(client.apiUrl("https://cdn.example.com/a.png")).toBe("https://cdn.example.com/a.png");
+  } finally {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  }
+});
+
+it("keeps backend requests relative when VITE_API_BASE_URL is not set (local development)", async () => {
+  const { apiUrl } = await import("./client");
+  expect(apiUrl("/api/v1/auth/me/")).toBe("/api/v1/auth/me/");
+});

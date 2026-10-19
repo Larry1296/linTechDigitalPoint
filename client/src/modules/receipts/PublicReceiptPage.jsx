@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Printer } from "lucide-react";
 import { Loading } from "../../components/States";
 import { ReceiptDocument } from "./ReceiptDocument";
+import { apiUrl } from "../../core/api/client";
 
 // What the customer sees when they open the link from WhatsApp or email. No account needed.
 export function PublicReceiptPage() {
@@ -10,7 +11,7 @@ export function PublicReceiptPage() {
   const [receipt, setReceipt] = useState();
   const [error, setError] = useState("");
   useEffect(() => {
-    fetch(`/api/v1/tenancy/public/receipts/${encodeURIComponent(token)}/`, { credentials: "omit" })
+    fetch(apiUrl(`/api/v1/tenancy/public/receipts/${encodeURIComponent(token)}/`), { credentials: "omit" })
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.detail || "This receipt could not be loaded.");

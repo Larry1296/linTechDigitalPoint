@@ -4,6 +4,13 @@ let accessToken;
 let accessExpiresAt = 0;
 let refreshFlight;
 let activeBranch;
+// A build served apart from the API (the static site at dukaflow.co.ke) sets VITE_API_BASE_URL to the API's origin,
+// e.g. https://api.dukaflow.co.ke. Without it requests stay relative: the Vite proxy locally, Caddy in deploy/.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+// The address to fetch or show for a backend path (/api/…, /media/…); anything else (bundled images, full URLs) as is.
+export function apiUrl(path) {
+  return API_BASE && typeof path === "string" && /^\/(api|media|platform-admin)\//.test(path) ? API_BASE + path : path;
+}
 export function setActiveBranch(id) { activeBranch = id == null ? undefined : String(id); }
 export function clearAccessToken() { accessToken = undefined; accessExpiresAt = 0; }
 export function accessNeedsRefresh() { return !!accessToken && Date.now() >= accessExpiresAt - 30000; }
@@ -39,7 +46,7 @@ export async function refreshAccess() {
 export const SERVER_UNREACHABLE = "Can't reach the LinTech server right now. Check your internet connection, or that the server is running, then try again.";
 async function send(path, options) {
   try {
-    return await fetch(path, options);
+    return await fetch(apiUrl(path), options);
   } catch (err) {
     if (err?.name === "AbortError" || err?.name === "TimeoutError") throw err;
     throw new ApiError(0, SERVER_UNREACHABLE);
@@ -88,7 +95,7 @@ async function getCsrfToken() {
 async function checkExpiredSession() {
   if (expiryNotified) return "expired";
   if (!sessionCheck) {
-    sessionCheck = fetch("/api/v1/auth/me/", { credentials: "include", signal: AbortSignal.timeout(5000) })
+    sessionCheck = fetch(apiUrl("/api/v1/auth/me/"), { credentials: "include", signal: AbortSignal.timeout(5000) })
       .then(async response => response.ok ? response.json() : null)
       .catch(() => null)
       .finally(() => { sessionCheck = undefined; });
@@ -226,7 +233,7 @@ export async function privateBlob(path, signal) {
   if (!path.startsWith('/media/')) throw new ApiError(400, 'Invalid private media path.');
   if (workspaceLocked) await waitForUnlock(signal);
   if (!accessToken || accessNeedsRefresh()) await refreshAccess();
-  const response = await fetch(path, { credentials:'include', signal, headers:{ Authorization:`Bearer ${accessToken}` } });
+  const response = await fetch(apiUrl(path), { credentials:'include', signal, headers:{ Authorization:`Bearer ${accessToken}` } });
   if (!response.ok || workspaceLocked) throw new ApiError(response.status, 'Image unavailable.');
   return response.blob();
 }
@@ -241,7 +248,7 @@ export async function apiStream(path, body, signal) {
     const headers = { "Content-Type": "application/json", "X-CSRFToken": csrfToken, Authorization: `Bearer ${accessToken}` };
     if (activeOrganization) headers["X-Organization-ID"] = activeOrganization;
     if (activeBranch) headers["X-Branch-ID"] = activeBranch;
-    return fetch(path, { method: "POST", credentials: "include", signal, headers, body: JSON.stringify(body) });
+    return fetch(apiUrl(path), { method: "POST", credentials: "include", signal, headers, body: JSON.stringify(body) });
   };
   let response = await send();
   if (response.status === 401) {
@@ -262,7 +269,7 @@ export async function apiBlob(path, signal) {
   const headers = { Authorization: `Bearer ${accessToken}` };
   if (activeOrganization) headers["X-Organization-ID"] = activeOrganization;
   if (activeBranch) headers["X-Branch-ID"] = activeBranch;
-  const response = await fetch(path, { credentials: "include", signal, headers });
+  const response = await fetch(apiUrl(path), { credentials: "include", signal, headers });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new ApiError(response.status, data.detail || "The file could not be downloaded.");

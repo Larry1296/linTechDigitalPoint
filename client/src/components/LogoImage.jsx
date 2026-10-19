@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../core/api/client";
 
 // Each place a logo appears gives it the same visual weight: the logo is sized by area, so a wide
 // wordmark gets more width (keeping its letters readable) and a square mark gets more height.
@@ -41,7 +42,7 @@ export function LogoImage({ src, alt, slot, className = "" }) {
   const [aspect, setAspect] = useState(null);
   const scale = useScreenScale(Boolean(LOGO_SLOTS[slot].responsive));
   const width = aspect ? logoWidth(aspect, slot, scale) : undefined;
-  return <img className={`logoImage logoImage-${slot} ${className}`.trim()} src={src} alt={alt}
+  return <img className={`logoImage logoImage-${slot} ${className}`.trim()} src={apiUrl(src)} alt={alt}
     style={width ? { width } : undefined} data-sized={aspect ? "true" : undefined}
     onLoad={(event) => {
       const { naturalWidth, naturalHeight } = event.currentTarget;

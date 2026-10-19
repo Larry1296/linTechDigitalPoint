@@ -13,7 +13,7 @@ import { suggestProductSku } from "./sku";
 import { ProductSkuField } from "./components/ProductSkuField";
 import { ProductForm } from "./ProductForm";
 import { api } from "../../core/api/client";
-vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/api/client", () => ({ api: vi.fn(), apiUrl: (path) => path }));
 const zones = [
   {
     id: 1,

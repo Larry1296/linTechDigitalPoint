@@ -6,7 +6,7 @@ import { PublicReceiptPage } from "./PublicReceiptPage";
 import { whatsappLink, whatsappNumber } from "./whatsapp";
 import { api } from "../../core/api/client";
 
-vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/api/client", () => ({ api: vi.fn(), apiUrl: (path) => path }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { organization: { country: "KE" } } }) }));
 
 const receipt = {

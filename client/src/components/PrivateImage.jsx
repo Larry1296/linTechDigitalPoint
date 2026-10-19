@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { privateBlob } from '../core/api/client';
+import { apiUrl, privateBlob } from '../core/api/client';
 
 export function PrivateImage({ src, alt, ...props }) {
   const [blob, setBlob] = useState(null);
@@ -14,5 +14,5 @@ export function PrivateImage({ src, alt, ...props }) {
     }).catch(() => {});
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
   }, [src, privatePath]);
-  return <img {...props} src={privatePath ? (blob?.src === src ? blob.url : undefined) : src} alt={alt} />;
+  return <img {...props} src={privatePath ? (blob?.src === src ? blob.url : undefined) : apiUrl(src)} alt={alt} />;
 }

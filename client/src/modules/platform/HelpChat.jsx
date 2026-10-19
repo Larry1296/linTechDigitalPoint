@@ -3,6 +3,7 @@ import { MessageCircle, Sparkles } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
 import { ChatWidget, readEvents } from "../assistant/ChatWidget";
 import { Answer } from "./answerFormat";
+import { apiUrl } from "../../core/api/client";
 
 const MAX_QUESTION = 1000;
 export const SUGGESTIONS = [
@@ -24,7 +25,7 @@ export function openHelpChat(question) {
 
 // The public chat endpoint answers with an error body rather than a stream when it refuses.
 async function send(messages, signal) {
-  const response = await fetch("/api/v1/assistant/chat/", {
+  const response = await fetch(apiUrl("/api/v1/assistant/chat/"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
@@ -41,7 +42,7 @@ export function HelpChat() {
   const [config, setConfig] = useState(null);
   useEffect(() => {
     let live = true;
-    fetch("/api/v1/assistant/config/").then((r) => (r.ok ? r.json() : null)).then((data) => { if (live && data) setConfig(data); }).catch(() => {});
+    fetch(apiUrl("/api/v1/assistant/config/")).then((r) => (r.ok ? r.json() : null)).then((data) => { if (live && data) setConfig(data); }).catch(() => {});
     return () => { live = false; };
   }, []);
   if (config && !config.enabled) return null;

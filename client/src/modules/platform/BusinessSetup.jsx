@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Check, Plus, Search, X } from "lucide-react";
-import { api } from "../../core/api/client";
+import { api, apiUrl } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 import { BackLink } from "../../components/navigation/BackLink";
@@ -409,7 +409,7 @@ function LogoStep({ business, onUploaded, onDone }) {
     <span className="eyebrow">{business.name} is ready</span>
     <h1>Add your logo</h1>
     <p className="muted">Your logo appears in your dashboard and on the receipts your customers receive. A plain background is removed automatically. You can also do this later in Settings.</p>
-    <div className="businessLogoPreview setupLogo">{logo ? <img src={logo} alt={`${business.name} logo`} /> : <span className="muted">No logo yet</span>}</div>
+    <div className="businessLogoPreview setupLogo">{logo ? <img src={apiUrl(logo)} alt={`${business.name} logo`} /> : <span className="muted">No logo yet</span>}</div>
     <div className="setupActions">
       <label className={`button${busy ? " disabled" : ""}`}>{busy ? "Uploading…" : logo ? "Choose a different logo" : "Upload logo"}
         <input type="file" accept="image/png,image/jpeg,image/webp" className="sr" onChange={(e) => void upload(e)} disabled={busy} />

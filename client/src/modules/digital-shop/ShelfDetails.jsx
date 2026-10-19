@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState, Loading } from "../../components/States";
 import { loadShelfContents, updateShelf } from "./api";
+import { apiUrl } from "../../core/api/client";
 
 const MOVEMENTS = {
   PURCHASE_RECEIPT: "Received", OPENING_STOCK: "Opening stock", SALE: "Sold", TRANSFER: "Transferred",
@@ -16,7 +17,7 @@ const money = (value) => `${businessCurrency()} ${Number(value).toLocaleString("
 const date = (value) => new Date(value).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric", timeZone: businessTimeZone() });
 
 function ItemPhoto({ item }) {
-  if (item.image) return <img className="shelfItemPhoto" src={item.image} alt="" loading="lazy" />;
+  if (item.image) return <img className="shelfItemPhoto" src={apiUrl(item.image)} alt="" loading="lazy" />;
   return <span className="shelfItemPhoto shelfItemInitials" aria-hidden="true">{item.product.slice(0, 2).toUpperCase()}</span>;
 }
 

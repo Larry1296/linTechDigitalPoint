@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { DisplayImageInput } from "./DisplayImageInput";
 import { ProductPhotos } from "../ProductPhotos";
 import { api } from "../../../core/api/client";
-vi.mock("../../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../../core/api/client", () => ({ api: vi.fn(), apiUrl: (path) => path }));
 beforeEach(() => {
   vi.clearAllMocks();
   URL.createObjectURL = vi.fn(() => "blob:preview");
