@@ -2,6 +2,12 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 
 // Grows the box to fit what is in it, so every word shows without scrolling. Browsers that size a field to its content
 // themselves (CSS field-sizing) do it already; this keeps the others the same.
+// Hands the box to a ref passed in from outside, whether a callback or a ref object.
+function assignRef(target, node) {
+  if (typeof target === "function") target(node);
+  else if (target) target.current = node;
+}
+
 function useFitHeight(outerRef, value) {
   const ref = useRef(null);
   const fit = useCallback(() => {
@@ -25,8 +31,7 @@ function useFitHeight(outerRef, value) {
   }, [fit]);
   const setRef = useCallback((node) => {
     ref.current = node;
-    if (typeof outerRef === "function") outerRef(node);
-    else if (outerRef) outerRef.current = node;
+    assignRef(outerRef, node);
   }, [outerRef]);
   return { setRef, fit };
 }
