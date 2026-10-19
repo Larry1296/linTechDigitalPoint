@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { dashboardSnapshot } from "./fixtures.js";
+// Staff sign in to a business; customers do not have one.
+const organization = { id: 1, name: "LinTech Digital Point", currency: "KES", timezone: "Africa/Nairobi", enabled_modules: ["inventory", "locations", "pos", "reports"] };
 const products = [
   {
     id: 1,
@@ -66,6 +69,7 @@ async function mockShop(page) {
               is_superuser: staff,
               roles: staff ? [] : ["Ecommerce Customer"],
               permissions: [],
+              ...(staff ? { organization, memberships: [{ organization, role: "OWNER" }] } : {}),
             }
           : {
               authenticated: false,
@@ -90,6 +94,7 @@ async function mockShop(page) {
           is_superuser: staff,
           roles: staff ? [] : ["Ecommerce Customer"],
           permissions: [],
+          ...(staff ? { organization, memberships: [{ organization, role: "OWNER" }] } : {}),
         },
       });
     }
@@ -115,23 +120,19 @@ async function mockShop(page) {
       });
     if (path.endsWith("/store/products/"))
       return route.fulfill({ json: products });
+    // An empty shelf opened from the rack drawing.
+    if (/\/locations\/shelves\/\d+\/contents\/$/.test(path))
+      return route.fulfill({ json: {
+        shelf: { code: "UPSTAIRSWINDOWDI-R01-L1-S1", physical_label: "", display_name: "Level 1 Shelf 1" },
+        location: { area: "Upstairs Window Display", rack: "Phone Accessories Rack", rack_code: "UPSTAIRSWINDOWDI-R01", level: 1, position: 1, categories: ["Phone Accessories"] },
+        totals: { items: 0, units: "0.000", available: "0.000", retail_value: "0.00" },
+        show_cost: false, items: [], recent_movements: [],
+      } });
+    // A rack holds product categories, so the shop needs at least one before a rack can be added.
+    if (path.endsWith("/catalog/categories/") && request.method() === "GET")
+      return route.fulfill({ json: [{ id: 1, name: "Phone Accessories", active: true }] });
     if (path.endsWith("/inventory/dashboard/"))
-      return route.fulfill({
-        json: {
-          today: { revenue: 0, cogs: 0, profit: 0, sales: 0 },
-          retail: { revenue: 0, cogs: 0, profit: 0, sales: 0 },
-          cyber: { revenue: 0, profit: 0, active_jobs: 0, ready_jobs: 0 },
-          mpesa: { cash: 0, float: 0, transaction_count: 0, commission: 0 },
-          inventory: {
-            cost: 0,
-            retail: 0,
-            potential_margin: 0,
-            low_stock: 0,
-            total_skus: 0,
-          },
-          orders: {},
-        },
-      });
+      return route.fulfill({ json: dashboardSnapshot(organization) });
     if (path.endsWith("/locations/zones/") && request.method() === "POST") {
       const input = request.postDataJSON();
       customZone = {
@@ -263,12 +264,12 @@ test("staff use the shared login and return to their intended page", async ({
   page,
 }) => {
   await mockShop(page);
-  await page.goto("/admin-app/digital-shop");
-  await expect(page).toHaveURL(/\/login\?next=%2Fadmin-app%2Fdigital-shop/);
+  await page.goto("/admin/shelf-management");
+  await expect(page).toHaveURL(/\/login\?next=%2Fadmin%2Fshelf-management/);
   await page.getByLabel("Username or email").fill("owner");
   await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/admin-app\/digital-shop$/);
+  await expect(page).toHaveURL(/\/admin\/shelf-management$/);
 });
 test("Django superuser name is displayed and defaults to the admin dashboard", async ({
   page,
@@ -278,8 +279,10 @@ test("Django superuser name is displayed and defaults to the admin dashboard", a
   await page.getByLabel("Username or email").fill("owner");
   await page.getByLabel("Password", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/admin-app\/dashboard$/);
-  await expect(page.getByText("owner (Admin)", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
+  const account = page.locator(".sidebarAccount");
+  await expect(account.getByText("owner", { exact: true })).toBeVisible();
+  await expect(account.getByText("Admin", { exact: true })).toBeVisible();
 });
 test("Owner adds an area, then previews and creates a complete unequal rack", async ({
   page,
@@ -327,7 +330,7 @@ test("Owner adds an area, then previews and creates a complete unequal rack", as
     0,
   );
   await page.getByRole("button", { name: "Edit rack" }).click();
-  await page.getByLabel("Shop area").selectOption("3");
+  await page.getByRole("combobox", { name: "Shop area" }).selectOption("3");
   await page.getByLabel("X position (ft)").fill("5");
   await page.getByRole("button", { name: "Save rack position" }).click();
   await expect(

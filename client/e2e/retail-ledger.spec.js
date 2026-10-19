@@ -24,8 +24,12 @@ test('new business receives without shelves, sells, records rent, reconciles and
   for (const question of ['Do you run an M-Pesa agency?', 'Are you the treasurer of a chama?', 'Do you keep money in an investment, such as an MMF?'])
     await page.getByRole('button',{name:`No: ${question}`}).click();
   for (let step = 0; step < 4; step += 1) await page.getByRole('button',{name:'Continue'}).click();
+  // Reports, used below, come with the Pro plan.
+  await page.getByRole('button',{name:/^Pro · /}).click();
   await page.getByRole('button',{name:'Create business workspace'}).click();
   await page.getByRole('button',{name:'Skip for now'}).click();
+  // Last set-up step: how customers pay. Manual payments are fine for this shop.
+  await page.getByRole('button',{name:'Go to my dashboard'}).click();
   await expect(page).toHaveURL(/\/admin\/dashboard$/);
   const variant=await page.evaluate(async()=>{
     const {api}=await import('/src/core/api/client.js');
@@ -39,9 +43,11 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByRole('listbox',{name:'Product suggestions'}).getByRole('option').first().click();
   await page.getByLabel('Quantity received').fill('1');
   await page.getByLabel('Buying price for one').fill('400');
-  await page.getByLabel('Supplier (optional)').fill('Charger supplier');
+  await page.getByLabel('Supplier',{exact:true}).fill('Charger supplier');
+  // Bought at the market: there is no invoice number to type.
+  await page.getByLabel(/^No supplier document/).check();
   await page.getByRole('button',{name:'Receive stock',exact:true}).click();
-  await expect(page.getByRole('status').filter({hasText:'Stock recorded'})).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText:/Test charger.* added/})).toBeVisible();
   await page.goto('/admin/pos');
   await page.getByRole('button',{name:/^Test charger/}).first().click();
   // Charging sells nothing yet; the cash taken on the checkout completes the sale.
@@ -53,13 +59,15 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByLabel('Category',{exact:true}).fill('Rent');
   await page.getByLabel('Amount',{exact:true}).fill('200');
   await page.getByRole('button',{name:'Record expense',exact:true}).click();
-  await expect(page.getByText('Rent · 200.00')).toBeVisible();
+  await expect(page.getByRole('row').filter({hasText:'Rent'}).filter({hasText:'200.00'}).first()).toBeVisible();
   await page.goto('/admin/reports');
-  await expect(page.getByText('Gross profit',{exact:true}).locator('..')).toContainText('600.00');
-  await expect(page.getByText('Net profit',{exact:true}).locator('..')).toContainText('400.00');
+  // Sold at 1000, bought at 400, rent 200.
+  const card=(label)=>page.locator('.reportCard').filter({has:page.getByText(label,{exact:true})});
+  await expect(card('Profit before running costs')).toContainText('600.00');
+  await expect(card('Profit or loss')).toContainText('400.00');
   const other=await context.newPage();
   await other.goto('/admin/reports');
-  await expect(other.getByRole('heading',{name:'Profit and loss'})).toBeVisible();
+  await expect(other.getByRole('heading',{name:'Where the business stands today'})).toBeVisible();
   await page.goto('/admin/expenses');
   await page.getByLabel('What was it for?').fill('Private unsaved transport');
   await page.getByRole('button',{name:'Lock workspace',exact:true}).click();
@@ -67,7 +75,7 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await expect(other.getByRole('dialog')).toContainText('Workspace locked');
   await expect(page.locator('.sessionWorkspace')).toHaveCSS('visibility','hidden');
   await page.getByLabel('Password',{exact:true}).fill(password);
-  await page.getByRole('button',{name:'Unlock',exact:true}).click();
+  // A password filled in all at once (saved, autofilled or pasted) opens the workspace by itself.
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByLabel('What was it for?')).toHaveValue('Private unsaved transport');
   await expect(other.getByRole('dialog')).toHaveCount(0);

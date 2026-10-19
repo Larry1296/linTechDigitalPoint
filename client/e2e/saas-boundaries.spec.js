@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { dashboardSnapshot } from './fixtures.js';
 
 async function mockSession(page, authenticated = false) {
   const organization = {id: 1, name: 'Test business', currency: 'USD', timezone: 'America/New_York', enabled_modules: ['inventory', 'pos', 'reports'], subscription_status: 'ACTIVE'};
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/tenancy/platform/')) return route.fulfill({json: {name: 'Business Management Platform', contact_email: ''}});
-    if (path.endsWith('/auth/me/')) return route.fulfill({json: authenticated ? {authenticated: true, username: 'test-owner', organization, memberships: [{organization, role: 'OWNER'}], roles: ['OWNER'], permissions: ['catalog.view_product', 'commerce.add_sale', 'commerce.view_sale']} : {authenticated: false}});
-    if (path.endsWith('/inventory/dashboard/')) return route.fulfill({json: {today: {revenue: 0}, retail: {revenue: 0, profit: 0, sales: 0}, cyber: {}, mpesa: {}, inventory: {total_skus: 0, low_stock: 0}}});
+    if (path.endsWith('/auth/me/')) return route.fulfill({json: authenticated ? {authenticated: true, username: 'test-owner', organization, memberships: [{organization, role: 'OWNER'}, {organization: {id: 2, name: 'Second business'}, role: 'OWNER'}], roles: ['OWNER'], permissions: ['catalog.view_product', 'commerce.add_sale', 'commerce.view_sale']} : {authenticated: false}});
+    if (path.endsWith('/inventory/dashboard/')) return route.fulfill({json: dashboardSnapshot(organization)});
     return route.fulfill({json: []});
   });
 }
@@ -32,7 +33,7 @@ for (const width of [390, 768, 1440]) {
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
     await expect(page.getByRole('heading', {name: 'Test business', exact: true})).toBeVisible();
-    await expect(page.getByLabel('Active business')).toHaveValue('1');
+    await expect(page.getByLabel('Active organization')).toHaveValue('1');
     await page.reload();
     await expect(page.getByRole('heading', {name: 'Test business', exact: true})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -68,8 +69,8 @@ test("theme follows the system, resets overrides on reload, and applies across p
   await page.getByRole("combobox", {name:"Theme", exact:true}).selectOption("light");
   await expect(root).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".saasSite")).toHaveCSS("background-color", "rgb(244, 247, 252)");
+  // The sign-in page has no theme picker: a fresh page follows the system again.
   await page.goto("/login");
-  await page.getByRole("combobox", {name:"Theme", exact:true}).selectOption("system");
   await page.emulateMedia({colorScheme: "dark"});
   await expect(root).toHaveAttribute("data-theme", "dark");
 });

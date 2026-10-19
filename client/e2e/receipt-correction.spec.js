@@ -30,6 +30,7 @@ for (const [width, theme] of [
       supplier_name: "Supplier",
       lines: [line],
     };
+    const organization = { id: 1, name: "Test business", currency: "KES", timezone: "Africa/Nairobi", enabled_modules: ["inventory"] };
     await page.emulateMedia({ colorScheme: theme });
     await page.setViewportSize({ width, height: 1000 });
     await page.route("**/api/v1/**", async (route) => {
@@ -39,11 +40,11 @@ for (const [width, theme] of [
       if (path.endsWith("/auth/me/"))
         json = {
           authenticated: true,
-          is_staff: true,
-          is_superuser: true,
           username: "admin",
-          permissions: [],
-          roles: [],
+          organization,
+          memberships: [{ organization, role: "OWNER" }],
+          permissions: ["inventory.view_stockreceipt", "inventory.change_stockreceipt"],
+          roles: ["OWNER"],
         };
       else if (path.endsWith("/auth/csrf/")) json = { csrfToken: "test" };
       else if (path.endsWith("/cart/")) json = { items: [], total: "0" };
@@ -76,14 +77,15 @@ for (const [width, theme] of [
       }
       await route.fulfill({ json });
     });
-    await page.goto("/admin-app/receipts");
-    if (width < 700)
+    await page.goto("/admin/receipts");
+    // Phones and tablets reach the sidebar through the topbar's menu button.
+    if (width < 1024)
       await page.getByRole("button", { name: "Open dashboard menu" }).click();
     await expect(
-      page.getByRole("link", { name: "Receipt History", exact: true }),
+      page.getByRole("link", { name: "Recent Receipts", exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("link", { name: "Receipt History", exact: true })
+      .getByRole("link", { name: "Recent Receipts", exact: true })
       .click();
     await page.getByRole("link", { name: "Receipt 145 · REC-145" }).click();
     await page
@@ -94,7 +96,8 @@ for (const [width, theme] of [
       .fill("80");
     await page.getByLabel("Correction reason", { exact: true }).fill(reason);
     await expect(
-      page.getByRole("cell", { name: "KSh 240.00", exact: true }),
+      // On phones each cell also carries its column name ("New KSh 240.00").
+      page.getByRole("cell", { name: /^(New )?KSh 240\.00$/ }),
     ).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
