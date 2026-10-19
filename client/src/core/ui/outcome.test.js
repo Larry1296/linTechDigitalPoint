@@ -36,6 +36,17 @@ it("shows the page's own success message instead of a plain one", async () => {
   expect(form.querySelector("input").value).toBe("");
 });
 
+it("does not close a question already on screen with a success note", async () => {
+  vi.spyOn(Swal, "isVisible").mockReturnValue(true);
+  vi.spyOn(Swal, "getPopup").mockReturnValue(Object.assign(document.createElement("div"), { className: "swal2-popup" }));
+  submit();
+  mutationStarted("/api/v1/locations/stacks/4/");
+  mutationFinished(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(Swal.fire).not.toHaveBeenCalled();
+  expect(form.querySelector("input").value).toBe("");
+});
+
 it("covers the screen with the error and keeps what was typed", async () => {
   submit();
   mutationStarted("/api/v1/mpesa/transactions/");

@@ -59,6 +59,9 @@ export function beginAction() {
 // A success confirms what was just done and closes by itself; an error waits to be read and closed.
 function overlay(icon, title, text) {
   const error = icon === "error";
+  // A question already on screen (a confirmation being answered) is never swapped for a success note: only one
+  // dialog shows at a time, and a save that finished a moment earlier would otherwise close the question.
+  if (!error && Swal.isVisible() && !Swal.getPopup()?.classList.contains("outcomeCard")) return Promise.resolve();
   return Swal.fire({ icon, title, text, buttonsStyling: false, returnFocus: true,
     ...(error ? { confirmButtonText: "Close" } : { showConfirmButton: false, timer: 1600, timerProgressBar: true }),
     customClass: { container: "outcomeOverlay", popup: `outcomeCard ${error ? "outcomeError" : "outcomeSuccess"}`, confirmButton: "outcomeButton" } });

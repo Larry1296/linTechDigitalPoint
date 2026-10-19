@@ -1,3 +1,4 @@
+import { businessToday } from "../../core/organization/presentation";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -9,7 +10,7 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { TextBox } from "../../components/forms/TextBox";
 
 const VIEWS = [["owner", "Summary"], ["units", "By business"], ["accounting", "Accounts"]];
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 const monthStart = () => today().slice(0, 8) + "01";
 
 export function useMoney(currency) {

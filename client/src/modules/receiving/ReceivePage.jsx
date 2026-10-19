@@ -1,4 +1,4 @@
-import { businessCurrency } from "../../core/organization/presentation";
+import { businessCurrency, businessNow } from "../../core/organization/presentation";
 import { DisplayImageInput } from "../products/components/DisplayImageInput";
 import { ProductSkuField } from "../products/components/ProductSkuField";
 import { CategoryOptions, UnrackedHint, categoryFamily, categoryUsable, rackHolds } from "../products/categories";
@@ -53,7 +53,7 @@ export function ReceivePage() {
       ...NEW_RECEIPT_COSTS,
       supplier_name: "",
       external_reference: "",
-      received_at: new Date().toISOString().slice(0, 16),
+      received_at: businessNow(),
       notes: "",
     },
   );

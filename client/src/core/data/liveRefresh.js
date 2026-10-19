@@ -29,6 +29,8 @@ export function useLiveRefresh(load, { pollMs } = {}) {
     };
     const whenVisible = () => { if (!document.hidden) refresh(); };
     window.addEventListener(EVENT, refresh);
+    // Anything that could not load while the workspace was locked loads once it is unlocked.
+    window.addEventListener("session-unlocked", refresh);
     window.addEventListener("focus", whenVisible);
     document.addEventListener("visibilitychange", whenVisible);
     const other = typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL) : null;
@@ -38,6 +40,7 @@ export function useLiveRefresh(load, { pollMs } = {}) {
       clearTimeout(timer);
       if (poll) clearInterval(poll);
       window.removeEventListener(EVENT, refresh);
+      window.removeEventListener("session-unlocked", refresh);
       window.removeEventListener("focus", whenVisible);
       document.removeEventListener("visibilitychange", whenVisible);
       other?.close();

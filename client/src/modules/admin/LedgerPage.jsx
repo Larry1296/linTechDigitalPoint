@@ -1,4 +1,4 @@
-import { businessCurrency } from "../../core/organization/presentation";
+import { businessCurrency, businessToday } from "../../core/organization/presentation";
 import { useTranslation } from "../../core/i18n";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
@@ -106,7 +106,8 @@ export function ExpensesPage() {
     const [expenses, groups] = await Promise.all([api('/api/v1/accounting/expenses/'), api('/api/v1/accounting/categories/')]);
     setRows(expenses); setCategories(groups);
   };
-  useEffect(() => { load().catch(e => setError(e.message)); }, []);
+  // A load stopped by the workspace locking (423) is not a failed expense: the list loads again on unlock.
+  useEffect(() => { load().catch(e => { if (e.status !== 423) setError(e.message); }); }, []);
   useLiveRefresh(load);
   const submit = async e => {
     e.preventDefault(); if (busy) return;
@@ -146,7 +147,7 @@ export function ExpensesPage() {
     <label>What was it for?<TextBox name="description" required maxLength="160" /></label>
     <label>Category<TextBox name="category_name" list="expense-categories" required maxLength="120" placeholder="Rent, transport, electricity…" /></label><datalist id="expense-categories">{categories.map(c => <option key={c.id} value={c.name} />)}</datalist>
     <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-    <label>Which period is it for?<input name="incurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+    <label>Which period is it for?<input name="incurred_on" type="date" defaultValue={businessToday()} /></label>
     {sharing ? <ExpenseParts parts={parts} amount={amount} separateCash={viewer?.organization?.money_mode === "SEPARATE_CASH"} value={expenseFor} onChange={setExpenseFor} />
       : <input type="hidden" name="business_unit" value={parts[0].key} />}
     <fieldset className="checkList"><legend>Has it been paid?</legend>
