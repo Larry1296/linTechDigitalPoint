@@ -1,4 +1,3 @@
-.admin > aside,
 .customerSidebar {
   display: flex;
   flex-direction: column;
@@ -6,7 +5,6 @@
   overflow: hidden;
 }
 
-.admin > aside > nav,
 .customerSidebar > nav {
   flex: 1 1 auto;
   min-height: 0;
@@ -17,6 +15,36 @@
   margin: 0;
   padding-bottom: 20px;
 }
+
+/* The business sidebar: one column that scrolls as a whole — links first, then the account — so no
+   link is ever squeezed out by the account card. */
+.admin > aside {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+}
+.admin > aside > .sidebarBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #3b6aa8 transparent;
+}
+.admin > aside > .sidebarBody::-webkit-scrollbar { display: block; width: 8px; }
+.admin > aside > .sidebarBody::-webkit-scrollbar-thumb { background: #3b6aa8; border-radius: 8px; }
+.admin > aside .sidebarBody > nav { margin: 0; padding: 0; }
+.admin > aside nav a { padding: 9px 12px; }
+/* Business groups sit close together like the plain links; the open group's links show under it. */
+.admin > aside nav section.navGroup { margin-top: 2px; }
+.admin > aside nav > section:not(.navGroup) + section { margin-top: 12px; }
+.sidebarHeader, .sidebarBackdrop { display: none; }
 
 .sidebarAccount {
   flex: 0 0 auto;
@@ -75,10 +103,9 @@
 .sidebarAccount .logoutButton:disabled { opacity: 1; cursor: wait; }
 .sidebarAccount > p { margin: 0; font-size: 13px; }
 
+/* Customer account pages keep their own drawer below 761px. */
 @media (max-width: 760px) {
-  .admin > aside,
   .customerSidebar { display: none; }
-  .admin > aside.sidebarOpen,
   .customerSidebar.isOpen {
     display: flex;
     flex-direction: column;
@@ -87,61 +114,108 @@
     padding-top: 68px;
     overflow: hidden;
   }
-  .admin > aside > nav,
-  .customerSidebar > nav {
-    width: 100%;
-    min-width: 0;
-    overflow-y: auto;
-    margin: 0;
-    padding-bottom: 20px;
-  }
-  .admin > aside nav section { border-right: 0; padding-right: 0; }
+  .customerSidebar > nav { width: 100%; min-width: 0; overflow-y: auto; margin: 0; padding-bottom: 20px; }
 }
 
 @media print {
   .customerSidebar { display: none; }
 }
 
-/* Desktop: the whole sidebar scrolls as one column so no menu item hides behind
-   the account card, with a visible scrollbar whenever there is more to see. */
-@media (min-width: 761px) {
-  /* The sidebar runs from under the top bar to the bottom edge of the window,
-     and the footer starts at its right edge instead of running underneath it. */
+/* Desktop: the sidebar runs from under the top bar to the bottom of the window,
+   and the footer starts at its right edge instead of running underneath it. */
+@media (min-width: 1024px) {
   .workspaceTopbar ~ .admin > aside {
     position: fixed;
     top: var(--workspace-topbar-height);
     bottom: 0;
     left: 0;
-    width: 240px;
+    width: var(--workspace-sidebar-width);
     height: auto;
+    /* stretch: base.css's align-self:start would otherwise shrink a fixed box to its content. */
+    align-self: stretch;
   }
   .workspaceTopbar ~ .admin > main { grid-column: 2; }
-  .workspaceTopbar ~ .appFooter { margin-left: 240px; }
-  .admin > aside {
-    padding-top: 20px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #3b6aa8 transparent;
-  }
-  .admin > aside::-webkit-scrollbar {
-    display: block;
-    width: 8px;
-    height: auto;
-  }
-  .admin > aside::-webkit-scrollbar-thumb {
-    background: #3b6aa8;
-    border-radius: 8px;
-  }
-  .admin > aside > nav {
-    flex: 0 0 auto;
-    min-height: auto;
-    overflow: visible;
-    margin-top: 0;
-  }
-  .admin > aside nav a {
-    padding: 9px 12px;
-  }
+  .workspaceTopbar ~ .appFooter { margin-left: var(--workspace-sidebar-width); }
 }
+
+/* Phones and tablets: the sidebar is a drawer that slides in over the page from the left,
+   above the topbar, with the page dimmed behind it. */
+@media (max-width: 1023px) {
+  .admin { display: block; }
+  .workspaceTopbar ~ .admin > aside {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 70;
+    width: min(320px, 86vw);
+    height: 100dvh;
+    align-self: stretch;
+    border-right: 1px solid var(--chrome-line);
+    border-radius: 0 16px 16px 0;
+    box-shadow: 12px 0 40px rgb(2 8 23 / 45%);
+    transform: translateX(-104%);
+    visibility: hidden;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 260ms;
+  }
+  .workspaceTopbar ~ .admin > aside.sidebarOpen {
+    transform: none;
+    visibility: visible;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+  }
+  .sidebarBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgb(2 8 23 / 55%);
+    box-shadow: none;
+    cursor: default;
+    animation: sidebarFade 200ms ease-out;
+  }
+  .sidebarHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex: 0 0 auto;
+    min-height: 64px;
+    padding: 10px 12px 10px 18px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .sidebarBrand { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
+  .admin > aside .sidebarClose {
+    display: inline-flex;
+    position: static;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    background: transparent;
+    color: var(--chrome-text);
+    border: 1px solid var(--chrome-line);
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .admin > aside > .sidebarBody { padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); }
+  .admin > aside nav a,
+  .admin > aside nav .navGroupToggle { min-height: 46px; font-size: 15px; }
+  .workspaceTopbar ~ .appFooter { margin-left: 0; }
+}
+@keyframes sidebarFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .workspaceTopbar ~ .admin > aside, .workspaceTopbar ~ .admin > aside.sidebarOpen { transition: none; }
+  .sidebarBackdrop { animation: none; }
+}
+
+.admin > aside .sidebarAccount { margin-top: auto; }
 
 /* Business groups (Shop Management, Cyber Services, M-Pesa Agent, Business): a heading that opens its links. */
 .admin > aside nav .navGroupToggle {

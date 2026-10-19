@@ -576,40 +576,6 @@ main {
   .metrics {
     @apply tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)];
   }
-  .admin {
-    @apply tw:block;
-  }
-  .admin > aside {
-    @apply tw:[border-right:0];
-    @apply tw:[border-bottom:1px_solid_var(--line)];
-    @apply tw:h-[auto];
-    @apply tw:overflow-x-auto;
-    @apply tw:overflow-y-hidden;
-    @apply tw:[padding:14px_16px];
-    @apply tw:static;
-    @apply tw:top-[auto];
-  }
-  .admin > aside > .brand {
-    @apply tw:hidden;
-  }
-  .admin > aside nav {
-    @apply tw:flex;
-    @apply tw:[margin:0];
-    @apply tw:[padding:0];
-  }
-  .admin > aside nav section {
-    @apply tw:flex;
-    @apply tw:[margin:0];
-  }
-  .admin > aside nav section > small {
-    @apply tw:hidden;
-  }
-  .admin > aside nav a {
-    @apply tw:whitespace-nowrap;
-  }
-  .admin > aside nav svg {
-    @apply tw:hidden;
-  }
   .admin main {
     @apply tw:[padding:24px_16px];
   }

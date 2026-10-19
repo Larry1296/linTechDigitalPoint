@@ -644,14 +644,6 @@
     @apply tw:min-w-[620px];
   }
 
-  .admin > aside nav {
-    @apply tw:[margin-top:14px];
-    @apply tw:[padding-bottom:10px];
-  }
-
-  .admin > aside nav a {
-    @apply tw:min-h-[44px];
-  }
 }
 
 @media (max-width: 480px) {
@@ -681,71 +673,6 @@
   }
 }
 
-@media (max-width: 760px) {
-  .admin {
-    @apply tw:relative;
-    @apply tw:block;
-    @apply tw:min-h-[calc(100vh_-_190px)];
-  }
-
-  .sidebarToggle {
-    @apply tw:inline-flex;
-    @apply tw:items-center;
-    @apply tw:gap-[8px];
-    @apply tw:w-[calc(100%_-_24px)];
-    @apply tw:min-h-[44px];
-    @apply tw:[margin:10px_12px_0];
-    @apply tw:[padding:10px_14px];
-    background: var(--chrome);
-    @apply tw:[color:var(--chrome-text)];
-    @apply tw:[border:1px_solid_var(--chrome-line)];
-    @apply tw:rounded-[10px];
-  }
-
-  .admin > aside,
-  .admin > aside.sidebarOpen {
-    @apply tw:fixed tw:top-[190px] tw:bottom-[12px] tw:left-[12px] tw:z-[60];
-    top: 190px;
-    z-index: 40;
-    @apply tw:hidden;
-    @apply tw:w-[min(320px,_85vw)] tw:h-auto tw:max-h-none tw:overflow-y-auto tw:overflow-x-hidden tw:p-[20px];
-    background: var(--chrome);
-    border: 1px solid var(--chrome-line);
-    border-radius: 12px;
-    box-shadow: 8px 0 24px rgb(0 0 0 / 25%);
-  }
-
-  .admin > aside.sidebarOpen {
-    @apply tw:flex;
-    animation: dashboardOverlayIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .sidebarClose {
-    @apply tw:block tw:absolute tw:right-[12px] tw:top-[12px] tw:w-[44px] tw:h-[44px] tw:p-0;
-    background: transparent;
-    color: var(--chrome-text);
-    border: 1px solid var(--chrome-line);
-  }
-
-  .admin > aside nav {
-    @apply tw:w-auto;
-    @apply tw:min-w-0;
-    @apply tw:grid;
-    @apply tw:overflow-visible;
-    @apply tw:justify-items-stretch;
-  }
-
-  .admin > aside nav section {
-    @apply tw:grid;
-    @apply tw:w-full tw:justify-items-stretch;
-    @apply tw:[border-right:0];
-  }
-
-  .admin > aside nav a {
-    @apply tw:w-full tw:justify-start;
-    @apply tw:min-h-[44px];
-  }
-}
 
 @media (max-width: 760px) {
   .appNavbar.dashboardNavbar {
@@ -876,38 +803,10 @@
     @apply tw:h-[36px];
   }
 
-  .admin > aside {
-    @apply tw:max-h-[92px];
-    @apply tw:overflow-x-auto;
-    @apply tw:overflow-y-hidden;
-    @apply tw:[padding:8px_10px];
-  }
-
-  .admin > aside nav {
-    @apply tw:w-[max-content];
-    @apply tw:min-w-[100%];
-    @apply tw:gap-[6px];
-    @apply tw:[margin:0];
-    @apply tw:[padding:0];
-  }
-
-  .admin > aside nav section {
-    @apply tw:[flex:0_0_auto];
-    @apply tw:gap-[4px];
-    @apply tw:[margin:0];
-    @apply tw:[padding-right:4px];
-    @apply tw:[border-right:1px_solid_var(--chrome-line)];
-  }
-
-  .admin > aside nav a {
-    @apply tw:min-h-[38px];
-    @apply tw:[padding:8px_10px];
-    @apply tw:text-[12px];
-  }
 
   main,
   .admin main {
-    @apply tw:[padding:20px_12px];
+    @apply tw:[padding:20px_16px];
   }
 
   .tabs {

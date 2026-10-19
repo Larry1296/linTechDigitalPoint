@@ -128,11 +128,16 @@ export function StaffLayout() {
   const { locale } = useTranslation();
   const { pathname } = useLocation();
   const { user, lock } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const phone = useMediaQuery("(max-width: 760px)");
+  // Phones and tablets: the sidebar is a drawer opened by the topbar's menu button. It remembers the page it
+  // was opened on, so going to another page closes it.
+  const [openOn, setOpenOn] = useState(null);
+  const compact = useMediaQuery("(max-width: 1023px)");
+  const drawerOpen = compact && openOn === pathname;
   const [switchError, setSwitchError] = useState("");
   const mainRef = useRef(null);
   const topbarRef = useRef(null);
+  const sidebarRef = useRef(null);
+  const menuButtonRef = useRef(null);
   useTableLabels(mainRef);
   useKeyboardShortcuts();
   useEffect(() => {
@@ -142,57 +147,84 @@ export function StaffLayout() {
     observer.observe(bar);
     return () => { observer.disconnect(); document.documentElement.style.removeProperty("--workspace-topbar-height"); };
   }, []);
+  // While the drawer is open the page behind it stays still, Escape closes it, and focus starts on its first link.
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    (sidebarRef.current?.querySelector("nav a.active") || sidebarRef.current?.querySelector("nav a, nav button"))?.focus({ preventScroll: true });
+    const onKey = (event) => { if (event.key === "Escape") { setOpenOn(null); menuButtonRef.current?.focus(); } };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKey); };
+  }, [drawerOpen]);
+  function closeDrawer() {
+    setOpenOn(null);
+    menuButtonRef.current?.focus();
+  }
   const organization = user.organization;
   const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports"};
-  // On phones the topbar keeps only the menu button and the brand; everything else moves into the menu.
-  const controls = <>
+  const planLabel = organization.subscription?.complimentary ? "Pro" : organization.subscription?.ended ? "Renew" : `${organization.subscription?.plan_name || "Plan"}${organization.subscription?.days_left != null ? ` · ${organization.subscription.days_left}d` : ""}`;
+  const switchers = <>
     {user.memberships.length > 1 && <label className="workspaceBusiness">Organization <select aria-label="Active organization" value={organization.id} onChange={event => switchBusiness(event.target.value).then(() => window.location.assign("/admin/dashboard")).catch(error=>setSwitchError(error.message))}>{user.memberships.map(({organization})=><option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
     {user.branches?.length > 0 && <label className="workspaceBusiness">Branch <select aria-label="Active branch" value={user.branch?.id || user.branches[0].id} onChange={event => switchBranch(event.target.value).then(() => window.location.assign(window.location.pathname)).catch(error=>setSwitchError(error.message))}>{user.branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>}
-    <div className="workspaceActions"><button type="button" className="workspaceLock" onClick={lock} aria-label="Lock workspace"><LockKeyhole size={18} aria-hidden="true" /><span className="workspaceLockLabel">Lock workspace</span></button>
-      <Link className="workspacePlan" to="/admin/subscription">{organization.subscription?.complimentary ? "Pro" : organization.subscription?.ended ? "Renew" : `${organization.subscription?.plan_name || "Plan"}${organization.subscription?.days_left != null ? ` · ${organization.subscription.days_left}d` : ""}`}</Link>
-      <Link className="workspaceHelp" to="/#contact">Help</Link>
-      <label>Language<select value={locale} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="sw">Kiswahili</option></select></label><ThemePicker />
-    </div>
   </>;
+  const language = <label className="workspaceLanguage">Language<select value={locale} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="sw">Kiswahili</option></select></label>;
+  const lockButton = <button type="button" className="workspaceLock" onClick={lock} aria-label="Lock workspace" title="Lock workspace"><LockKeyhole size={18} aria-hidden="true" /><span className="workspaceLockLabel">Lock workspace</span></button>;
   return (
     <>
       <header ref={topbarRef} className="workspaceTopbar" aria-label="Business topbar">
-        <button className="workspaceMenu" type="button" aria-label={sidebarOpen ? "Close dashboard menu" : "Open dashboard menu"} aria-expanded={sidebarOpen} aria-controls="business-sidebar" onClick={() => setSidebarOpen(open => !open)}>
-          {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        {compact && <button ref={menuButtonRef} className="workspaceMenu" type="button" aria-label={drawerOpen ? "Close dashboard menu" : "Open dashboard menu"} aria-expanded={drawerOpen} aria-controls="business-sidebar" onClick={() => setOpenOn(drawerOpen ? null : pathname)}>
+          {drawerOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+        </button>}
         <Link className="workspaceBrand" to="/admin/dashboard">
-        <BusinessBrand organization={organization} compact />
+          <BusinessBrand organization={organization} compact />
         </Link>
-        {!phone && controls}
+        {/* Phones and tablets keep only what the page needs: the menu, the business and the lock. */}
+        {compact ? lockButton : <>
+          {switchers}
+          <div className="workspaceActions">{lockButton}
+            <Link className="workspacePlan" to="/admin/subscription">{planLabel}</Link>
+            <Link className="workspaceHelp" to="/#contact">Help</Link>
+            {language}<ThemePicker />
+          </div>
+        </>}
         {switchError && <p role="alert">{switchError}</p>}
       </header>
       <div className="admin">
-        <aside id="business-sidebar" className={sidebarOpen ? "sidebarOpen" : undefined} onKeyDown={event => { if (event.key === "Escape") { setSidebarOpen(false); document.querySelector(".workspaceMenu")?.focus(); } }}>
-          <button
-            className="sidebarClose"
-            type="button"
-            aria-label="Close dashboard menu"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X size={24} aria-hidden="true" />
-          </button>
-          <SidebarNavigation
-            sections={operations.map((section) => ({
-              ...section,
-              links: section.links.filter(
-                (item) =>
-                  (!moduleFor[item.to] || organization.enabled_modules.includes(moduleFor[item.to])) &&
-                  (!item.permission || user?.permissions.includes(item.permission)) &&
-                  (!item.platformAdmin || user.platform_admin) &&
-                  (!item.managers || ["OWNER", "ADMIN"].includes(user.roles?.[0])),
-              ),
-            }))}
-            onNavigate={() => setSidebarOpen(false)}
-          />
-          <SidebarAccount>{phone && <div className="sidebarTopbarControls">{controls}</div>}</SidebarAccount>
+        {drawerOpen && <button className="sidebarBackdrop" type="button" tabIndex={-1} aria-label="Close dashboard menu" onClick={closeDrawer} />}
+        <aside ref={sidebarRef} id="business-sidebar" className={drawerOpen ? "sidebarOpen" : undefined} aria-label="Dashboard menu" aria-hidden={compact && !drawerOpen ? true : undefined} inert={compact && !drawerOpen ? true : undefined}>
+          {compact && <div className="sidebarHeader">
+            <Link className="sidebarBrand" to="/admin/dashboard"><BusinessBrand organization={organization} compact /></Link>
+            <button className="sidebarClose" type="button" aria-label="Close dashboard menu" onClick={closeDrawer}><X size={22} aria-hidden="true" /></button>
+          </div>}
+          <div className="sidebarBody">
+            <SidebarNavigation
+              sections={operations.map((section) => ({
+                ...section,
+                links: section.links.filter(
+                  (item) =>
+                    (!moduleFor[item.to] || organization.enabled_modules.includes(moduleFor[item.to])) &&
+                    (!item.permission || user?.permissions.includes(item.permission)) &&
+                    (!item.platformAdmin || user.platform_admin) &&
+                    (!item.managers || ["OWNER", "ADMIN"].includes(user.roles?.[0])),
+                ),
+              }))}
+              onNavigate={() => setOpenOn(null)}
+            />
+            {/* The topbar's other controls live here on phones and tablets. */}
+            {compact && <div className="sidebarTopbarControls">
+              {switchers}
+              <div className="sidebarQuickLinks">
+                <Link className="workspacePlan" to="/admin/subscription"><CreditCard size={16} aria-hidden="true" />{planLabel}</Link>
+                <Link className="workspaceHelp" to="/#contact">Help</Link>
+              </div>
+              <div className="sidebarPreferences">{language}<ThemePicker /></div>
+            </div>}
+            <SidebarAccount />
+          </div>
         </aside>
-        <main ref={mainRef}>
-          {!(["/admin/products", "/admin/product-lookup"].includes(pathname)) && <BackLink />}
+        <main ref={mainRef} inert={drawerOpen ? true : undefined}>
+          {!(["/admin/products", "/admin/product-lookup", "/admin/categories"].includes(pathname)) && <BackLink />}
           <SubscriptionBanner organization={organization} canManage={["OWNER", "ADMIN"].includes(user.roles?.[0])} />
           <Outlet />
         </main>

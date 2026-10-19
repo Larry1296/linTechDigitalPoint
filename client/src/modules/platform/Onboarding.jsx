@@ -1,5 +1,6 @@
 import { BackLink } from "../../components/navigation/BackLink";
 import { AuthShowcase } from "../auth/AuthShowcase";
+import { PlatformLogo } from "../../components/Brand";
 import { AUTH_SLIDES } from "./showcase";
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
@@ -26,7 +27,7 @@ export function RegisterPage() {
       resetCsrfToken(); await signedIn(); navigate("/onboarding");
     } catch(error) { setError(error.message); } finally { setBusy(false); }
   }
-  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><AuthShowcase slides={AUTH_SLIDES.register}><div><span className="eyebrow">Business management, made clear</span><h2>Everything your business needs in one workspace.</h2><p>Set up a private workspace for your business and keep daily operations connected.</p></div></AuthShowcase></div>
+  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><Link className="authIntroBrand" to="/"><PlatformLogo /></Link><AuthShowcase slides={AUTH_SLIDES.register}><div><span className="eyebrow">Business management, made clear</span><h2>Everything your business needs in one workspace.</h2><p>Set up a private workspace for your business and keep daily operations connected.</p></div></AuthShowcase></div>
   <div className="authStandaloneForm"><BackLink to="/" className="authBackButton" /><Link to="/">{platform.name}</Link><h1>Create your account</h1>
     <p>Step 1 of 2: your personal details. Next, you will set up your business.</p>
     <form onSubmit={submit} className="registerForm">
@@ -74,7 +75,7 @@ export function ForgotPasswordPage() {
   const [message,setMessage] = useState("");
   const [error,setError] = useState("");
   async function submit(event) { event.preventDefault(); setMessage(""); setError(""); try { const result = await api("/api/v1/auth/password/reset/",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))}); setMessage(result.detail); } catch(error) { setError(error.message); } }
-  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><AuthShowcase slides={AUTH_SLIDES.forgotPassword}><div><span className="eyebrow">Secure account access</span><h2>Get back to your business workspace.</h2><p>Request a reset link and continue managing your business securely.</p></div></AuthShowcase></div><div className="authStandaloneForm"><BackLink to="/" className="authBackButton" /><h1>Reset your password</h1><form onSubmit={submit}><label>Email<input name="email" type="email" required autoComplete="email" /></label><button>Request reset instructions</button><FormSuccess message={message} /><FormError title="Could not send reset instructions." message={error} /><Link to="/login">Back to login</Link></form></div></main>;
+  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><Link className="authIntroBrand" to="/"><PlatformLogo /></Link><AuthShowcase slides={AUTH_SLIDES.forgotPassword}><div><span className="eyebrow">Secure account access</span><h2>Get back to your business workspace.</h2><p>Request a reset link and continue managing your business securely.</p></div></AuthShowcase></div><div className="authStandaloneForm"><BackLink to="/" className="authBackButton" /><h1>Reset your password</h1><form onSubmit={submit}><label>Email<input name="email" type="email" required autoComplete="email" /></label><button>Request reset instructions</button><FormSuccess message={message} /><FormError title="Could not send reset instructions." message={error} /><Link to="/login">Back to login</Link></form></div></main>;
 }
 
 export function ResetPasswordPage() {
@@ -88,5 +89,5 @@ export function ResetPasswordPage() {
     try { const result = await api("/api/v1/auth/password/reset/confirm/",{method:"POST",body:JSON.stringify(data)}); setMessage(result.detail); }
     catch(error) { setError(error.message); }
   }
-  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><AuthShowcase slides={AUTH_SLIDES.resetPassword}><div><span className="eyebrow">Secure account access</span><h2>Choose a password you can trust.</h2><p>Your account gives you access to the private workspace for your business.</p></div></AuthShowcase></div><div className="authStandaloneForm"><BackLink to="/" className="authBackButton" /><h1>Choose a new password</h1><form onSubmit={submit}><label>New password<input name="password" type="password" autoComplete="new-password" minLength={8} required /></label><button>Reset password</button><FormSuccess message={message} /><FormError title="Could not reset your password." message={error} /><Link to="/login">Back to login</Link></form></div></main>;
+  return <main className="tenantForm authStandalone"><div className="authStandaloneIntro"><Link className="authIntroBrand" to="/"><PlatformLogo /></Link><AuthShowcase slides={AUTH_SLIDES.resetPassword}><div><span className="eyebrow">Secure account access</span><h2>Choose a password you can trust.</h2><p>Your account gives you access to the private workspace for your business.</p></div></AuthShowcase></div><div className="authStandaloneForm"><BackLink to="/" className="authBackButton" /><h1>Choose a new password</h1><form onSubmit={submit}><label>New password<input name="password" type="password" autoComplete="new-password" minLength={8} required /></label><button>Reset password</button><FormSuccess message={message} /><FormError title="Could not reset your password." message={error} /><Link to="/login">Back to login</Link></form></div></main>;
 }
