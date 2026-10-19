@@ -24,3 +24,20 @@
   .authIntro, .authStandaloneIntro { flex-direction: row; align-items: center; justify-content: flex-start; gap: 0; min-height: 0; padding: 14px 20px; }
   .authShell .authIntro > :not(.authIntroBrand), .authStandalone .authStandaloneIntro > :not(.authIntroBrand) { display: none; }
 }
+/* Phones: the form only, so it fits on the first screen. The logo strip above links home, so the back
+   button, eyebrow, step note, hints and section titles are left out. */
+@media (max-width: 760px) {
+  .authShell .authIntro, .authStandalone .authStandaloneIntro { padding: 10px 20px; }
+  .authShell .authIntroBrand .platformMark, .authStandalone .authIntroBrand .platformMark { width: 30px; height: 30px; }
+  .authShell .authBackButton, .authStandalone .authBackButton,
+  .authShell .formCard > .eyebrow,
+  .authStandalone .authStandaloneForm > a, .authStandalone .authStandaloneForm > p,
+  .authStandalone .registerForm small, .authStandalone .registerForm legend { display: none; }
+  .authShell .formCard, .authStandalone .authStandaloneForm { gap: 12px; padding: 18px 20px 20px; align-content: start; }
+  .authShell .formCard h1, .authStandalone .authStandaloneForm h1 { margin: 0 0 2px; font-size: 24px; line-height: 1.2; }
+  .authStandalone .authStandaloneForm form { gap: 12px; }
+  .authStandalone .registerForm fieldset { gap: 10px; padding: 0; border: 0; background: none; }
+  /* Two short boxes share a row (names, passwords) so the whole form fits. */
+  .authStandalone .registerRow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .authShell .formCard label, .authStandalone .authStandaloneForm label { gap: 4px; }
+}
