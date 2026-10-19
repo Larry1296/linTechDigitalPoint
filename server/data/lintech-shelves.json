@@ -1,0 +1,406 @@
+{
+  "business": "LinTechDigitalPoint",
+  "zones": [
+    {
+      "code": "BACKWALL",
+      "name": "BACK WALL",
+      "active": true,
+      "width": "7.00",
+      "height": "7.00",
+      "next_shelf_number": 1,
+      "branch": "Main branch",
+      "stacks": [
+        {
+          "code": "BACKWALL-R01",
+          "display_name": "ELECTRICAL APPLIANCES",
+          "x": "0.00",
+          "y": "0.00",
+          "width": "6.00",
+          "height": "7.00",
+          "depth": "1.50",
+          "rotation": "0.00",
+          "number_of_levels": 3,
+          "active": true,
+          "notes": "",
+          "categories": [
+            {
+              "name": "ELECTRICAL APPLIANCES",
+              "is_primary": true
+            }
+          ],
+          "levels": [
+            {
+              "level_number": 1,
+              "y_position": "0.00",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "BACKWALL-R01-L01-S01",
+                  "physical_label": "",
+                  "display_name": "Level 1 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "0.00",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "BACKWALL-R01-L01-S02",
+                  "physical_label": "",
+                  "display_name": "Level 1 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "3.00",
+                  "y": "0.00",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            },
+            {
+              "level_number": 2,
+              "y_position": "2.33",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "BACKWALL-R01-L02-S01",
+                  "physical_label": "",
+                  "display_name": "Level 2 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "2.33",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "BACKWALL-R01-L02-S02",
+                  "physical_label": "",
+                  "display_name": "Level 2 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "3.00",
+                  "y": "2.33",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            },
+            {
+              "level_number": 3,
+              "y_position": "4.67",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "BACKWALL-R01-L03-S01",
+                  "physical_label": "",
+                  "display_name": "Level 3 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "4.67",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "BACKWALL-R01-L03-S02",
+                  "physical_label": "",
+                  "display_name": "Level 3 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "3.00",
+                  "y": "4.67",
+                  "width": "3.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "shelves": []
+    },
+    {
+      "code": "LEFTWALL",
+      "name": "LEFT WALL",
+      "active": true,
+      "width": "8.00",
+      "height": "7.00",
+      "next_shelf_number": 1,
+      "branch": "Main branch",
+      "stacks": [
+        {
+          "code": "LEFTWALL-R01",
+          "display_name": "PHONE ACCESSORIES",
+          "x": "0.00",
+          "y": "0.00",
+          "width": "8.00",
+          "height": "7.00",
+          "depth": "1.50",
+          "rotation": "0.00",
+          "number_of_levels": 3,
+          "active": true,
+          "notes": "",
+          "categories": [
+            {
+              "name": "PHONE ACCESSORIES",
+              "is_primary": true
+            }
+          ],
+          "levels": [
+            {
+              "level_number": 1,
+              "y_position": "0.00",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "LEFTWALL-R01-L01-S01",
+                  "physical_label": "",
+                  "display_name": "Level 1 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "0.00",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "LEFTWALL-R01-L01-S02",
+                  "physical_label": "",
+                  "display_name": "Level 1 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "4.00",
+                  "y": "0.00",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            },
+            {
+              "level_number": 2,
+              "y_position": "2.33",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "LEFTWALL-R01-L02-S01",
+                  "physical_label": "",
+                  "display_name": "Level 2 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "2.33",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "LEFTWALL-R01-L02-S02",
+                  "physical_label": "",
+                  "display_name": "Level 2 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "4.00",
+                  "y": "2.33",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            },
+            {
+              "level_number": 3,
+              "y_position": "4.67",
+              "height": "2.33",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "LEFTWALL-R01-L03-S01",
+                  "physical_label": "",
+                  "display_name": "Level 3 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "4.67",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                },
+                {
+                  "code": "LEFTWALL-R01-L03-S02",
+                  "physical_label": "",
+                  "display_name": "Level 3 Compartment 2",
+                  "position_in_level": 2,
+                  "x": "4.00",
+                  "y": "4.67",
+                  "width": "4.00",
+                  "height": "2.33",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 2,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "shelves": []
+    },
+    {
+      "code": "RIGHTWALL",
+      "name": "RIGHT WALL",
+      "active": true,
+      "width": "5.20",
+      "height": "7.00",
+      "next_shelf_number": 1,
+      "branch": "Main branch",
+      "stacks": [
+        {
+          "code": "RIGHTWALL-R01",
+          "display_name": "COMPUTER ACCESSORIES",
+          "x": "0.00",
+          "y": "0.00",
+          "width": "5.20",
+          "height": "7.00",
+          "depth": "1.50",
+          "rotation": "0.00",
+          "number_of_levels": 2,
+          "active": true,
+          "notes": "",
+          "categories": [
+            {
+              "name": "COMPUTER ACCESSORIES",
+              "is_primary": true
+            }
+          ],
+          "levels": [
+            {
+              "level_number": 1,
+              "y_position": "0.00",
+              "height": "3.50",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "RIGHTWALL-R01-L01-S01",
+                  "physical_label": "",
+                  "display_name": "Level 1 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "0.00",
+                  "width": "5.20",
+                  "height": "3.50",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            },
+            {
+              "level_number": 2,
+              "y_position": "3.50",
+              "height": "3.50",
+              "active": true,
+              "shelves": [
+                {
+                  "code": "RIGHTWALL-R01-L02-S01",
+                  "physical_label": "",
+                  "display_name": "Level 2 Compartment 1",
+                  "position_in_level": 1,
+                  "x": "0.00",
+                  "y": "3.50",
+                  "width": "5.20",
+                  "height": "3.50",
+                  "depth": "1.50",
+                  "rotation": "0.00",
+                  "sort_order": 1,
+                  "capacity": null,
+                  "active": true,
+                  "notes": "",
+                  "parent": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "shelves": []
+    }
+  ]
+}
