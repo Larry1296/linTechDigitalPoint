@@ -95,3 +95,16 @@ def test_supplier_list_needs_permission_to_receive(receipt_data):
     client = APIClient()
     client.force_authenticate(user=user)
     assert client.get("/api/v1/inventory/suppliers/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_names_the_top_of_the_items_category(receiver):
+    from apps.catalog.models import Category
+    user, variant, _ = receiver
+    top = variant.product.category
+    while top.parent_id:
+        top = top.parent
+    covers = Category.objects.create(name="Soft covers", slug="soft-covers", parent=top)
+    variant.product.category = Category.objects.create(name="Tecno", slug="tecno-soft", parent=covers)
+    variant.product.save()
+    assert defaults(user, variant).json()["root_category_id"] == top.pk

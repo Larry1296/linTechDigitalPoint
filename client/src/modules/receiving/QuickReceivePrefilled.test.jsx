@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { QuickReceivePage } from "./QuickReceivePage";
 import { api } from "../../core/api/client";
@@ -30,6 +30,17 @@ it("from a product page asks only how many arrived and repeats the last delivery
   const body = JSON.parse(api.mock.calls.at(-1)[1].body);
   expect(body).toMatchObject({ supplier_name: "Luthuli Covers", document_status: "NO_DOCUMENT", payment: { method: "CASH", amount: "360" },
     lines: [{ variant_id: 9, received_quantity: "3", unit_cost: "120", placements: [{ shelf_id: 31, quantity: "3" }] }] });
+});
+
+it("once received, goes back to the top of the product's category", async () => {
+  api.mockImplementation(async (url) => (url.includes("receive-defaults") ? { ...DEFAULTS, root_category_id: 2 } : { id: 4, receipt_number: "RCV-1" }));
+  const Products = () => { const where = useLocation(); return <p>{where.pathname}{where.search} · {where.state.received.receipt_number}</p>; };
+  await act(async () => { render(<MemoryRouter initialEntries={["/admin/quick-receive?variant=9"]}><Routes>
+    <Route path="/admin/quick-receive" element={<QuickReceivePage />} /><Route path="/admin/products" element={<Products />} />
+  </Routes></MemoryRouter>); });
+  fireEvent.change(screen.getByLabelText("Quantity received"), { target: { value: "3" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Receive stock" })); });
+  expect(screen.getByText("/admin/products?category=2 · RCV-1")).toBeInTheDocument();
 });
 
 it("shows every field after Change", async () => {

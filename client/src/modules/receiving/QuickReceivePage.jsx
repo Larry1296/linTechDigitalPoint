@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ProductSearch } from "../storefront/components/ProductSearch";
 import { api } from "../../core/api/client";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
@@ -21,6 +21,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
   // Opened from a product page (?variant=): the item, supplier, buying price, payment and compartment repeat its last
   // delivery, so only the quantity is asked. "Change" shows the fields to correct any of them.
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const variantId = params.get("variant");
   const [prefilled, setPrefilled] = useState(null), [editing, setEditing] = useState(false), [shelf, setShelf] = useState(null);
   const quantityBox = useRef(null);
@@ -75,7 +76,13 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       const body = opening ? { document_status: "OPENING_BALANCE", idempotency_key: key, notes: "Stock already in the shop", lines: [line] }
         : { ...receiptCostsPayload(sendDetails), idempotency_key: key, lines: [line] };
       const result = await api('/api/v1/inventory/receipts/', { method: 'POST', body: JSON.stringify(body) });
-      setReceipt({ ...result, item: `${item.product_name} ${item.variant_name}`.trim(), quantity: packs, unknownCost });
+      const done = { ...result, item: `${item.product_name} ${item.variant_name}`.trim(), quantity: packs, unknownCost };
+      // From a product page: back to the top of its category in the products list, saying what was received.
+      if (prefilled?.root_category_id) {
+        navigate(`/admin/products?category=${prefilled.root_category_id}`, { state: { received: done } });
+        return;
+      }
+      setReceipt(done);
       setKey(crypto.randomUUID()); setQuantity('');
       // From a product page the same item stays ready for its next delivery; otherwise the form starts again.
       if (!prefilled) { setItem(null); setQuery(''); setCost(''); setShelf(null); }

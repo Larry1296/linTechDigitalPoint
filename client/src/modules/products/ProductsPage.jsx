@@ -7,14 +7,14 @@ import { VariantSummary, hasPermission } from "./VariantSummary";
 import { useAuth } from "../../core/auth/AuthContext";
 import { loadZonesIfUsed } from "../digital-shop/api";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ProductImage } from "../storefront/components/ProductImage";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { api } from "../../core/api/client";
 import { ProductForm } from "./ProductForm";
 import { ProductImport, downloadTemplate } from "./ProductImport";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
-import { FormError } from "../../components/forms/FormNotice";
+import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { FileSpreadsheet, Trash2 } from "lucide-react";
 import { DeleteProductsDialog, ProductSelection, useProductSelection } from "./DeleteProducts";
@@ -321,6 +321,8 @@ export function ProductsPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  // Stock just received from a product page, which comes back here to the top of the product's category.
+  const received = useLocation().state?.received;
   const productId = params.get("product");
   const selectedVariant = Number(params.get("variant")) || null;
   // The open category (none: the top-level categories) and the page of its products, kept in the address so Back works.
@@ -487,6 +489,7 @@ export function ProductsPage() {
           <h1>{category ? openCategory?.path.at(-1) || "Category not found" : "Products"}</h1>
           <p>{category ? "Open a sub-category, or tap a product to see its prices, stock, shelf and types."
             : "Open a category to see its sub-categories and products."}</p>
+          {received && <FormSuccess>{received.quantity} × {received.item} added to stock{received.unknownCost ? " (cost pending)" : ""}. <Link to={`/admin/receipts/${received.id}`}>View record {received.receipt_number}</Link></FormSuccess>}
         </div>
         {(hasPermission(user, "catalog.add_product") || canDelete) && (
           <div className="actionRow">

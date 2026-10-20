@@ -240,7 +240,10 @@ def receive_defaults(request, pk):
         held=(StockBalance.objects.filter(lot__variant=v,quantity__gt=0,shelf__active=True,shelf__is_virtual=False)
               .values("shelf_id").annotate(q=Sum("quantity")).order_by("-q").first())
         shelf=Shelf.objects.filter(pk=held["shelf_id"]).first() if held else None
-    return Response({"item":_search_row(v,on_hand),"supplier_name":supplier,"unit_cost":unit_cost,"document_status":document_status,
+    # The top of the product's category, where the products list goes back to once it is received.
+    root=v.product.category
+    while root.parent_id:root=root.parent
+    return Response({"item":_search_row(v,on_hand),"root_category_id":root.id,"supplier_name":supplier,"unit_cost":unit_cost,"document_status":document_status,
                      "payment_method":payment_method,"shelf":{"id":shelf.id,"code":shelf.code,"display_name":shelf.display_name} if shelf else None})
 
 @api_view(["GET"])
