@@ -142,7 +142,10 @@ function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
 // Money put in or taken out. Agency cash and float move through today's open shift, so the desk balances follow.
 function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel }) {
   const putIn = kind === "DEPOSIT";
-  const [source, setSource] = useState(preset?.source || "MPESA");
+  // First whose money it is (the business's, or the owner's own from outside), then which business account.
+  const [origin, setOrigin] = useState(preset?.source === OWNER[0] ? "OWN" : "BUSINESS");
+  const [account, setAccount] = useState(preset?.source && preset.source !== OWNER[0] ? preset.source : "MPESA");
+  const source = origin === "OWN" ? OWNER[0] : account;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Number(investment.value))));
   const available = (value) => spare.find((p) => p.method === value)?.expected;
   const short = putIn && available(source) != null && Number(amount) > Number(available(source));
@@ -153,6 +156,7 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
+    delete values.origin;
     const where = sourceName(values.source).toLowerCase();
     const text = own
       ? (putIn ? "It is your own money put into the business. Your cash, till and bank do not change, and profit does not change."
@@ -178,14 +182,23 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
       <fieldset disabled={busy} className="loanFields">
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
           max={putIn ? undefined : investment.value} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        <FormField label={putIn ? "Taken from" : "Paid to"}>
-          <select name="source" value={source} onChange={(event) => setSource(event.target.value)}>
-            {BUSINESS.map(([value, label]) => <option key={value} value={value}>
-              {label}{putIn && available(value) != null ? ` · ${money(available(value))} expected` : ""}</option>)}
-            {sessions.length > 0 && AGENCY.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            <option value={OWNER[0]}>{putIn ? OWNER[1] : "Me, the owner (out of the business)"}</option>
+        <FormField label={putIn ? "Money source" : "Money goes to"}>
+          <select name="origin" value={origin} onChange={(event) => setOrigin(event.target.value)}>
+            <option value="BUSINESS">{putIn ? "From the business" : "Back into the business"}</option>
+            <option value="OWN">{putIn ? OWNER[1] : "Me, the owner (out of the business)"}</option>
           </select>
         </FormField>
+        {own
+          ? <><input type="hidden" name="source" value={OWNER[0]} />
+            <p className="muted">{putIn ? "Nothing is taken from the business: its cash, till and bank stay as they are."
+              : "Nothing goes back into the business: its cash, till and bank stay as they are."}</p></>
+          : <FormField label={putIn ? "Taken from" : "Paid to"}>
+            <select name="source" value={account} onChange={(event) => setAccount(event.target.value)}>
+              {BUSINESS.map(([value, label]) => <option key={value} value={value}>
+                {label}{putIn && available(value) != null ? ` · ${money(available(value))} expected` : ""}</option>)}
+              {sessions.length > 0 && AGENCY.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </FormField>}
         {agency && sessions.length > 1 && (
           <FormField label="M-Pesa outlet">
             <select name="session_id" required defaultValue="">
@@ -197,7 +210,8 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
         {agency && sessions.length === 1 && <p className="muted">{sessions[0].outlet} now: cash {money(sessions[0].cash)} · float {money(sessions[0].float)}</p>}
         {agency
           ? <p className="muted">Agency money moves today, through the open shift.</p>
-          : <FormField label="Date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />}
+          : <><FormField label={putIn ? "Date the money went in" : "Date the money came out"} name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+            {putIn && <p className="muted">Already invested earlier? Choose the day it really went in: interest is worked out from that day.</p>}</>}
         <FormField label="Transaction code or reference (optional)" name="reference" maxLength={120} autoComplete="off" />
         <FormField label="Note (optional)" name="note" maxLength={500} autoComplete="off" />
       </fieldset>
@@ -347,6 +361,31 @@ function DayByDay({ investment }) {
 }
 
 // Where the rate comes from: the fund's published rate, kept up to date by the app, or typed in each month.
+// Each statement next to what the app predicted for the same date, so the estimate can be checked month by month.
+function StatementChecks({ investment }) {
+  const rows = investment.statements || [];
+  if (!rows.length) return null;
+  const signed = (value) => (Number(value) < 0 ? `− ${money(-value)}` : `+ ${money(value)}`);
+  return (
+    <details className="investRates" open>
+      <summary>Predicted and actual interest ({rows.length})</summary>
+      <table className="loanRepayments">
+        <caption>What the app predicted, next to what the statement showed</caption>
+        <thead><tr><th scope="col">Statement</th><th scope="col">App predicted</th><th scope="col">Statement showed</th><th scope="col">Difference</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.id}>
+            <th scope="row">{date(r.date)}{r.since && <small className="muted"> · since {date(r.since)}</small>}</th>
+            <td>{r.predicted == null ? "Not predicted" : signed(r.predicted)}</td>
+            <td>{signed(r.actual)}<small className="muted"> · balance {money(r.statement_balance)}</small></td>
+            <td>{r.difference == null ? "—" : Math.abs(Number(r.difference)) < 0.5 ? "Same" : signed(r.difference)}</td>
+          </tr>))}</tbody>
+      </table>
+      <p className="muted">Interest after {percent(investment.tax_rate)} tax. A big difference usually means a rate, a date or an amount
+        put in or taken out is not recorded as on the statement.</p>
+    </details>
+  );
+}
+
 function RateSource({ investment, funds, canMove, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -478,6 +517,7 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
       </dl>
       <Earning investment={investment} />
       <DayByDay investment={investment} />
+      <StatementChecks investment={investment} />
       <RateSource investment={investment} funds={funds} canMove={canMove} onChanged={onChanged} />
       {investment.check_due && <p className="investWarning">{month}'s check is due: record the rate {investment.name} pays now
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}

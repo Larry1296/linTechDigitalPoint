@@ -213,8 +213,13 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
     kind = InvestmentMovement.INTEREST if difference > 0 else InvestmentMovement.FEE
     amount = abs(difference)
     branch = resolve_branch()
+    # The app's own prediction for the same date is kept beside it, so each statement shows how close the estimate was.
+    from .investment_interest import estimate
+    guess = estimate(investment, today=day)
     movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, occurred_on=day,
                                                  note=str(note or "").strip(), statement_balance=balance, branch=branch,
+                                                 predicted_interest=guess["net"] if guess else None,
+                                                 predicted_since=guess["since"] if guess else None,
                                                  idempotency_key=key, created_by=user)
     words = f"{'Interest earned on' if kind == InvestmentMovement.INTEREST else 'Fees or loss on'} {investment.name}"
     post_journal(key=f"investment:{movement.pk}", description=words[:240], branch=branch, date=day, user=user,

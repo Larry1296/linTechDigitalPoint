@@ -10,7 +10,8 @@ from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
-from .investment_interest import current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month
+from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
+                                  statement_checks)
 from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, totals, undo, value
 from .models import Investment, InvestmentMovement
 
@@ -47,7 +48,7 @@ def investment_row(investment):
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
-            "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment),
+            "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment), "statements": statement_checks(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
             "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "occurred_on": m.occurred_on, "source": m.source,
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,

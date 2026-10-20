@@ -301,6 +301,9 @@ class InvestmentMovement(TenantModel):
     reference = models.CharField(max_length=120, blank=True)
     note = models.TextField(blank=True)
     statement_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # when worked out from a statement
+    # What the app predicted the money had earned (after tax) since predicted_since, just before the statement was recorded.
+    predicted_interest = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    predicted_since = models.DateField(null=True, blank=True)
     entry = models.OneToOneField(CashEntry, null=True, blank=True, related_name='investment_movement', on_delete=models.PROTECT)
     agency_transaction = models.OneToOneField('mpesa.MpesaTransaction', null=True, blank=True, related_name='investment_movement', on_delete=models.PROTECT)
     # The stock purchase a withdrawal paid for, when money was taken out to pay a supplier.

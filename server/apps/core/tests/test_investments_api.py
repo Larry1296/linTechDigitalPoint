@@ -358,3 +358,25 @@ def test_monthly_check_records_the_rate_and_the_statement_interest_and_reminds_u
     client.force_login(cashier)
     assert client.post(f"/api/v1/accounting/investments/{mmf}/monthly/", {"annual_rate": "1", "idempotency_key": "m-4"}, format="json").status_code == 403
     assert client.get("/api/v1/accounting/investments/reminder/").status_code == 403
+
+
+def test_own_money_dated_earlier_earns_from_that_day_and_each_statement_keeps_the_apps_prediction(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    start = (timezone.localdate().replace(day=1) - timedelta(days=40)).replace(day=1)
+    month_end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    # Recorded today, but the money went in on the first of a past month, from the owner's own pocket.
+    _move(client, mmf, "DEPOSIT", "100000", "OWNER", "own-earlier", occurred_on=str(start))
+    _rate(org, mmf, start, "12")
+    predicted = _estimate(org, mmf, month_end)
+    assert predicted["since"] == start and predicted["days"] == (month_end - start).days
+    row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "100900", "idempotency_key": "st",
+                      "occurred_on": str(month_end)}, format="json").json()
+    check = row["statements"][0]
+    assert check["date"] == str(month_end) and check["since"] == str(start)
+    assert D(str(check["predicted"])) == predicted["net"] and D(str(check["actual"])) == D("900")
+    assert D(str(check["difference"])) == D("900") - predicted["net"]
+    # Nothing came out of the business: the cash book has no entry for it.
+    from apps.accounting.models import CashEntry
+    with organization_context(org):
+        assert not CashEntry.objects.exists()

@@ -184,6 +184,20 @@ def day_by_day(investment, today=None):
     return rows[::-1]
 
 
+def statement_checks(investment):
+    """Each statement recorded, newest first, next to what the app predicted for the same date:
+    {date, label, since, predicted, actual, difference}. actual is the interest the statement showed (below zero for fees
+    or a loss); predicted is None for statements recorded before the app kept its prediction."""
+    rows = []
+    for m in investment.movements.filter(reversed_at__isnull=True, statement_balance__isnull=False).order_by("-occurred_on", "-pk"):
+        actual = SIGN[m.kind] * m.amount
+        predicted = m.predicted_interest
+        rows.append({"id": m.pk, "date": m.occurred_on, "label": month_label(m.occurred_on), "since": m.predicted_since,
+                     "statement_balance": m.statement_balance, "predicted": predicted, "actual": actual,
+                     "difference": None if predicted is None else actual - predicted})
+    return rows
+
+
 @transaction.atomic
 def record_month(*, investment, user, annual_rate, key, balance=None, note=""):
     """This month's check: the rate the fund quotes now and, if known, the balance it shows.
