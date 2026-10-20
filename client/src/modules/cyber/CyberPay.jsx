@@ -18,8 +18,9 @@ export function useOpenCyberCheckout(user, which) {
 }
 
 // Cyber services paid exactly as at the till: cash, the till, a prompt, bank, or owed by a named customer, or a mix.
-export function CyberPay({ checkout, customers, onChange, onDone, onBack }) {
+export function CyberPay({ user, checkout, customers, setCustomers, onChange, onDone, onBack }) {
   const express = useMpesaExpress();
   const customerPhone = customers.find((c) => String(c.id) === String(checkout.customer_id))?.phone;
-  return <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={onChange} onDone={onDone} onBack={onBack} />;
+  return <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={onChange} onDone={onDone} onBack={onBack}
+    user={user} customers={customers} setCustomers={setCustomers} />;
 }

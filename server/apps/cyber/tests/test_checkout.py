@@ -63,6 +63,18 @@ def test_credit_needs_a_named_customer(cyber):
     assert "customer" in str(refused.content)
 
 
+def test_the_customer_who_owes_can_be_chosen_when_paying(cyber):
+    owner, till, org, printing, _ = cyber
+    customer = _customer(owner)
+    checkout = _charge(till, printing)  # charged as a walk-in
+    done = _pay(till, checkout, method="OWED", customer_id=customer, due_date="2026-11-01").json()
+    assert (done["status"], done["customer_id"]) == ("COMPLETED", customer), done
+    with organization_context(org):
+        sale = Sale.objects.get(pk=done["sale_id"])
+        assert (sale.customer_id, sale.cyber_job.customer_id, str(sale.due_date)) == (customer, customer, "2026-11-01")
+        assert not sale.payments.exists()  # all of it is owed
+
+
 def test_a_job_from_the_desk_is_paid_at_the_checkout_once(cyber):
     owner, till, org, printing, _ = cyber
     job = till.post("/api/v1/cyber/jobs/", {"lines": [{"variant_id": printing.variant_id, "quantity": "5"}]}, format="json").json()

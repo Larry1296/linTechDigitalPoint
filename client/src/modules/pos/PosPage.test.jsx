@@ -88,7 +88,7 @@ it("records a customer who gave no cash as owing it, once the customer is chosen
   fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
   await charge();
   fireEvent.change(within(panel()).getByLabelText("Cash received"), { target: { value: "0" } });
-  expect(within(panel()).getByText(/Choose the customer to leave it owed/)).toBeInTheDocument();
+  expect(within(panel()).getByText(/Choose Owed to leave it owed/)).toBeInTheDocument();
   expect(within(panel()).getByRole("button", { name: "Leave KSh 300.00 owed by the customer" })).toBeDisabled();
 }, 20000);
 

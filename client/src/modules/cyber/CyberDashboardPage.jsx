@@ -48,7 +48,7 @@ function JobPayment({ user, job, checkout, setCheckout, onPaid, onClose }) {
   return (
     <section className="formCard incomeEntry" aria-label="Pay for the job">
       <h2>Pay &amp; complete {job?.number || ""}</h2>
-      {checkout ? <CyberPay checkout={checkout} customers={customers} onChange={setCheckout} onDone={onPaid}
+      {checkout ? <CyberPay user={user} checkout={checkout} customers={customers} setCustomers={setCustomers} onChange={setCheckout} onDone={onPaid}
         onBack={() => { setCheckout(null); onClose(); }} /> : <>
         <p className="muted">{job.walk_in_customer_name || "Walk-in"} · {businessCurrency()} {job.total}</p>
         <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />

@@ -211,8 +211,10 @@ def _attach(checkout, incoming, *, user=None, method=Tender.TILL, tender=None):
 
 
 @transaction.atomic
-def add_payment(checkout, *, user, method, amount=None, cash_given=None, reference="", phone="", incoming_id=None, code="", due_date=None):
-    """One way the customer pays. Returns the payment; the sale is made as soon as the payments cover the amount."""
+def add_payment(checkout, *, user, method, amount=None, cash_given=None, reference="", phone="", incoming_id=None, code="", due_date=None,
+                customer_id=None):
+    """One way the customer pays. Returns the payment; the sale is made as soon as the payments cover the amount.
+    Owed money may name its customer here (``customer_id``), when no customer was chosen before charging."""
     from . import mpesa_express
     checkout = _locked(checkout, user)
     if checkout.status not in (Checkout.AWAITING, Checkout.PART_PAID):
@@ -233,6 +235,12 @@ def add_payment(checkout, *, user, method, amount=None, cash_given=None, referen
             raise ValidationError("Enter the bank transfer's reference.")
         tender = Tender.objects.create(checkout=checkout, method=method, amount=wanted, reference=str(reference).strip()[:100], status=Tender.CONFIRMED, recorded_by=user)
     elif method == Tender.OWED:
+        if customer_id and str(customer_id) != str(checkout.customer_id):
+            customer = get_user_model().objects.filter(customer_profiles__organization_id=checkout.organization_id, pk=customer_id).first()
+            if not customer:
+                raise ValidationError("Choose a customer in this business.")
+            checkout.customer = customer
+            checkout.save(update_fields=["customer", "updated_at"])
         if not checkout.customer_id:
             raise ValidationError("Choose the customer who will owe it before leaving anything to pay later.")
         tender = Tender.objects.create(checkout=checkout, method=method, amount=wanted, status=Tender.CONFIRMED, recorded_by=user,

@@ -6,6 +6,7 @@ import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { PromptStatus, shownPhone } from "./MpesaPrompt";
 import { TextBox } from "../../components/forms/TextBox";
+import { CustomerChooser } from "./CustomerChooser";
 
 const POLL_MS = 2500;
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,8 +16,9 @@ const OPEN = ["AWAITING", "PART_PAID"];
 
 // How the customer pays a charged basket: cash, the till, a prompt to their phone, bank, or owed by a named customer. Several
 // can be combined. The sale is made by the server once the payments cover the amount; till payments and prompts are
-// confirmed by Safaricom's own record, never by an amount alone.
-export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDone, onBack }) {
+// confirmed by Safaricom's own record, never by an amount alone. Owed is always offered: with no customer chosen before
+// charging, the one who owes it is chosen (or added) there.
+export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDone, onBack, user, customers = [], setCustomers }) {
   const [way, setWay] = useState("CASH");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -25,6 +27,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
   const [phone, setPhone] = useState(shownPhone(customerPhone));
   const [reference, setReference] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [owedBy, setOwedBy] = useState("");
   const left = Number(checkout.left);
   const open = OPEN.includes(checkout.status);
   const promptOut = checkout.payments.find((p) => p.method === "PROMPT" && p.status === "PENDING");
@@ -102,7 +105,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
     {open && left > 0 && !promptOut && <>
       <div className="posWays" role="tablist" aria-label="How the customer pays">
         {[["CASH", "Cash", Banknote], ["TILL", paybill ? "Paybill" : "Till", Smartphone], ...(express?.ready ? [["PROMPT", "Prompt", Smartphone]] : []),
-          ["BANK", "Bank", Landmark], ...(checkout.customer_id ? [["OWED", "Owed", UserRound]] : [])].map(([id, name, Icon]) =>
+          ["BANK", "Bank", Landmark], ["OWED", "Owed", UserRound]].map(([id, name, Icon]) =>
           <button type="button" role="tab" key={id} aria-selected={way === id} className={way === id ? "on" : ""} onClick={() => { setWay(id); setError(""); }}>
             <Icon size={17} aria-hidden="true" /> {name}
           </button>)}
@@ -118,7 +121,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
           onChange={(e) => setCashGiven(e.target.value)} placeholder={left.toFixed(2)} /></label>
         {nothingGiven
           ? <p className="muted">{checkout.customer_id ? `The customer gave nothing, so ${money(left)} is left owed by them.`
-            : "The customer gave nothing. Choose the customer to leave it owed by them, or pay another way."}</p>
+            : "The customer gave nothing. Choose Owed to leave it owed by a named customer, or pay another way."}</p>
           : change !== null && (change >= 0 ? <p className="posChange">Give change: <b>{money(change)}</b></p>
             : <p className="muted">{money(-change)} still to pay after this, by any other way.</p>)}
         <button disabled={busy || (nothingGiven && !checkout.customer_id)}>{busy ? "Recording…"
@@ -163,9 +166,13 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
         <button disabled={busy || !reference.trim()}>Record {money(left)} by bank</button>
       </form>}
 
-      {way === "OWED" && <form className="posWay" onSubmit={(e) => { e.preventDefault(); void pay({ method: "OWED", due_date: dueDate || null }); }}>
+      {way === "OWED" && <form className="posWay" onSubmit={(e) => { e.preventDefault();
+        void pay({ method: "OWED", due_date: dueDate || null, ...(checkout.customer_id ? {} : { customer_id: owedBy }) }); }}>
+        {checkout.customer_id ? <p className="muted">Owed by {customers.find((c) => String(c.id) === String(checkout.customer_id))?.name || "the customer"}.</p>
+          : setCustomers ? <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={owedBy} onChange={setOwedBy} open />
+          : <p className="muted">Choose the customer before charging to leave it owed by them.</p>}
         <label>Due date (optional)<input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
-        <button disabled={busy}>Leave {money(left)} owed by the customer</button>
+        <button disabled={busy || !(checkout.customer_id || owedBy)}>Leave {money(left)} owed by the customer</button>
       </form>}
     </>}
     {open && promptOut && <p className="muted">Waiting for the customer to answer the prompt. Take it back (×) to pay another way.</p>}

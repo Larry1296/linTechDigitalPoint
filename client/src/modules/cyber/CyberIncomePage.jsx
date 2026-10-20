@@ -243,7 +243,7 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
   if (checkout) return (
     <section className="formCard incomeEntry" aria-label="Take payment">
       <h2>{title}: take payment</h2>
-      <CyberPay checkout={checkout} customers={customers} onChange={setCheckout} onDone={paid} onBack={back} />
+      <CyberPay user={user} checkout={checkout} customers={customers} setCustomers={setCustomers} onChange={setCheckout} onDone={paid} onBack={back} />
     </section>
   );
   return (

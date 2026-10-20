@@ -266,7 +266,8 @@ export function PosPage() {
 
         {checkout ? <aside className="posCart" ref={cartRef}>
           <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={setCheckout}
-            onDone={finished} onBack={backToBasket} />
+            onDone={finished} onBack={backToBasket}
+            user={user} customers={customers} setCustomers={setCustomers} />
         </aside> : <form className="posCart" onSubmit={charge} ref={cartRef}>
           <div className="posCartHead">
             <h2>Current sale</h2>
