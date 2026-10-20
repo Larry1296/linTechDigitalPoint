@@ -136,6 +136,15 @@ class CyberJobViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(self.get_serializer(job).data)
 
     @action(detail=True, methods=["post"])
+    def checkout(self, request, pk=None):
+        """Charges a done job at the checkout, where the customer pays as at the till (cyber/checkout.py)."""
+        from apps.commerce.checkout import checkout_data
+        from .checkout import charge_job, customer_in
+        checkout = charge_job(user=request.user, store=request.store, key=str(request.data.get("idempotency_key") or ""), job=self.get_object(),
+                              customer=customer_in(request.organization, request.data.get("customer_id")))
+        return Response(checkout_data(checkout, user=request.user, with_candidates=True), status=201)
+
+    @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         if not has_business_permission(request.user, "cyber.complete_cyber_job"):
             return Response({"detail": "Cyber checkout permission required."}, status=403)

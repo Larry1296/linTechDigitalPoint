@@ -187,6 +187,9 @@ class Checkout(TimeStamped):
     STATUSES = [(AWAITING, "Waiting for payment"), (PART_PAID, "Partly paid"), (PAID, "Paid, sale not made yet"), (COMPLETED, "Completed"),
                 (CANCELLED, "Cancelled"), (EXPIRED, "Expired")]
     OPEN = (AWAITING, PART_PAID, PAID)
+    POS, CYBER = "POS", "CYBER"
+    # What is being paid for: a basket of the till, or Cyber services (a visit, or a job from the desk; see cyber/checkout.py).
+    kind = models.CharField(max_length=6, choices=[(POS, "Till"), (CYBER, "Cyber services")], default=POS)
     number = models.CharField(max_length=40)  # becomes the sale's receipt number
     status = models.CharField(max_length=10, choices=STATUSES, default=AWAITING)
     branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT)

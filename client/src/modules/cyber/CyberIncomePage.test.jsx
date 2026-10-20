@@ -29,8 +29,9 @@ const kra = { id: 7, name: "KRA PIN registration / retrieval", notes: "Service f
 beforeEach(() => { vi.clearAllMocks(); perms.list = STAFF; });
 
 const overview = async () => {
-  api.mockImplementation(async (path, options) => (options?.method === "POST" ? { ...printing } : {
-    services: [printing, lamination, kra], groups: GROUPS, totals: { all: "400.00", week: "400.00", month: "400.00" } }));
+  api.mockImplementation(async (path, options) => (options?.method === "POST"
+    ? { id: 1, kind: "CYBER", number: "CYB-1", status: "AWAITING", total: "85.00", left: "85.00", paid: "0.00", items: 1, payments: [] } : {
+      services: [printing, lamination, kra], groups: GROUPS, totals: { all: "400.00", week: "400.00", month: "400.00" } }));
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   return screen.findByRole("form", { name: "Record income" });
 };
@@ -52,12 +53,12 @@ it("records income from one Service list of every service (under its group), the
   expect(within(form).getByText(/^KSh 10 per page, can go down to KSh 8/)).toHaveTextContent("KSh 100 in all");
   fireEvent.change(within(form).getByLabelText(/Amount charged/), { target: { value: "70" } });
   expect(within(form).getByText("The lowest for this is KSh 80.")).toBeInTheDocument();
-  expect(within(form).getByRole("button", { name: "Record income" })).toBeDisabled();
+  expect(within(form).getByRole("button", { name: "Charge" })).toBeDisabled();
   fireEvent.change(within(form).getByLabelText(/Amount charged/), { target: { value: "85" } });
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record KSh 85" })); });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Charge KSh 85" })); });
   const [path, options] = api.mock.calls.find(([, o]) => o?.method === "POST");
-  expect(path).toBe("/api/v1/cyber/income/record/");
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ lines: [{ option_id: 41, quantity: "10", amount: "85" }], payment_method: "CASH" }));
+  expect(path).toBe("/api/v1/cyber/income/checkout/");
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ lines: [{ option_id: 41, quantity: "10", amount: "85" }] }));
 });
 
 it("asks for the amount when a service has no price yet, and lists revenue by group with links to each service's page", async () => {
@@ -66,7 +67,7 @@ it("asks for the amount when a service has no price yet, and lists revenue by gr
   expect(within(form).queryByLabelText("Price option")).toBeNull();
   expect(within(form).getByLabelText(/Amount charged/)).toHaveAttribute("placeholder", "Type the amount");
   fireEvent.change(within(form).getByLabelText(/Amount charged/), { target: { value: "200" } });
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record KSh 200" })); });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Charge KSh 200" })); });
   expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body)).toEqual(expect.objectContaining({ lines: [{ option_id: 71, quantity: "1", amount: "200" }] }));
   const row = screen.getByRole("link", { name: "Printing" }).closest("tr");
   expect(screen.getByRole("link", { name: "Printing" })).toHaveAttribute("href", "/admin/cyber/income/4");
@@ -119,11 +120,17 @@ it("lets the owner move a service to another group from its page", async () => {
   expect(await screen.findByText(/Online Applications › NTSA & Education/, { selector: "p" })).toBeInTheDocument();
 });
 
-it("records one customer's visit: colour printing with design for 30 and three A4 laminations at 50, on one receipt", async () => {
+it("charges one customer's visit, colour printing with design for 30 and three A4 laminations at 50, and takes it at the till's checkout, owed by a named customer", async () => {
+  perms.list = [...STAFF, "accounts.view_customerprofile"];
   const colour = option(43, "Colour with design", { price: "0.00", billing_unit: "FIXED", price_varies: true });
   const withColour = { ...printing, options: [...printing.options, colour] };
-  api.mockImplementation(async (path, opts) => (opts?.method === "POST" ? { sale_id: 5, receipt_number: "CYB-5", total: "180.00" } : {
-    services: [withColour, lamination, kra], groups: GROUPS, totals: { all: "0", week: "0", month: "0" } }));
+  const checkout = { id: 3, kind: "CYBER", number: "CYB-1", status: "AWAITING", total: "180.00", left: "180.00", paid: "0.00", items: 2, customer_id: 8, payments: [] };
+  api.mockImplementation(async (path) => {
+    if (path === "/api/v1/commerce/customers/") return [{ id: 8, name: "Mary", phone: "0712345678" }];
+    if (path === "/api/v1/cyber/income/checkout/") return checkout;
+    if (path.endsWith("/pay/")) return { ...checkout, status: "COMPLETED", left: "0.00", receipt: { sale_id: 5, receipt_number: "CYB-1", total: "180.00" } };
+    return { services: [withColour, lamination, kra], groups: GROUPS, totals: { all: "0", week: "0", month: "0" } };
+  });
   render(<MemoryRouter><CyberIncomePage /></MemoryRouter>);
   const form = await screen.findByRole("form", { name: "Record income" });
   const first = within(form).getByRole("group", { name: "Service 1" });
@@ -140,14 +147,19 @@ it("records one customer's visit: colour printing with design for 30 and three A
   expect(summary).toHaveTextContent("Printing (Colour with design)KSh 30");
   expect(summary).toHaveTextContent("Lamination (A4) × 3KSh 150");
   expect(summary).toHaveTextContent("TotalKSh 180");
-  fireEvent.change(within(form).getByLabelText("Paid by"), { target: { value: "MPESA" } });
-  fireEvent.change(within(form).getByLabelText("M-Pesa code"), { target: { value: "SJK4ABC123" } });
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record KSh 180" })); });
-  const [path, opts] = api.mock.calls.find(([, o]) => o?.method === "POST");
-  expect(path).toBe("/api/v1/cyber/income/record/");
-  expect(JSON.parse(opts.body)).toEqual(expect.objectContaining({ payment_method: "MPESA", payment_reference: "SJK4ABC123",
+  await screen.findByRole("option", { name: /Mary/ });
+  fireEvent.change(within(form).getByLabelText("Customer"), { target: { value: "8" } });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Charge KSh 180" })); });
+  const [, opts] = api.mock.calls.find(([path]) => path === "/api/v1/cyber/income/checkout/");
+  expect(JSON.parse(opts.body)).toEqual(expect.objectContaining({ customer_id: "8",
     lines: [{ option_id: 43, quantity: "1", amount: "30" }, { option_id: 92, quantity: "3" }] }));
-  expect(await screen.findByText(/KSh 180 recorded for 2 services on one receipt/)).toBeInTheDocument();
+  // The same ways to pay as the till's checkout, owed among them for a named customer.
+  const pay = screen.getByRole("region", { name: "Take payment" });
+  for (const way of ["Cash", "Till", "Bank", "Owed"]) expect(within(pay).getByRole("tab", { name: way })).toBeInTheDocument();
+  fireEvent.click(within(pay).getByRole("tab", { name: "Owed" }));
+  await act(async () => { fireEvent.click(within(pay).getByRole("button", { name: /owed by the customer/ })); });
+  expect(api.mock.calls.find(([path]) => path === "/api/v1/commerce/pos/checkouts/3/pay/")[1].body).toContain('"method":"OWED"');
+  expect(await screen.findByText(/KSh 180 recorded on receipt CYB-1/)).toBeInTheDocument();
 });
 
 it("lets the owner add a service from the dropdowns; it is then picked on that line, ready to record", async () => {

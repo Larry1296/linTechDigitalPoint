@@ -13,9 +13,17 @@ from . import mpesa_express
 from .models import Checkout, CheckoutPayment, IncomingMpesaPayment, StkPush
 
 
-def _till_staff(request):
-    if not has_business_permission(request.user, "commerce.add_sale"):
+# Who takes payments at each kind of checkout: the till's cashiers, or the Cyber desk's.
+TAKES_PAYMENT = {Checkout.POS: "commerce.add_sale", Checkout.CYBER: "cyber.complete_cyber_job"}
+
+
+def _till_staff(request, kind=Checkout.POS):
+    if not has_business_permission(request.user, TAKES_PAYMENT[kind]):
         raise PermissionDenied("You do not have permission to take payments.")
+
+
+def _kind(request):
+    return Checkout.CYBER if request.query_params.get("kind", "").upper() == Checkout.CYBER else Checkout.POS
 
 
 def _checkouts(request):
@@ -25,8 +33,8 @@ def _checkouts(request):
 
 
 def _get(request, pk):
-    _till_staff(request)
     checkout = get_object_or_404(_checkouts(request), pk=pk)
+    _till_staff(request, checkout.kind)
     if not service.can_handle(request.user, checkout):
         raise PermissionDenied("This checkout belongs to another cashier.")
     return checkout
@@ -36,11 +44,12 @@ def _get(request, pk):
 @permission_classes([HasLinTechPermission])
 def checkouts(request):
     """GET: this cashier's checkouts still open (all of the branch's, for a manager), so a reloaded till picks up where it
-    was. POST: charge a basket."""
-    _till_staff(request)
+    was (``?kind=cyber``: the Cyber desk's). POST: charge a basket."""
+    kind = _kind(request) if request.method == "GET" else Checkout.POS
+    _till_staff(request, kind)
     if request.method == "GET":
         service.expire_stale()
-        rows = _checkouts(request).filter(status__in=Checkout.OPEN).order_by("-created_at")
+        rows = _checkouts(request).filter(kind=kind, status__in=Checkout.OPEN).order_by("-created_at")
         if not is_business_manager(request.user):
             rows = rows.filter(cashier=request.user)
         return Response({"checkouts": [service.checkout_data(row) for row in rows[:20]]})
@@ -148,7 +157,8 @@ def till_register(request):
 @permission_classes([HasLinTechPermission])
 def till_simulate(request):
     """Development only: a customer paying the till, to try the checkout without Safaricom."""
-    _till_staff(request)
+    if not any(has_business_permission(request.user, p) for p in TAKES_PAYMENT.values()):
+        raise PermissionDenied("You do not have permission to take payments.")
     row = mpesa_express.simulate_till_payment(mpesa_express.setup_for(request.organization), amount=request.data.get("amount"),
                                               name=str(request.data.get("name") or "Test"), account=str(request.data.get("account") or ""))
     return Response(service.incoming_data(row), status=201)

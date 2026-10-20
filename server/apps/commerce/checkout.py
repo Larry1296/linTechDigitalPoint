@@ -299,8 +299,12 @@ def _complete(checkout):
     basket = checkout.basket
     try:
         with transaction.atomic(), branch_context(checkout.branch_id):
-            sale = _sale(basket, number=checkout.number, user=checkout.cashier, customer=checkout.customer, key=f"checkout:{checkout.pk}",
-                         due_date=basket.get("due_date") or None)
+            if checkout.kind == Checkout.CYBER:
+                from apps.cyber.checkout import make_sale
+                sale = make_sale(checkout)
+            else:
+                sale = _sale(basket, number=checkout.number, user=checkout.cashier, customer=checkout.customer, key=f"checkout:{checkout.pk}",
+                             due_date=basket.get("due_date") or None)
             if sale.total != checkout.total:
                 raise ValidationError(f"The sale came to {sale.total:,.2f}, not the {checkout.total:,.2f} charged.")
             for tender in checkout.payments.filter(status=Tender.CONFIRMED).exclude(method=Tender.OWED).select_related("incoming").order_by("pk"):
@@ -411,7 +415,7 @@ def till_notice(setup, data):
                                             paid_at=paid_at, shortcode=data.get("BusinessShortCode") or "", account_reference=data.get("BillRefNumber") or "",
                                             payer_phone=data.get("MSISDN") or "", payer_name=data.get("FirstName") or "")
         reference = incoming.account_reference.upper()
-        if created and reference.startswith("POS-"):
+        if created and reference.startswith(("POS-", "CYB-")):
             checkout = Checkout.objects.select_for_update().filter(number=reference, status__in=[Checkout.AWAITING, Checkout.PART_PAID]).first()
             if checkout and totals(checkout)["open"] > 0:
                 _attach(checkout, incoming)
@@ -445,10 +449,10 @@ def tender_data(tender):
 
 def checkout_data(checkout, *, user=None, with_candidates=False):
     numbers = totals(checkout)
-    data = {"id": checkout.pk, "number": checkout.number, "status": checkout.status, "total": checkout.total, "paid": numbers["paid"],
+    data = {"id": checkout.pk, "kind": checkout.kind, "number": checkout.number, "status": checkout.status, "total": checkout.total, "paid": numbers["paid"],
             "waiting": numbers["waiting"], "left": numbers["left"], "open": numbers["open"], "problem": checkout.problem,
             "customer_id": checkout.customer_id, "cashier_id": checkout.cashier_id, "cashier": checkout.cashier.get_full_name() or checkout.cashier.username,
-            "created_at": checkout.created_at, "sale_id": checkout.sale_id, "items": len(checkout.basket.get("lines", [])),
+            "created_at": checkout.created_at, "sale_id": checkout.sale_id, "job_id": checkout.basket.get("job_id"), "items": len(checkout.basket.get("lines", [])),
             "payments": [tender_data(t) for t in checkout.payments.exclude(status=Tender.VOID).select_related("prompt").order_by("pk")]}
     if checkout.sale_id:
         sale = checkout.sale

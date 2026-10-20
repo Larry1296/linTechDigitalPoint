@@ -5,12 +5,14 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
 import { askForm, confirmAction } from "../../core/ui/alerts";
 import { deleteCyberSale } from "./api";
-import { label, PAYMENT_METHODS } from "../../core/ui/labels";
+import { label } from "../../core/ui/labels";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { FormField } from "../../components/forms/FormField";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
+import { CustomerChooser, useCustomers } from "../pos/CustomerChooser";
+import { CyberPay, useOpenCyberCheckout } from "./CyberPay";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const UNITS = [["PER_PAGE", "page", "pages"], ["PER_COPY", "copy", "copies"], ["PER_SHEET", "sheet", "sheets"], ["PER_DOCUMENT", "document", "documents"],
@@ -146,8 +148,9 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
   );
 }
 
-/** One customer's visit: each service done (group, service, price option, how many, amount charged), then one payment
- * and one receipt for the lot. On a service's own page the service is already chosen. */
+/** One customer's visit: each service done (group, service, price option, how many, amount charged), then it is charged
+ * and paid at the same checkout as the till (cash, M-Pesa, bank, a mix, or owed by a named customer), one receipt for the
+ * lot. On a service's own page the service is already chosen. */
 export function RecordIncome({ services, groups = [], fixedService, onSaved, onServicesChanged, title = "Record income" }) {
   const { user } = useAuth();
   const can = (p) => Boolean(user?.permissions?.includes(p));
@@ -162,7 +165,11 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
   const offered = services.filter((s) => s.active && s.options.some((o) => o.active));
   const sections = byGroup(offered, groups);
   const [lines, setLines] = useState(() => [newLine(fixedService ? String(fixedService.id) : "")]);
-  const [method, setMethod] = useState("CASH");
+  const [customers, setCustomers] = useCustomers(user);
+  const [customerId, setCustomerId] = useState("");
+  // The visit charged and waiting for the customer to pay; nothing is recorded until it is paid.
+  const [checkout, setCheckout] = useOpenCyberCheckout(user, (row) => !row.job_id);
+  const [receipt, setReceipt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
@@ -173,36 +180,41 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
   const ready = states.every((state) => state.ready);
   const change = (key, values) => setLines((rows) => rows.map((row) => (row.key === key ? { ...row, ...values } : row)));
   const describe = (state, line) => `${state.service.name}${state.options.length > 1 ? ` (${state.option.name})` : ""}${Number(line.quantity) !== 1 ? ` × ${Number(line.quantity)}` : ""}`;
+  const reset = () => {
+    setLines([newLine(fixedService ? String(fixedService.id) : "")]);
+    setCustomerId("");
+  };
   const submit = async (event) => {
     event.preventDefault();
-    if (!ready) return;
-    const form = event.currentTarget;
-    const values = Object.fromEntries(new FormData(form));
-    const items = lines.map((line, index) => `${describe(states[index], line)}: ${money(states[index].total)}`);
-    if (!(await confirmAction({ title: `Record ${money(total)}${lines.length > 1 ? ` for ${lines.length} services` : ""}?`,
-      text: `${items.join("\n")}\n\nPaid by ${label(method)}, one receipt.`, confirmButtonText: "Record income" }))) return;
+    if (!ready || busy) return;
+    const values = Object.fromEntries(new FormData(event.currentTarget));
     const payload = lines.map((line, index) => {
       const state = states[index];
       return { option_id: state.option.id, quantity: line.quantity, ...(state.mustType || cents(state.total) !== state.listed ? { amount: String(cents(state.total)) } : {}) };
     });
-    const payment = { payment_method: method, payment_reference: values.payment_reference || "", customer_name: values.customer_name || "", idempotency_key: crypto.randomUUID() };
     setBusy(true);
     setError("");
     setDone("");
     try {
-      const result = fixedService
-        ? await api(`/api/v1/cyber/income/${fixedService.id}/`, { method: "POST", body: JSON.stringify({ ...payload[0], ...payment }) })
-        : await api("/api/v1/cyber/income/record/", { method: "POST", body: JSON.stringify({ lines: payload, ...payment }) });
-      setDone(`${money(total)} recorded${lines.length > 1 ? ` for ${lines.length} services on one receipt` : ""}.${method === "MPESA" ? " The M-Pesa payment waits for confirmation under Sales." : ""}`);
-      form.reset();
-      setLines([newLine(fixedService ? String(fixedService.id) : "")]);
-      setMethod("CASH");
-      await onSaved(result);
+      setCheckout(await api("/api/v1/cyber/income/checkout/", { method: "POST", body: JSON.stringify({ lines: payload, customer_name: values.customer_name || "",
+        ...(fixedService ? { service_id: fixedService.id } : {}), ...(customerId ? { customer_id: customerId } : {}), idempotency_key: crypto.randomUUID() }) }));
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
     }
+  };
+  // Paid: the server recorded the job and its sale. Start the next customer.
+  const paid = async (result) => {
+    setCheckout(null);
+    setDone(`${money(result.receipt.total)} recorded on receipt ${result.receipt.receipt_number}.`);
+    setReceipt(result.receipt.sale_id);
+    reset();
+    await onSaved(result);
+  };
+  const back = ({ keepBasket }) => {
+    setCheckout(null);
+    if (!keepBasket) reset();
   };
   const editing = managing?.serviceId ? services.find((s) => s.id === managing.serviceId) : null;
   const managingLine = lines.find((line) => line.key === managing?.lineKey);
@@ -227,11 +239,20 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
       )}
     </div>
   );
+  const receiptPanel = receipt && <ReceiptPanel saleId={receipt} onClose={() => setReceipt(null)} />;
+  if (checkout) return (
+    <section className="formCard incomeEntry" aria-label="Take payment">
+      <h2>{title}: take payment</h2>
+      <CyberPay checkout={checkout} customers={customers} onChange={setCheckout} onDone={paid} onBack={back} />
+    </section>
+  );
   return (
     <>
+    {receiptPanel}
     <form className="formCard incomeEntry" onSubmit={(event) => void submit(event)} aria-label="Record income">
       <h2>{title}</h2>
-      {!fixedService && <p className="muted">For a customer already served: choose each thing they had done, then how they paid. It all goes on one receipt.</p>}
+      {!fixedService && <p className="muted">For a customer already served: choose each thing they had done, then charge it and take the payment as at the
+        till: cash, M-Pesa, bank, or owed by the customer. It all goes on one receipt.</p>}
       <div className="incomeLines" aria-busy={busy}>
         {lines.map((line, index) => (
           <IncomeLine key={line.key} line={line} state={states[index]} sections={sections} fixedService={fixedService} number={index + 1}
@@ -248,16 +269,11 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
         </ul>
       )}
       <fieldset disabled={busy} className="loanFields">
-        <FormField label="Paid by">
-          <select value={method} onChange={(event) => setMethod(event.target.value)}>
-            {PAYMENT_METHODS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-          </select>
-        </FormField>
-        <FormField label={method === "MPESA" ? "M-Pesa code" : "Reference (optional)"} name="payment_reference" maxLength={120} required={method === "MPESA"} autoComplete="off" />
         <FormField label="Customer or note (optional)" name="customer_name" maxLength={160} autoComplete="off" placeholder="e.g. Mary, KRA returns for John" />
       </fieldset>
-      <button disabled={busy || !ready}>{busy ? "Recording…" : ready ? `Record ${money(total)}` : "Record income"}</button>
-      <FormError title="Could not record the income." message={error} />
+      <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />
+      <button disabled={busy || !ready}>{busy ? "Charging…" : ready ? `Charge ${money(total)}` : "Charge"}</button>
+      <FormError title="Could not charge the income." message={error} />
       {done && <FormSuccess message={done} />}
     </form>
     {managePanel}
@@ -591,7 +607,7 @@ export function CyberServiceIncomePage() {
       {canEditService && <ServiceDetails service={data} onSaved={(saved) => setData(saved)} />}
       {canDelete && <DeleteService service={data} onDeleted={() => navigate("/admin/cyber/income")} />}
       <Totals totals={data} unitCode={single} />
-      <RecordIncome key={data.id} services={[data]} fixedService={data} onSaved={(saved) => setData(saved)} />
+      <RecordIncome key={data.id} services={[data]} fixedService={data} onSaved={() => load()} />
       <PriceOptions service={data} onSaved={(saved) => setData(saved)} />
       <section aria-labelledby="income-history">
         <h2 id="income-history">History</h2>

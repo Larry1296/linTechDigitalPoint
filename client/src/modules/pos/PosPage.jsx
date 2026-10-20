@@ -13,6 +13,7 @@ import { VariantSummary, stockLimit } from "../products/VariantSummary";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
 import { useMpesaExpress } from "./MpesaPrompt";
 import { CheckoutPanel } from "./CheckoutPanel";
+import { CustomerChooser, useCustomers } from "./CustomerChooser";
 import "../admin/pos.css";
 import "./posPage.css";
 import { TextBox } from "../../components/forms/TextBox";
@@ -127,7 +128,7 @@ export function PosPage() {
   const express = useMpesaExpress();
   const saleRequest = useRef({ signature: null, key: null });
   const [saleBusy, setSaleBusy] = useState(false);
-  const [customers, setCustomers] = useState([]);
+  const [customers, setCustomers] = useCustomers(user);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState(ALL);
   const [rows, setRows] = useState([]);
@@ -142,24 +143,8 @@ export function PosPage() {
   const [checkout, setCheckout] = useState(null);
   const canChangePrice = user?.permissions?.includes("commerce.change_sale");
   const canSellAtLoss = user?.permissions?.includes("commerce.sell_below_cost");
-  const canAddCustomer = user?.permissions?.includes("accounts.add_customerprofile");
   const [customerId, setCustomerId] = useState("");
-  const [newCustomer, setNewCustomer] = useState(null);
-  const [customerError, setCustomerError] = useState("");
   const cartRef = useRef(null);
-  // Someone who pays later must be named, so the balance is owed by a real customer.
-  const addCustomer = async () => {
-    setCustomerError("");
-    try {
-      const created = await api("/api/v1/commerce/customers/", { method: "POST", body: JSON.stringify({ name: newCustomer.name.trim(), phone: newCustomer.phone.trim() }) });
-      setCustomers((list) => [created, ...list]);
-      chooseCustomer(String(created.id), created);
-      setNewCustomer(null);
-    } catch (e) {
-      setCustomerError(e.message);
-    }
-  };
-  const chooseCustomer = (id) => setCustomerId(id);
   const setLine = (id, changes) => setCart((c) => c.map((y) => (y.p.id === id ? { ...y, ...changes } : y)));
   const removeLine = (id) => setCart((c) => c.filter((y) => y.p.id !== id));
   // Line amount at the agreed price less its discount; this is what the customer is charged before any sale discount.
@@ -170,7 +155,6 @@ export function PosPage() {
       .catch((e) => setLoadError(e.message));
   useEffect(() => {
     void search();
-    if (user?.permissions?.includes("accounts.view_customerprofile")) api("/api/v1/commerce/customers/").then(setCustomers).catch(() => {});
     // A reloaded till picks up the cashier's own checkout that is still waiting for payment.
     api("/api/v1/commerce/pos/checkouts/").then((data) => {
       const mine = (data?.checkouts || []).find((row) => row.cashier_id === user?.id);
@@ -308,18 +292,7 @@ export function PosPage() {
             <div className="posGrandTotal"><span>Total</span><strong>{money(total)}</strong></div>
           </div>
 
-          <details className="posCustomer" open={Boolean(customerId) || undefined}>
-            <summary>Customer{customerId ? `: ${customers.find((c) => String(c.id) === customerId)?.name || ""}` : " (optional)"}</summary>
-            <p className="muted">Walk-in customers need nothing. Choose a customer to put the sale on their record, or to let them owe part of it.</p>
-            <label>Customer<select name="customer_id" value={customerId} onChange={(e) => chooseCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}</select></label>
-            {canAddCustomer && (newCustomer ? <div className="inlineCreate" role="group" aria-label="New customer">
-              <label>Customer name<TextBox value={newCustomer.name} maxLength={150} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} /></label>
-              <label>Phone<TextBox value={newCustomer.phone} maxLength={30} inputMode="tel" onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} /></label>
-              <button type="button" disabled={!newCustomer.name.trim()} onClick={() => void addCustomer()}>Save customer</button>
-              <button type="button" className="secondary" onClick={() => { setNewCustomer(null); setCustomerError(""); }}>Cancel</button>
-              <FormError title="Could not add the customer." message={customerError} />
-            </div> : <button type="button" className="secondary" onClick={() => setNewCustomer({ name: "", phone: "" })}>+ New customer</button>)}
-          </details>
+          <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />
 
           <button className="posCharge" disabled={!cart.length || saleBusy}>
             <span>{saleBusy ? "Charging…" : "Charge"}</span>

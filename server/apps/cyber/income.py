@@ -193,9 +193,8 @@ class VisitInput(PaymentInput):
     lines = LineInput(many=True, allow_empty=False)
 
 
-def _record(request, lines, d, product=None):
-    """Checks each line against its price option's rules, then records them all as one job, sale and payment."""
-    _require(request, "cyber.add_cyberjob", "cyber.complete_cyber_job")
+def _job_lines(request, lines, product=None):
+    """The job lines for what was done, each checked against its price option's rules."""
     job_lines = []
     for line in lines:
         options = CyberServiceProfile.objects.select_related("variant__product").filter(pk=line["option_id"])
@@ -213,6 +212,13 @@ def _record(request, lines, d, product=None):
             except ValidationError as exc:
                 raise ValidationError(f"{name}: {exc.detail[0]}") from exc
         job_lines.append(_line(profile, line["quantity"], amount))
+    return job_lines
+
+
+def _record(request, lines, d, product=None):
+    """Records what was done as one job, sale and payment."""
+    _require(request, "cyber.add_cyberjob", "cyber.complete_cyber_job")
+    job_lines = _job_lines(request, lines, product)
     key = f"cyber-income:{d['idempotency_key']}"
     with transaction.atomic():
         existing = Payment.objects.filter(idempotency_key=key, sale__isnull=False).select_related("sale").first()
@@ -231,6 +237,30 @@ def record_visit(request):
     form.is_valid(raise_exception=True)
     sale = _record(request, form.validated_data["lines"], form.validated_data)
     return Response({"sale_id": sale.pk, "receipt_number": sale.number, "total": sale.total}, status=201)
+
+
+class ChargeInput(serializers.Serializer):
+    """A visit charged at the checkout, where the customer pays as at the till: cash, M-Pesa, bank, or owed."""
+    lines = LineInput(many=True, allow_empty=False)
+    service_id = serializers.IntegerField(required=False, allow_null=True)  # on a service's own page: only its options
+    customer_id = serializers.IntegerField(required=False, allow_null=True)
+    customer_name = serializers.CharField(max_length=160, required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(max_length=100)
+
+
+@api_view(["POST"])
+@permission_classes([HasLinTechPermission])
+def charge_visit(request):
+    from apps.commerce.checkout import checkout_data
+    from .checkout import charge_visit as charge, customer_in
+    _require(request, "cyber.view_cyberjob", "cyber.add_cyberjob", "cyber.complete_cyber_job")
+    form = ChargeInput(data=request.data)
+    form.is_valid(raise_exception=True)
+    d = form.validated_data
+    product = get_object_or_404(Product, pk=d["service_id"]) if d.get("service_id") else None
+    checkout = charge(user=request.user, store=request.store, key=d["idempotency_key"], lines=_job_lines(request, d["lines"], product),
+                      customer=customer_in(request.organization, d.get("customer_id")), customer_name=d["customer_name"])
+    return Response(checkout_data(checkout, user=request.user, with_candidates=True), status=201)
 
 
 def _check_amount(user, profile, quantity, amount):

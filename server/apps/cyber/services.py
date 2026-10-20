@@ -30,14 +30,18 @@ def audit(action, obj, user, before=None, after=None):
     )
 
 
+def job_number():
+    return f"CYB-{timezone.now():%y%m%d}-{uuid4().hex[:6].upper()}"
+
+
 @transaction.atomic
-def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone="", notes="", due_at=None, discount=0, allow_price_change=False):
+def create_job(*, user, lines, customer=None, walk_in_customer_name="", phone="", notes="", due_at=None, discount=0, allow_price_change=False, number=None):
     """``allow_price_change``: the caller has already checked an amount different from the list price against the
     service's own rules (income by service); the change is still audited."""
     if not lines:
         raise ValidationError("Add at least one cyber service.")
     job = CyberJob.objects.create(
-        number=f"CYB-{timezone.now():%y%m%d}-{uuid4().hex[:6].upper()}",
+        number=number or job_number(),
         customer=customer,
         walk_in_customer_name=walk_in_customer_name,
         phone=phone,
@@ -120,7 +124,9 @@ def set_job_status(*, job, status, user):
 
 
 @transaction.atomic
-def complete_job(*, job, user, payment_method, payment_reference="", idempotency_key=None):
+def complete_job(*, job, user, payment_method, payment_reference="", idempotency_key=None, due_date=None):
+    """Makes the job's sale. With ``payment_method`` the whole amount is paid that way; without one (the checkout,
+    which records its own payments on the sale) the customer owes it until they are recorded."""
     lock_business()
     job = CyberJob.objects.select_for_update().prefetch_related(
         "lines__variant__product", "lines__variant__material_requirements__material_variant"
@@ -141,6 +147,7 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
         subtotal=job.subtotal,
         discount=job.discount,
         total=job.total,
+        due_date=due_date,
     )
     from apps.commerce.pricing import cents, price_line, spread_discount, tax_config
     from apps.tenancy.models import Organization
@@ -188,17 +195,18 @@ def complete_job(*, job, user, payment_method, payment_reference="", idempotency
     sale.save(update_fields=["subtotal", "discount", "tax_total", "net_total", "total", "cogs", "gross_profit", "updated_at"])
     from apps.accounting.ledger import post_sale
     post_sale(sale)
-    from apps.commerce.settlements import mpesa_code
-    code = mpesa_code(payment_method, payment_reference)  # M-Pesa with its SMS code is confirmed; without one it waits
-    Payment.objects.create(
-        sale=sale,
-        method=payment_method,
-        amount=sale.total,
-        reference=payment_reference,
-        provider_transaction_id=code,
-        status="MANUAL_REVIEW" if payment_method == "MPESA" and not code else "COMPLETED",
-        idempotency_key=key,
-    )
+    if payment_method:
+        from apps.commerce.settlements import mpesa_code
+        code = mpesa_code(payment_method, payment_reference)  # M-Pesa with its SMS code is confirmed; without one it waits
+        Payment.objects.create(
+            sale=sale,
+            method=payment_method,
+            amount=sale.total,
+            reference=payment_reference,
+            provider_transaction_id=code,
+            status="MANUAL_REVIEW" if payment_method == "MPESA" and not code else "COMPLETED",
+            idempotency_key=key,
+        )
     job.sale = sale
     job.status = "COMPLETED"
     job.completed_at = timezone.now()

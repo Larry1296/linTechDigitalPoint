@@ -6,7 +6,6 @@ import { Empty, ErrorState, Loading } from "../../components/States";
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormError } from "../../components/forms/FormNotice";
 import {
-  completeCyberJob,
   updateCyberService,
   createCyberJob,
   deleteCyberJob,
@@ -21,10 +20,48 @@ import { CyberAnalysis } from "./CyberAnalysis";
 import { NewService, RecordIncome } from "./CyberIncomePage";
 import { api } from "../../core/api/client";
 import { askForm, confirmAction, showError } from "../../core/ui/alerts";
-import { label, PAYMENT_METHODS } from "../../core/ui/labels";
+import { label } from "../../core/ui/labels";
+import { CustomerChooser, useCustomers } from "../pos/CustomerChooser";
+import { CyberPay, useOpenCyberCheckout } from "./CyberPay";
 import { ReceiptPanel } from "../receipts/ReceiptPanel";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { PartBooks } from "../admin/PartBooks";
+// A done job charged and paid at the same checkout as the till: first who pays (a named customer can owe part of it),
+// then cash, M-Pesa, bank, a mix, or owed.
+function JobPayment({ user, job, checkout, setCheckout, onPaid, onClose }) {
+  const [customers, setCustomers] = useCustomers(user);
+  const [customerId, setCustomerId] = useState(job?.customer ? String(job.customer) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const charge = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      setCheckout(await api(`/api/v1/cyber/jobs/${job.id}/checkout/`, { method: "POST",
+        body: JSON.stringify({ idempotency_key: crypto.randomUUID(), ...(customerId ? { customer_id: customerId } : {}) }) }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="formCard incomeEntry" aria-label="Pay for the job">
+      <h2>Pay &amp; complete {job?.number || ""}</h2>
+      {checkout ? <CyberPay checkout={checkout} customers={customers} onChange={setCheckout} onDone={onPaid}
+        onBack={() => { setCheckout(null); onClose(); }} /> : <>
+        <p className="muted">{job.walk_in_customer_name || "Walk-in"} · {businessCurrency()} {job.total}</p>
+        <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />
+        <div className="actionRow">
+          <button type="button" disabled={busy} onClick={() => void charge()}>{busy ? "Charging…" : `Charge ${businessCurrency()} ${job.total}`}</button>
+          <button type="button" className="secondary" onClick={onClose}>Cancel</button>
+        </div>
+        <FormError title={`Could not charge job ${job.number}.`} message={error} />
+      </>}
+    </section>
+  );
+}
+
 export function CyberDashboardPage() {
   const { user } = useAuth();
   const canManageServices = Boolean(user?.permissions?.includes("cyber.add_cyberserviceprofile") && user?.permissions?.includes("catalog.add_product"));
@@ -43,6 +80,9 @@ export function CyberDashboardPage() {
   const [takingJob, setTakingJob] = useState(false);
   const [income, setIncome] = useState({ services: [], groups: [] });
   const [addingService, setAddingService] = useState(false);
+  // The job being paid for, and its checkout once charged (picked up again after a reload).
+  const [paying, setPaying] = useState(null);
+  const [jobCheckout, setJobCheckout] = useOpenCyberCheckout(user, (row) => Boolean(row.job_id));
   const load = async () => {
     try {
       const [summary, jobRows, serviceRows, incomeRows] = await Promise.all([
@@ -95,30 +135,14 @@ export function CyberDashboardPage() {
       await showError(failure, err.message);
     }
   };
-  const complete = async (job) => {
-    const paid = await askForm({
-      title: `Complete job ${job.number}?`,
-      text: "This records the payment and marks the job as completed.",
-      confirmButtonText: "Pay & complete",
-      fields: [
-        { name: "method", label: "Paid by", type: "select", options: PAYMENT_METHODS, value: "CASH", required: true },
-        { name: "reference", label: "Payment reference, e.g. the M-Pesa code", placeholder: "e.g. SJK4H7T2QX" },
-      ],
-    });
-    if (!paid) return;
-    try {
-      const result = await completeCyberJob(job.id, {
-        payment_method: paid.method,
-        payment_reference: paid.reference,
-        idempotency_key: `cyber:${job.number}`,
-      });
-      setReceipt(`${result.receipt_number} · ${businessCurrency()} ${result.total} · ${label(paid.method)}`);
-      setReceiptSale(result.sale_id);
-      await load();
-    } catch (err) {
-      await showError(`Could not complete job ${job.number}.`, err.message);
-    }
+  const paid = async (result) => {
+    setJobCheckout(null);
+    setPaying(null);
+    setReceipt(`${result.receipt.receipt_number} · ${businessCurrency()} ${result.receipt.total}`);
+    setReceiptSale(result.receipt.sale_id);
+    await load();
   };
+  const payingJob = paying || (jobCheckout && (jobs.find((job) => job.id === jobCheckout.job_id) || { id: jobCheckout.job_id, number: "", total: jobCheckout.total }));
   return (
     <>
       <span className="eyebrow">{user?.organization?.business_type || "Services"}</span>
@@ -134,6 +158,8 @@ export function CyberDashboardPage() {
         </div>
       )}
       {showReceipt && receiptSale && <ReceiptPanel saleId={receiptSale} onClose={() => setShowReceipt(false)} />}
+      {payingJob && <JobPayment user={user} job={payingJob} checkout={jobCheckout} setCheckout={setJobCheckout} onPaid={paid}
+        onClose={() => setPaying(null)} />}
       <div className="metrics">
         <MetricCard label="Revenue since the start">
           {businessCurrency()} {dashboard.all_time?.revenue ?? 0}
@@ -261,7 +287,7 @@ export function CyberDashboardPage() {
                       )}
                     {job.status !== "COMPLETED" &&
                       job.status !== "CANCELLED" && (
-                        <button onClick={() => void complete(job)}>
+                        <button onClick={() => { setPaying(job); window.scrollTo?.({ top: 0, behavior: "smooth" }); }} disabled={Boolean(payingJob)}>
                           Pay & complete
                         </button>
                       )}
