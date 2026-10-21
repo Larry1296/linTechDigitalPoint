@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
+from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -199,6 +199,16 @@ class InvestmentUndoView(APIView):
 
     def post(self, request, pk):
         movement = undo(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, reason=str(request.data.get("reason") or ""))
+        return Response(investment_row(movement.investment))
+
+
+class InvestmentClaimView(APIView):
+    """Money recorded as the owner's own that was really the business's."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.reverse_cashentry"
+
+    def post(self, request, pk):
+        movement = claim(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, note=str(request.data.get("note") or ""))
         return Response(investment_row(movement.investment))
 
 

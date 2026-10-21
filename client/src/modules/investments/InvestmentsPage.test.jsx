@@ -95,6 +95,31 @@ it("puts in the owner's own money from outside, of any amount, without a warning
   expect(JSON.parse(options.body)).not.toHaveProperty("origin");
 });
 
+it("adds business money that was already in the investment without taking it from the till", async () => {
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
+  const form = within(card).getByRole("form", { name: "Add money" });
+  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "1300" } });
+  fireEvent.change(within(form).getByLabelText("Money source"), { target: { value: "EARLIER" } });
+  expect(within(form).queryByLabelText("Taken from")).toBeNull();
+  expect(within(form).getByText(/nothing is taken from the till, cash or bank now/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
+  const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "1300", source: "EARLIER" }));
+});
+
+it("marks money recorded as the owner's own as the business's", async () => {
+  const own = { id: 11, kind: "DEPOSIT", amount: "1300.00", occurred_on: "2026-09-01", source: "OWNER", reference: "", note: "", statement_balance: null, reversed_at: null };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing({ ...mmf, movements: [...mmf.movements, own] })));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  const claims = within(card).getAllByRole("button", { name: "It was the business's money" });
+  expect(claims).toHaveLength(1);
+  await act(async () => { fireEvent.click(claims[0]); });
+  expect(api.mock.calls.some(([p, o]) => p === "/api/v1/accounting/investments/movements/11/business/" && o.method === "POST")).toBe(true);
+});
+
 it("records a statement balance and can undo a mistake", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");

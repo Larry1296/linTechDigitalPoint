@@ -439,3 +439,47 @@ def test_own_money_dated_earlier_earns_from_that_day_and_each_statement_keeps_th
     from apps.accounting.models import CashEntry
     with organization_context(org):
         assert not CashEntry.objects.exists()
+
+
+def test_money_recorded_as_the_owners_is_marked_as_the_business_and_its_interest_share_follows(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    row = _mixed(client, mmf)
+    own = next(m for m in row["movements"] if m["source"] == "OWNER")
+    claimed = client.post(f"/api/v1/accounting/investments/movements/{own['id']}/business/", {}, format="json")
+    assert claimed.status_code == 200, claimed.content
+    row = claimed.json()
+    # All the money was the business's all month, so all of it and all its interest are now in the books and profit.
+    assert (D(row["from_shop"]), D(row["from_owner"]), D(row["value"])) == (D("80000"), D("0"), D("80800"))
+    assert (D(row["shop_interest"]), D(row["owner_interest"])) == (D("800"), D("0"))
+    earlier = next(m for m in row["movements"] if m["source"] == "EARLIER")
+    assert earlier["occurred_on"] == own["occurred_on"] and not earlier["reversed_at"]
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("80800") and accounts["3000"]["balance"] == D("-60000")
+    assert pl["net_profit_before_tax"] == D("800")
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"]
+    # The same click again changes nothing, and money from the business cannot be marked again.
+    assert client.post(f"/api/v1/accounting/investments/movements/{own['id']}/business/", {}, format="json").status_code == 200
+    assert _books(org)[0]["1400"]["balance"] == D("80800")
+    shop_in = next(m for m in row["movements"] if m["source"] == "BANK")
+    assert client.post(f"/api/v1/accounting/investments/movements/{shop_in['id']}/business/", {}, format="json").status_code == 400
+    # Undoing it takes the money and its share of the interest back out of the books.
+    undone = client.post(f"/api/v1/accounting/investments/movements/{earlier['id']}/undo/", {"reason": "test"}, format="json")
+    assert undone.status_code == 200, undone.content
+    accounts, checks, pl = _books(org)
+    assert accounts["3000"]["balance"] == 0 and pl["net_profit_before_tax"] == D("800")
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"]
+
+
+def test_business_money_already_in_the_investment_is_added_without_touching_the_till(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    put = _move(client, mmf, "DEPOSIT", "1300", "EARLIER", "earlier-in", occurred_on=str(timezone.localdate() - timedelta(days=20)))
+    assert put.status_code == 201, put.content
+    row = _move(client, mmf, "DEPOSIT", "2000", "MPESA", "more-in").json()
+    assert (D(row["from_shop"]), D(row["from_owner"]), D(row["invested"])) == (D("3300"), D("0"), D("3300"))
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("3300") and accounts["3000"]["balance"] == D("-1300")
+    assert pl["net_profit_before_tax"] == 0
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"]
+    assert _move(client, mmf, "WITHDRAWAL", "100", "EARLIER", "earlier-out").status_code == 400

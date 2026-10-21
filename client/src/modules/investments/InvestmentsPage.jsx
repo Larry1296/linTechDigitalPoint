@@ -15,7 +15,10 @@ const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa 
 // The owner's own money from outside the business: any amount can go in, no till, drawer or bank changes, and it is
 // kept out of the business's books; it earns interest with the rest, but only the business's share is profit.
 const OWNER = ["OWNER", "My own money (from outside the business)"];
-const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY, OWNER])[value] || value;
+// The business's money that was already in the investment before it was recorded here: it left the till, cash or bank
+// long ago, so they do not change now.
+const EARLIER = ["EARLIER", "Business money already in it (put in before)"];
+const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY, OWNER, EARLIER])[value] || value;
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -144,9 +147,9 @@ function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
 function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel }) {
   const putIn = kind === "DEPOSIT";
   // First whose money it is (the business's, or the owner's own from outside), then which business account.
-  const [origin, setOrigin] = useState(preset?.source === OWNER[0] ? "OWN" : "BUSINESS");
-  const [account, setAccount] = useState(preset?.source && preset.source !== OWNER[0] ? preset.source : "MPESA");
-  const source = origin === "OWN" ? OWNER[0] : account;
+  const [origin, setOrigin] = useState(preset?.source === OWNER[0] ? "OWN" : preset?.source === EARLIER[0] ? "EARLIER" : "BUSINESS");
+  const [account, setAccount] = useState(preset?.source && ![OWNER[0], EARLIER[0]].includes(preset.source) ? preset.source : "MPESA");
+  const source = origin === "OWN" ? OWNER[0] : origin === "EARLIER" && putIn ? EARLIER[0] : account;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Number(investment.value))));
   const available = (value) => spare.find((p) => p.method === value)?.expected;
   const short = putIn && available(source) != null && Number(amount) > Number(available(source));
@@ -154,6 +157,7 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
   const [error, setError] = useState("");
   const agency = source.startsWith("AGENCY_");
   const own = source === OWNER[0];
+  const earlier = source === EARLIER[0];
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -162,6 +166,7 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
     const text = own
       ? (putIn ? "It is your own money, not the business's: it is kept out of the business's books. It earns interest with the rest, and only the business's share of the interest is profit."
         : "It goes back to you. Your cash, till and bank do not change.")
+      : earlier ? "It is the business's money, counted with the rest of the business's money in it. It left the till, cash or bank before, so they do not change now."
       : putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`;
     const added = Number(investment.value) > 0 ? ` It is added to the ${money(investment.value)} already in it.` : "";
     if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
@@ -186,10 +191,15 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
         <FormField label={putIn ? "Money source" : "Money goes to"}>
           <select name="origin" value={origin} onChange={(event) => setOrigin(event.target.value)}>
             <option value="BUSINESS">{putIn ? "From the business" : "Back into the business"}</option>
+            {putIn && <option value="EARLIER">{EARLIER[1]}</option>}
             <option value="OWN">{putIn ? OWNER[1] : "Me, the owner (out of the business)"}</option>
           </select>
         </FormField>
-        {own
+        {earlier
+          ? <><input type="hidden" name="source" value={EARLIER[0]} />
+            <p className="muted">For business money that was put in before it was recorded here. It counts as the business&apos;s
+              money in the investment, but nothing is taken from the till, cash or bank now.</p></>
+          : own
           ? <><input type="hidden" name="source" value={OWNER[0]} />
             <p className="muted">{putIn ? "Nothing is taken from the business: its cash, till and bank stay as they are."
               : "Nothing goes back into the business: its cash, till and bank stay as they are."}</p></>
@@ -481,12 +491,26 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
       text: m.source === OWNER[0] ? "It was your own money, so your cash, till and bank do not change."
+        : m.source === EARLIER[0] ? "It was business money put in before, so your cash, till and bank do not change."
         : m.source ? `The money goes back to your ${sourceName(m.source).toLowerCase()}.` : "The investment's value goes back to what it was.",
       confirmButtonText: "Undo", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. entered twice" }] });
     if (!values) return;
     setError("");
     try {
       await api(`/api/v1/accounting/investments/movements/${m.id}/undo/`, { method: "POST", body: JSON.stringify({ reason: values.reason }) });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  // Money recorded as the owner's own that was really the business's: it moves to the business's share.
+  const claim = async (m) => {
+    if (!(await confirmAction({ title: `Was this ${money(m.amount)} the business's money?`,
+      text: "It moves to the business's money in this investment, on the same date, and the business's share of the interest earned since is worked out again. Your cash, till and bank do not change.",
+      confirmButtonText: "Yes, it was the business's" }))) return;
+    setError("");
+    try {
+      await api(`/api/v1/accounting/investments/movements/${m.id}/business/`, { method: "POST", body: JSON.stringify({}) });
       await onChanged();
     } catch (err) {
       setError(err.message);
@@ -543,7 +567,9 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
               <td>{money(m.amount)}{m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
               <td>{m.source ? sourceName(m.source) : "—"}</td>
               <td>{m.reference || m.note || "—"}</td>
-              <td>{!m.reversed_at && canCorrect && <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button>}</td>
+              <td>{!m.reversed_at && canCorrect && <div className="actionRow">
+                {m.kind === "DEPOSIT" && m.source === OWNER[0] && <button type="button" className="secondary" onClick={() => void claim(m)}>It was the business&apos;s money</button>}
+                <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
             </tr>
           ))}</tbody>
         </table>
