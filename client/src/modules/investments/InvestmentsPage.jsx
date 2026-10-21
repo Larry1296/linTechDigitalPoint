@@ -508,6 +508,9 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
+        <div><dt>From the shop</dt><dd>{money(investment.from_shop)}</dd></div>
+        <div><dt>From my own money</dt><dd>{money(investment.from_owner)}</dd></div>
+        <div><dt>Total invested</dt><dd><strong>{money(investment.invested)}</strong> <small>interest is earned on this</small></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
@@ -644,7 +647,13 @@ export function InvestmentsPage() {
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
             <small>Goes up every day as interest builds</small></article>}
-        <article><span>Invested now</span><strong>{money(data.total_value)}</strong></article>
+        <article><span>From the shop</span><strong>{money(data.from_shop)}</strong>
+          <small>The business's money in investments</small></article>
+        <article><span>From my own money</span><strong>{money(data.from_owner)}</strong>
+          <small>Put in from outside the business</small></article>
+        <article><span>Total invested</span><strong>{money(data.invested)}</strong>
+          <small>Shop and own money together; interest is earned on this</small></article>
+        <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>

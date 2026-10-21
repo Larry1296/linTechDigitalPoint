@@ -71,6 +71,24 @@ def value(investment):
     return sum((SIGN[kind] * amount for kind, amount in totals(investment).items()), Decimal("0"))
 
 
+def shares(investment):
+    """{"shop", "owner"}: how much of the money put in, and not yet taken out, came from the business and how much from
+    the owner's own money outside it. Interest and fees belong to the whole and are not split. Money taken out to the
+    owner comes off the owner's share and money taken back into the business off the shop's; when one share runs out,
+    the rest comes off the other."""
+    share = {"shop": Decimal("0"), "owner": Decimal("0")}
+    for m in _live(investment).filter(kind__in=[InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL]).order_by("occurred_on", "pk"):
+        side = "owner" if m.source == OWNER else "shop"
+        if m.kind == InvestmentMovement.DEPOSIT:
+            share[side] += m.amount
+            continue
+        other = "shop" if side == "owner" else "owner"
+        taken = min(m.amount, share[side])
+        share[side] -= taken
+        share[other] = max(share[other] - (m.amount - taken), Decimal("0"))
+    return share
+
+
 def _amount(raw):
     amount = money(raw)
     if amount <= 0:

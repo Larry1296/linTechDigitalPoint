@@ -94,6 +94,20 @@ def test_the_owners_own_money_goes_in_without_touching_the_business_money(shop):
     assert accounts["1400"]["balance"] == D("500000") and accounts["3000"]["balance"] == D("-500000")
 
 
+def test_shop_money_and_own_money_are_shown_apart_and_added_up(shop):
+    client, *_ = shop
+    mmf = _mmf(client)
+    _move(client, mmf, "DEPOSIT", "20000", "BANK", "split-shop")
+    _move(client, mmf, "DEPOSIT", "50000", "OWNER", "split-own")
+    row = _move(client, mmf, "WITHDRAWAL", "5000", "BANK", "split-back").json()
+    assert (D(row["from_shop"]), D(row["from_owner"]), D(row["invested"])) == (D("15000"), D("50000"), D("65000"))
+    # Taken back into the business beyond what the shop put in: the rest comes off the owner's share.
+    row = _move(client, mmf, "WITHDRAWAL", "20000", "BANK", "split-more").json()
+    assert (D(row["from_shop"]), D(row["from_owner"]), D(row["invested"])) == (D("0"), D("45000"), D("45000"))
+    listed = client.get("/api/v1/accounting/investments/").json()
+    assert (D(listed["from_shop"]), D(listed["from_owner"]), D(listed["invested"])) == (D("0"), D("45000"), D("45000"))
+
+
 def test_a_lower_statement_is_a_fee_and_mistakes_are_undone_in_order(shop):
     client, org, *_ = shop
     mmf = _mmf(client)

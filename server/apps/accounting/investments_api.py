@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, totals, undo, value
+from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -44,9 +44,12 @@ def investment_row(investment):
     sums = totals(investment)
     latest = current_rate(investment)
     guess = estimate(investment)
+    share = shares(investment)
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
-            "fees": sums["FEE"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
+            "fees": sums["FEE"],
+            # Money in it now by where it came from; together they are the total invested, which interest is earned on.
+            "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
             "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment), "statements": statement_checks(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
@@ -99,7 +102,11 @@ class InvestmentsView(APIView):
 
     def get(self, request):
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
-        return Response({"investments": rows, "total_value": sum((r["value"] for r in rows), Decimal("0")),
+        return Response({"investments": rows,
+                         "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
+                         "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
+                         "invested": sum((r["invested"] for r in rows), Decimal("0")),
+                         "total_value": sum((r["value"] for r in rows), Decimal("0")),
                          # What it is all worth today: the recorded value plus the interest estimated since each statement.
                          "worth_today": sum((r["estimate"]["value"] if r["estimate"] else r["value"] for r in rows), Decimal("0")),
                          "interest_earned": sum((r["interest"] - r["fees"] for r in rows), Decimal("0")),
