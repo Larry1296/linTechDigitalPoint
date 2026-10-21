@@ -4,12 +4,15 @@ Putting money in moves it from cash, M-Pesa, bank or the agency's cash or float 
 asset: it is still the business's money, so it is neither an expense nor income and profit does not change.
 Taking it out moves it back. Interest is income (4910) and fees are an expense (6200); both are usually worked
 out from the fund's statement balance. Business money appears in the cash book (kind INVESTMENT); agency money
-goes through the open agency shift (type INVESTMENT) so the desk's cash and float stay right. The owner's own money
-from outside the business (OWNER) is owner capital (3000) put straight into the investment, so no till, drawer or
-bank changes and any amount can be put in; taken out to the owner, it is the owner taking capital back. Mistakes are
-undone, never edited or deleted.
+goes through the open agency shift (type INVESTMENT) so the desk's cash and float stay right.
+
+The owner's own money from outside the business (OWNER) is not the business's: it is kept on the Investments page so
+the interest is worked out on everything in the fund, but it never enters the books. Each movement keeps the part that
+is the business's (business_amount), and only that part is posted: the business's money in "Investments" (1400), and
+only the business's share of interest and fees in profit. Interest and fees are shared by how much of the money in the
+fund was the business's, day by day, over the time they were earned. Mistakes are undone, never edited or deleted.
 """
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum
@@ -18,7 +21,7 @@ from rest_framework.exceptions import ValidationError
 from apps.tenancy.transactions import lock_business
 from .ledger import cash_code, money, paired, post_journal, resolve_branch, reverse_journal
 from .models import Investment, InvestmentMovement, JournalEntry
-from .services import audit, post, reverse as reverse_cash
+from .services import FinancialPeriod, audit, post, reverse as reverse_cash
 
 BUSINESS = {"CASH", "MPESA", "BANK", "OTHER"}
 AGENCY = {"AGENCY_CASH", "AGENCY_FLOAT"}
@@ -71,22 +74,75 @@ def value(investment):
     return sum((SIGN[kind] * amount for kind, amount in totals(investment).items()), Decimal("0"))
 
 
+def _business(movement):
+    return movement.amount if movement.business_amount is None else movement.business_amount
+
+
+def business_value(investment):
+    """The part of what the investment holds that is the business's money, as in the books (1400)."""
+    return sum((SIGN[m.kind] * _business(m) for m in _live(investment)), Decimal("0"))
+
+
 def shares(investment):
-    """{"shop", "owner"}: how much of the money put in, and not yet taken out, came from the business and how much from
-    the owner's own money outside it. Interest and fees belong to the whole and are not split. Money taken out to the
-    owner comes off the owner's share and money taken back into the business off the shop's; when one share runs out,
-    the rest comes off the other."""
-    share = {"shop": Decimal("0"), "owner": Decimal("0")}
-    for m in _live(investment).filter(kind__in=[InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL]).order_by("occurred_on", "pk"):
-        side = "owner" if m.source == OWNER else "shop"
-        if m.kind == InvestmentMovement.DEPOSIT:
-            share[side] += m.amount
-            continue
-        other = "shop" if side == "owner" else "owner"
-        taken = min(m.amount, share[side])
-        share[side] -= taken
-        share[other] = max(share[other] - (m.amount - taken), Decimal("0"))
-    return share
+    """How the investment splits between the business and the owner's own money from outside it:
+    {shop, owner}: the money put in and not taken out, by where it came from (together, the total invested);
+    {shop_interest, owner_interest}: each one's share of the interest less fees; {shop_value, owner_value}: what each holds now."""
+    put = {"shop": Decimal("0"), "owner": Decimal("0")}
+    earned = {"shop": Decimal("0"), "owner": Decimal("0")}
+    for m in _live(investment):
+        mine = _business(m)
+        target = put if m.kind in (InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL) else earned
+        target["shop"] += SIGN[m.kind] * mine
+        target["owner"] += SIGN[m.kind] * (m.amount - mine)
+    held = {side: put[side] + earned[side] for side in put}
+    # Interest taken out shows as less put in; what was put in never shows below zero.
+    principal = {side: min(max(put[side], Decimal("0")), max(held[side], Decimal("0"))) for side in put}
+    return {"shop": principal["shop"], "owner": principal["owner"], "shop_interest": earned["shop"], "owner_interest": earned["owner"],
+            "shop_value": held["shop"], "owner_value": held["owner"]}
+
+
+def business_fraction(investment, since, until, movements=None):
+    """The share of the money in the investment that was the business's from since to until, day by day: what interest
+    earned (or fees taken) over those days is shared by. 1 when there was no money in it."""
+    live = list(_live(investment).order_by("occurred_on", "pk")) if movements is None else movements
+    mine = everything = Decimal("0")
+    weighted_mine = weighted_all = Decimal("0")
+    i = 0
+    for day_number in range(max((until - since).days, 0) + 1):
+        day = since + timedelta(days=day_number)
+        while i < len(live) and live[i].occurred_on <= day:
+            m = live[i]
+            mine += SIGN[m.kind] * _business(m)
+            everything += SIGN[m.kind] * m.amount
+            i += 1
+        if day > since or since == until:
+            weighted_mine += max(mine, Decimal("0"))
+            weighted_all += max(everything, Decimal("0"))
+    if weighted_all <= 0:
+        return Decimal("1")
+    return min(max(weighted_mine / weighted_all, Decimal("0")), Decimal("1"))
+
+
+def _lines(kind, source, amount, mine):
+    """The journal lines for a movement: only the business's part (mine) touches the books. Money taken out into the
+    business beyond the business's part is the owner's money coming in (owner capital); taken out to the owner, the
+    business's part is the owner taking the business's money."""
+    counter = None if source == OWNER else "3000" if source in AGENCY else cash_code(source) if source else None
+    if kind == InvestmentMovement.DEPOSIT:
+        return paired("1400", counter, mine) if counter and mine else []
+    if kind == InvestmentMovement.WITHDRAWAL:
+        if counter is None:
+            return paired("3000", "1400", mine) if mine else []
+        return [(counter, amount, 0), ("1400", 0, mine), ("3000", 0, amount - mine)]
+    if kind == InvestmentMovement.INTEREST:
+        return paired("1400", "4910", mine) if mine else []
+    return paired("6200", "1400", mine) if mine else []
+
+
+def _post(movement, words, lines, key=None, day=None):
+    if lines:
+        post_journal(key=key or f"investment:{movement.pk}", description=words[:240], branch=movement.branch_id,
+                     date=day or movement.occurred_on, user=movement.created_by, lines=lines)
 
 
 def _amount(raw):
@@ -161,10 +217,15 @@ def move(*, investment, user, kind, amount, source, key, occurred_on=None, refer
                               "If the statement shows more, record the interest first.")
     reference = str(reference or "").strip().upper()[:120]
     words = f"{'Put into' if putting_in else 'Taken out of'} {investment.name}"
+    if putting_in:
+        mine = Decimal("0") if source == OWNER else amount
+    else:
+        held, mine_held = value(investment), business_value(investment)
+        # Money taken back into the business comes off the business's part first; taken out to the owner, off the owner's.
+        mine = max(amount - (held - mine_held), Decimal("0")) if source == OWNER else min(amount, max(mine_held, Decimal("0")))
     entry = agency = None
     if source == OWNER:
         branch = resolve_branch()
-        lines = paired("1400", "3000", amount) if putting_in else paired("3000", "1400", amount)
     elif source in AGENCY:
         if day != timezone.localdate():
             raise ValidationError("Agency cash and float can only be moved today, through the open shift.")
@@ -174,18 +235,16 @@ def move(*, investment, user, kind, amount, source, key, occurred_on=None, refer
         agency, _ = post_transaction(session=session, transaction_type="INVESTMENT", transaction_amount=amount, user=user,
                                      idempotency_key=f"investment:{key}", notes=words,
                                      cash_delta=change if source == "AGENCY_CASH" else 0, float_delta=change if source == "AGENCY_FLOAT" else 0)
+        # The agency side already posted against owner capital (3000); the lines below move it from there into the investment.
         branch = session.outlet.store
-        # The agency side already posted against owner capital (3000); this moves it from there into the investment.
-        lines = paired("1400", "3000", amount) if putting_in else paired("3000", "1400", amount)
     else:
         branch = resolve_branch()
         entry = post(unit="SHOP", method=source, amount=-amount if putting_in else amount, kind="INVESTMENT", reference=words[:160],
                      key=f"investment:{key}", user=user, occurred_at=_moment(day), reason=note, branch=branch, journal=False)
-        lines = paired("1400", cash_code(source), amount) if putting_in else paired(cash_code(source), "1400", amount)
-    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, occurred_on=day, source=source,
+    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=mine, occurred_on=day, source=source,
                                                  reference=reference, note=str(note or "").strip(), entry=entry, agency_transaction=agency, purchase=purchase,
                                                  branch=branch, idempotency_key=key, created_by=user)
-    post_journal(key=f"investment:{movement.pk}", description=words[:240], branch=branch, date=day, user=user, lines=lines)
+    _post(movement, words, _lines(kind, source, amount, mine))
     audit(movement, user, f"{words}: {amount}")
     return movement
 
@@ -232,17 +291,18 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
     amount = abs(difference)
     branch = resolve_branch()
     # The app's own prediction for the same date is kept beside it, so each statement shows how close the estimate was.
-    from .investment_interest import estimate
+    from .investment_interest import estimate, last_check
     guess = estimate(investment, today=day)
-    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, occurred_on=day,
+    # Only the business's share of the interest (or fees) is the business's: the rest was earned on the owner's own money.
+    mine = (amount * business_fraction(investment, last_check(investment, day), day)).quantize(Decimal("0.01"))
+    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=mine, occurred_on=day,
                                                  note=str(note or "").strip(), statement_balance=balance, branch=branch,
                                                  predicted_interest=guess["net"] if guess else None,
                                                  predicted_since=guess["since"] if guess else None,
                                                  idempotency_key=key, created_by=user)
     words = f"{'Interest earned on' if kind == InvestmentMovement.INTEREST else 'Fees or loss on'} {investment.name}"
-    post_journal(key=f"investment:{movement.pk}", description=words[:240], branch=branch, date=day, user=user,
-                 lines=paired("1400", "4910", amount) if kind == InvestmentMovement.INTEREST else paired("6200", "1400", amount))
-    audit(movement, user, f"{words}: {amount} (statement {balance})")
+    _post(movement, words, _lines(kind, "", amount, mine))
+    audit(movement, user, f"{words}: {amount}, the business's share {mine} (statement {balance})")
     return movement
 
 
@@ -258,15 +318,18 @@ def undo(*, movement, user, reason):
         return movement
     if SIGN[movement.kind] > 0 and value(movement.investment) - movement.amount < 0:
         raise ValidationError("Money has since been taken out of this investment. Undo that first.")
+    settle_books()
     if movement.agency_transaction_id:
         from apps.mpesa.services import reverse_transaction
         reverse_transaction(original=movement.agency_transaction, user=user, idempotency_key=f"investment-undo:{movement.pk}",
                             reason=reason, allow_investment=True)
     if movement.entry_id:
         reverse_cash(entry=movement.entry, user=user, reason=reason, allow_investment=True)
-    journal = JournalEntry.objects.filter(source_key=f"investment:{movement.pk}").first()
-    if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
-        reverse_journal(journal, user=user, reason=reason, key=f"investment-undo:{movement.pk}")
+    for posted, undo_key in ((f"investment:{movement.pk}", f"investment-undo:{movement.pk}"),
+                             (f"investment-share:{movement.pk}", f"investment-share-undo:{movement.pk}")):
+        journal = JournalEntry.objects.filter(source_key=posted).first()
+        if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
+            reverse_journal(journal, user=user, reason=reason, key=undo_key)
     InvestmentMovement.objects.filter(pk=movement.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
     movement.refresh_from_db()
     return movement
@@ -294,3 +357,59 @@ def remove(*, investment, user, reason):
     investment.refresh_from_db()
     audit(investment, user, f"Investment account {investment.name} removed: {reason}")
     return investment
+
+
+@transaction.atomic
+def settle_books():
+    """Records from before the owner's own money was kept out of the books: work out the business's part of each, in
+    order, and take the rest out of the books with a correction (on its own date, or today if that period is closed).
+    Done once per record; afterwards there is nothing left to do."""
+    old = InvestmentMovement.objects.filter(business_amount__isnull=True)
+    if not old.exists():
+        return
+    lock_business()
+    for investment in Investment.objects.filter(pk__in=old.values("investment")):
+        mine = everything = Decimal("0")
+        for m in investment.movements.order_by("occurred_on", "pk"):
+            if m.business_amount is None:
+                if m.kind == InvestmentMovement.DEPOSIT:
+                    share = Decimal("0") if m.source == OWNER else m.amount
+                elif m.kind == InvestmentMovement.WITHDRAWAL:
+                    share = (max(m.amount - (everything - mine), Decimal("0")) if m.source == OWNER
+                             else min(m.amount, max(mine, Decimal("0"))))
+                else:
+                    since = m.predicted_since or _last_before(investment, m)
+                    share = (m.amount * _fraction_before(investment, m, since)).quantize(Decimal("0.01"))
+                InvestmentMovement.objects.filter(pk=m.pk).update(business_amount=share)
+                m.business_amount = share
+                if not m.reversed_at and share != m.amount:
+                    _correct(m, share)
+            if not m.reversed_at:
+                mine += SIGN[m.kind] * m.business_amount
+                everything += SIGN[m.kind] * m.amount
+
+
+def _last_before(investment, movement):
+    earlier = investment.movements.filter(reversed_at__isnull=True, occurred_on__lt=movement.occurred_on).order_by("occurred_on", "pk")
+    checks = [m.occurred_on for m in earlier if m.kind in (InvestmentMovement.INTEREST, InvestmentMovement.FEE)]
+    first = earlier.first()
+    return max(checks) if checks else (first.occurred_on if first else movement.occurred_on)
+
+
+def _fraction_before(investment, movement, since):
+    """business_fraction as it stood when this statement was recorded: only the records before it count."""
+    earlier = [m for m in _live(investment).order_by("occurred_on", "pk")
+               if (m.occurred_on, m.pk) < (movement.occurred_on, movement.pk)]
+    return business_fraction(investment, since, movement.occurred_on, earlier)
+
+
+def _correct(movement, share):
+    """The books took the whole amount; the owner's part comes out again. Posted under its own key, undone with it."""
+    owners = movement.amount - share
+    counter = {InvestmentMovement.INTEREST: "4910", InvestmentMovement.FEE: "6200"}.get(movement.kind, "3000")
+    lines = paired(counter, "1400", owners) if SIGN[movement.kind] > 0 else paired("1400", counter, owners)
+    day = movement.occurred_on
+    if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
+        day = timezone.localdate()
+    _post(movement, f"Owner's own money in {movement.investment.name} kept out of the books", lines,
+          key=f"investment-share:{movement.pk}", day=day)

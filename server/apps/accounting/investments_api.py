@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, shares, totals, undo, value
+from .investments import KINDS, SOURCES, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -49,11 +49,14 @@ def investment_row(investment):
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"],
             # Money in it now by where it came from; together they are the total invested, which interest is earned on.
-            "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
+            # Only the business's part, and its share of the interest, is in the books and profit.
+            "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"],
+            "shop_interest": share["shop_interest"], "owner_interest": share["owner_interest"],
+            "shop_value": share["shop_value"], "owner_value": share["owner_value"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
             "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment), "statements": statement_checks(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
-            "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "occurred_on": m.occurred_on, "source": m.source,
+            "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "business_amount": m.business_amount, "occurred_on": m.occurred_on, "source": m.source,
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
                            "recorded_by": _name(m.created_by), "reversed_at": m.reversed_at, "reverse_reason": m.reverse_reason,
                            "purchase": _purchase(m.purchase) if m.purchase_id else None}
@@ -101,11 +104,15 @@ class InvestmentsView(APIView):
     permission_required = "accounting.view_investment"
 
     def get(self, request):
+        settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
         return Response({"investments": rows,
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),
+                         "shop_value": sum((r["shop_value"] for r in rows), Decimal("0")),
+                         "shop_interest": sum((r["shop_interest"] for r in rows), Decimal("0")),
+                         "owner_interest": sum((r["owner_interest"] for r in rows), Decimal("0")),
                          "total_value": sum((r["value"] for r in rows), Decimal("0")),
                          # What it is all worth today: the recorded value plus the interest estimated since each statement.
                          "worth_today": sum((r["estimate"]["value"] if r["estimate"] else r["value"] for r in rows), Decimal("0")),

@@ -706,14 +706,18 @@ def top_customers(ctx, args):
 def investments(ctx, args):
     from apps.accounting import fund_rates
     from apps.accounting.investment_interest import earnings, estimate, rate_now
-    from apps.accounting.investments import totals, value
+    from apps.accounting.investments import shares, totals, value
     from apps.accounting.models import Investment
     rows = []
     for inv in Investment.objects.filter(removed_at__isnull=True):
         t = totals(inv)
         guess, rate = estimate(inv), rate_now(inv)
         fund = fund_rates.summary(inv.fund)
+        share = shares(inv)
         row = {"investment": inv.name, "value_now": _money(value(inv)),
+               "business_money_in_it": _money(share["shop"]), "owners_own_money_in_it": _money(share["owner"]),
+               "business_share_of_interest": _money(share["shop_interest"]), "owners_share_of_interest": _money(share["owner_interest"]),
+               "business_value_in_the_books": _money(share["shop_value"]),
                **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}}
         if rate is not None:
             balance = guess["value"] if guess else value(inv)
@@ -728,7 +732,9 @@ def investments(ctx, args):
             row["estimated_value_today"] = _money(guess["value"])
         rows.append(row)
     return {"investments": rows, "total_value": _money(sum((Decimal(str(row["value_now"] or 0)) for row in rows), ZERO)),
-            "explained": "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted. "
+            "explained": "The owner's own money put in from outside the business earns interest with the rest but is not the "
+                         "business's: only the business's money and its share of the interest are in the books and profit. "
+                         "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted. "
                          "earns_after_tax is what the money earns now at the current yearly rate after withholding tax: a day, an "
                          "average month, and a year with each month's interest earning interest after it is added."}
 

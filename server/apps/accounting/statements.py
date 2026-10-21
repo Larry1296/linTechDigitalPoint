@@ -179,9 +179,11 @@ def reconciliation():
     from .loans import outstanding
     from .models import Loan
     lent = sum((outstanding(loan) for loan in Loan.objects.prefetch_related("repayments")), ZERO)
-    from .investments import value as investment_value
+    from .investments import business_value, settle_books
     from .models import Investment
-    invested = sum((investment_value(i) for i in Investment.objects.all()), ZERO)
+    settle_books()
+    # Only the business's money in investments is in the books; the owner's own money is kept out.
+    invested = sum((business_value(i) for i in Investment.objects.all()), ZERO)
     checks = [
         ("inventory", "Stock value (cost layers) vs Stock account", stock, _debit(accounts, ["1200"]),
          "Stock received before the books started, or rounding of fractional quantities (under 1.00)."),

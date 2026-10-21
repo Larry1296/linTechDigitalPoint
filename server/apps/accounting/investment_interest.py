@@ -92,6 +92,17 @@ def _rate_for(rates, day):
     return chosen
 
 
+def last_check(investment, today=None, live=None):
+    """The last time the app's figure was set from a statement: a statement that changed it, or a check that agreed with
+    it; the first money put in when there has been none."""
+    today = today or timezone.localdate()
+    live = live if live is not None else list(investment.movements.filter(reversed_at__isnull=True).order_by("occurred_on", "pk"))
+    checks = [m.occurred_on for m in live if m.kind in {InvestmentMovement.INTEREST, InvestmentMovement.FEE}]
+    checks += list(investment.rates.filter(statement_balance__isnull=False).values_list("recorded_on", flat=True))
+    since = max(checks) if checks else (live[0].occurred_on if live else today)
+    return min(since, today)
+
+
 def estimate(investment, today=None):
     """Interest estimated to have built up since the money was last checked against a statement, or None without a rate.
 
@@ -102,11 +113,7 @@ def estimate(investment, today=None):
     live = list(investment.movements.filter(reversed_at__isnull=True).order_by("occurred_on", "pk"))
     if not rates or not live:
         return None
-    # The last time the app's figure was set from a statement: a statement that changed it, or a check that agreed with it.
-    checks = [m.occurred_on for m in live if m.kind in {InvestmentMovement.INTEREST, InvestmentMovement.FEE}]
-    checks += list(investment.rates.filter(statement_balance__isnull=False).values_list("recorded_on", flat=True))
-    since = max(checks) if checks else live[0].occurred_on
-    since = min(since, today)
+    since = last_check(investment, today, live)
     changes = {}
     balance = ZERO
     for m in live:

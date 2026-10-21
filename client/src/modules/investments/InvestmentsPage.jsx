@@ -12,7 +12,8 @@ import { TextArea } from "../../components/forms/TextBox";
 
 const BUSINESS = [["MPESA", "Lipa na M-Pesa (till)"], ["CASH", "Cash"], ["BANK", "Bank"], ["OTHER", "Other"]];
 const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa agency float"]];
-// The owner's own money from outside the business: any amount can go in, and no till, drawer or bank changes.
+// The owner's own money from outside the business: any amount can go in, no till, drawer or bank changes, and it is
+// kept out of the business's books; it earns interest with the rest, but only the business's share is profit.
 const OWNER = ["OWNER", "My own money (from outside the business)"];
 const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY, OWNER])[value] || value;
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
@@ -159,8 +160,8 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
     delete values.origin;
     const where = sourceName(values.source).toLowerCase();
     const text = own
-      ? (putIn ? "It is your own money put into the business. Your cash, till and bank do not change, and profit does not change."
-        : "It goes to you, out of the business. Your cash, till and bank do not change, and profit does not change.")
+      ? (putIn ? "It is your own money, not the business's: it is kept out of the business's books. It earns interest with the rest, and only the business's share of the interest is profit."
+        : "It goes back to you. Your cash, till and bank do not change.")
       : putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`;
     const added = Number(investment.value) > 0 ? ` It is added to the ${money(investment.value)} already in it.` : "";
     if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
@@ -514,6 +515,11 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
+        {Number(investment.owner_value) !== 0 && <>
+          <div><dt>Business's share of interest</dt><dd>{money(investment.shop_interest)} <small>in profit</small></dd></div>
+          <div><dt>My share of interest</dt><dd>{money(investment.owner_interest)} <small>not in the business's books</small></dd></div>
+          <div><dt>Business's money in it now</dt><dd>{money(investment.shop_value)} <small>in the books</small></dd></div>
+        </>}
         {investment.estimate && <div><dt>Estimated since {date(investment.estimate.since)}</dt>
           <dd>+ {money(investment.estimate.net)} <small>after {percent(investment.tax_rate)} tax</small></dd></div>}
         {investment.estimate && <div><dt>Estimated value today</dt><dd>{money(investment.estimate.value)}</dd></div>}
@@ -641,8 +647,9 @@ export function InvestmentsPage() {
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
-      <p className="muted">Spare money kept in a money market fund (MMF) or similar. Putting money in or taking it out is still your money,
-        so profit does not change; only the interest it earns is income.</p>
+      <p className="muted">Spare money kept in a money market fund (MMF) or similar. Putting the business's money in or taking it out
+        does not change profit; only its share of the interest is income. Your own money from outside the business earns interest with the rest
+        but is kept out of the business's books.</p>
       <div className="metrics investMetrics">
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
@@ -654,7 +661,10 @@ export function InvestmentsPage() {
         <article><span>Total invested</span><strong>{money(data.invested)}</strong>
           <small>Shop and own money together; interest is earned on this</small></article>
         <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong></article>
-        <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong></article>
+        <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
+          {Number(data.owner_interest) !== 0 && <small>{money(data.shop_interest)} the business's, in profit · {money(data.owner_interest)} yours</small>}</article>
+        {Number(data.shop_value) !== Number(data.total_value) && <article><span>Business's money in investments</span>
+          <strong>{money(data.shop_value)}</strong><small>Its money and interest: what the books and net worth count</small></article>}
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
           <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}

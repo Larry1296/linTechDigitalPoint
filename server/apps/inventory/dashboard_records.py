@@ -98,7 +98,7 @@ def _mpesa(commission):
 
 
 def _money(expenses):
-    from apps.accounting.investments import value
+    from apps.accounting.investments import business_value as value
     from apps.accounting.loans import outstanding
     from apps.accounting.models import Expense, Investment, Loan
     loans = Loan.objects.filter(cancelled_at__isnull=True)

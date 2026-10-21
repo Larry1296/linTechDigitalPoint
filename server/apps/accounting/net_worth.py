@@ -53,16 +53,18 @@ def _agency_money():
 
 
 def _investments():
-    from .investments import value
+    from .investments import business_value, settle_books, value
     from .models import Investment
     from .investment_interest import estimate
+    settle_books()
     rows = []
     for investment in Investment.objects.filter(removed_at__isnull=True):
-        held = value(investment)
+        # Only the business's part: the owner's own money in the same fund is not the business's.
+        held, everything = business_value(investment), value(investment)
         if held:
             guess = estimate(investment)
             rows.append({"key": f"investment-{investment.pk}", "label": investment.name, "amount": held,
-                         "estimated_interest": guess["net"] if guess else None})
+                         "estimated_interest": (guess["net"] * held / everything).quantize(Decimal("0.01")) if guess and everything > 0 else None})
     return rows
 
 

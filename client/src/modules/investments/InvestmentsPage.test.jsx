@@ -10,6 +10,7 @@ import { InvestmentsPage } from "./InvestmentsPage";
 const LOW = { code: "MMF", label: "Money market fund", risk: 1, risk_label: "Low", risk_note: "Short-term loans to the government and banks." };
 const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", value: "20150.00", put_in: "20000.00", taken_out: "0.00",
   from_shop: "15000.00", from_owner: "5000.00", invested: "20000.00",
+  shop_interest: "112.50", owner_interest: "37.50", shop_value: "15112.50", owner_value: "5037.50",
   interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false, kind: LOW,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
@@ -29,7 +30,8 @@ const session = { id: 5, outlet: "Main agency", cash: "45000.00", float: "30000.
 const KINDS = [LOW, { code: "SACCO", label: "Sacco deposits", risk: 2, risk_label: "Low to medium", risk_note: "Depends on how the Sacco is managed." }];
 const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)", short: "CIC", kind: LOW, annual_rate: "8.120" },
   { code: "KCB_MMF_KES", name: "KCB Money Market Fund (KES)", short: "KCB", kind: LOW, annual_rate: null }];
-const listing = (investment) => ({ investments: [investment], from_shop: "15000.00", from_owner: "5000.00", invested: "20000.00", total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
+const listing = (investment) => ({ investments: [investment], from_shop: "15000.00", from_owner: "5000.00", invested: "20000.00",
+    shop_value: "15112.50", shop_interest: "112.50", owner_interest: "37.50", total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
     funds: FUNDS, kinds: KINDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
     spare_money: [{ method: "CASH", label: "Cash in the drawer", expected: "0.00" }, { method: "MPESA", label: "Lipa na M-Pesa till", expected: "64000.00" }] });
 beforeEach(() => {
@@ -48,6 +50,10 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(within(card).getByText("From the shop").nextSibling).toHaveTextContent("KSh 15,000");
   expect(within(card).getByText("From my own money").nextSibling).toHaveTextContent("KSh 5,000");
   expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
+  // Only the business's share of the interest is profit; the owner's own money is kept out of the books.
+  expect(within(card).getByText("Business's share of interest").nextSibling).toHaveTextContent("KSh 112.5 in profit");
+  expect(within(card).getByText("My share of interest").nextSibling).toHaveTextContent("KSh 37.5");
+  expect(within(metrics).getByText("Business's money in investments").nextSibling).toHaveTextContent("KSh 15,112.5");
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
   expect(within(card).getByText("Recorded value").nextSibling).toHaveTextContent("KSh 20,150");
   expect(within(card).getByText("Interest earned").nextSibling).toHaveTextContent("KSh 150");

@@ -84,14 +84,59 @@ def test_the_owners_own_money_goes_in_without_touching_the_business_money(shop):
     assert D(put.json()["value"]) == D("500000") and put.json()["movements"][0]["source"] == "OWNER"
     out = _move(client, mmf, "WITHDRAWAL", "100000", "OWNER", "own-out")
     assert out.status_code == 201 and D(out.json()["value"]) == D("400000")
+    # It is not the business's money, so it never enters the books: no investment, no owner capital, no profit.
     accounts, checks, pl = _books(org)
-    assert accounts["1400"]["balance"] == D("400000") and accounts["3000"]["balance"] == D("-400000")
-    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1000", "1010", "1020"))
+    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1000", "1010", "1020", "1400", "3000"))
     assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == 0
+    assert (D(out.json()["from_owner"]), D(out.json()["from_shop"]), D(out.json()["shop_value"])) == (D("400000"), D("0"), D("0"))
     first = next(m for m in out.json()["movements"] if m["kind"] == "WITHDRAWAL")["id"]
     assert client.post(f"/api/v1/accounting/investments/movements/{first}/undo/", {"reason": "Wrong"}, format="json").status_code == 200
     accounts, *_ = _books(org)
-    assert accounts["1400"]["balance"] == D("500000") and accounts["3000"]["balance"] == D("-500000")
+    assert accounts.get("1400", {"balance": D("0")})["balance"] == 0
+
+
+def _mixed(client, mmf):
+    """20,000 of the business's and 60,000 of the owner's own, in for 30 days, then a statement 800 higher."""
+    start = timezone.localdate() - timedelta(days=30)
+    _move(client, mmf, "DEPOSIT", "20000", "BANK", "mix-shop", occurred_on=str(start))
+    _move(client, mmf, "DEPOSIT", "60000", "OWNER", "mix-own", occurred_on=str(start))
+    return client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "80800", "idempotency_key": "mix-st"}, format="json").json()
+
+
+def test_interest_is_earned_on_everything_but_only_the_business_share_is_profit(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    row = _mixed(client, mmf)
+    assert (D(row["value"]), D(row["invested"]), D(row["interest"])) == (D("80800"), D("80000"), D("800"))
+    # A quarter of the money was the business's all month, so a quarter of the interest is.
+    assert (D(row["shop_interest"]), D(row["owner_interest"]), D(row["shop_value"]), D(row["owner_value"])) == (D("200"), D("600"), D("20200"), D("60600"))
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("20200") and pl["net_profit_before_tax"] == D("200")
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"]
+    # Taken out into the business beyond its own 20,200: the rest is the owner's money coming into the business.
+    _move(client, mmf, "WITHDRAWAL", "30000", "BANK", "mix-out")
+    accounts, checks, _ = _books(org)
+    assert accounts.get("1400", {"balance": D("0")})["balance"] == 0 and accounts["3000"]["balance"] == D("-9800")
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"]
+
+
+def test_records_from_before_the_split_have_the_owners_part_taken_out_of_the_books(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    _mixed(client, mmf)
+    with organization_context(org):
+        from apps.accounting.ledger import paired, post_journal
+        from apps.accounting.models import InvestmentMovement
+        # As the books were before: the owner's money and all the interest were posted to the business.
+        post_journal(key="legacy:own", description="Old owner deposit", lines=paired("1400", "3000", D("60000")))
+        post_journal(key="legacy:interest", description="Old interest", lines=paired("1400", "4910", D("600")))
+        InvestmentMovement.objects.update(business_amount=None)
+    _books(org)  # the check settles the old records, once
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("20200") and accounts["3000"]["balance"] == 0
+    assert pl["net_profit_before_tax"] == D("200") and next(c for c in checks if c["key"] == "investments")["reconciled"]
+    row = client.get("/api/v1/accounting/investments/").json()
+    assert (D(row["shop_value"]), D(row["shop_interest"]), D(row["owner_interest"])) == (D("20200"), D("200"), D("600"))
 
 
 def test_shop_money_and_own_money_are_shown_apart_and_added_up(shop):
