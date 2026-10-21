@@ -162,7 +162,11 @@ export function StaffLayout() {
     menuButtonRef.current?.focus();
   }
   const organization = user.organization;
-  const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports"};
+  const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports", "/admin/chama":"chama"};
+  // The services part is named for this business: "Cyber Services" only for a cyber, else the name its owner gave it.
+  const servicesPart = organization.parts?.find((part) => part.key === "CYBER")?.name;
+  const servicesTitle = servicesPart && servicesPart !== "Cyber" ? (/services?$/i.test(servicesPart) ? servicesPart : `${servicesPart} services`)
+    : (organization.sector || "").includes("cyber") ? "Cyber Services" : "Services";
   const planLabel = organization.subscription?.complimentary ? "Pro" : organization.subscription?.ended ? "Renew" : `${organization.subscription?.plan_name || "Plan"}${organization.subscription?.days_left != null ? ` · ${organization.subscription.days_left}d` : ""}`;
   const switchers = <>
     {user.memberships.length > 1 && <label className="workspaceBusiness">Organization <select aria-label="Active organization" value={organization.id} onChange={event => switchBusiness(event.target.value).then(() => window.location.assign("/admin/dashboard")).catch(error=>setSwitchError(error.message))}>{user.memberships.map(({organization})=><option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
@@ -201,6 +205,7 @@ export function StaffLayout() {
             <SidebarNavigation
               sections={operations.map((section) => ({
                 ...section,
+                title: section.links === cyberLinks ? servicesTitle : section.title,
                 links: section.links.filter(
                   (item) =>
                     (!moduleFor[item.to] || organization.enabled_modules.includes(moduleFor[item.to])) &&

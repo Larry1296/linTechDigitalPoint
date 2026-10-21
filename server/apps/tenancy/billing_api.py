@@ -25,7 +25,8 @@ PLAN_FEATURES = {"inventory": "Products & stock", "services": "Services & jobs",
 def plan_data(plan):
     return {"id": plan.pk, "code": plan.code, "name": plan.name, "price": str(plan.price), "currency": plan.currency,
             "period_days": plan.period_days, "description": plan.description, "active": plan.active,
-            "enabled_modules": plan.enabled_modules, "features": [PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules]}
+            "enabled_modules": plan.enabled_modules, "features": [PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules],
+            "feature_names": {m: PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules}}
 
 
 def payment_data(payment):

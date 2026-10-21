@@ -4,16 +4,17 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../core/api/client", async (original) => ({ ...(await original()), api: vi.fn() }));
 vi.mock("../modules/assistant/BusinessAssistant", () => ({ BusinessAssistant: () => null }));
 vi.mock("../modules/billing/SubscriptionBanner", () => ({ SubscriptionBanner: () => null }));
-const auth = vi.hoisted(() => ({ modules: [] }));
+const auth = vi.hoisted(() => ({ modules: [], sector: "cyber_shop" }));
 vi.mock("../core/auth/AuthContext", () => ({ useAuth: () => ({ lock: vi.fn(), logout: vi.fn(), user: {
   username: "owner", roles: ["OWNER"], memberships: [{ organization: { id: 1, name: "LinTech" } }], branches: [],
-  permissions: ["commerce.add_sale", "commerce.view_sale", "catalog.view_product", "cyber.view_cyberjob", "mpesa.view_mpesasession", "mpesa.view_mpesacommissionentry", "accounting.view_profit"],
-  organization: { id: 1, name: "LinTech", enabled_modules: auth.modules, subscription: {} } } }) }));
+  permissions: ["commerce.add_sale", "commerce.view_sale", "catalog.view_product", "cyber.view_cyberjob", "mpesa.view_mpesasession", "mpesa.view_mpesacommissionentry", "accounting.view_profit", "chama.view_chama"],
+  organization: { id: 1, name: "LinTech", enabled_modules: auth.modules, sector: auth.sector, subscription: {} } } }) }));
 import { api } from "../core/api/client";
 import { StaffLayout } from "./StaffLayout";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  auth.sector = "cyber_shop";
   api.mockImplementation(async (path) => (path === "/api/v1/cyber/services/"
     ? [{ id: 4, name: "Printing", active: true }, { id: 5, name: "Typing", active: true }, { id: 6, name: "Lamination", active: false }] : []));
 });
@@ -46,6 +47,21 @@ it("shows only the businesses that are switched on", async () => {
   expect(within(sidebar).getByRole("button", { name: "Shop Management" })).toHaveAttribute("aria-expanded", "true");
   expect(within(sidebar).queryByRole("button", { name: "Cyber Services" })).toBeNull();
   expect(within(sidebar).queryByRole("button", { name: "M-Pesa Agent" })).toBeNull();
+});
+
+it("shows the chama only to a business that chose it, and names services for the business, not Cyber", async () => {
+  auth.modules = ["pos", "inventory", "services"];
+  auth.sector = "other_mixed";
+  const sidebar = await renderAt("/admin/pos");
+  expect(within(sidebar).queryByRole("button", { name: "Chama" })).toBeNull();
+  expect(within(sidebar).queryByRole("button", { name: "Cyber Services" })).toBeNull();
+  expect(within(sidebar).getByRole("button", { name: "Services" })).toBeInTheDocument();
+});
+
+it("shows the chama when it was chosen", async () => {
+  auth.modules = ["pos", "inventory", "chama"];
+  const sidebar = await renderAt("/admin/pos");
+  expect(within(sidebar).getByRole("button", { name: "Chama" })).toBeInTheDocument();
 });
 
 it("highlights only the M-Pesa page shown, not the Agent desk as well", async () => {

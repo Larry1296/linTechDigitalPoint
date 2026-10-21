@@ -150,7 +150,8 @@ it("keeps only the tools that fit when the business changes how it makes money",
 });
 
 it("shows tools outside a Basic plan as locked instead of letting the owner tick them", async () => {
-  const basic = { ...settings, enabled_modules: ["inventory", "pos", "reports"], plan_modules: ["customers", "expenses", "inventory", "mpesa", "pos", "services"] };
+  const basic = { ...settings, enabled_modules: ["inventory", "pos", "reports"], plan_modules: ["customers", "expenses", "inventory", "mpesa", "pos", "services"],
+    plan: { code: "BASIC", name: "Basic", complimentary: false, ended: false, includes: ["inventory", "services", "pos", "customers", "expenses", "mpesa"], waiting: ["reports"] } };
   const usual = api.getMockImplementation();
   api.mockImplementation(async (path, options = {}) => (path === "/api/v1/tenancy/settings/" && !options.method ? basic : usual(path, options)));
   renderAs("OWNER");
@@ -162,4 +163,10 @@ it("shows tools outside a Basic plan as locked instead of letting the owner tick
   }
   expect(within(business).getByRole("checkbox", { name: "Customers" })).toBeEnabled();
   expect(within(business).getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
+  // The plan the business is on, what it includes, and what was chosen but waits for Pro.
+  const plan = within(business).getByRole("region", { name: "Your plan" });
+  expect(within(plan).getByRole("heading", { name: "Plan: Basic" })).toBeInTheDocument();
+  expect(plan).toHaveTextContent("Includes: Products & stock, Services & jobs, Point of sale, Customers, Expenses, M-Pesa agency.");
+  expect(plan).toHaveTextContent("switched off until you are on Pro: Reports");
+  expect(within(plan).getByRole("link", { name: "Change plan" })).toHaveAttribute("href", "/admin/subscription");
 });

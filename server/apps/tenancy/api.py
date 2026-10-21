@@ -307,6 +307,15 @@ def create_business(request):
     opening_cash, opening_bank = values.pop('opening_cash'), values.pop('opening_bank')
     starter_categories, starter_services = values.pop('starter_categories'), values.pop('starter_services')
     plan_code = values.pop('plan')
+    if not request.user.is_superuser:
+        # Only what the chosen plan includes: a Basic business never starts with Pro tools.
+        from .billing import plan as find_plan
+        chosen_plan = find_plan(plan_code)
+        beyond = sorted(set(values["enabled_modules"]) - set(chosen_plan.enabled_modules), key=MODULES.index) if chosen_plan else []
+        if beyond:
+            names = ", ".join(profiles.MODULES[module]["label"] for module in beyond)
+            return Response({"enabled_modules": [f"{names} {'is' if len(beyond) == 1 else 'are'} not in the {chosen_plan.name} plan. "
+                                                 f"Choose Pro, or leave {'it' if len(beyond) == 1 else 'them'} off."]}, status=400)
     chama = values.pop('chama')
     money_mode = values.pop('money_mode')
     stored = {"money_mode": money_mode}
@@ -510,6 +519,18 @@ class SettingsInput(serializers.Serializer):
     sale_mpesa_to = serializers.ChoiceField(choices=["AGENT_LINE", "TILL"], required=False)
     validate_timezone = BusinessInput.validate_timezone
 
+def _plan_view(organization):
+    """The plan the business is on, for Settings: which tools it includes, and which chosen tools wait for Pro."""
+    from .billing import plan_modules, state
+    subscription = getattr(organization, "subscription", None)
+    included = plan_modules(organization)
+    view = state(organization)
+    return {"code": view["plan"], "name": "Pro" if subscription and subscription.complimentary else view["plan_name"],
+            "complimentary": bool(subscription and subscription.complimentary), "ended": view["ended"],
+            "includes": [module for module in MODULES if included is None or module in included],
+            "waiting": [module for module in MODULES if included is not None and module in organization.enabled_modules and module not in included]}
+
+
 def settings_data(organization, store):
     from apps.accounting.money_mode import money_mode, part_names, structure
     from .billing import plan_modules
@@ -522,6 +543,7 @@ def settings_data(organization, store):
             "timezone": organization.timezone, "country": organization.country,
             "enabled_modules": organization.enabled_modules, "available_modules": MODULES,
             "plan_modules": sorted(plan_modules(organization)) if plan_modules(organization) is not None else None,
+            "plan": _plan_view(organization),
             "receipt_footer": store.receipt_footer if store else "", "logo_url": public_logo_path(organization),
             "logo_dark_url": public_logo_path(organization, "logo_dark")}
 

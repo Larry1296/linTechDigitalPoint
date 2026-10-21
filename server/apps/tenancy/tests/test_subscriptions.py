@@ -13,6 +13,7 @@ from apps.tenancy.models import Organization, OrganizationSubscription, Subscrip
 
 pytestmark = pytest.mark.django_db
 EVERYTHING = ["inventory", "locations", "services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff"]
+BASIC = ["inventory", "services", "pos", "customers", "expenses", "mpesa"]
 
 
 def signed_in(username, superuser=False):
@@ -22,8 +23,10 @@ def signed_in(username, superuser=False):
     return client
 
 
-def new_business(client, plan="BASIC", name="Wanjiru Traders"):
-    response = client.post("/api/v1/tenancy/create/", {"name": name, "business_model": "MIXED", "enabled_modules": EVERYTHING, "plan": plan}, format="json")
+def new_business(client, plan="BASIC", name="Wanjiru Traders", modules=None):
+    # A Basic business can only be set up with Basic tools; the platform owner's own business gets every tool.
+    modules = modules or (BASIC if plan == "BASIC" else EVERYTHING)
+    response = client.post("/api/v1/tenancy/create/", {"name": name, "business_model": "MIXED", "enabled_modules": modules, "plan": plan}, format="json")
     assert response.status_code == 201, response.content
     return Organization.objects.select_related("subscription__plan").get(pk=response.json()["id"])
 
@@ -51,7 +54,7 @@ def test_a_new_business_gets_a_free_month_on_the_plan_it_chose_and_basic_hides_p
 
 def test_the_platform_owners_own_business_is_pro_forever_with_every_tool():
     admin = signed_in("platform-owner", superuser=True)
-    organization = new_business(admin, "BASIC", name="LinTechDigitalPoint")
+    organization = new_business(admin, "BASIC", name="LinTechDigitalPoint", modules=EVERYTHING)
     view = billing.state(organization)
     assert (view["status"], view["plan"], view["complimentary"], view["ends_at"]) == ("ACTIVE", "PRO", True, None)
     end_subscription(organization)  # even an end date in the past never pauses it

@@ -179,6 +179,12 @@ function BusinessSettings() {
     <FormField label="Time zone" name="timezone" defaultValue={data.timezone} required />
     <FormField label="Receipt footer" name="receipt_footer" defaultValue={data.receipt_footer} maxLength={255} />
     <p>Currency: <strong>{data.currency}</strong> (fixed after setup so past records stay correct).</p>
+    {data.plan && <section className="planSummary" aria-label="Your plan">
+      <h3>Plan: {data.plan.name || "None"}{data.plan.complimentary ? " · free, every tool" : ""}{data.plan.ended ? " · ended" : ""}</h3>
+      <p>Includes: {catalogue.modules.filter((m) => data.plan.includes.includes(m.id)).map((m) => m.label).join(", ")}.</p>
+      {data.plan.waiting.length > 0 && <p className="muted">Chosen but not in {data.plan.name}, so switched off until you are on Pro: {catalogue.modules.filter((m) => data.plan.waiting.includes(m.id)).map((m) => m.label).join(", ")}.</p>}
+      {!data.plan.complimentary && <p className="muted"><Link to="/admin/subscription">Change plan</Link>: switch between Basic and Pro when you pay for the next month.</p>}
+    </section>}
     <fieldset className="checkList">
       <legend>Tools</legend>
       {catalogue.modules.filter((module) => allowed.includes(module.id)).map((module) => {

@@ -47,6 +47,20 @@ it("upgrades to Pro: confirms, sends the M-Pesa prompt, waits for the phone and 
   expect(refresh).toHaveBeenCalled();
 });
 
+it("says which tools switch off when moving from Pro to Basic, and that nothing recorded is deleted", async () => {
+  const named = [{ ...PLANS[0], feature_names: { pos: "Point of sale & receipts" } },
+    { ...PLANS[1], feature_names: { pos: "Point of sale & receipts", reports: "Profit & loss, balance sheet and reports" } }];
+  useAuth.mockReturnValue({ user: { roles: ["OWNER"], platform_admin: false, organization: { subscription: { ...trial, status: "ACTIVE", plan: "PRO", plan_name: "Pro" } } }, refresh });
+  confirmAction.mockResolvedValueOnce(false);
+  api.mockImplementation(async (path) => (path === "/api/v1/tenancy/billing/"
+    ? { subscription: { ...trial, status: "ACTIVE", plan: "PRO", plan_name: "Pro" }, plans: named, payments: [], payment_methods: ["MPESA"], phone: "0712345678" } : {}));
+  render(<MemoryRouter><SubscriptionPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Switch · KES 500/ }));
+  await waitFor(() => expect(confirmAction).toHaveBeenCalled());
+  expect(confirmAction.mock.calls[0][0].text).toContain("these switch off until you are back on Pro; nothing recorded in them is deleted: Profit & loss, balance sheet and reports");
+  expect(api).not.toHaveBeenCalledWith("/api/v1/tenancy/billing/pay/", expect.anything());
+});
+
 it("does nothing when the owner cancels, and explains when M-Pesa is not set up", async () => {
   api.mockResolvedValue({ subscription: trial, plans: PLANS, payments: [], payment_methods: [], phone: "" });
   render(<MemoryRouter><SubscriptionPage /></MemoryRouter>);

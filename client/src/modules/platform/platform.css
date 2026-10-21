@@ -164,3 +164,4 @@ html { scroll-behavior: smooth; }
 /* Naming the parts of the business at setup: each name's label sits above its field, in even columns. */
 .tenantForm .businessParts fieldset.partNames { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap:12px; }
 .tenantForm .businessParts fieldset.partNames > label { display:grid; gap:6px; align-content:start; }
+.choiceCard .planTools { font-size:.82rem; opacity:.85; }

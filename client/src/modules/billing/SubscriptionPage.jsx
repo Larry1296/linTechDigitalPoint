@@ -54,9 +54,16 @@ export function SubscriptionPage() {
     if (!mpesa) { await showError("Payments are not available yet", "M-Pesa payments are not set up on this platform yet. Contact the platform team to activate your subscription."); return; }
     if (!phone.trim()) { await showError("Enter your M-Pesa number", "Type the Safaricom number that will receive the payment prompt."); return; }
     const renewing = plan.code === subscription.plan;
+    // Switching plan says which tools go off (kept, back on with Pro) or come back, so nothing changes unexpectedly.
+    const names = { ...current?.feature_names, ...plan.feature_names };
+    const label = (codes) => codes.map((code) => names[code] || code).join(", ");
+    const goingOff = !renewing && current ? label(current.enabled_modules.filter((code) => !plan.enabled_modules.includes(code))) : "";
+    const comingBack = !renewing && current ? label(plan.enabled_modules.filter((code) => !current.enabled_modules.includes(code))) : "";
+    const change = goingOff ? ` On ${plan.name}, these switch off until you are back on ${current.name}; nothing recorded in them is deleted: ${goingOff}.`
+      : comingBack ? ` ${plan.name} adds: ${comingBack}. Turn on the ones you want in Settings.` : "";
     const confirmed = await confirmAction({
       title: `${renewing ? "Renew" : "Switch to"} ${plan.name} for ${money(plan.currency, plan.price)}?`,
-      text: `An M-Pesa prompt will be sent to ${phone}. Enter your M-Pesa PIN on the phone to pay for ${plan.period_days} days.`,
+      text: `An M-Pesa prompt will be sent to ${phone}. Enter your M-Pesa PIN on the phone to pay for ${plan.period_days} days.${change}`,
       confirmButtonText: `Send M-Pesa prompt`, icon: "question",
     });
     if (!confirmed) return;

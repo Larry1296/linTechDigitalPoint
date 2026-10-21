@@ -74,7 +74,7 @@ def test_the_kind_of_business_must_match_how_it_makes_money(owner):
 
 
 def test_a_barbershop_sells_its_services_without_any_stock_or_shelves(owner):
-    response = create(owner, name="Fresh Cuts", business_model="SERVICES", sector="barber", business_size="SOLO",
+    response = create(owner, name="Fresh Cuts", business_model="SERVICES", sector="barber", business_size="SOLO", plan="PRO",
         enabled_modules=["services", "pos", "expenses", "reports"],
         starter_services=[{"name": "Haircut", "selling_price": "200"}, {"name": "Shave", "selling_price": "100"}],
         starter_categories=["Should be ignored"])
@@ -93,7 +93,7 @@ def test_a_barbershop_sells_its_services_without_any_stock_or_shelves(owner):
 
 
 def test_a_mama_mboga_starts_with_her_produce_categories(owner):
-    response = create(owner, name="Mama Wanjiru", business_model="GOODS", sector="mama_mboga",
+    response = create(owner, name="Mama Wanjiru", business_model="GOODS", sector="mama_mboga", plan="PRO",
         enabled_modules=["inventory", "pos", "expenses", "reports"], starter_categories=["Vegetables", "Fruits", "Vegetables"],
         starter_services=[{"name": "Not a service business", "selling_price": "10"}])
     assert response.status_code == 201, response.content
@@ -141,6 +141,21 @@ def test_setup_asks_about_agency_chama_and_investments_instead_of_assuming_them(
             assert not {"chama", "investments"} & set(sector["modules"]["MEDIUM"]), sector["id"]
             if "mpesa" in sector["modules"]["SOLO"]:
                 assert sector["id"] in {"mpesa_agent", "cyber_shop"}
+
+
+def test_a_basic_business_is_created_with_only_basic_tools_and_settings_show_its_plan(owner):
+    refused = create(owner, name="Mama Shop", business_model="GOODS", sector="duka", plan="BASIC",
+                     enabled_modules=["inventory", "pos", "reports", "staff", "chama"])
+    assert refused.status_code == 400
+    assert "Reports, Staff, Chama management are not in the Basic plan" in str(refused.json())
+    assert not Organization.objects.filter(name="Mama Shop").exists()
+    made = create(owner, name="Mama Shop", business_model="GOODS", sector="duka", plan="BASIC", enabled_modules=["inventory", "pos", "expenses"])
+    assert made.status_code == 201, made.content
+    assert made.json()["enabled_modules"] == ["expenses", "inventory", "pos"]  # exactly what was chosen, nothing more
+    plan = owner.get("/api/v1/tenancy/settings/").json()["plan"]
+    assert (plan["code"], plan["name"], plan["waiting"]) == ("BASIC", "Basic", [])
+    assert "chama" not in plan["includes"] and "inventory" in plan["includes"]
+    assert owner.get("/api/v1/chama/").status_code == 403
 
 
 def test_investments_open_only_for_a_business_that_chose_them(owner):

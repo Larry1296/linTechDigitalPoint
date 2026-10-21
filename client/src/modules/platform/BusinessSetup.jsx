@@ -13,7 +13,7 @@ import { MpesaPaymentsSetup } from "../settings/MpesaPaymentsSetup";
 import { BusinessPartsChoice, MONEY_MODES, MONEY_PARTS, STRUCTURES, defaultPartName } from "../../core/organization/MoneyModeChoice";
 import { TextBox } from "../../components/forms/TextBox";
 
-const STEP_LABELS = { business: "Your business", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
+const STEP_LABELS = { business: "Your business", plan: "Your plan", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Money", review: "Review" };
 const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item" };
 
@@ -80,11 +80,15 @@ function SetupWizard({ catalogue, user, refresh }) {
     onDone={() => (modules.has("pos") ? setCreated({ ...created, paymentsStep: true }) : toDashboard())} />;
 
   const sector = sectorId ? findSector(catalogue, sectorId) : null;
+  // The plan is chosen before any tool, so only what it includes can be picked: a Basic business never gets Pro tools.
+  // The platform administrator's own businesses get every tool, free.
+  const planModules = user.platform_admin ? null : plans?.find((item) => item.code === plan)?.enabled_modules;
+  const inPlan = (id) => !planModules || planModules.includes(id);
   // Unanswered, a question starts at Yes only when the kind of business is that work, such as an M-Pesa agent.
-  const answer = (id) => extras[id] ?? (sector?.modules[size]?.includes(id) ? true : undefined);
-  const chosen = new Set([...modules, ...extraIds.filter((id) => answer(id))]);
+  const answer = (id) => !inPlan(id) ? false : extras[id] ?? (sector?.modules[size]?.includes(id) ? true : undefined);
+  const chosen = new Set([...modules, ...extraIds.filter((id) => answer(id))].filter(inPlan));
   // The chama step appears only when the owner runs a chama.
-  const steps = ["business", "kind", "extras", "tools", ...(chosen.has("chama") ? ["chama"] : []), "place", "money", "review"];
+  const steps = ["business", ...(user.platform_admin ? [] : ["plan"]), "kind", "extras", "tools", ...(chosen.has("chama") ? ["chama"] : []), "place", "money", "review"];
   const current = steps[Math.min(step, steps.length - 1)];
   const goTo = (id) => setStep(steps.indexOf(id));
   const isOther = catalogue.other_sectors.includes(sectorId);
@@ -93,6 +97,12 @@ function SetupWizard({ catalogue, user, refresh }) {
   // Until the owner edits the tools themselves, they follow the kind of business and its size.
   const suggest = (nextSector, nextSize) => {
     if (!modulesEdited && nextSector) setModules(new Set(nextSector.modules[nextSize].filter((id) => !extraIds.includes(id))));
+  };
+  const choosePlan = (code) => {
+    setPlan(code);
+    // Tools the new plan does not include are switched off, so what is shown is what is created.
+    const included = plans?.find((item) => item.code === code)?.enabled_modules;
+    if (included) setModules((current) => new Set([...current].filter((id) => included.includes(id))));
   };
   const chooseModel = (id) => {
     if (id === model) return;
@@ -106,6 +116,7 @@ function SetupWizard({ catalogue, user, refresh }) {
     setServices(item.services.map((service) => ({ ...service, selling_price: "" })));
   };
   const chooseModule = (id) => {
+    if (!inPlan(id)) return;
     const result = toggleModule(catalogue, model, modules, id);
     setModules(result.modules);
     setModuleNotes(result.notes);
@@ -131,9 +142,10 @@ function SetupWizard({ catalogue, user, refresh }) {
   const partName = (key) => money.part_names[key]?.trim() || defaultPartName(key, sectorId);
   const problem = {
     business: () => !name.trim() ? "Enter your business name." : !model ? "Choose how your business makes money." : "",
+    plan: () => !plans ? "The plans are still loading." : "",
     kind: () => !sectorId ? "Choose the kind of business you run." : isOther && !otherText.trim() ? "Name your kind of business." : "",
     extras: () => {
-      const open = catalogue.extras.find((extra) => answer(extra.id) === undefined);
+      const open = catalogue.extras.find((extra) => allowed.includes(extra.id) && answer(extra.id) === undefined);
       return open ? `Answer Yes or No: ${open.question}` : "";
     },
     tools: () => moduleProblem(catalogue, model, chosen)
@@ -156,8 +168,8 @@ function SetupWizard({ catalogue, user, refresh }) {
       const business = await api("/api/v1/tenancy/create/", { method: "POST", body: JSON.stringify({
         name: name.trim(), business_model: model, sector: sectorId, business_size: size, business_type: typeLabel.slice(0, 100), plan,
         enabled_modules: [...chosen],
-        starter_categories: modules.has("inventory") ? chosenCategories : [],
-        starter_services: modules.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
+        starter_categories: chosen.has("inventory") ? chosenCategories : [],
+        starter_services: chosen.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
           ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
         ...(withParts ? { structure: "PARTS", money_mode: money.money_mode, part_names: Object.fromEntries(earningParts.map((part) => [part.key, money.part_names[part.key]?.trim() || ""])) }
@@ -175,9 +187,8 @@ function SetupWizard({ catalogue, user, refresh }) {
     }
   };
   const country = COUNTRIES.find((item) => item.code === details.country);
-  const basicModules = plans?.find((item) => item.code === "BASIC")?.enabled_modules;
-  const proOnly = (id) => Boolean(basicModules && !basicModules.includes(id));
-  const lockedOnBasic = !user.platform_admin && plan === "BASIC" ? [...chosen].filter(proOnly) : [];
+  const planName = plans?.find((item) => item.code === plan)?.name || plan;
+  const lockedTag = <small className="proTag">Not in {planName}: choose Pro to use it</small>;
   const modelLabel = catalogue.models.find((item) => item.id === model)?.label;
   // "Other" stays in view whatever the search, so a business that is not listed can always create its own kind.
   const otherSector = model ? catalogue.sectors[model].find((item) => catalogue.other_sectors.includes(item.id)) : null;
@@ -218,6 +229,22 @@ function SetupWizard({ catalogue, user, refresh }) {
       <p className="muted">Built for small and medium businesses. Support for large companies and supermarkets is coming later.</p>
     </section>}
 
+    {current === "plan" && <section className="setupPanel">
+      <fieldset className="choiceGroup">
+        <legend>Choose your plan <small>The first month is free. You pay only when you continue after it.</small></legend>
+        <p className="muted">Choose the plan first: the next steps offer only the tools it includes. You can switch plan when you pay for the next month.</p>
+        <div className="choiceGrid wideChoices">
+          {(plans || []).map((item) => <button type="button" key={item.code} className={`choiceCard${plan === item.code ? " selected" : ""}`}
+            aria-pressed={plan === item.code} onClick={() => choosePlan(item.code)}>
+            <strong>{item.name} · {item.currency} {Number(item.price).toLocaleString()} / month</strong><span>{item.description}</span>
+            <span className="planTools">Includes: {catalogue.modules.filter((m) => item.enabled_modules.includes(m.id)).map((m) => m.label).join(", ")}</span>
+          </button>)}
+        </div>
+        {plans === null && <p className="muted">Loading plans…</p>}
+        {plans?.length === 0 && <p className="muted">Plans could not be loaded. Go back and try again in a moment.</p>}
+      </fieldset>
+    </section>}
+
     {current === "kind" && <section className="setupPanel">
       <p className="muted">You chose <strong>{modelLabel}</strong>. Which of these is closest to your business?</p>
       <label className="sectorSearch"><Search size={16} aria-hidden="true" /><span className="sr">Search kinds of business</span>
@@ -244,15 +271,15 @@ function SetupWizard({ catalogue, user, refresh }) {
 
     {current === "extras" && <section className="setupPanel">
       <p className="muted">Not every owner does these, so tell us which you do. Each adds its own pages; you can change your answers later in Settings.</p>
-      {catalogue.extras.filter((extra) => allowed.includes(extra.id)).map((extra) => <fieldset className="choiceGroup" key={extra.id}>
-        <legend>{extra.question}{proOnly(extra.id) && <small className="proTag">Pro plan</small>}</legend>
+      {catalogue.extras.filter((extra) => allowed.includes(extra.id)).map((extra) => <fieldset className="choiceGroup" key={extra.id} disabled={!inPlan(extra.id)}>
+        <legend>{extra.question}{!inPlan(extra.id) && lockedTag}</legend>
         <p className="muted">{extra.hint}</p>
-        <div className="choiceGrid">
+        {inPlan(extra.id) && <div className="choiceGrid">
           {[[true, "Yes"], [false, "No"]].map(([value, label]) => <button type="button" key={label} className={`choiceCard compact${answer(extra.id) === value ? " selected" : ""}`}
             aria-pressed={answer(extra.id) === value} aria-label={`${label}: ${extra.question}`} onClick={() => setExtras((current) => ({ ...current, [extra.id]: value }))}>
             <strong>{label}</strong>
           </button>)}
-        </div>
+        </div>}
       </fieldset>)}
     </section>}
 
@@ -262,16 +289,16 @@ function SetupWizard({ catalogue, user, refresh }) {
         <legend>Tools</legend>
         <div className="choiceGrid">
           {catalogue.modules.filter((module) => allowed.includes(module.id) && !extraIds.includes(module.id)).map((module) => <button type="button" key={module.id}
-            className={`choiceCard module${modules.has(module.id) ? " selected" : ""}`} aria-pressed={modules.has(module.id)} onClick={() => chooseModule(module.id)}>
+            className={`choiceCard module${chosen.has(module.id) ? " selected" : ""}`} aria-pressed={chosen.has(module.id)} disabled={!inPlan(module.id)} onClick={() => chooseModule(module.id)}>
             <strong>{module.label}</strong><span>{module.description}</span>
-            {proOnly(module.id) && <small className="proTag">Pro plan</small>}
+            {!inPlan(module.id) && lockedTag}
             {module.needs.length > 0 && <small>Works with {module.needs.filter((need) => allowed.includes(need)).map((need) => moduleLabel(catalogue, need)).join(" or ")}</small>}
           </button>)}
         </div>
       </fieldset>
       {moduleNotes.length > 0 && <FormSuccess message={moduleNotes.join(" ")} />}
 
-      {modules.has("services") && <fieldset className="choiceGroup starterList">
+      {chosen.has("services") && <fieldset className="choiceGroup starterList">
         <legend>Your service price list <small>Leave a price blank to skip that service.</small></legend>
         {services.map((service, index) => <div className="starterService" key={index}>
           <label><span className="sr">Service name</span><TextBox value={service.name} onChange={(e) => setService(index, { name: e.target.value })} maxLength={180} placeholder="Service name" /></label>
@@ -283,7 +310,7 @@ function SetupWizard({ catalogue, user, refresh }) {
         <button type="button" className="secondary addRow" onClick={() => setServices([...services, { name: "", selling_price: "", billing_unit: "FIXED", requires_job: false }])}><Plus size={16} aria-hidden="true" /> Add a service</button>
       </fieldset>}
 
-      {modules.has("inventory") && <fieldset className="choiceGroup starterList">
+      {chosen.has("inventory") && <fieldset className="choiceGroup starterList">
         <legend>Product categories <small>Groups for the things you sell.</small></legend>
         <div className="chipList">
           {categories.map((item, index) => <button type="button" key={item.label} className={`chip${item.on ? " selected" : ""}`} aria-pressed={item.on}
@@ -334,11 +361,12 @@ function SetupWizard({ catalogue, user, refresh }) {
     {current === "review" && <section className="setupPanel">
       <dl className="setupReview">
         <div><dt>Business</dt><dd>{name} · {catalogue.sizes.find((item) => item.id === size)?.label}</dd><button type="button" className="linkButton" onClick={() => goTo("business")}>Change</button></div>
+        {!user.platform_admin && <div><dt>Plan</dt><dd>{planName} · first month free</dd><button type="button" className="linkButton" onClick={() => goTo("plan")}>Change</button></div>}
         <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => goTo("kind")}>Change</button></div>
         <div><dt>Also does</dt><dd>{catalogue.modules.filter((m) => extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ") || "None of these"}</dd><button type="button" className="linkButton" onClick={() => goTo("extras")}>Change</button></div>
-        <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => modules.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
-        {modules.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
-        {modules.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
+        <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => !extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
+        {chosen.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
+        {chosen.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
         {chosen.has("chama") && <div><dt>Chama</dt><dd>{chama.name} · {details.currency} {Number(chama.contribution_amount || 0).toLocaleString()} each · {chamaPayload(chama).members.length} members · treasurer {chama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("chama")}>Change</button></div>}
         <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
         <div><dt>Contacts</dt><dd>{[details.phone, details.email].filter(Boolean).join(" · ") || "None yet"}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
@@ -348,18 +376,8 @@ function SetupWizard({ catalogue, user, refresh }) {
           : STRUCTURES.find((item) => item.id === "SINGLE").label}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>}
         <div><dt>Opening money</dt><dd>{Number(money.opening_cash || 0) || Number(money.opening_bank || 0) ? `Cash ${money.opening_cash || 0} · Bank ${money.opening_bank || 0}` : "None"}</dd><button type="button" className="linkButton" onClick={() => goTo("money")}>Change</button></div>
       </dl>
+      <p className="muted">Only what is listed here is set up. You can change your tools later in Settings.</p>
       {user.platform_admin && <p className="muted">As the platform administrator, your business gets every Pro feature for free, with no expiry.</p>}
-      {!user.platform_admin && <fieldset className="choiceGroup">
-        <legend>Choose your plan <small>The first month is free. You pay only when you continue after it.</small></legend>
-        <div className="choiceGrid wideChoices">
-          {(plans || []).map((item) => <button type="button" key={item.code} className={`choiceCard${plan === item.code ? " selected" : ""}`}
-            aria-pressed={plan === item.code} onClick={() => setPlan(item.code)}>
-            <strong>{item.name} · {item.currency} {Number(item.price).toLocaleString()} / month</strong><span>{item.description}</span>
-          </button>)}
-        </div>
-        {lockedOnBasic.length > 0 && <p className="muted">On Basic, {lockedOnBasic.map((id) => moduleLabel(catalogue, id)).join(", ")} stay locked until you upgrade to Pro.</p>}
-        {plans?.length === 0 && <p className="muted">Plans could not be loaded. You start on Basic and can change it on the Subscription page.</p>}
-      </fieldset>}
     </section>}
 
     <div className="setupActions">
