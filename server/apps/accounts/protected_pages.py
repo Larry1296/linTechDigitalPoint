@@ -92,6 +92,25 @@ def opened(device, event):
     return Response({'protected': status(device)})
 
 
+def confirm(request, password):
+    """The person's protected pages password typed again before something that cannot be undone, such as deleting a
+    whole business. None when it is right; else the refusal. Wrong tries count towards the same five-minute block."""
+    device = locked_device(request) if isinstance(request.auth, DeviceSession) else None
+    refusal = blocked(device) if device else None
+    if refusal:
+        return refusal
+    latest = current(request.user)
+    if not latest:
+        return Response({'detail': 'Set your protected pages password first, then try again.', 'code': 'protected_unset'}, status=400)
+    if not isinstance(password, str) or not constant_time_compare(digest(password, latest.salt), latest.digest):
+        if device:
+            return failed(device, 'Incorrect protected pages password.')
+        return Response({'detail': 'Incorrect protected pages password.'}, status=400)
+    if timezone.now() >= latest.created_at + LIFETIME:
+        return Response({'detail': 'Your protected pages password is a week old. Set a new one, then try again.', 'code': 'protected_expired'}, status=400)
+    return None
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def protected_status(request):

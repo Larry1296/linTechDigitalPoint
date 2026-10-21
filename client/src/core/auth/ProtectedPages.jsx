@@ -32,7 +32,7 @@ export function ProtectedPages() {
   return <ProtectedPasswordForm state={state} onOpen={setState} />;
 }
 
-function ProtectedPasswordForm({ state, onOpen }) {
+export function ProtectedPasswordForm({ state, onOpen }) {
   // "unlock" enters the password; "renew" replaces a week-old one; "forgot" and "first" prove it with the sign-in password.
   const [mode, setMode] = useState(!state.has_password ? "first" : state.expired ? "renew" : "unlock");
   const [form, setForm] = useState({ password: "", proof: "", next: "", again: "" });

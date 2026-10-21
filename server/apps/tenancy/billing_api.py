@@ -245,7 +245,8 @@ def _plain(view):
 @permission_classes([permissions.IsAuthenticated])
 def platform_business(request, pk):
     """GET the business's subscription and payments; PATCH to change plan, status, dates or switch the business off and on;
-    POST to record a manual payment; DELETE (with the business name typed again) to remove a switched-off business for good."""
+    POST to record a manual payment; DELETE (with the business name typed again and the administrator's protected pages
+    password) to remove a switched-off business for good."""
     denied = _platform_admin(request)
     if denied:
         return denied
@@ -314,6 +315,11 @@ def _delete_business(request, organization):
         return Response({"detail": "You work in this business, so you cannot delete it from here."}, status=400)
     if (request.data.get("confirm_name") or "").strip() != organization.name.strip():
         return Response({"confirm_name": ["Type the business name exactly as shown to confirm."]}, status=400)
+    from apps.accounts.protected_pages import confirm
+    with transaction.atomic():
+        refusal = confirm(request, request.data.get("password", ""))
+    if refusal:
+        return refusal
     removed = delete_business(organization)
     return Response({"deleted": organization.name, "records": sum(removed.values())})
 

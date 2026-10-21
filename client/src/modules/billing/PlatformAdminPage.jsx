@@ -6,6 +6,7 @@ import { askForm, confirmAction, showError, showSuccess } from "../../core/ui/al
 import { ErrorState, Loading } from "../../components/States";
 import "./billing.css";
 import { TextBox } from "../../components/forms/TextBox";
+import { ProtectedPasswordForm } from "../../core/auth/ProtectedPages";
 
 const MODULE_LABELS = { inventory: "Products & stock", locations: "Shelves & locations", services: "Services & jobs", pos: "Point of sale",
   customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff", chama: "Chama" };
@@ -113,6 +114,8 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
   const [row, setRow] = useState();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Deleting needs the administrator's protected pages password; when there is none yet, or it is a week old, it is set here first.
+  const [needsPassword, setNeedsPassword] = useState(null);
   const path = `/api/v1/tenancy/platform-admin/businesses/${id}/`;
   const load = useCallback(() => api(path).then(setRow).catch((e) => setError(e.message)), [path]);
   useEffect(() => { void load(); }, [load]);
@@ -132,9 +135,18 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
     }
   };
   const remove = async () => {
+    let status;
+    try {
+      status = (await api("/api/v1/auth/protected/")).protected;
+    } catch (e) {
+      await showError("Could not delete the business", e.message);
+      return;
+    }
+    if (!status.has_password || status.expired) { setNeedsPassword(status); return; }
     const values = await askForm({ title: `Delete ${row.name} for good?`, confirmButtonText: "Delete for good",
-      text: "Every product, sale, expense, journal and staff link in this business is removed and cannot be brought back. People keep their sign-in accounts. Type the business name to confirm.",
-      fields: [{ name: "confirm_name", label: "Business name", required: true, placeholder: row.name }] });
+      text: "Every product, sale, expense, journal and staff link in this business is removed and cannot be brought back. People keep their sign-in accounts. Type the business name and your protected pages password to confirm.",
+      fields: [{ name: "confirm_name", label: "Business name", required: true, placeholder: row.name },
+        { name: "password", label: "Your protected pages password", type: "password", required: true }] });
     if (!values) return;
     if (values.confirm_name !== row.name.trim()) { await showError("The name does not match", `Type ${row.name} exactly as shown.`); return; }
     setBusy(true);
@@ -145,6 +157,7 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
     } catch (e) {
       await showError("Could not delete the business", e.message);
       setBusy(false);
+      if (["protected_unset", "protected_expired"].includes(e.data?.code)) setNeedsPassword((await api("/api/v1/auth/protected/")).protected);
     }
   };
   const submit = (handler) => (event) => { event.preventDefault(); void handler(Object.fromEntries(new FormData(event.currentTarget))); };
@@ -199,6 +212,10 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
         {row.active ? "Switch off business" : "Switch business back on"}</button>
       {!row.active && <button type="button" className="danger" disabled={busy} onClick={() => void remove()}>Delete business for good</button>}
     </div>
+    {needsPassword && <div className="platformProtected">
+      <ProtectedPasswordForm state={needsPassword} onOpen={() => { setNeedsPassword(null); void remove(); }} />
+      <button type="button" className="secondary" onClick={() => setNeedsPassword(null)}>Cancel</button>
+    </div>}
 
     <h3>Payments</h3>
     {row.payments.length ? <table className="platformTable"><thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Receipt</th><th>Paid until</th></tr></thead>

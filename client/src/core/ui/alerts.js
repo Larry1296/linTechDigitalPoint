@@ -40,6 +40,8 @@ const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":
 export async function askForm({ title, text, fields, confirmButtonText = "Save" }) {
   const control = (field, id) => field.type === "select"
     ? `<select id="${id}" class="swal2-select">${field.options.map(([value, name]) => `<option value="${escape(value)}"${value === field.value ? " selected" : ""}>${escape(name)}</option>`).join("")}</select>`
+    : field.type === "password"
+    ? `<input id="${id}" class="swal2-input" type="password" autocomplete="off" maxlength="240" placeholder="${escape(field.placeholder)}">`
     : `<input id="${id}" class="swal2-input" type="${field.type === "number" ? "number" : "text"}"${field.type === "number" ? ` step="0.01" min="${escape(field.min ?? "0.01")}"${field.max !== undefined ? ` max="${escape(field.max)}"` : ""} inputmode="decimal"` : ' maxlength="240"'} placeholder="${escape(field.placeholder)}" value="${escape(field.value)}">`;
   const html = `${text ? `<p>${escape(text)}</p>` : ""}${fields.map((field, index) =>
     `<label class="swalField" for="swal-field-${index}">${escape(field.label)}${field.required ? "" : " (optional)"}</label>${control(field, `swal-field-${index}`)}`).join("")}`;
@@ -49,7 +51,8 @@ export async function askForm({ title, text, fields, confirmButtonText = "Save" 
     preConfirm: () => {
       const values = {};
       for (const [index, field] of fields.entries()) {
-        const value = String(document.getElementById(`swal-field-${index}`).value ?? "").trim();
+        const raw = String(document.getElementById(`swal-field-${index}`).value ?? "");
+        const value = field.type === "password" ? raw : raw.trim(); // a password is used exactly as typed
         if (field.required && !value) return Swal.showValidationMessage(`Enter ${field.label.toLowerCase()}.`);
         if (field.type === "number" && value && !(Number(value) > 0)) return Swal.showValidationMessage(`${field.label} must be more than zero.`);
         if (field.type === "number" && value && field.max !== undefined && Number(value) > Number(field.max)) return Swal.showValidationMessage(`${field.label} cannot be more than ${field.max}.`);

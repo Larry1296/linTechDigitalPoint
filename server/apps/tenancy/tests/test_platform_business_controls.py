@@ -17,8 +17,12 @@ from apps.tenancy.tests.test_isolation import businesses  # noqa: F401
 pytestmark = pytest.mark.django_db
 
 
-def platform_admin():
+def platform_admin(pages_password="Pages-pass-77"):
     user = User.objects.create_user("platform-owner", password="Safe-pass-1848", is_superuser=True, is_staff=True)
+    if pages_password:
+        from apps.accounts.models import ProtectedPagesPassword
+        from apps.accounts.protected_pages import digest
+        ProtectedPagesPassword.objects.create(user=user, salt="platform-salt", digest=digest(pages_password, "platform-salt"))
     client = APIClient()
     client.force_login(user)
     return client
@@ -62,6 +66,21 @@ def test_deleting_needs_the_business_switched_off_and_its_name_typed(businesses)
     assert Organization.objects.filter(pk=a["org"].pk).exists()
 
 
+def test_deleting_needs_the_administrators_protected_pages_password(businesses):
+    a, _ = businesses
+    admin = platform_admin()
+    admin.patch(path(a["org"]), {"active": False}, format="json")
+    for password in ("", "Safe-pass-1848", "pages-pass-77"):  # none, the sign-in password, wrong case
+        response = admin.delete(path(a["org"]), {"confirm_name": "Alpha", "password": password}, format="json")
+        assert response.status_code == 400 and "protected pages password" in response.json()["detail"]
+    assert Organization.objects.filter(pk=a["org"].pk).exists()
+    User.objects.filter(username="platform-owner").delete()
+    unset = platform_admin(pages_password=None)
+    response = unset.delete(path(a["org"]), {"confirm_name": "Alpha", "password": "anything"}, format="json")
+    assert response.status_code == 400 and response.json()["code"] == "protected_unset"
+    assert Organization.objects.filter(pk=a["org"].pk).exists()
+
+
 def test_deleting_removes_the_business_and_its_books_and_leaves_others_untouched(businesses):
     a, b = businesses
     with organization_context(a["org"]):
@@ -77,7 +96,7 @@ def test_deleting_removes_the_business_and_its_books_and_leaves_others_untouched
         beta_journals = JournalEntry.objects.count()
     admin = platform_admin()
     admin.patch(path(a["org"]), {"active": False}, format="json")
-    response = admin.delete(path(a["org"]), {"confirm_name": "Alpha"}, format="json")
+    response = admin.delete(path(a["org"]), {"confirm_name": "Alpha", "password": "Pages-pass-77"}, format="json")
     assert response.status_code == 200, response.content
     assert response.json()["deleted"] == "Alpha" and response.json()["records"] > 0
     assert not Organization.objects.filter(pk=a["org"].pk).exists()

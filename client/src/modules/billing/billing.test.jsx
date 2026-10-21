@@ -5,12 +5,12 @@ import { POLL_INTERVAL, SubscriptionPage } from "./SubscriptionPage";
 import { SubscriptionBanner } from "./SubscriptionBanner";
 import { BusinessKinds, PlatformAdminPage } from "./PlatformAdminPage";
 import { api } from "../../core/api/client";
-import { confirmAction, showError, showSuccess } from "../../core/ui/alerts";
+import { askForm, confirmAction, showError, showSuccess } from "../../core/ui/alerts";
 import { useAuth } from "../../core/auth/AuthContext";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: vi.fn() }));
-vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), showError: vi.fn(async () => {}), showSuccess: vi.fn(async () => {}) }));
+vi.mock("../../core/ui/alerts", () => ({ askForm: vi.fn(async () => null), confirmAction: vi.fn(async () => true), showError: vi.fn(async () => {}), showSuccess: vi.fn(async () => {}) }));
 vi.mock("sweetalert2", () => ({ default: { fire: vi.fn(async () => ({})), close: vi.fn(), showLoading: vi.fn() } }));
 
 const refresh = vi.fn(async () => {});
@@ -117,6 +117,34 @@ it("shows the platform owner every business and records a payment received outsi
   await waitFor(() => expect(showSuccess).toHaveBeenCalled());
   const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/1/" && o?.method === "POST");
   expect(JSON.parse(options.body)).toEqual({ plan: "BASIC", amount: "500", receipt_number: "QKX99" });
+});
+
+it("deletes a switched-off business only with its name and the administrator's protected pages password", async () => {
+  useAuth.mockReturnValue({ user: { platform_admin: true } });
+  let status = { has_password: false, expired: false, lifetime_days: 7, shortest: 6 };
+  api.mockImplementation(async (path, options = {}) => {
+    if (path === "/api/v1/tenancy/platform-admin/overview/") return overview;
+    if (path === "/api/v1/tenancy/platform-admin/businesses/1/") return options.method ? { deleted: "Fresh Cuts", records: 9 } : { ...overview.businesses[0], active: false, members: 1, payments: [] };
+    if (path === "/api/v1/auth/protected/") return { protected: status };
+    if (path === "/api/v1/auth/protected/password/") { status = { ...status, has_password: true }; return { protected: status }; }
+    return {};
+  });
+  askForm.mockResolvedValue({ confirm_name: "Fresh Cuts", password: "pages-pass" });
+  render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: "Fresh Cuts" }));
+  const detail = await screen.findByRole("article", { name: "Fresh Cuts subscription" });
+  // No protected pages password yet: it is set first, then the delete is asked for.
+  fireEvent.click(within(detail).getByRole("button", { name: "Delete business for good" }));
+  expect(await within(detail).findByRole("heading", { name: "Set a password for protected pages" })).toBeInTheDocument();
+  expect(askForm).not.toHaveBeenCalled();
+  fireEvent.change(within(detail).getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
+  fireEvent.change(within(detail).getByLabelText("New protected pages password"), { target: { value: "pages-pass" } });
+  fireEvent.change(within(detail).getByLabelText("New password again"), { target: { value: "pages-pass" } });
+  await act(async () => { fireEvent.click(within(detail).getByRole("button", { name: "Save and open" })); });
+  await waitFor(() => expect(showSuccess).toHaveBeenCalledWith("Business deleted", expect.any(String)));
+  expect(askForm.mock.calls[0][0].fields.map((f) => [f.name, f.type])).toEqual([["confirm_name", undefined], ["password", "password"]]);
+  const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/1/" && o?.method === "DELETE");
+  expect(JSON.parse(options.body)).toEqual({ confirm_name: "Fresh Cuts", password: "pages-pass" });
 });
 
 it("keeps the platform page away from everyone else", () => {
