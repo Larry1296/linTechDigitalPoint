@@ -92,11 +92,13 @@ function List({ items }) {
 function Table({ head, rows }) {
   // Columns whose cells are all numbers or money line up on the right.
   const numeric = head.map((_, col) => rows.length > 0 && rows.every((row) => !row[col] || NUMBER.test(row[col].replace(/\*\*/g, ""))));
+  // On phones each row is a card, each cell labelled with its column heading.
+  const labels = head.map((cell) => cell.replace(/\*\*/g, "").trim());
   return (
     <div className="answerTable" role="region" aria-label={head.join(", ")} tabIndex={0}>
       <table>
         <thead><tr>{head.map((cell, col) => <th key={col} className={numeric[col] ? "num" : undefined}>{inline(cell)}</th>)}</tr></thead>
-        <tbody>{rows.map((row, r) => <tr key={r}>{head.map((_, col) => <td key={col} className={numeric[col] ? "num" : undefined}>{inline(row[col] || "")}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((row, r) => <tr key={r}>{head.map((_, col) => <td key={col} className={numeric[col] ? "num" : undefined} data-label={labels[col]}>{inline(row[col] || "")}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );

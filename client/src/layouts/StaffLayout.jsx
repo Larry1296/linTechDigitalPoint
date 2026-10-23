@@ -38,7 +38,6 @@ import { Outlet } from "react-router-dom";
 import { useKeyboardShortcuts } from "../core/ui/keyboardShortcuts";
 import { SubscriptionBanner } from "../modules/billing/SubscriptionBanner";
 import { useEffect, useRef, useState } from "react";
-import { useTableLabels } from "../core/ui/useTableLabels";
 import { useAuth } from "../core/auth/AuthContext";
 import { AppFooter } from "../components/AppChrome";
 import { BusinessBrand } from "../components/Brand";
@@ -134,11 +133,9 @@ export function StaffLayout() {
   const compact = useMediaQuery("(max-width: 1023px)");
   const drawerOpen = compact && openOn === pathname;
   const [switchError, setSwitchError] = useState("");
-  const mainRef = useRef(null);
   const topbarRef = useRef(null);
   const sidebarRef = useRef(null);
   const menuButtonRef = useRef(null);
-  useTableLabels(mainRef);
   useKeyboardShortcuts();
   useEffect(() => {
     const bar = topbarRef.current;
@@ -228,7 +225,7 @@ export function StaffLayout() {
             <SidebarAccount />
           </div>
         </aside>
-        <main ref={mainRef} inert={drawerOpen ? true : undefined}>
+        <main inert={drawerOpen ? true : undefined}>
           {!(["/admin/products", "/admin/product-lookup", "/admin/categories"].includes(pathname)) && <BackLink />}
           <SubscriptionBanner organization={organization} canManage={["OWNER", "ADMIN"].includes(user.roles?.[0])} />
           <Outlet />

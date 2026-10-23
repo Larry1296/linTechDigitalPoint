@@ -26,6 +26,7 @@ it("renders a lead, section headings, a table with numbers on the right, a callo
   expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Unit", "Revenue", "Net"]);
   expect(within(table).getByText("KES 2,460")).toHaveClass("num");
   expect(within(table).getByText("Shop")).not.toHaveClass("num");
+  expect(within(table).getByText("KES 2,460").closest("td")).toHaveAttribute("data-label", "Revenue");
   expect(answer.querySelector(".answerCallout")).toHaveTextContent("real profit is lower");
   expect(answer.querySelector(".answerNote")).toHaveTextContent("Answered directly from your records.");
 });

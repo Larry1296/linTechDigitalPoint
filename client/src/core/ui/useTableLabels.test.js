@@ -10,3 +10,12 @@ it("labels every body and footer cell with its column heading, following colspan
   const labels = [...document.querySelectorAll("tbody :is(td, th), tfoot :is(td, th)")].map((cell) => cell.dataset.label);
   expect(labels).toEqual(["Month", "Money", "Money", "Net profit / loss", "Month", "Net profit / loss"]);
 });
+
+it("labels the grid tables' cells from their heading row", () => {
+  document.body.innerHTML = `<div class="table ledgerTable">
+    <div><b>Time</b><b>Amount</b><b>Transaction ID</b></div>
+    <div><span>09:12</span><span>KSh 500</span><span>SJK4H7XQ2P</span></div></div>`;
+  labelTableCells(document.body);
+  expect([...document.querySelectorAll(".table > div + div > span")].map((cell) => cell.dataset.label)).toEqual(["Time", "Amount", "Transaction ID"]);
+  expect(document.querySelector(".table b").dataset.label).toBeUndefined();
+});

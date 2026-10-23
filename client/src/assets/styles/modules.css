@@ -885,15 +885,6 @@ label:where(:has(> input[type="radio"])) {
   .deskGrid {
     @apply tw:grid-cols-[minmax(0,1fr)];
   }
-  .ledgerTable > div {
-    @apply tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)];
-  }
-  .table > div {
-    @apply tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)];
-  }
-  .table > div span:nth-last-child(-n + 2) {
-    @apply tw:text-right;
-  }
 }
 @media (max-width: 600px) {
   .jobLine {
@@ -1744,27 +1735,41 @@ form a:not(.button, .pageBackLink),
 .admin > main table {
   max-width: 100%;
 }
-/* Small screens and tablets: every table row becomes a labelled card. */
+/* Small screens and tablets: every table in the app becomes labelled cards, one card per row, each figure
+   labelled with its column heading (see useTableLabels). #root outweighs each table's own cell styles. Tables
+   with no heading row (a short list of figures) stay one list, row under row. */
 @media (max-width: 900px) {
-  .admin > main table,
-  .admin > main table :is(tbody, tfoot, tr, td, th, caption) {
+  #root table,
+  #root table :is(tbody, tfoot, tr, td, th, caption) {
     display: block;
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
   }
-  .admin > main table thead {
+  #root table thead {
     display: none;
   }
-  .admin > main table caption {
+  #root table caption {
     margin-bottom: 8px;
     text-align: left;
     font-weight: 700;
   }
-  .admin > main table tr {
+  #root table tr {
     padding: 10px 0;
+    border: 0;
     border-bottom: 1px solid var(--line);
   }
-  .admin > main table :is(td, th) {
+  #root table:has(thead) :is(tbody, tfoot) tr {
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  #root table:has(thead) :is(tbody, tfoot) tr:last-child {
+    margin-bottom: 0;
+  }
+  #root table :is(td, th) {
+    position: static;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -1774,7 +1779,7 @@ form a:not(.button, .pageBackLink),
     text-align: right;
     white-space: normal;
   }
-  .admin > main table :is(td, th)[data-label]::before {
+  #root table :is(td, th)[data-label]::before {
     content: attr(data-label);
     flex: 0 0 auto;
     max-width: 50%;
@@ -1782,16 +1787,55 @@ form a:not(.button, .pageBackLink),
     font-weight: 700;
     text-align: left;
   }
-  .admin > main table th[scope="row"] {
+  #root table th[scope="row"] {
     font-weight: 800;
   }
-  .admin > main table :is(td, th)[data-label="Actions"],
-  .admin > main table :is(td, th)[data-label=""] {
+  #root table :is(td, th)[data-label="Actions"],
+  #root table :is(td, th)[data-label=""] {
     justify-content: flex-start;
     flex-wrap: wrap;
   }
-  .admin > main table :is(td, th)[data-label="Actions"]::before {
+  #root table :is(td, th)[data-label="Actions"]::before {
     display: none;
+  }
+  /* Boxes drawn around a table would box its cards in. */
+  #root :is(.balancePreview, .platformTableWrap, .answerTable) {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+  /* The grid tables (M-Pesa transactions): the heading row is hidden and each row is a labelled card too. */
+  #root .table {
+    gap: 10px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+  #root .table > div {
+    display: block;
+    min-width: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  #root .table > div:first-child {
+    display: none;
+  }
+  #root .table > div > * {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 4px 0;
+    text-align: right;
+  }
+  #root .table > div > [data-label]::before {
+    content: attr(data-label);
+    margin-right: auto;
+    color: var(--muted);
+    font-weight: 700;
+    text-align: left;
   }
 }
 /* Report tables in narrow side-by-side panels share their width instead of overflowing. */
@@ -2286,20 +2330,6 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 [data-theme="dark"] .balancePreview .balanceUp { color: #47cd89; }
 [data-theme="dark"] .balancePreview .balanceDown { color: #f97066; }
 .balancePreview .visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* Four short columns fit a phone, so this table stays a table instead of becoming labelled cards. */
-@media (max-width: 900px) {
-  .admin .balancePreview table { display: table; }
-  .admin .balancePreview caption { display: table-caption; margin: 0; font-weight: 700; }
-  .admin .balancePreview thead { display: table-header-group; }
-  .admin .balancePreview tbody { display: table-row-group; }
-  .admin .balancePreview tr { display: table-row; padding: 0; border-bottom: 0; }
-  .admin .balancePreview :is(td, th) { display: table-cell; width: auto; padding: 8px 10px; text-align: right; white-space: nowrap; }
-  .admin .balancePreview thead th { border-bottom: 1px solid var(--line); }
-  .admin .balancePreview tbody tr + tr { border-top: 1px solid var(--line); }
-  .admin .balancePreview tbody th { text-align: left; }
-  .admin .balancePreview :is(td, th)::before { content: none; display: none; }
-}
-@media (max-width: 400px) { .admin .balancePreview :is(td, th) { padding: 8px 5px; font-size: 13.5px; } }
 .balanceShort { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--danger, #b42318); font-weight: 700; }
 
 /* M-Pesa deposits/withdrawals today: the Agency transactions grid with their own columns. */
@@ -2317,16 +2347,6 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
 .customerLedger .inlineForm input, .customerLedger .inlineForm textarea.textBox { flex: 1 1 8rem; min-width: 0; }
 .customerLedger .inlineForm button { margin: 0; }
-/* On narrow screens the M-Pesa tables keep their columns and scroll sideways, rather than wrapping each
-   row onto two lines under headings that no longer match. */
-@media (max-width: 800px) {
-  .table.ledgerTable { overflow-x: auto; }
-  .table.ledgerTable > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; min-width: 620px; }
-  .table.ledgerTable > div span:nth-last-child(-n + 2) { text-align: left; }
-  .customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 740px; }
-  .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 740px; }
-  .customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); min-width: 520px; }
-}
 
 /* M-Pesa monthly report: appears once a month has ended. */
 .monthlyReport { width: min(100%, 760px); margin: 0 auto 16px; padding: 16px 20px; border: 1px solid var(--line); border-left: 4px solid var(--primary); border-radius: 15px; background: var(--surface); }
@@ -2401,15 +2421,6 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .moneyParts .reportTotal th, .moneyParts .reportTotal td { font-weight: 800; border-bottom: 0; }
 .moneyCount fieldset { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
 .moneyCompare { margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 8%, transparent); }
-/* These small tables fit a phone, so they stay tables instead of becoming labelled cards. */
-@media (max-width: 900px) {
-  .admin .moneyParts { display: table; }
-  .admin .moneyParts caption { display: table-caption; }
-  .admin .moneyParts tbody { display: table-row-group; }
-  .admin .moneyParts tr { display: table-row; padding: 0; }
-  .admin .moneyParts :is(th, td) { display: table-cell; width: auto; }
-  .admin .moneyParts :is(th, td)::before { content: none; display: none; }
-}
 .stockCheckTable :is(th, td) { text-align: left; vertical-align: middle; }
 .stockCheckTable th[scope="row"] { min-width: 12rem; font-weight: 700; }
 
@@ -2597,9 +2608,6 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .table.ledgerTable.agencyLedger > div { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 12.5rem; align-items: center; }
 .agencyLedger > div > :nth-child(n+3):nth-child(-n+5) { text-align: right; font-variant-numeric: tabular-nums; }
 .agencyLedger > div > :last-child { text-align: right; }
-@media (max-width: 800px) {
-  .table.ledgerTable.agencyLedger > div { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 12.5rem; min-width: 760px; }
-}
 .agencyActions { flex-wrap: nowrap; }
 .agencyActions > button { min-height: 36px; padding: 4px 12px; margin: 0 !important; white-space: nowrap; }
 .stockItemSearch { display: grid; gap: 4px; }
