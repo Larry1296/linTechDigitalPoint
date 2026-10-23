@@ -31,6 +31,28 @@ def plan(code):
     return SubscriptionPlan.objects.filter(code=code, active=True).first()
 
 
+def billing_sector(organization):
+    """The kind of business the plans are priced for: the one recorded on the subscription, else the business's kind."""
+    subscription = getattr(organization, "subscription", None)
+    return (subscription.billing_sector if subscription else "") or organization.sector
+
+
+def price_for(plan_, organization=None, sector=None):
+    """What ``plan_`` costs, most specific first, as (price, source): the business's own price ("business"), the price
+    for its kind of business or for ``sector`` ("kind"), or the plan's standard price ("standard")."""
+    from .models import PlanPrice
+    if organization is not None:
+        own = PlanPrice.objects.filter(plan=plan_, organization=organization).first()
+        if own:
+            return own.price, "business"
+        sector = billing_sector(organization)
+    if sector:
+        kind = PlanPrice.objects.filter(plan=plan_, sector=sector, organization__isnull=True).first()
+        if kind:
+            return kind.price, "kind"
+    return plan_.price, "standard"
+
+
 def state(organization):
     """The subscription as the business experiences it right now (status, plan, days left, whether it has ended)."""
     subscription = getattr(organization, "subscription", None) if organization else None
@@ -88,7 +110,7 @@ def start_trial(organization, plan_code, platform_owner=False):
         return OrganizationSubscription.objects.create(organization=organization, plan=plan("PRO"), status="ACTIVE",
                                                        complimentary=True, started_at=now)
     return OrganizationSubscription.objects.create(organization=organization, plan=plan(plan_code), status="TRIAL",
-                                                   started_at=now, ends_at=now + timedelta(days=TRIAL_DAYS))
+                                                   billing_sector=organization.sector, started_at=now, ends_at=now + timedelta(days=TRIAL_DAYS))
 
 
 def new_period_end(subscription, new_plan, now=None):
@@ -96,7 +118,7 @@ def new_period_end(subscription, new_plan, now=None):
 
     - During the free month, the paid period starts when the free month ends.
     - Renewing the same plan adds a period to the current end.
-    - Changing plan applies straight away; unused paid days are converted at the two plans' prices.
+    - Changing plan applies straight away; unused paid days are converted at the two plans' prices for this business.
     - After it has ended, the period starts now.
     """
     now = now or timezone.now()
@@ -108,8 +130,11 @@ def new_period_end(subscription, new_plan, now=None):
         return ends_at + period
     old = subscription.plan
     remaining = ends_at - now
-    if old and old.price and new_plan.price:
-        credit = remaining * float(Decimal(old.price) / Decimal(new_plan.price))
+    business = subscription.organization if subscription.organization_id else None
+    old_price = price_for(old, business)[0] if old else 0
+    new_price = price_for(new_plan, business)[0]
+    if old_price and new_price:
+        credit = remaining * float(Decimal(old_price) / Decimal(new_price))
     else:
         credit = remaining
     return now + period + credit

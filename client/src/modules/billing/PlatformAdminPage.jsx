@@ -10,6 +10,7 @@ import { ProtectedPasswordForm } from "../../core/auth/ProtectedPages";
 
 const MODULE_LABELS = { inventory: "Products & stock", locations: "Shelves & locations", services: "Services & jobs", pos: "Point of sale",
   customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff", chama: "Chama" };
+const MODEL_LABELS = { GOODS: "Sells goods", SERVICES: "Provides services", MIXED: "Goods and services" };
 const money = (amount, currency = "KES") => `${currency} ${Number(amount || 0).toLocaleString()}`;
 const dateText = (value) => (value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 
@@ -90,7 +91,7 @@ export function PlatformAdminPage() {
       {!rows.length && <p className="muted" style={{ padding: 16 }}>No businesses match.</p>}
     </div>
 
-    {selected && <BusinessDetail key={selected} id={selected} plans={data.plans} onChanged={load} onClose={() => setSelected(null)}
+    {selected && <BusinessDetail key={selected} id={selected} plans={data.plans} kinds={data.kinds || []} onChanged={load} onClose={() => setSelected(null)}
       onDeleted={() => { setSelected(null); void load(); }} />}
 
     <h2>Recent payments</h2>
@@ -104,13 +105,25 @@ export function PlatformAdminPage() {
     </table></div> : <p className="muted">No payments yet.</p>}
 
     <h2>Plans</h2>
-    <div className="platformPlans">{data.plans.map((item) => <PlanEditor key={item.id} plan={item} onSaved={load} />)}</div>
+    <p className="muted">Each plan has a standard price. Set a different price for a kind of business (a kibanda pays less than a hardware shop),
+      or for one business from its details above. A business pays its own price first, then its kind's, then the standard price.</p>
+    <div className="platformPlans">{data.plans.map((item) => <PlanEditor key={item.id} plan={item} kinds={data.kinds || []} onSaved={load} />)}</div>
 
     <BusinessKinds />
   </section>;
 }
 
-function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
+const SOURCE = { business: "its own price", kind: "the price for its kind", standard: "the standard price" };
+const MODEL_ORDER = ["GOODS", "SERVICES", "MIXED"];
+
+// The kinds of business as a grouped list to choose from (owner-added kinds not yet listed are marked).
+function KindOptions({ kinds }) {
+  return MODEL_ORDER.map((model) => <optgroup key={model} label={MODEL_LABELS[model]}>
+    {kinds.filter((kind) => kind.model === model).map((kind) => <option key={kind.id} value={kind.id}>{kind.label}{kind.listed ? "" : " (not listed)"}</option>)}
+  </optgroup>);
+}
+
+function BusinessDetail({ id, plans, kinds, onChanged, onClose, onDeleted }) {
   const [row, setRow] = useState();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -162,6 +175,11 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
   };
   const submit = (handler) => (event) => { event.preventDefault(); void handler(Object.fromEntries(new FormData(event.currentTarget))); };
   const view = statusOf(row.subscription);
+  const pricing = row.pricing;
+  const priceOf = (code) => pricing?.plans.find((p) => p.plan === code);
+  // Own prices typed here; a box left empty goes back to the price for the business's kind.
+  const ownPrices = (values) => Object.fromEntries((pricing?.plans || []).map((p) => [p.plan, values[`price_${p.plan}`] ? values[`price_${p.plan}`] : null])
+    .filter(([code, value]) => value !== (priceOf(code).source === "business" ? String(Number(priceOf(code).price)) : null)));
   return <article className="platformDetail" aria-label={`${row.name} subscription`}>
     <header><div><h2>{row.name}</h2><span className={`statusPill ${view.tone}`}>{view.label}</span>{!row.active && <span className="statusPill ended">Switched off</span>}</div>
       <button type="button" className="secondary" onClick={onClose}>Close</button></header>
@@ -175,6 +193,32 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
       <div><dt>Active users</dt><dd>{row.members}</dd></div>
       <div><dt>Paid in total</dt><dd>{money(row.total_paid)}</dd></div>
     </dl>
+
+    {pricing && <>
+      <h3>What it pays</h3>
+      <ul className="platformPrices" aria-label="Prices for this business">{pricing.plans.map((p) => <li key={p.plan}>
+        <strong>{p.plan_name}: {money(p.price, p.currency)}</strong> <small>{SOURCE[p.source]}{p.source === "business" ? ` · its kind pays ${money(p.kind_price, p.currency)}` : ""}{p.note ? ` · ${p.note}` : ""}</small>
+      </li>)}</ul>
+      {pricing.kind_changed && <p className="billingNote">The owner changed the kind of business to <b>{pricing.kind}</b>, but it is still billed as <b>{pricing.billing_kind}</b>.
+        Bill it as {pricing.kind} if that is right; the price does not change until you do.</p>}
+      <form onSubmit={submit((values) => change(`Bill it as ${kinds.find((k) => k.id === values.billing_sector)?.label}?`, "PATCH", values, "Its plans are now priced for that kind of business."))}>
+        <label>Billed as<select name="billing_sector" defaultValue={pricing.billing_sector} key={pricing.billing_sector}>
+          {!pricing.billing_sector && <option value="">Not set: standard prices</option>}<KindOptions kinds={kinds} /></select></label>
+        <label>Note<TextBox name="note" maxLength={255} placeholder="Why (kept in the history)" /></label>
+        <button disabled={busy}>Bill as this kind</button>
+      </form>
+      <form onSubmit={submit((values) => {
+        const prices = ownPrices(values);
+        if (!Object.keys(prices).length) return showError("Nothing changed", "Type a price, or clear one to go back to the price for its kind.");
+        return change("Change what this business pays?", "PATCH", { prices, note: values.note }, "Its prices were updated. They apply to its next payment.");
+      })}>
+        {pricing.plans.map((p) => <label key={p.plan}>Own price for {p.plan_name} ({p.currency})
+          <input name={`price_${p.plan}`} type="number" min="1" step="1" defaultValue={p.source === "business" ? Number(p.price) : ""} placeholder={`${Number(p.kind_price)} for its kind`} /></label>)}
+        <label>Note<TextBox name="note" maxLength={255} placeholder="e.g. Agreed discount for the first year" /></label>
+        <button disabled={busy}>Save its own prices</button>
+      </form>
+      <p className="muted">Leave a box empty for the price of its kind. New prices apply to its next payment.</p>
+    </>}
 
     <h3>Change the subscription</h3>
     <form onSubmit={submit((values) => change("Change plan and status?", "PATCH", values, "The subscription was updated."))}>
@@ -196,8 +240,10 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
 
     <h3>Record a payment received outside the app</h3>
     <form onSubmit={submit((values) => change(`Record ${money(values.amount)} for ${values.plan}?`, "POST", values, "The payment was recorded and the subscription extended."))}>
-      <label>Plan<select name="plan" defaultValue={row.subscription.plan || plans[0]?.code}>{plans.map((p) => <option key={p.code} value={p.code}>{p.name} · {money(p.price, p.currency)}</option>)}</select></label>
-      <label>Amount<input name="amount" type="number" min="1" step="0.01" required /></label>
+      <label>Plan<select name="plan" defaultValue={row.subscription.plan || plans[0]?.code}
+        onChange={(e) => { const amount = e.currentTarget.form.elements.amount; if (priceOf(e.target.value)) amount.value = Number(priceOf(e.target.value).price); }}>
+        {plans.map((p) => <option key={p.code} value={p.code}>{p.name} · {money(priceOf(p.code)?.price ?? p.price, p.currency)}</option>)}</select></label>
+      <label>Amount<input name="amount" type="number" min="1" step="0.01" required defaultValue={Number(priceOf(row.subscription.plan || plans[0]?.code)?.price ?? "") || ""} /></label>
       <label>Receipt / reference<TextBox name="receipt_number" maxLength={40} placeholder="M-Pesa code or cash receipt" /></label>
       <button disabled={busy}>Record payment</button>
     </form>
@@ -226,16 +272,21 @@ function BusinessDetail({ id, plans, onChanged, onClose, onDeleted }) {
   </article>;
 }
 
-function PlanEditor({ plan, onSaved }) {
+function PlanEditor({ plan, kinds, onSaved }) {
   const [modules, setModules] = useState(new Set(plan.enabled_modules));
   const [busy, setBusy] = useState(false);
+  const kindPrices = plan.kind_prices || {};
   const save = async (event) => {
     event.preventDefault();
-    const form = Object.fromEntries(new FormData(event.currentTarget));
+    const { name, price, description, active, ...typed } = Object.fromEntries(new FormData(event.currentTarget));
+    const form = { name, price, description, active };
+    // Only the kinds whose price changed; an emptied box goes back to the standard price.
+    const kind_prices = Object.fromEntries(kinds.map((kind) => [kind.id, typed[`kind_${kind.id}`] || null])
+      .filter(([id, value]) => value !== (kindPrices[id] ? String(Number(kindPrices[id])) : null)));
     if (!(await confirmAction({ title: `Save the ${plan.name} plan?`, text: "Changes apply to every business on this plan straight away. Prices apply to the next payment.", confirmButtonText: "Save plan" }))) return;
     setBusy(true);
     try {
-      await api(`/api/v1/tenancy/platform-admin/plans/${plan.id}/`, { method: "PATCH", body: JSON.stringify({ ...form, active: form.active === "on", enabled_modules: [...modules] }) });
+      await api(`/api/v1/tenancy/platform-admin/plans/${plan.id}/`, { method: "PATCH", body: JSON.stringify({ ...form, active: form.active === "on", enabled_modules: [...modules], kind_prices }) });
       await onSaved();
       await showSuccess("Plan saved", `${form.name} is updated.`);
     } catch (e) {
@@ -248,7 +299,15 @@ function PlanEditor({ plan, onSaved }) {
   return <form onSubmit={(event) => void save(event)} aria-label={`${plan.name} plan`}>
     <h3>{plan.name} <small className="muted">({plan.code})</small></h3>
     <label>Name<TextBox name="name" defaultValue={plan.name} required maxLength={100} /></label>
-    <label>Price ({plan.currency} per {plan.period_days} days)<input name="price" type="number" min="1" step="1" defaultValue={Number(plan.price)} required /></label>
+    <label>Standard price ({plan.currency} per {plan.period_days} days)<input name="price" type="number" min="1" step="1" defaultValue={Number(plan.price)} required /></label>
+    <details className="kindPrices">
+      <summary>Price for each kind of business ({Object.keys(kindPrices).length} set{plan.business_prices ? ` · ${plan.business_prices} ${plan.business_prices === 1 ? "business has" : "businesses have"} its own` : ""})</summary>
+      <p className="muted">Leave a box empty for the standard price.</p>
+      {MODEL_ORDER.map((model) => <fieldset key={model}><legend>{MODEL_LABELS[model]}</legend>
+        {kinds.filter((kind) => kind.model === model).map((kind) => <label key={kind.id}>{kind.label}{kind.listed ? "" : " (not listed)"}
+          <input name={`kind_${kind.id}`} type="number" min="1" step="1" defaultValue={kindPrices[kind.id] ? Number(kindPrices[kind.id]) : ""} placeholder={String(Number(plan.price))} /></label>)}
+      </fieldset>)}
+    </details>
     <label>Description<TextBox name="description" defaultValue={plan.description} maxLength={255} /></label>
     <fieldset className="checkList"><legend>Tools included</legend>
       {Object.entries(MODULE_LABELS).map(([id, label]) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {label}</label>)}
@@ -258,7 +317,6 @@ function PlanEditor({ plan, onSaved }) {
   </form>;
 }
 
-const MODEL_LABELS = { GOODS: "Sells goods", SERVICES: "Provides services", MIXED: "Goods and services" };
 const KIND_STATUS = { SUGGESTED: { label: "Waiting for review", tone: "warn" }, LISTED: { label: "Listed", tone: "active" }, HIDDEN: { label: "Not listed", tone: "ended" } };
 
 // Kinds of business owners created under "Other". Listing one adds it to the set-up list for every new owner.

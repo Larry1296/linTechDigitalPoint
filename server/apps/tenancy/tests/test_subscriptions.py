@@ -23,10 +23,11 @@ def signed_in(username, superuser=False):
     return client
 
 
-def new_business(client, plan="BASIC", name="Wanjiru Traders", modules=None):
+def new_business(client, plan="BASIC", name="Wanjiru Traders", modules=None, sector=None):
     # A Basic business can only be set up with Basic tools; the platform owner's own business gets every tool.
     modules = modules or (BASIC if plan == "BASIC" else EVERYTHING)
-    response = client.post("/api/v1/tenancy/create/", {"name": name, "business_model": "MIXED", "enabled_modules": modules, "plan": plan}, format="json")
+    kind = {"business_model": "GOODS", "sector": sector, "enabled_modules": [m for m in modules if m != "services"]} if sector else {"business_model": "MIXED", "enabled_modules": modules}
+    response = client.post("/api/v1/tenancy/create/", {"name": name, **kind, "plan": plan}, format="json")
     assert response.status_code == 201, response.content
     return Organization.objects.select_related("subscription__plan").get(pk=response.json()["id"])
 
@@ -191,3 +192,77 @@ def test_a_basic_business_cannot_switch_on_pro_tools_in_settings():
     assert kept.status_code == 200, kept.content  # an earlier choice is kept; Customers is in Basic
     OrganizationSubscription.objects.filter(organization=organization).update(plan=SubscriptionPlan.objects.get(code="PRO"))
     assert owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["inventory", "pos", "staff"]}, format="json").status_code == 200
+
+
+def set_kind_price(admin, code, sector, price):
+    plan = SubscriptionPlan.objects.get(code=code)
+    response = admin.patch(f"/api/v1/tenancy/platform-admin/plans/{plan.pk}/", {"kind_prices": {sector: price}}, format="json")
+    assert response.status_code == 200, response.content
+    return response.json()
+
+
+def test_each_kind_of_business_pays_its_own_price_for_a_plan(simulated):
+    admin = signed_in("platform-owner", superuser=True)
+    assert set_kind_price(admin, "BASIC", "mama_mboga", "250")["kind_prices"] == {"mama_mboga": "250.00"}
+    set_kind_price(admin, "BASIC", "duka", "700")
+    kibanda, shop = signed_in("kibanda-owner"), signed_in("shop-owner")
+    new_business(kibanda, name="Mama Njeri", sector="mama_mboga")
+    new_business(shop, name="Baraka Duka", sector="duka")
+    prices = lambda client: {p["code"]: (p["price"], p["price_source"]) for p in client.get("/api/v1/tenancy/billing/").json()["plans"]}
+    assert prices(kibanda) == {"BASIC": ("250.00", "kind"), "PRO": ("1000.00", "standard")}
+    assert prices(shop)["BASIC"] == ("700.00", "kind")
+    for client, amount in [(kibanda, "250.00"), (shop, "700.00")]:
+        sent = client.post("/api/v1/tenancy/billing/pay/", {"plan": "BASIC", "phone": "0712345678"}, format="json")
+        assert sent.json()["amount"] == amount  # the M-Pesa prompt asks for the business's own price
+    # Before the kind is known (pricing page, first set-up step) the lowest price is shown; once chosen, the kind's.
+    public = {p["code"]: p for p in APIClient().get("/api/v1/tenancy/plans/").json()["plans"]}
+    assert (public["BASIC"]["price"], public["BASIC"]["price_from"], public["BASIC"]["prices_vary"]) == ("500.00", "250.00", True)
+    assert APIClient().get("/api/v1/tenancy/plans/?sector=duka").json()["plans"][0]["price"] == "700.00"
+    assert set_kind_price(admin, "BASIC", "duka", None)["kind_prices"] == {"mama_mboga": "250.00"}  # back to the standard price
+    assert prices(shop)["BASIC"] == ("500.00", "standard")
+    unknown = admin.patch(f"/api/v1/tenancy/platform-admin/plans/{SubscriptionPlan.objects.get(code='BASIC').pk}/", {"kind_prices": {"spaceship": "5"}}, format="json")
+    assert unknown.status_code == 400
+
+
+def test_a_business_keeps_its_billed_kind_until_the_platform_owner_changes_it_and_can_have_its_own_price():
+    admin = signed_in("platform-owner", superuser=True)
+    set_kind_price(admin, "BASIC", "mama_mboga", "250")
+    owner = signed_in("owner")
+    organization = new_business(owner, sector="duka")
+    assert organization.subscription.billing_sector == "duka"
+    # Changing the kind in Settings to a cheaper one does not change what the business pays.
+    assert owner.patch("/api/v1/tenancy/settings/", {"sector": "mama_mboga"}, format="json").status_code == 200, "settings"
+    assert Organization.objects.get(pk=organization.pk).sector == "mama_mboga"
+    basic = lambda: next(p for p in owner.get("/api/v1/tenancy/billing/").json()["plans"] if p["code"] == "BASIC")
+    assert basic()["price"] == "500.00"
+    path = f"/api/v1/tenancy/platform-admin/businesses/{organization.pk}/"
+    pricing = admin.get(path).json()["pricing"]
+    assert (pricing["billing_kind"], pricing["kind"], pricing["kind_changed"]) == ("Duka / general shop", "Mama mboga / kibanda", True)
+    # The platform owner decides: bill it as its new kind, or give it a price of its own (most specific wins).
+    assert admin.patch(path, {"billing_sector": "mama_mboga"}, format="json").json()["pricing"]["kind_changed"] is False
+    assert basic()["price"] == "250.00"
+    changed = admin.patch(path, {"prices": {"BASIC": "300"}, "note": "Agreed at the market"}, format="json")
+    assert changed.status_code == 200, changed.content
+    row = admin.get(path).json()["pricing"]["plans"][0]
+    assert (row["price"], row["source"], row["kind_price"], row["note"]) == ("300.00", "business", "250.00", "Agreed at the market")
+    assert basic()["price"] == "300.00"
+    admin.patch(path, {"prices": {"BASIC": None}}, format="json")
+    assert basic()["price"] == "250.00"
+    assert admin.patch(path, {"billing_sector": "spaceship"}, format="json").status_code == 400
+    assert owner.patch(path, {"prices": {"BASIC": "1"}}, format="json").status_code == 403
+    from apps.core.models import AuditLog
+    from apps.tenancy.context import organization_context
+    with organization_context(organization):  # every price change is in the business's history
+        assert AuditLog.objects.filter(action="SUBSCRIPTION_CHANGED", after__own_prices={"BASIC": "300.00"}).exists()
+
+
+def test_switching_plan_converts_unused_days_at_the_businesss_own_prices():
+    basic, pro = SubscriptionPlan.objects.get(code="BASIC"), SubscriptionPlan.objects.get(code="PRO")
+    owner = signed_in("owner")
+    organization = new_business(owner, sector="mama_mboga")
+    from apps.tenancy.models import PlanPrice
+    PlanPrice.objects.create(plan=basic, sector="mama_mboga", price=250)
+    now = timezone.now()
+    subscription = OrganizationSubscription.objects.get(organization=organization)
+    subscription.status, subscription.ends_at = "ACTIVE", now + timedelta(days=12)
+    assert billing.new_period_end(subscription, pro, now) == now + timedelta(days=33)  # 12 days at 250 = 3 days at 1,000

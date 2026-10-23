@@ -102,3 +102,10 @@
 .subscriptionEnds { color:var(--muted); font-size:13px; }
 .platformProtected { display:grid; gap:10px; justify-items:start; margin-top:14px; }
 .platformProtected .protectedCard { margin:0; }
+/* What one business pays for each plan, and the price for each kind of business on a plan. */
+.platformPrices { display:grid; gap:6px; margin:0 0 12px; padding:0; list-style:none; }
+.platformPrices small { color:var(--muted); }
+.kindPrices summary { cursor:pointer; font-weight:700; color:var(--primary); }
+.kindPrices fieldset { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap:8px 12px; margin:10px 0 0; padding:10px 0 0; border:0; border-top:1px solid var(--line); }
+.kindPrices legend { font-weight:700; }
+.kindPrices label { display:grid; gap:4px; font-size:13.5px; }

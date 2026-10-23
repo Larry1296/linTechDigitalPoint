@@ -141,8 +141,31 @@ class OrganizationSubscription(models.Model):
     ends_at = models.DateTimeField(null=True, blank=True)
     # Never expires and never asks for payment: the platform owner's own businesses, or a free account the platform grants.
     complimentary = models.BooleanField(default=False)
+    # The kind of business the plan is priced for (a sector id, see business_profiles.py). Set when the business is
+    # created and changed only by the platform owner, so changing the kind in Settings never changes what it pays.
+    billing_sector = models.CharField(max_length=40, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class PlanPrice(models.Model):
+    """What a plan costs a kind of business (``sector``) or one business (``organization``), instead of its standard price.
+
+    A business pays, most specific first: its own price, the price for the kind it is billed as, the plan's price."""
+    plan = models.ForeignKey(SubscriptionPlan, related_name="prices", on_delete=models.CASCADE)
+    sector = models.CharField(max_length=40, blank=True)
+    organization = models.ForeignKey(Organization, null=True, blank=True, related_name="plan_prices", on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    note = models.CharField(max_length=255, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=(models.Q(sector="") & models.Q(organization__isnull=False)) | (~models.Q(sector="") & models.Q(organization__isnull=True)),
+                                   name="plan_price_for_a_kind_or_a_business"),
+            models.UniqueConstraint(fields=["plan", "sector"], condition=models.Q(organization__isnull=True), name="unique_plan_price_per_kind"),
+            models.UniqueConstraint(fields=["plan", "organization"], condition=models.Q(organization__isnull=False), name="unique_plan_price_per_business"),
+        ]
 
 
 class SubscriptionPayment(models.Model):

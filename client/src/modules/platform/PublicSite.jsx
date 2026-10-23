@@ -228,7 +228,8 @@ function PublicPricing() {
     <div className="publicPlans">
       {(data?.plans || []).map((plan) => <article key={plan.code} className={`publicPlan${plan.code === "PRO" ? " pro" : ""}`}>
         <h3>{plan.name}</h3>
-        <p className="publicPlanPrice"><strong>{plan.currency} {Number(plan.price).toLocaleString()}</strong> / month</p>
+        <p className="publicPlanPrice">{plan.prices_vary && "From "}<strong>{plan.currency} {Number(plan.prices_vary ? plan.price_from : plan.price).toLocaleString()}</strong> / month</p>
+        {plan.prices_vary && <p className="muted">The price depends on your kind of business.</p>}
         <p>{plan.description}</p>
         <ul>{plan.features.map((feature) => <li key={feature}><CircleCheck size={16} aria-hidden="true" /> {feature}</li>)}</ul>
         <Link className={`button${plan.code === "PRO" ? "" : " secondary"}`} to="/register">Start free</Link>

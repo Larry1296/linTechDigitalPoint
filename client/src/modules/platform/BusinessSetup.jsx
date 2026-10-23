@@ -66,6 +66,14 @@ function SetupWizard({ catalogue, user, refresh }) {
   const [chama, setChama] = useState(() => draft.chama ?? emptyChama(user));
   const [plans, setPlans] = useState(null);
   useEffect(() => { api("/api/v1/tenancy/plans/").then((data) => setPlans(data.plans)).catch(() => setPlans([])); }, []);
+  // What the chosen plan costs this kind of business, once the kind is chosen (the price differs by kind).
+  const [kindPrice, setKindPrice] = useState(null);
+  useEffect(() => {
+    setKindPrice(null);
+    if (!sectorId || user.platform_admin) return;
+    api(`/api/v1/tenancy/plans/?sector=${encodeURIComponent(sectorId)}`)
+      .then((data) => setKindPrice(data.plans.find((item) => item.code === plan) || null)).catch(() => {});
+  }, [sectorId, plan, user.platform_admin]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(null);
@@ -188,6 +196,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   };
   const country = COUNTRIES.find((item) => item.code === details.country);
   const planName = plans?.find((item) => item.code === plan)?.name || plan;
+  const priceText = (item) => `${item.prices_vary ? "from " : ""}${item.currency} ${Number(item.prices_vary ? item.price_from : item.price).toLocaleString()} / month`;
   const lockedTag = <small className="proTag">Not in {planName}: choose Pro to use it</small>;
   const modelLabel = catalogue.models.find((item) => item.id === model)?.label;
   // "Other" stays in view whatever the search, so a business that is not listed can always create its own kind.
@@ -233,10 +242,11 @@ function SetupWizard({ catalogue, user, refresh }) {
       <fieldset className="choiceGroup">
         <legend>Choose your plan <small>The first month is free. You pay only when you continue after it.</small></legend>
         <p className="muted">Choose the plan first: the next steps offer only the tools it includes. You can switch plan when you pay for the next month.</p>
+        {plans?.some((item) => item.prices_vary) && <p className="muted">The price depends on your kind of business. You see your own price before you finish.</p>}
         <div className="choiceGrid wideChoices">
           {(plans || []).map((item) => <button type="button" key={item.code} className={`choiceCard${plan === item.code ? " selected" : ""}`}
             aria-pressed={plan === item.code} onClick={() => choosePlan(item.code)}>
-            <strong>{item.name} · {item.currency} {Number(item.price).toLocaleString()} / month</strong><span>{item.description}</span>
+            <strong>{item.name} · {priceText(item)}</strong><span>{item.description}</span>
             <span className="planTools">Includes: {catalogue.modules.filter((m) => item.enabled_modules.includes(m.id)).map((m) => m.label).join(", ")}</span>
           </button>)}
         </div>
@@ -361,7 +371,7 @@ function SetupWizard({ catalogue, user, refresh }) {
     {current === "review" && <section className="setupPanel">
       <dl className="setupReview">
         <div><dt>Business</dt><dd>{name} · {catalogue.sizes.find((item) => item.id === size)?.label}</dd><button type="button" className="linkButton" onClick={() => goTo("business")}>Change</button></div>
-        {!user.platform_admin && <div><dt>Plan</dt><dd>{planName} · first month free</dd><button type="button" className="linkButton" onClick={() => goTo("plan")}>Change</button></div>}
+        {!user.platform_admin && <div><dt>Plan</dt><dd>{planName} · first month free{kindPrice ? `, then ${kindPrice.currency} ${Number(kindPrice.price).toLocaleString()} / month` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("plan")}>Change</button></div>}
         <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => goTo("kind")}>Change</button></div>
         <div><dt>Also does</dt><dd>{catalogue.modules.filter((m) => extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ") || "None of these"}</dd><button type="button" className="linkButton" onClick={() => goTo("extras")}>Change</button></div>
         <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => !extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>

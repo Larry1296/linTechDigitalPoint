@@ -13,7 +13,7 @@ from rest_framework.response import Response
 
 from . import billing
 from .context import organization_context
-from .models import MODULES, Membership, Organization, OrganizationSubscription, SubscriptionPayment, SubscriptionPlan
+from .models import MODULES, Membership, Organization, OrganizationSubscription, PlanPrice, SubscriptionPayment, SubscriptionPlan
 
 PLAN_FEATURES = {"inventory": "Products & stock", "services": "Services & jobs", "pos": "Point of sale & receipts",
                  "customers": "Customers & credit", "expenses": "Expenses", "mpesa": "M-Pesa agency",
@@ -22,8 +22,14 @@ PLAN_FEATURES = {"inventory": "Products & stock", "services": "Services & jobs",
                  "investments": "Investments (MMF)"}
 
 
-def plan_data(plan):
-    return {"id": plan.pk, "code": plan.code, "name": plan.name, "price": str(plan.price), "currency": plan.currency,
+def plan_data(plan, organization=None, sector=None):
+    """A plan as shown to a business: ``price`` is what it costs that business (or that kind of business), and
+    ``price_from`` the lowest it costs any kind, for pages shown before the kind is known."""
+    price, source = billing.price_for(plan, organization, sector)
+    kind_prices = [p.price for p in plan.prices.all() if p.organization_id is None]
+    return {"id": plan.pk, "code": plan.code, "name": plan.name, "price": str(price), "price_source": source,
+            "standard_price": str(plan.price), "price_from": str(min([plan.price, *kind_prices])),
+            "prices_vary": any(value != plan.price for value in kind_prices), "currency": plan.currency,
             "period_days": plan.period_days, "description": plan.description, "active": plan.active,
             "enabled_modules": plan.enabled_modules, "features": [PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules],
             "feature_names": {m: PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules}}
@@ -37,7 +43,7 @@ def payment_data(payment):
 
 
 def plans():
-    return SubscriptionPlan.objects.filter(active=True).exclude(code="").order_by("sort_order", "price")
+    return SubscriptionPlan.objects.filter(active=True).exclude(code="").prefetch_related("prices").order_by("sort_order", "price")
 
 
 def _owner_or_admin(request):
@@ -57,7 +63,8 @@ def _default_phone(request):
 @permission_classes([permissions.AllowAny])
 def public_plans(request):
     """The plans on offer, for registration and the public pricing section."""
-    return Response({"plans": [plan_data(p) for p in plans()], "trial_days": billing.TRIAL_DAYS})
+    sector = str(request.query_params.get("sector", ""))[:40]
+    return Response({"plans": [plan_data(p, sector=sector) for p in plans()], "trial_days": billing.TRIAL_DAYS})
 
 
 @api_view(["GET"])
@@ -67,7 +74,7 @@ def subscription(request):
     if denied:
         return denied
     payments = SubscriptionPayment.objects.filter(organization=request.organization).select_related("plan")[:20]
-    return Response({"subscription": billing.state(request.organization), "plans": [plan_data(p) for p in plans()],
+    return Response({"subscription": billing.state(request.organization), "plans": [plan_data(p, request.organization) for p in plans()],
                      "payments": [payment_data(p) for p in payments], "payment_methods": ["MPESA"] if billing.mpesa_configured() else [],
                      "simulated_payments": billing.mpesa_mode() == "simulate" and billing.mpesa_configured(),
                      "phone": _default_phone(request)})
@@ -105,7 +112,7 @@ def pay(request):
     if SubscriptionPayment.objects.filter(organization=request.organization, status="PENDING", created_at__gte=recent).exists():
         return Response({"detail": "A payment prompt was sent less than two minutes ago. Complete or cancel it on your phone first."}, status=409)
     plan = form.validated_data["plan"]
-    payment = SubscriptionPayment.objects.create(organization=request.organization, plan=plan, amount=plan.price, currency=plan.currency,
+    payment = SubscriptionPayment.objects.create(organization=request.organization, plan=plan, amount=billing.price_for(plan, request.organization)[0], currency=plan.currency,
                                                  method="MPESA", phone=form.validated_data["phone"], requested_by=request.user)
     try:
         billing.request_payment(payment)
@@ -161,6 +168,39 @@ def _owner(organization):
     return {"name": user.get_full_name(), "username": user.username, "email": user.email, "phone": profile.phone if profile else ""}
 
 
+def kind_label(sector_id):
+    """The name of a kind of business, built-in or added by an owner (listed or not)."""
+    from . import business_profiles as profiles
+    found = profiles.find_sector(sector_id, also=sector_id) if sector_id else None
+    return found[1]["label"] if found else ""
+
+
+def kinds():
+    """Every kind of business a plan can be priced for: the built-in ones, then those owners added, by model."""
+    from . import business_profiles as profiles
+    from .models import BusinessKind
+    added = {model: [] for model in profiles.SECTORS}
+    for kind in BusinessKind.objects.order_by("label"):
+        added[kind.business_model].append({"id": kind.sector_id, "label": kind.label, "model": kind.business_model,
+                                           "listed": kind.status == "LISTED"})
+    return [row for model, sectors in profiles.SECTORS.items()
+            for row in [{"id": s["id"], "label": s["label"], "model": model, "listed": True} for s in sectors] + added[model]]
+
+
+def pricing(organization):
+    """How the business is priced: the kind it is billed as, and what each plan costs it and why."""
+    sector = billing.billing_sector(organization)
+    rows = []
+    for plan in SubscriptionPlan.objects.exclude(code="").order_by("sort_order", "price"):
+        price, source = billing.price_for(plan, organization)
+        own = PlanPrice.objects.filter(plan=plan, organization=organization).first()
+        rows.append({"plan": plan.code, "plan_name": plan.name, "price": str(price), "source": source, "currency": plan.currency,
+                     "kind_price": str(billing.price_for(plan, sector=sector)[0]), "note": own.note if own else ""})
+    return {"billing_sector": sector, "billing_kind": kind_label(sector), "sector": organization.sector,
+            "kind": kind_label(organization.sector), "kind_changed": bool(sector and organization.sector and sector != organization.sector),
+            "plans": rows}
+
+
 def business_row(organization):
     view = billing.state(organization)
     return {"id": organization.pk, "name": organization.name, "business_type": organization.business_type,
@@ -210,7 +250,16 @@ def platform_overview(request):
     recent = SubscriptionPayment.objects.select_related("plan", "organization")[:15]
     return Response({"summary": summary, "businesses": rows,
                      "recent_payments": [{**payment_data(p), "business": p.organization.name, "business_id": p.organization_id} for p in recent],
-                     "plans": [plan_data(p) for p in SubscriptionPlan.objects.exclude(code="").order_by("sort_order", "price")]})
+                     "plans": [admin_plan_data(p) for p in SubscriptionPlan.objects.exclude(code="").prefetch_related("prices").order_by("sort_order", "price")],
+                     "kinds": kinds()})
+
+
+def admin_plan_data(plan):
+    """A plan with the prices set for each kind of business and how many businesses have a price of their own."""
+    rows = plan.prices.all()
+    return {**plan_data(plan), "price": str(plan.price), "price_source": "standard",
+            "kind_prices": {p.sector: str(p.price) for p in rows if p.organization_id is None},
+            "business_prices": sum(1 for p in rows if p.organization_id is not None)}
 
 
 class BusinessSubscriptionInput(serializers.Serializer):
@@ -220,7 +269,21 @@ class BusinessSubscriptionInput(serializers.Serializer):
     extend_days = serializers.IntegerField(required=False, min_value=1, max_value=3650)
     complimentary = serializers.BooleanField(required=False)
     active = serializers.BooleanField(required=False)
+    # The kind of business its plans are priced for, and its own prices by plan code (null goes back to the kind's price).
+    billing_sector = serializers.CharField(max_length=40, required=False)
+    prices = serializers.DictField(child=serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("1"), allow_null=True), required=False)
     note = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+    def validate_billing_sector(self, value):
+        if not kind_label(value):
+            raise serializers.ValidationError("Choose a kind of business.")
+        return value
+
+    def validate_prices(self, value):
+        unknown = set(value) - set(SubscriptionPlan.objects.exclude(code="").values_list("code", flat=True))
+        if unknown:
+            raise serializers.ValidationError("Choose one of the plans.")
+        return value
 
 
 class ManualPaymentInput(serializers.Serializer):
@@ -242,6 +305,12 @@ def _plain(view):
     return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in view.items()}
 
 
+def _priced(organization):
+    """The subscription with what the business is billed as, for the history."""
+    own = {p.plan.code: str(p.price) for p in PlanPrice.objects.filter(organization=organization).select_related("plan")}
+    return {**_plain(billing.state(organization)), "billing_sector": billing.billing_sector(organization), "own_prices": own}
+
+
 @api_view(["GET", "PATCH", "POST", "DELETE"])
 @permission_classes([permissions.IsAuthenticated])
 def platform_business(request, pk):
@@ -256,10 +325,10 @@ def platform_business(request, pk):
         return Response({"detail": "Business not found."}, status=404)
     if request.method == "GET":
         payments = SubscriptionPayment.objects.filter(organization=organization).select_related("plan")
-        return Response({**business_row(organization), "payments": [payment_data(p) for p in payments]})
+        return Response({**business_row(organization), "pricing": pricing(organization), "payments": [payment_data(p) for p in payments]})
     if request.method == "DELETE":
         return _delete_business(request, organization)
-    before = _plain(billing.state(organization))
+    before = _priced(organization)
     if request.method == "POST":
         form = ManualPaymentInput(data=request.data)
         form.is_valid(raise_exception=True)
@@ -271,7 +340,7 @@ def platform_business(request, pk):
                                                      status_detail=form.validated_data.get("note", "")[:255])
         billing.mark_paid(payment, receipt_number=form.validated_data.get("receipt_number", ""))
         organization = _businesses().get(pk=pk)
-        _audit(organization, request.user, "SUBSCRIPTION_PAYMENT_RECORDED", before, _plain(billing.state(organization)))
+        _audit(organization, request.user, "SUBSCRIPTION_PAYMENT_RECORDED", before, _priced(organization))
         return Response(business_row(organization), status=201)
     form = BusinessSubscriptionInput(data=request.data)
     form.is_valid(raise_exception=True)
@@ -293,6 +362,15 @@ def platform_business(request, pk):
             if not values["active"] and Membership.objects.filter(organization=organization, user=request.user).exists():
                 return Response({"detail": "You work in this business, so you cannot switch it off from here."}, status=400)
             Organization.objects.filter(pk=organization.pk).update(active=values["active"])
+        if "billing_sector" in values:
+            subscription.billing_sector = values["billing_sector"]
+        for code, price in values.get("prices", {}).items():
+            plan = SubscriptionPlan.objects.get(code=code)
+            if price is None:
+                PlanPrice.objects.filter(plan=plan, organization=organization).delete()
+            else:
+                PlanPrice.objects.update_or_create(plan=plan, organization=organization,
+                                                   defaults={"price": price, "note": values.get("note", "")[:255]})
         if values.get("extend_days"):
             base = max(subscription.ends_at or timezone.now(), timezone.now())
             subscription.ends_at = base + timedelta(days=values["extend_days"])
@@ -304,8 +382,8 @@ def platform_business(request, pk):
         _audit(organization, request.user, "BUSINESS_ACTIVATED" if values["active"] else "BUSINESS_DEACTIVATED",
                {"active": was_active, "note": values.get("note", "")}, {"active": organization.active})
     if set(values) - {"active", "note"}:
-        _audit(organization, request.user, "SUBSCRIPTION_CHANGED", {**before, "note": values.get("note", "")}, _plain(billing.state(organization)))
-    return Response(business_row(organization))
+        _audit(organization, request.user, "SUBSCRIPTION_CHANGED", {**before, "note": values.get("note", "")}, _priced(organization))
+    return Response({**business_row(organization), "pricing": pricing(organization)})
 
 
 def _delete_business(request, organization):
@@ -331,6 +409,14 @@ class PlanInput(serializers.Serializer):
     description = serializers.CharField(max_length=255, allow_blank=True, required=False)
     active = serializers.BooleanField(required=False)
     enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), required=False, allow_empty=False)
+    # The price for each kind of business, by kind id; null goes back to the standard price.
+    kind_prices = serializers.DictField(child=serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("1"), allow_null=True), required=False)
+
+    def validate_kind_prices(self, value):
+        unknown = [sector for sector in value if not kind_label(sector)]
+        if unknown:
+            raise serializers.ValidationError(f"Unknown kind of business: {', '.join(unknown)}.")
+        return value
 
 
 @api_view(["PATCH"])
@@ -344,10 +430,17 @@ def platform_plan(request, pk):
         return Response({"detail": "Plan not found."}, status=404)
     form = PlanInput(data=request.data, partial=True)
     form.is_valid(raise_exception=True)
-    for field, value in form.validated_data.items():
+    values = dict(form.validated_data)
+    kind_prices = values.pop("kind_prices", {})
+    for field, value in values.items():
         setattr(plan, field, value)
     plan.save()
-    return Response(plan_data(plan))
+    for sector, price in kind_prices.items():
+        if price is None:
+            PlanPrice.objects.filter(plan=plan, sector=sector, organization__isnull=True).delete()
+        else:
+            PlanPrice.objects.update_or_create(plan=plan, sector=sector, organization=None, defaults={"price": price})
+    return Response(admin_plan_data(SubscriptionPlan.objects.prefetch_related("prices").get(pk=plan.pk)))
 
 
 # --- Kinds of business added by owners ----------------------------------------------------------------------------

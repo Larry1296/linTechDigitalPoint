@@ -133,6 +133,40 @@ it("shows the platform owner every business and records a payment received outsi
   expect(JSON.parse(options.body)).toEqual({ plan: "BASIC", amount: "500", receipt_number: "QKX99" });
 });
 
+it("prices a plan for each kind of business and gives one business its own price", async () => {
+  useAuth.mockReturnValue({ user: { platform_admin: true } });
+  const kinds = [{ id: "duka", label: "Duka / general shop", model: "GOODS", listed: true }, { id: "mama_mboga", label: "Mama mboga / kibanda", model: "GOODS", listed: true }];
+  const plans = overview.plans.map((plan) => ({ ...plan, kind_prices: plan.code === "BASIC" ? { duka: "700.00" } : {}, business_prices: 0 }));
+  const pricing = { billing_sector: "mama_mboga", billing_kind: "Mama mboga / kibanda", sector: "duka", kind: "Duka / general shop", kind_changed: true,
+    plans: [{ plan: "BASIC", plan_name: "Basic", price: "250.00", source: "kind", kind_price: "250.00", currency: "KES", note: "" },
+      { plan: "PRO", plan_name: "Pro", price: "1000.00", source: "standard", kind_price: "1000.00", currency: "KES", note: "" }] };
+  api.mockImplementation(async (path, options = {}) => {
+    if (path === "/api/v1/tenancy/platform-admin/overview/") return { ...overview, plans, kinds };
+    if (path === "/api/v1/tenancy/platform-admin/businesses/2/") return options.method ? {} : { ...overview.businesses[1], members: 1, payments: [], pricing };
+    return {};
+  });
+  render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
+  const basic = await screen.findByRole("form", { name: "Basic plan" });
+  expect(within(basic).getByText(/Price for each kind of business \(1 set\)/)).toBeInTheDocument();
+  expect(within(basic).getByLabelText("Duka / general shop")).toHaveValue(700);
+  fireEvent.change(within(basic).getByLabelText("Mama mboga / kibanda"), { target: { value: "250" } });
+  fireEvent.change(within(basic).getByLabelText("Duka / general shop"), { target: { value: "" } });
+  await act(async () => { fireEvent.submit(basic); });
+  const [, saved] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/plans/1/" && o?.method === "PATCH");
+  expect(JSON.parse(saved.body).kind_prices).toEqual({ duka: null, mama_mboga: "250" });  // only what changed; emptied goes back to standard
+
+  fireEvent.click(screen.getByRole("button", { name: "Mama Wanjiru" }));
+  const detail = await screen.findByRole("article", { name: "Mama Wanjiru subscription" });
+  expect(within(detail).getByText("Basic: KES 250")).toBeInTheDocument();
+  expect(within(detail).getByText(/still billed as/)).toHaveTextContent("changed the kind of business to Duka / general shop, but it is still billed as Mama mboga / kibanda");
+  expect(within(detail).getByLabelText("Amount")).toHaveValue(1000);  // a payment for its plan defaults to what it pays
+  const own = within(detail).getByRole("button", { name: "Save its own prices" }).closest("form");
+  fireEvent.change(within(own).getByLabelText(/Own price for Basic/), { target: { value: "300" } });
+  await act(async () => { fireEvent.submit(own); });
+  const [, priced] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/2/" && o?.method === "PATCH");
+  expect(JSON.parse(priced.body)).toEqual({ prices: { BASIC: "300" }, note: "" });
+});
+
 it("deletes a switched-off business only with its name and the administrator's protected pages password", async () => {
   useAuth.mockReturnValue({ user: { platform_admin: true } });
   let status = { has_password: false, expired: false, lifetime_days: 7, shortest: 6 };
