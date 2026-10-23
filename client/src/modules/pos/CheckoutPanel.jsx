@@ -114,17 +114,19 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
       {way === "CASH" && <form className="posWay" onSubmit={(e) => {
         e.preventDefault();
         // The customer gave nothing: what is left is owed by them, not paid in cash.
-        if (nothingGiven) void pay({ method: "OWED", due_date: null });
+        if (nothingGiven) void pay({ method: "OWED", due_date: null, ...(checkout.customer_id ? {} : { customer_id: owedBy }) });
         else void pay({ method: "CASH", cash_given: cashGiven || left });
       }}>
         <label>Cash received<input type="number" min="0" step="0.01" inputMode="decimal" autoFocus value={cashGiven}
           onChange={(e) => setCashGiven(e.target.value)} placeholder={left.toFixed(2)} /></label>
         {nothingGiven
-          ? <p className="muted">{checkout.customer_id ? `The customer gave nothing, so ${money(left)} is left owed by them.`
-            : "The customer gave nothing. Choose Owed to leave it owed by a named customer, or pay another way."}</p>
+          ? checkout.customer_id ? <p className="muted">The customer gave nothing, so {money(left)} is left owed by them.</p>
+            : setCustomers ? <><p className="muted">The customer gave nothing. Choose who owes {money(left)}, or pay another way.</p>
+              <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={owedBy} onChange={setOwedBy} open /></>
+            : <p className="muted">The customer gave nothing. Choose Owed to leave it owed by a named customer, or pay another way.</p>
           : change !== null && (change >= 0 ? <p className="posChange">Give change: <b>{money(change)}</b></p>
             : <p className="muted">{money(-change)} still to pay after this, by any other way.</p>)}
-        <button disabled={busy || (nothingGiven && !checkout.customer_id)}>{busy ? "Recording…"
+        <button disabled={busy || (nothingGiven && !(checkout.customer_id || owedBy))}>{busy ? "Recording…"
           : nothingGiven ? `Leave ${money(left)} owed by the customer` : `Take ${money(Math.min(given || left, left))} cash`}</button>
       </form>}
 

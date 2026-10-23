@@ -6,7 +6,7 @@ import { api } from "../../core/api/client";
 
 vi.mock("../../core/api/client", async (original) => ({ ...(await original()), api: vi.fn() }));
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true) }));
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { id: 1, permissions: ["commerce.add_sale", "commerce.change_payment"] } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { id: 1, permissions: ["commerce.add_sale", "commerce.change_payment", "accounts.view_customerprofile"] } }) }));
 vi.mock("../storefront/components/ProductSearch", () => ({ ProductSearch: () => null }));
 
 const item = (id, name, price, category) => ({ id, product_name: name, variant_name: "Standard", sku: `S${id}`, selling_price: price,
@@ -31,6 +31,7 @@ beforeEach(() => {
     const body = options.body ? JSON.parse(options.body) : {};
     if (path.startsWith("/api/v1/commerce/pos/catalog/")) return catalog;
     if (path === "/api/v1/commerce/mpesa-express/") return express;
+    if (path === "/api/v1/commerce/customers/") return [{ id: 12, name: "Wanjiru", phone: "0712345678" }];
     if (path === "/api/v1/commerce/pos/checkouts/" && options.method === "POST") {
       const total = body.items.reduce((sum, line) => sum + Number(catalog.find((p) => p.id === line.variant_id).selling_price) * line.quantity, 0).toFixed(2);
       checkout = fresh(total);
@@ -83,13 +84,20 @@ it("adds up the basket, and charging it sells nothing until the customer pays; c
   expect(within(done).getByText(/Give change/)).toHaveTextContent("250.00");
 }, 20000);  // a whole sale, tap by tap: slow when every test file runs at once
 
-it("records a customer who gave no cash as owing it, once the customer is chosen", async () => {
+it("records a customer who gave no cash as owing the whole price, once the customer is chosen there", async () => {
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
   await charge();
   fireEvent.change(within(panel()).getByLabelText("Cash received"), { target: { value: "0" } });
-  expect(within(panel()).getByText(/Choose Owed to leave it owed/)).toBeInTheDocument();
-  expect(within(panel()).getByRole("button", { name: "Leave KSh 300.00 owed by the customer" })).toBeDisabled();
+  expect(within(panel()).getByText(/Choose who owes KSh 300.00/)).toBeInTheDocument();
+  const leave = within(panel()).getByRole("button", { name: "Leave KSh 300.00 owed by the customer" });
+  expect(leave).toBeDisabled();
+  fireEvent.change(within(panel()).getByLabelText("Customer"), { target: { value: "12" } });
+  expect(leave).toBeEnabled();
+  fireEvent.change(within(panel()).getByLabelText("Customer"), { target: { value: "12" } });
+  expect(leave).toBeEnabled();
+  await act(async () => { fireEvent.click(leave); });
+  expect(posted("/api/v1/commerce/pos/checkouts/7/pay/")).toEqual([{ method: "OWED", due_date: null, customer_id: "12" }]);
 }, 20000);
 
 it("leaves the whole amount owed when the chosen customer gave no cash", async () => {
