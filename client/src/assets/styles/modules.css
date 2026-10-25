@@ -1286,7 +1286,7 @@ form a:not(.button, .pageBackLink),
   margin-top: 0;
 }
 :is(.dashHeaderLive, .reportPeriod, .loanSummary, .investReminder, .callout, .heading, .receiptCosts, .moneyCount fieldset,
-    .posCart, .mpesaSetupForm) > :is(button, a.button, .actionRow) {
+    .posSheetSide, .mpesaSetupForm) > :is(button, a.button, .actionRow) {
   margin-top: 0;
   margin-bottom: 0;
 }

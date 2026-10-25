@@ -58,7 +58,8 @@ beforeEach(() => {
 
 const cart = () => screen.getByRole("heading", { name: "Current sale" }).closest("form");
 const panel = () => screen.getByRole("region", { name: /^Checkout POS-ABC123/ });
-const charge = async () => { await act(async () => { fireEvent.click(within(cart()).getByRole("button", { name: /^Charge/ })); }); };
+const review = () => fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
+const charge = async () => { if (!screen.queryByRole("dialog")) review(); await act(async () => { fireEvent.click(within(cart()).getByRole("button", { name: /^Charge/ })); }); };
 const posted = (path) => api.mock.calls.filter(([p, o]) => p === path && o?.method === "POST").map(([, o]) => JSON.parse(o.body));
 
 it("adds up the basket, and charging it sells nothing until the customer pays; cash gives change", async () => {
@@ -66,6 +67,10 @@ it("adds up the basket, and charging it sells nothing until the customer pays; c
   fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
   fireEvent.click(screen.getByRole("button", { name: /^Earphones/ }));
   fireEvent.click(screen.getByRole("button", { name: /^Cable/ }));
+  // Picking products never opens the checkout; the bar keeps the sale so far.
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Sale so far" })).toHaveTextContent("3 items");
+  review();
   fireEvent.click(within(cart()).getByRole("button", { name: "One more Charger" }));
   expect(within(cart()).getByText("4 items")).toBeInTheDocument();
   expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("1,200.00");
@@ -157,4 +162,23 @@ it("a till not connected to Safaricom takes the code as typed, and says it is no
   expect(within(panel()).getByText(/not connected to Safaricom/)).toBeInTheDocument();
   expect(within(panel()).getByRole("button", { name: "Record payment" })).toBeDisabled();
   expect(within(panel()).queryByRole("tab", { name: /Prompt/ })).toBeNull();
+});
+
+it("opens the checkout only when asked, and going back to the products keeps the sale", async () => {
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  expect(await screen.findByRole("button", { name: /^Complete sale/ })).toBeDisabled();
+  fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
+  fireEvent.keyDown(document, { key: "F2" });
+  expect(screen.getByRole("dialog", { name: "Complete the sale" })).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Earphones/ }));
+  review();
+  fireEvent.click(within(cart()).getByRole("button", { name: /Add more products/ }));
+  expect(screen.getByRole("region", { name: "Sale so far" })).toHaveTextContent("750.00");
+  // Taking payment cannot be closed by accident.
+  await charge();
+  expect(screen.queryByRole("button", { name: "Back to products" })).toBeNull();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(panel()).toBeInTheDocument();
 });

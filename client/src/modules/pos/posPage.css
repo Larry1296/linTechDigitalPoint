@@ -1,4 +1,5 @@
-/* The point of sale: products on the left as tiles, the sale on the right, always in view. */
+/* The point of sale: products across the page as tiles, the sale so far in a bar at the bottom, and the checkout in a
+   window over the whole till that opens only when the cashier is ready. */
 .posPage { --pos-radius: 14px; }
 .posHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .posHeader h1 { margin: 0; }
@@ -8,7 +9,6 @@
 }
 .posExpressBadge.on { color: #047857; border-color: color-mix(in srgb, #10b981 45%, var(--line)); background: color-mix(in srgb, #10b981 10%, var(--surface)); }
 
-.posLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 20px; align-items: start; }
 .posCatalog { min-width: 0; display: grid; gap: 14px; }
 
 /* Category filter */
@@ -48,15 +48,8 @@
 }
 .posTile .posActions { border-top: 1px solid var(--line); }
 
-/* The sale. It ends above the assistant's button (fixed bottom-right, 52px high, 20px up), so Complete sale is never
-   under it; the sale scrolls inside instead. */
-.posCart {
-  position: sticky; top: 12px; display: grid; gap: 14px; max-height: calc(100vh - 100px); overflow-y: auto; padding: 16px;
-  border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow);
-}
-.posCart, .posCart > * { min-width: 0; }
 .posCartHead { display: flex; align-items: center; gap: 8px; }
-.posCartHead h2 { margin: 0; flex: 1; font-size: 18px; }
+.posCartHead h3 { margin: 0; flex: 1; font-size: 18px; }
 .posCount { padding: 3px 10px; border-radius: 999px; color: var(--primary); background: var(--primary2); font-size: 12px; font-weight: 800; }
 .posPage .posIconButton {
   display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: 9px;
@@ -125,18 +118,6 @@
 [data-theme="dark"] .posExpressBadge.on { color: #6ee7b7; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .posTile { transition: none; } }
 
-/* Phones: one column; a bar at the bottom keeps the total in view and jumps to the sale. */
-.posMobileBar { display: none; }
-@media (max-width: 900px) {
-  .posLayout { grid-template-columns: 1fr; }
-  .posCart { position: static; max-height: none; }
-  .posMobileBar {
-    position: fixed; left: 12px; right: 80px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 8px;
-    min-height: 52px; padding: 0 16px; border-radius: 14px; box-shadow: 0 10px 30px rgb(2 18 45 / 30%); font-weight: 700;
-  }
-  .posMobileBar span { margin-left: auto; font-size: 13px; opacity: 0.9; }
-  .posPage { padding-bottom: 76px; }
-}
 @media (max-width: 420px) {
   .posTiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .posMethods { grid-template-columns: repeat(2, 1fr); }
@@ -176,3 +157,89 @@
 .posInline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .posInline label { flex: 1 1 180px; }
 .posInline button { margin: 0; }
+
+/* The sale so far. It stops short of the assistant's button (fixed bottom-right, 52px high, 20px up). */
+.posSaleBar {
+  position: sticky; bottom: 16px; z-index: 20; display: flex; align-items: center; gap: 14px; margin: 22px 76px 0 0; padding: 10px 10px 10px 16px;
+  border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 14px 36px rgb(2 18 45 / 18%);
+}
+.posSaleBarIcon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; color: var(--primary); background: var(--primary2); }
+.posSaleBar.empty .posSaleBarIcon { color: var(--muted); background: var(--bg); }
+.posSaleBarInfo { display: grid; flex: 1; min-width: 0; }
+.posSaleBarInfo small { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.posSaleBarCount { font-size: 15px; animation: posBump 0.25s ease-out; }
+.posSaleBarTotal { font-size: 22px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.posSaleBarGo { display: inline-flex; align-items: center; gap: 10px; flex: none; min-height: 48px; margin: 0; padding: 0 20px; border-radius: 13px; font-size: 15px; font-weight: 800; }
+.posSaleBarGo kbd { padding: 1px 6px; border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-radius: 6px; font: 700 11px/1.5 inherit; opacity: 0.8; }
+
+/* The checkout window */
+.posSheetBackdrop {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px;
+  background: rgb(2 12 27 / 62%); backdrop-filter: blur(6px); animation: posFade 0.16s ease-out;
+}
+.posPage .receiptOverlay { z-index: 210; }
+.posSheet {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(1180px, 100%); height: min(880px, 100%); overflow: hidden;
+  border: 1px solid var(--line); border-radius: 22px; background: var(--bg); box-shadow: 0 30px 80px rgb(2 18 45 / 45%);
+  outline: none; animation: posRise 0.2s ease-out;
+}
+.posSheetHead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 16px 22px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.posSheetHead h2 { margin: 0; font-size: 20px; }
+.posSheetHead .posIconButton { width: 40px; height: 40px; margin-left: auto; }
+.posSteps { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; counter-reset: posStep; }
+.posSteps li { display: flex; align-items: center; gap: 7px; padding: 5px 12px 5px 5px; border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 700; counter-increment: posStep; }
+.posSteps li::before {
+  content: counter(posStep); display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px;
+}
+.posSteps li.passed::before { content: "✓"; color: #fff; background: #10b981; border-color: transparent; }
+.posSteps li[aria-current="step"] { color: var(--primary); background: var(--primary2); }
+.posSteps li[aria-current="step"]::before { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.posSheetBody { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); min-height: 0; }
+.posSheetMain, .posSheetSide { display: grid; align-content: start; gap: 16px; min-width: 0; min-height: 0; padding: 20px 22px; overflow-y: auto; }
+.posSheetMain h3 { margin: 0; font-size: 18px; }
+.posSheetSide { border-left: 1px solid var(--line); background: var(--surface); }
+.posSheetSide > * { min-width: 0; }
+.posSheet .posLine { padding: 12px 14px; background: var(--surface); }
+.posSheet .posLineHead b { font-size: 15px; }
+.posSheetActions { display: grid; gap: 8px; }
+.posSheetActions > button { margin: 0; }
+.posSheetActions .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.posSummary { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.posSummary li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-variant-numeric: tabular-nums; }
+.posSummary li + li { border-top: 1px solid var(--line); }
+.posSummary li > span { display: grid; min-width: 0; }
+.posSummary small { color: var(--muted); }
+.posSummaryTotal { font-weight: 700; }
+.posSummaryTotal strong { font-size: 20px; }
+.posSheetDone { display: grid; place-items: center; padding: 32px 22px; overflow-y: auto; }
+.posSheetDone .posDone { width: min(560px, 100%); margin: 0; padding: 28px; text-align: center; }
+.posSheetDone .posDone header { flex-direction: column; align-items: center; }
+.posSheetDone .posDoneTotal { font-size: 40px; }
+.posSheetDone .posDoneActions { justify-content: center; }
+.posDone header b { display: inline-flex; align-items: center; gap: 6px; }
+.posDone header b svg { color: #047857; }
+
+@keyframes posFade { from { opacity: 0; } }
+@keyframes posRise { from { opacity: 0; transform: translateY(12px) scale(0.985); } }
+@keyframes posBump { 40% { transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .posSheetBackdrop, .posSheet, .posSaleBarCount { animation: none; } }
+
+/* Tablets and phones: the window fills the screen and scrolls as one, with Charge kept in reach at the bottom. */
+@media (max-width: 860px) {
+  .posSheetBackdrop { padding: 0; }
+  .posSheet { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .posSheetBody { grid-template-columns: 1fr; align-content: start; overflow-y: auto; }
+  .posSheetMain, .posSheetSide { overflow: visible; }
+  .posSheetSide { border-left: 0; border-top: 1px solid var(--line); }
+  .posSheetActions { position: sticky; bottom: 0; padding: 10px 0 4px; background: var(--surface); }
+}
+@media (max-width: 600px) {
+  .posSaleBar { gap: 10px; margin-right: 68px; padding: 8px; }
+  .posSaleBarIcon, .posSaleBarGo kbd { display: none; }
+  .posSaleBarTotal { font-size: 17px; }
+  .posSaleBarGo { padding: 0 14px; }
+  .posSheetHead { padding: 12px 16px; }
+  .posSteps li:not([aria-current]) span { display: none; }
+  .posSteps li:not([aria-current]) { padding-right: 5px; }
+  .posSheetMain, .posSheetSide { padding: 16px; }
+}

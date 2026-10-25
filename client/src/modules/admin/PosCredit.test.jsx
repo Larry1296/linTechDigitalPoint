@@ -39,6 +39,7 @@ it("adds a new customer at the till, takes part in cash and leaves the balance o
   });
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /50W Rechargeable Bulbs/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
   fireEvent.change(within(cart).getByLabelText(/Agreed price for/), { target: { value: "800" } });
   fireEvent.click(within(cart).getByText("Customer (optional)"));

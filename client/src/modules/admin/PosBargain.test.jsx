@@ -23,6 +23,7 @@ it("lets a cashier agree a price below the lowest price, noting it for review", 
   });
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /Original Normal Full Charger/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
   // The price is on the line straight away, with the range the customer can bargain within.
   expect(within(cart).queryByLabelText("Line discount")).not.toBeInTheDocument();
@@ -45,6 +46,7 @@ it("lets the cashier clear the quantity box and type a new quantity", async () =
     : path === "/api/v1/commerce/pos/checkouts/" ? { id: 1, number: "POS-1", status: "AWAITING", total: "1800.00", paid: "0", left: "1800.00", open: "1800.00", items: 1, payments: [], till_payments: [] } : []));
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /Original Normal Full Charger/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
   const quantity = screen.getByLabelText("Quantity of Original Normal Full Charger");
   fireEvent.change(quantity, { target: { value: "" } });
   expect(quantity).toHaveValue(null);          // stays empty while typing

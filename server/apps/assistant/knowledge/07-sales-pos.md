@@ -1,7 +1,7 @@
 # Point of sale, receipts and refunds
 
 ## How do I make a sale at the counter?
-Open **Point of Sale**. Tap products to add them (each tap adds one more; the number on the product shows how many are in the sale), use the category buttons to narrow the list, or search by name, item code or barcode. In the sale on the right, change quantities with − and +, and the total adds up as you go. Choose how the customer pays (Cash, M-Pesa, Bank or Other) and press **Complete sale**. For cash, type what the customer gave and the change is worked out. Stock updates as soon as the sale is completed, and a receipt is produced.
+Open **Point of Sale**. Tap products to add them (each tap adds one more; the number on the product shows how many are in the sale), use the category buttons to narrow the list, or search by name, item code or barcode. The bar at the bottom shows how many items are in the sale and the total as you go; picking products never interrupts you. When you are done, press **Complete sale** (or F2): the checkout opens over the whole screen. Check the items, change quantities with − and + or agree a price, choose the customer if any, and press **Charge**. Then take the payment (Cash, Till or Paybill, Prompt, Bank, or Owed). For cash, type what the customer gave and the change is worked out. **Add more products** goes back to the products with the sale kept. Stock updates as soon as the sale is completed, and a receipt is produced.
 
 ## Which payment methods can I record?
 Cash, M-Pesa, bank and other payments, recorded against each sale so your takings and stock stay in one place.

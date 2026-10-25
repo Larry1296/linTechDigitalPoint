@@ -31,6 +31,7 @@ it("sells at a negotiated price and, after a clear warning, records a below-cost
   });
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /Router/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
   const cart = screen.getByRole("heading", { name: "Current sale" }).closest("form");
   fireEvent.change(within(cart).getByLabelText(/Agreed price for/), { target: { value: "400" } });
   await act(async () => { fireEvent.click(within(cart).getByRole("button", { name: /^Charge/ })); });

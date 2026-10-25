@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
 import { businessCurrency } from "../../core/organization/presentation";
 import { useAuth } from "../../core/auth/AuthContext";
 import { api } from "../../core/api/client";
@@ -14,6 +14,7 @@ import { ReceiptPanel } from "../receipts/ReceiptPanel";
 import { useMpesaExpress } from "./MpesaPrompt";
 import { CheckoutPanel } from "./CheckoutPanel";
 import { CustomerChooser, useCustomers } from "./CustomerChooser";
+import { SaleSheet } from "./SaleSheet";
 import "../admin/pos.css";
 import "./posPage.css";
 import { TextBox } from "../../components/forms/TextBox";
@@ -104,7 +105,7 @@ function SaleDone({ result, onReceipt, onNewSale }) {
   return <section className="posDone" aria-label="Sale complete">
     <header>
       <div>
-        <b>Sale complete · {result.receipt_number}</b>
+        <b><CheckCircle2 size={18} aria-hidden="true" /> Sale complete · {result.receipt_number}</b>
         <p className="posDoneTotal">{money(result.total)}</p>
         {result.change > 0 && <p className="posChange">Give change: <b>{money(result.change)}</b></p>}
         {result.gross_profit !== undefined && (
@@ -121,6 +122,18 @@ function SaleDone({ result, onReceipt, onNewSale }) {
       </div>
     </header>
   </section>;
+}
+
+// The charged basket, read only, while the customer pays. A till reloaded mid-checkout has no basket, only its total.
+function ChargedLines({ cart, checkout, lineAmount }) {
+  if (!cart.length) return <p className="muted">{checkout.items} {checkout.items === 1 ? "line" : "lines"} · total {money(checkout.total)}</p>;
+  return <ul className="posSummary">
+    {cart.map((x) => <li key={x.p.id}>
+      <span><b>{x.p.product_name}</b><small>{x.q} × {money(x.price ?? x.p.selling_price)}</small></span>
+      <strong>{money(lineAmount(x))}</strong>
+    </li>)}
+    <li className="posSummaryTotal"><span>Total</span><strong>{money(checkout.total)}</strong></li>
+  </ul>;
 }
 
 export function PosPage() {
@@ -144,7 +157,10 @@ export function PosPage() {
   const canChangePrice = user?.permissions?.includes("commerce.change_sale");
   const canSellAtLoss = user?.permissions?.includes("commerce.sell_below_cost");
   const [customerId, setCustomerId] = useState("");
-  const cartRef = useRef(null);
+  // The checkout window: closed (null), reviewing the sale, or showing the sale just made. Taking payment is shown
+  // whenever a checkout is open.
+  const [sheet, setSheet] = useState(null);
+  const [lastAdded, setLastAdded] = useState("");
   const setLine = (id, changes) => setCart((c) => c.map((y) => (y.p.id === id ? { ...y, ...changes } : y)));
   const removeLine = (id) => setCart((c) => c.filter((y) => y.p.id !== id));
   // Line amount at the agreed price less its discount; this is what the customer is charged before any sale discount.
@@ -170,6 +186,7 @@ export function PosPage() {
       return current ? old.map((x) => (x.p.id === p.id ? { ...x, p, q: x.q + 1, qText: undefined } : x)) : [...old, { p, q: 1 }];
     });
     setQuery("");
+    setLastAdded(p.product_name);
   };
   const groups = useMemo(() => Object.entries(Object.groupBy(rows, groupOf)).sort(([a], [b]) => byGroup(a, b)), [rows]);
   const shown = category === ALL ? groups : groups.filter(([name]) => name === category);
@@ -177,7 +194,17 @@ export function PosPage() {
   const items = cart.reduce((sum, x) => sum + x.q, 0);
   const subtotal = cart.reduce((sum, x) => sum + lineAmount(x), 0);
   const total = Math.max(0, subtotal - Number(discount || 0));
-  const clear = () => { setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); };
+  const clear = () => { setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); setLastAdded(""); };
+  const step = checkout ? "pay" : sheet;
+  const openSheet = () => { if (cart.length) { setResult(undefined); setSheet("review"); } };
+  const newSale = () => { setResult(undefined); setShowReceipt(false); setSheet(null); };
+  // F2 opens the checkout from anywhere on the till, as on most tills; scanners never send it.
+  useEffect(() => {
+    if (step) return undefined;
+    const key = (event) => { if (event.key === "F2") { event.preventDefault(); openSheet(); } };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  });
 
   // Charging freezes the basket and its amount; the customer then pays on the checkout panel.
   const charge = async (e) => {
@@ -218,14 +245,15 @@ export function PosPage() {
     const change = done.payments.reduce((sum, p) => sum + Number(p.change || 0), 0);
     setResult({ ...done.receipt, change });
     setCheckout(null);
+    setSheet("done");
     saleRequest.current = { signature: null, key: null };
     clear();
-    window.scrollTo?.({ top: 0, behavior: "smooth" });
     await search();
   };
   const backToBasket = ({ keepBasket }) => {
     setCheckout(null);
     saleRequest.current = { signature: null, key: null };
+    setSheet(keepBasket ? "review" : null);
     if (!keepBasket) clear();
   };
   const customerPhone = customers.find((c) => String(c.id) === String(checkout?.customer_id || customerId))?.phone;
@@ -241,70 +269,94 @@ export function PosPage() {
           <Smartphone size={15} aria-hidden="true" /> {express.till_notices ? "Till payments checked with Safaricom" : express.ready ? "M-Pesa prompts on" : "M-Pesa by code"}
         </span>}
       </header>
-      {result && <SaleDone result={result} onReceipt={() => setShowReceipt(true)} onNewSale={() => setResult(undefined)} />}
+      {result && step !== "done" && <SaleDone result={result} onReceipt={() => setShowReceipt(true)} onNewSale={newSale} />}
       {showReceipt && result && <ReceiptPanel saleId={result.sale_id} onClose={() => setShowReceipt(false)} />}
       {loadError && <FormError title="Could not load products." message={loadError} />}
-      <div className="posLayout">
-        <section className="posCatalog" aria-label="Products">
-          <ProductSearch value={query} onChange={setQuery} endpoint="/api/v1/commerce/pos/catalog/" minLength={1} limit={50} onSelect={add}
-            exactScan isDisabled={(p) => stockLimit(p) < 1} renderResult={(p) => <VariantSummary row={p} />}
-            renderActions={(p) => <ProductActions row={p} user={user} />} placeholder="Scan a barcode or type a name or item code" />
-          {!query.trim() && groups.length > 1 && <div className="posChips" role="group" aria-label="Categories">
-            {[ALL, ...groups.map(([name]) => name)].map((name) => (
-              <button type="button" key={name} aria-pressed={category === name} onClick={() => setCategory(name)}>{name}</button>
-            ))}
-          </div>}
-          {!query.trim() && shown.map(([name, products]) => (
-            <section key={name} className="posGroup">
-              <h2>{name}</h2>
-              <div className="posTiles">
-                {products.map((p) => <Tile key={p.id} p={p} inCart={counts[p.id] || 0} onAdd={add} user={user} />)}
-              </div>
-            </section>
+      <section className="posCatalog" aria-label="Products">
+        <ProductSearch value={query} onChange={setQuery} endpoint="/api/v1/commerce/pos/catalog/" minLength={1} limit={50} onSelect={add}
+          exactScan isDisabled={(p) => stockLimit(p) < 1} renderResult={(p) => <VariantSummary row={p} />}
+          renderActions={(p) => <ProductActions row={p} user={user} />} placeholder="Scan a barcode or type a name or item code" />
+        {!query.trim() && groups.length > 1 && <div className="posChips" role="group" aria-label="Categories">
+          {[ALL, ...groups.map(([name]) => name)].map((name) => (
+            <button type="button" key={name} aria-pressed={category === name} onClick={() => setCategory(name)}>{name}</button>
           ))}
-        </section>
+        </div>}
+        {!query.trim() && shown.map(([name, products]) => (
+          <section key={name} className="posGroup">
+            <h2>{name}</h2>
+            <div className="posTiles">
+              {products.map((p) => <Tile key={p.id} p={p} inCart={counts[p.id] || 0} onAdd={add} user={user} />)}
+            </div>
+          </section>
+        ))}
+      </section>
 
-        {checkout ? <aside className="posCart" ref={cartRef}>
-          <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={setCheckout}
-            onDone={finished} onBack={backToBasket}
-            user={user} customers={customers} setCustomers={setCustomers} />
-        </aside> : <form className="posCart" onSubmit={charge} ref={cartRef}>
-          <div className="posCartHead">
-            <h2>Current sale</h2>
-            {cart.length > 0 && <>
-              <span className="posCount">{items} {items === 1 ? "item" : "items"}</span>
-              <button type="button" className="posIconButton" onClick={clear} aria-label="Clear the sale"><Trash2 size={16} /></button>
-            </>}
-          </div>
-          <div className="posLines">
-            {!cart.length ? <Empty>Tap products to add them, or scan a barcode.</Empty>
-              : cart.map((x) => <CartLine key={x.p.id} x={x} setLine={setLine} remove={removeLine} canChangePrice={canChangePrice} lineAmount={lineAmount} />)}
-          </div>
-
-          <div className="posTotals">
-            <div><span>Subtotal</span><span>{money(subtotal)}</span></div>
-            <details className="posSaleDiscount" open={Number(discount || 0) > 0 || undefined}>
-              <summary>Discount on the whole sale{Number(discount || 0) > 0 ? ` · −${money(discount)}` : ""}</summary>
-              <label>Discount on the whole sale
-                <input name="discount" type="number" min="0" step="0.01" value={discount} placeholder="0" onChange={(e) => setDiscount(e.target.value)} />
-              </label>
-              <label>Reason for sale discount<TextBox name="discount_reason" maxLength={160} value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
-            </details>
-            <div className="posGrandTotal"><span>Total</span><strong>{money(total)}</strong></div>
-          </div>
-
-          <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />
-
-          <button className="posCharge" disabled={!cart.length || saleBusy}>
-            <span>{saleBusy ? "Charging…" : "Charge"}</span>
-            {!saleBusy && cart.length > 0 && <strong>{money(total)}</strong>}
-          </button>
-          <FormError title="Could not charge the sale." message={error} />
-        </form>}
+      {/* The sale so far, always in view while products are picked; the checkout opens only when asked for. */}
+      <div className={`posSaleBar${cart.length ? "" : " empty"}`} role="region" aria-label="Sale so far">
+        <span className="posSaleBarIcon" aria-hidden="true"><ShoppingCart size={20} /></span>
+        {cart.length ? <span className="posSaleBarInfo">
+          <b key={items} className="posSaleBarCount">{items} {items === 1 ? "item" : "items"}</b>
+          {lastAdded && <small>Added {lastAdded}</small>}
+        </span> : <span className="posSaleBarInfo"><small>Tap products or scan a barcode to start a sale.</small></span>}
+        {cart.length > 0 && <strong className="posSaleBarTotal">{money(total)}</strong>}
+        <button type="button" className="posSaleBarGo" disabled={!cart.length} onClick={openSheet}>
+          Complete sale <kbd aria-hidden="true">F2</kbd>
+        </button>
       </div>
-      {cart.length > 0 && !checkout && <button type="button" className="posMobileBar" onClick={() => cartRef.current?.scrollIntoView({ behavior: "smooth" })}>
-        <ShoppingCart size={18} aria-hidden="true" /> {items} {items === 1 ? "item" : "items"} · <strong>{money(total)}</strong><span>Review sale</span>
-      </button>}
+
+      {step && <SaleSheet step={step} onClose={step === "pay" || showReceipt ? undefined : step === "done" ? newSale : () => setSheet(null)}>
+        {step === "review" && <form className="posSheetBody" onSubmit={charge}>
+          <section className="posSheetMain" aria-labelledby="pos-lines-title">
+            <div className="posCartHead">
+              <h3 id="pos-lines-title">Current sale</h3>
+              {cart.length > 0 && <>
+                <span className="posCount">{items} {items === 1 ? "item" : "items"}</span>
+                <button type="button" className="posIconButton" onClick={clear} aria-label="Clear the sale"><Trash2 size={16} /></button>
+              </>}
+            </div>
+            <div className="posLines">
+              {!cart.length ? <Empty>The sale is empty. Go back to the products to add some.</Empty>
+                : cart.map((x) => <CartLine key={x.p.id} x={x} setLine={setLine} remove={removeLine} canChangePrice={canChangePrice} lineAmount={lineAmount} />)}
+            </div>
+          </section>
+          <aside className="posSheetSide">
+            <div className="posTotals">
+              <div><span>Subtotal</span><span>{money(subtotal)}</span></div>
+              <details className="posSaleDiscount" open={Number(discount || 0) > 0 || undefined}>
+                <summary>Discount on the whole sale{Number(discount || 0) > 0 ? ` · −${money(discount)}` : ""}</summary>
+                <label>Discount on the whole sale
+                  <input name="discount" type="number" min="0" step="0.01" value={discount} placeholder="0" onChange={(e) => setDiscount(e.target.value)} />
+                </label>
+                <label>Reason for sale discount<TextBox name="discount_reason" maxLength={160} value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
+              </details>
+              <div className="posGrandTotal"><span>Total</span><strong>{money(total)}</strong></div>
+            </div>
+            <CustomerChooser user={user} customers={customers} setCustomers={setCustomers} value={customerId} onChange={setCustomerId} />
+            <FormError title="Could not charge the sale." message={error} />
+            <div className="posSheetActions">
+              <button className="posCharge" disabled={!cart.length || saleBusy}>
+                <span>{saleBusy ? "Charging…" : "Charge"}</span>
+                {!saleBusy && cart.length > 0 && <strong>{money(total)}</strong>}
+              </button>
+              <button type="button" className="secondary" onClick={() => setSheet(null)}><ArrowLeft size={16} aria-hidden="true" /> Add more products</button>
+            </div>
+          </aside>
+        </form>}
+        {step === "pay" && <div className="posSheetBody">
+          <section className="posSheetMain" aria-labelledby="pos-charged-title">
+            <h3 id="pos-charged-title">Items</h3>
+            <ChargedLines cart={cart} checkout={checkout} lineAmount={lineAmount} />
+          </section>
+          <aside className="posSheetSide">
+            <CheckoutPanel checkout={checkout} express={express} customerPhone={customerPhone} onChange={setCheckout}
+              onDone={finished} onBack={backToBasket}
+              user={user} customers={customers} setCustomers={setCustomers} />
+          </aside>
+        </div>}
+        {step === "done" && result && <div className="posSheetDone">
+          <SaleDone result={result} onReceipt={() => setShowReceipt(true)} onNewSale={newSale} />
+        </div>}
+      </SaleSheet>}
     </div>
   );
 }

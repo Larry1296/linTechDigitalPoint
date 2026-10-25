@@ -41,6 +41,8 @@ it("groups stock and services, disables empty stock and caps cart quantities", a
   fireEvent.click(add);
   fireEvent.click(add);
   fireEvent.click(add);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Complete sale/ }));
   const cart = screen
     .getByRole("heading", { name: "Current sale" })
     .closest("form");
