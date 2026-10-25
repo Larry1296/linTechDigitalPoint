@@ -14,7 +14,7 @@ from apps.tenancy.transactions import lock_business
 from .ledger import money, resolve_branch
 from .models import CashEntry, MoneyCheck
 from .money_mode import business_parts, money_names, part_names, separate_cash
-from .services import post
+from .services import post, reverse
 
 # The owner's own places. The agency's cash and float (AGENCY_CASH, AGENCY_FLOAT) are never one of them.
 PLACES = [("CASH", "Cash in the drawer"), ("MPESA", "Lipa na M-Pesa till"), ("BANK", "Bank"), ("OTHER", "Other")]
@@ -121,3 +121,31 @@ def _drawer(method, unit):
     if unit not in _cash_units():
         raise ValidationError("Choose whose cash drawer this is.")
     return unit
+
+
+def _place_label(method, unit):
+    if method == "CASH" and separate_cash() and unit:
+        return "M-Pesa commission cash" if unit == "MPESA" else f"{part_names().get(unit, unit)} cash drawer"
+    return dict(PLACES).get(method, method)
+
+
+def starting_entries():
+    """Starting money still counted, newest first, so an amount entered by mistake (at setup or later) can be undone.
+    Money the owner put in to pay a supplier is starting money too, but it is undone with that supplier payment."""
+    undone = CashEntry.objects.filter(reversal_of__isnull=False).values("reversal_of")
+    rows = (CashEntry.objects.filter(kind="OPENING", reversal_of__isnull=True, account__payment_method__in=dict(PLACES))
+            .exclude(pk__in=undone).select_related("account"))
+    return [{"id": e.pk, "place": _place_label(e.account.payment_method, e.business_unit), "amount": e.amount, "date": e.occurred_at,
+             "note": e.reference, "can_undo": not e.source_key.startswith("owner-pays:")} for e in rows]
+
+
+@transaction.atomic
+def undo_starting_money(*, user, entry_id, reason=""):
+    """Starting money that was never really there: a matching minus entry takes it off the place and out of the books."""
+    lock_business()
+    entry = CashEntry.objects.filter(pk=entry_id, kind="OPENING", reversal_of__isnull=True).first()
+    if not entry:
+        raise ValidationError("That starting money was not found.")
+    if entry.source_key.startswith("owner-pays:"):
+        raise ValidationError("This is your own money that paid a supplier. Undo that supplier payment on the stock receipt instead.")
+    return reverse(entry=entry, user=user, reason=str(reason or "").strip() or "Starting money entered by mistake")

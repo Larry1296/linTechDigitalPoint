@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true) }));
-vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["accounting.view_moneycheck", "accounting.add_moneycheck", "accounting.add_cashentry"] } }) }));
+vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["accounting.view_moneycheck", "accounting.add_moneycheck", "accounting.add_cashentry", "accounting.reverse_cashentry"] } }) }));
 import { api } from "../../core/api/client";
 import { MoneyCheckPage, differenceText } from "./MoneyCheckPage";
 
@@ -43,4 +43,18 @@ it("offers to record money found over the expected amount on the till as money a
   fireEvent.click(within(place).getByRole("button", { name: "Add KSh 2,500.00 as money I already had" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/", expect.objectContaining({ method: "POST" })));
   expect(JSON.parse(api.mock.calls.find(([p]) => p.endsWith("/starting/"))[1].body)).toMatchObject({ method: "MPESA", amount: "2500.00" });
+});
+
+it("lists starting money and undoes all of it so only sales are expected", async () => {
+  const starting = [{ id: 7, place: "Bank", amount: "800.00", date: "2026-10-19T08:00:00Z", note: "Starting money entered at setup", can_undo: true },
+    { id: 8, place: "Other", amount: "1000.00", date: "2026-10-20T08:00:00Z", note: "Owner's own money to pay Supplier", can_undo: false },
+    { id: 9, place: "Lipa na M-Pesa till", amount: "5000.00", date: "2026-10-19T09:00:00Z", note: "Starting money", can_undo: true }];
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : { places: [cash], starting, history: [] }));
+  render(<MemoryRouter><MoneyCheckPage /></MemoryRouter>);
+  const section = await screen.findByRole("region", { name: "Starting money" });
+  expect(within(section).getByText(/undo that payment on the stock receipt/)).toBeInTheDocument();
+  fireEvent.click(within(section).getByRole("button", { name: "Undo all starting money" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/9/undo/", expect.objectContaining({ method: "POST" })));
+  expect(api).toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/7/undo/", expect.objectContaining({ method: "POST" }));
+  expect(api).not.toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/8/undo/", expect.anything());
 });

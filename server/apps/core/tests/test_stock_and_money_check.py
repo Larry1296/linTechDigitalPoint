@@ -204,3 +204,32 @@ def test_the_money_mode_is_chosen_in_settings_and_known_everywhere(owner_shop):
     assert org.settings["money_mode"] == "SEPARATE_CASH"
     assert client.patch("/api/v1/tenancy/settings/", {"money_mode": "ANYTHING"}, format="json").status_code == 400
     assert client.get("/api/v1/accounting/money-check/").json()["mode"] == "SEPARATE_CASH"
+
+
+def test_starting_money_entered_by_mistake_is_undone_so_only_sales_are_expected(owner_shop):
+    client, org, charger = owner_shop
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="BANK", amount=D("800"), kind="OPENING", reference="Starting money entered at setup", key="opening:setup-bank")
+    client.post("/api/v1/accounting/money-check/starting/", {"method": "MPESA", "amount": "5000", "idempotency_key": "start-till"}, format="json")
+    client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 1}]}, format="json")  # +300 cash
+    starting = client.get("/api/v1/accounting/money-check/").json()["starting"]
+    assert sorted((s["place"], D(s["amount"])) for s in starting) == [("Bank", D("800")), ("Lipa na M-Pesa till", D("5000"))]
+    for row in starting:
+        assert client.post(f"/api/v1/accounting/money-check/starting/{row['id']}/undo/", {"reason": "Not real"}, format="json").status_code == 201
+    data = client.get("/api/v1/accounting/money-check/").json()
+    expected = {p["method"]: D(p["expected"]) for p in data["places"]}
+    assert data["starting"] == [] and expected["CASH"] == D("300") and expected["MPESA"] == 0 and expected.get("BANK", 0) == 0
+    again = client.post(f"/api/v1/accounting/money-check/starting/{starting[0]['id']}/undo/", {}, format="json")
+    assert again.status_code == 400
+
+
+def test_owner_money_that_paid_a_supplier_is_not_undone_as_starting_money(owner_shop):
+    client, org, charger = owner_shop
+    with organization_context(org):
+        from apps.accounting.services import post
+        entry = post(unit="SHOP", method="OTHER", amount=D("1000"), kind="OPENING", reference="Owner's own money to pay Supplier", key="owner-pays:x")
+    row = next(s for s in client.get("/api/v1/accounting/money-check/").json()["starting"] if s["id"] == entry.pk)
+    assert row["can_undo"] is False
+    response = client.post(f"/api/v1/accounting/money-check/starting/{entry.pk}/undo/", {}, format="json")
+    assert response.status_code == 400 and "supplier payment" in str(response.content)

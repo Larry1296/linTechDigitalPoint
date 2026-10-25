@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
 from .models import MoneyCheck
-from .money_check import add_starting_money, check_row, places, record_check
+from .money_check import add_starting_money, check_row, places, record_check, starting_entries, undo_starting_money
 
 
 class MoneyCheckView(APIView):
@@ -13,7 +13,7 @@ class MoneyCheckView(APIView):
 
     def get(self, request):
         from .money_mode import money_mode
-        return Response({"mode": money_mode(), "places": places(), "history": [check_row(c) for c in MoneyCheck.objects.select_related("created_by")[:30]]})
+        return Response({"mode": money_mode(), "places": places(), "starting": starting_entries(), "history": [check_row(c) for c in MoneyCheck.objects.select_related("created_by")[:30]]})
 
     def post(self, request):
         if not has_business_permission(request.user, "accounting.add_moneycheck"):
@@ -37,3 +37,12 @@ class StartingMoneyView(APIView):
         return Response({"places": places()}, status=201)
 
 
+
+
+class StartingMoneyUndoView(APIView):
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.reverse_cashentry"
+
+    def post(self, request, pk):
+        undo_starting_money(user=request.user, entry_id=pk, reason=request.data.get("reason", ""))
+        return Response({"places": places(), "starting": starting_entries()}, status=201)

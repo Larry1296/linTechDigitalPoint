@@ -138,6 +138,46 @@ function StartingMoney({ places, onSaved }) {
   );
 }
 
+// Starting money still counted (entered at setup or later). Undoing one takes it off its place, so a place holds only
+// what the business really took in and paid out. Owner money that paid a supplier is undone with that payment instead.
+function StartingEntries({ rows, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const undoable = rows.filter((row) => row.can_undo);
+  const undo = async (chosen) => {
+    const total = chosen.reduce((sum, row) => sum + Number(row.amount), 0);
+    if (!(await confirmAction({ title: chosen.length === 1 ? `Undo ${money(total)} starting money on ${chosen[0].place}?` : `Undo all starting money (${money(total)})?`,
+      text: "The app will no longer expect this money in that place. Use it when the money was not really there. It is kept in the history as undone.",
+      confirmButtonText: "Undo starting money" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      for (const row of chosen) {
+        await api(`/api/v1/accounting/money-check/starting/${row.id}/undo/`, { method: "POST", body: JSON.stringify({ reason: "Starting money entered by mistake" }) });
+      }
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section aria-labelledby="starting-heading">
+      <h2 id="starting-heading">Starting money</h2>
+      <p className="muted">Money recorded as already there, not from sales. Undo any that was not really there.</p>
+      <div className="trendTable"><table><thead><tr><th scope="col">Date</th><th scope="col">Where</th><th scope="col">Amount</th><th scope="col">Note</th><th scope="col"><span className="visuallyHidden">Action</span></th></tr></thead>
+        <tbody>{rows.map((row) => <tr key={row.id}><td>{when(row.date)}</td><td>{row.place}</td><td>{money(row.amount)}</td><td>{row.note}</td>
+          <td>{row.can_undo ? <button type="button" className="secondary" disabled={busy} onClick={() => void undo([row])}>Undo</button>
+            : <span className="muted">Paid a supplier: undo that payment on the stock receipt</span>}</td></tr>)}</tbody>
+      </table></div>
+      {undoable.length > 1 && <div className="actionRow"><button type="button" className="secondary" disabled={busy} onClick={() => void undo(undoable)}>Undo all starting money</button></div>}
+      <FormError title="Could not undo the starting money." message={error} />
+    </section>
+  );
+}
+
 export function MoneyCheckPage() {
   const { user } = useAuth();
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
@@ -183,6 +223,7 @@ export function MoneyCheckPage() {
         </section>
       ))}</div>
       {can("accounting.add_cashentry") && <StartingMoney places={data.places} onSaved={load} />}
+      {can("accounting.reverse_cashentry") && data.starting?.length > 0 && <StartingEntries rows={data.starting} onChanged={load} />}
       {data.history.length > 0 && <section aria-labelledby="history-heading">
         <h2 id="history-heading">Earlier counts</h2>
         <div className="trendTable"><table><thead><tr><th scope="col">When</th><th scope="col">Where</th><th scope="col">You had</th><th scope="col">App expected</th><th scope="col">Difference</th><th scope="col">Counted by</th><th scope="col">Note</th></tr></thead>
