@@ -93,13 +93,12 @@ function PayForm({ receipt, onCancel, onSaved }) {
   const [paidOn, setPaidOn] = useState(today);
   const [source, setSource] = useState("CASH");
   const [investmentId, setInvestmentId] = useState("");
-  const [via, setVia] = useState("MPESA");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const key = useRef(crypto.randomUUID());
   const { investments } = usePayableInvestments();
   const investment = investments.find((i) => String(i.id) === String(investmentId)) || (investments.length === 1 ? investments[0] : null);
-  const from = source === "INVESTMENT" ? `${investment?.name || "your investment"} (taken out to ${via === "BANK" ? "the bank" : "M-Pesa"})`
+  const from = source === "INVESTMENT" ? `${investment?.name || "your investment"} (your own money)`
     : SOURCES.find(([value]) => value === source)[1].toLowerCase();
   const valid = Number(amount) > 0 && Number(amount) <= Number(supplier.owed) && paidOn && paidOn >= received && paidOn <= today
     && (source !== "INVESTMENT" || investment);
@@ -107,13 +106,13 @@ function PayForm({ receipt, onCancel, onSaved }) {
     event.preventDefault();
     if (!valid || busy) return;
     if (!(await confirmAction({ title: `Record ${money(amount)} paid to ${supplier.supplier}?`,
-      text: `Paid on ${shown(paidOn)} from ${from}. ${source === "OWNER" ? "Your shop drawer and till stay as they are; it counts as money you put into the business." : "It comes off that money on that day."} What is owed for ${receipt.receipt_number} goes down to ${money(Number(supplier.owed) - Number(amount))}.`,
+      text: `Paid on ${shown(paidOn)} from ${from}. ${source === "OWNER" || source === "INVESTMENT" ? "Your shop drawer, till and bank stay as they are; it counts as your own money paying the supplier." : "It comes off that money on that day."} What is owed for ${receipt.receipt_number} goes down to ${money(Number(supplier.owed) - Number(amount))}.`,
       confirmButtonText: "Record payment" }))) return;
     setBusy(true); setError("");
     try {
       const data = await api(`/api/v1/inventory/receipts/${receipt.id}/pay-supplier/`, { method: "POST", body: JSON.stringify({
         amount, source, paid_on: paidOn, idempotency_key: key.current,
-        ...(source === "INVESTMENT" ? { investment_id: investment.id, via } : {}) }) });
+        ...(source === "INVESTMENT" ? { investment_id: investment.id } : {}) }) });
       onSaved(data, `Payment recorded. ${Number(data.supplier.owed) > 0 ? `Still owed: ${money(data.supplier.owed)}.` : `Nothing is owed to ${supplier.supplier} for this receipt now.`}`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -141,12 +140,7 @@ function PayForm({ receipt, onCancel, onSaved }) {
               {investments.map((i) => <option key={i.id} value={i.id}>{i.name} · holds {money(i.value)}</option>)}
             </select>
           </label>}
-          <label>Withdrawn to
-            <select value={via} onChange={(e) => setVia(e.target.value)}>
-              <option value="MPESA">M-Pesa</option><option value="BANK">Bank</option>
-            </select>
-          </label>
-          <small>Recorded today, as the money taken out of the investment and paid straight to the supplier.</small>
+          <small>Taken out of the investment to you and paid straight to the supplier as your own money; the business's till and bank are not touched.</small>
         </>}
         <button disabled={!valid || busy}>Review payment</button>{" "}
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>

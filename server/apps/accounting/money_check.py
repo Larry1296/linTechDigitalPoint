@@ -1,7 +1,7 @@
 """What the app expects in each place money is kept, against what was actually counted.
 
-Expected = starting money + money received − money spent − suppliers paid ± money lent and repaid ± money invested,
-from the cash book. These are the owner's own places (drawer, Lipa na M-Pesa till, bank): every part of the business is
+Expected = starting money + money received − money spent − suppliers paid ± money lent and repaid ± money moved to
+the agency, from the cash book. Investment money is the owner's own and never counts here. These are the owner's own places (drawer, Lipa na M-Pesa till, bank): every part of the business is
 in them, each amount labelled with the part that brought it, including commission the M-Pesa agency paid out to the
 owner. The agency's own cash and float are kept in their own accounts and checked on the M-Pesa desk, never here.
 With separate drawers (money_mode.SEPARATE_CASH) each part's cash drawer is expected and counted on its own.
@@ -20,7 +20,7 @@ from .services import post, reverse
 PLACES = [("CASH", "Cash in the drawer"), ("MPESA", "Lipa na M-Pesa till"), ("BANK", "Bank"), ("OTHER", "Other")]
 PARTS = [("OPENING", "starting", "Starting money"), ("INCOME", "received", "Received from customers (less refunds)"),
          ("EXPENSE", "expenses", "Spent on running costs"), ("PURCHASE", "suppliers", "Paid to suppliers"),
-         ("LOAN", "loans", "Money lent, less repayments"), ("INVESTMENT", "invested", "Put into investments, less taken out"),
+         ("LOAN", "loans", "Money lent, less repayments"),
          ("TRANSFER", "to_agency", "Moved to the M-Pesa agency (float or cash)")]
 ZERO = Decimal("0")
 
@@ -60,6 +60,8 @@ def _cash_units():
 
 
 def places():
+    from .investments import settle_books
+    settle_books()  # investment money never counts in the business's places
     result = []
     for method, label in PLACES:
         if method == "CASH" and separate_cash():

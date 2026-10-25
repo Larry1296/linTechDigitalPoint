@@ -10,15 +10,10 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InterestCalculator } from "./InterestCalculator";
 import { TextArea } from "../../components/forms/TextBox";
 
-const BUSINESS = [["MPESA", "Lipa na M-Pesa (till)"], ["CASH", "Cash"], ["BANK", "Bank"], ["OTHER", "Other"]];
-const AGENCY = [["AGENCY_CASH", "M-Pesa agency cash"], ["AGENCY_FLOAT", "M-Pesa agency float"]];
-// The owner's own money from outside the business: any amount can go in, no till, drawer or bank changes, and it is
-// kept out of the business's books; it earns interest with the rest, but only the business's share is profit.
-const OWNER = ["OWNER", "My own money (from outside the business)"];
-// The business's money that was already in the investment before it was recorded here: it left the till, cash or bank
-// long ago, so they do not change now.
-const EARLIER = ["EARLIER", "Business money already in it (put in before)"];
-const sourceName = (value) => Object.fromEntries([...BUSINESS, ...AGENCY, OWNER, EARLIER])[value] || value;
+// Investment money is the owner's own, kept completely apart from the business: it never comes from or goes into the
+// till, cash drawer, bank or M-Pesa agency, and it is never in the business's money, profit or net worth.
+const OWNER = "OWNER";
+const APART = "Nothing is taken from or put into the business's cash, till, bank or M-Pesa agency.";
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -97,7 +92,7 @@ function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
         {!chosen && <FormField label="Yearly interest rate it pays now (%)" name="annual_rate" type="number" min="0" max="100" step="0.001"
           placeholder="e.g. 13.25 — the annual yield in the fund's app or SMS" />}
         <FormField label="Withholding tax on interest (%)" name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue="15" required />
-        <FormField label="Note (optional)"><TextArea name="notes" maxLength={500} placeholder="e.g. spare agency cash, withdraw takes 2 days" /></FormField>
+        <FormField label="Note (optional)"><TextArea name="notes" maxLength={500} placeholder="e.g. withdraw takes 2 days" /></FormField>
       </fieldset>
       <Risk kind={risk} />
       {followed && <p className="muted">The app reads {followed.short}'s rate on its own website{followed.annual_rate == null ? " now" : ""} and checks it
@@ -143,40 +138,24 @@ function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
   );
 }
 
-// Money put in or taken out. Agency cash and float move through today's open shift, so the desk balances follow.
-function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel }) {
+// Money put in or taken out: always the owner's own money, never the business's.
+function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
   const putIn = kind === "DEPOSIT";
-  // First whose money it is (the business's, or the owner's own from outside), then which business account.
-  const [origin, setOrigin] = useState(preset?.source === OWNER[0] ? "OWN" : preset?.source === EARLIER[0] ? "EARLIER" : "BUSINESS");
-  const [account, setAccount] = useState(preset?.source && ![OWNER[0], EARLIER[0]].includes(preset.source) ? preset.source : "MPESA");
-  const source = origin === "OWN" ? OWNER[0] : origin === "EARLIER" && putIn ? EARLIER[0] : account;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Number(investment.value))));
-  const available = (value) => spare.find((p) => p.method === value)?.expected;
-  const short = putIn && available(source) != null && Number(amount) > Number(available(source));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const agency = source.startsWith("AGENCY_");
-  const own = source === OWNER[0];
-  const earlier = source === EARLIER[0];
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    delete values.origin;
-    const where = sourceName(values.source).toLowerCase();
-    const text = own
-      ? (putIn ? "It is your own money, not the business's: it is kept out of the business's books. It earns interest with the rest, and only the business's share of the interest is profit."
-        : "It goes back to you. Your cash, till and bank do not change.")
-      : earlier ? "It is the business's money, counted with the rest of the business's money in it. It left the till, cash or bank before, so they do not change now."
-      : putIn ? `It comes out of your ${where}. It is still your money, so profit does not change.` : `It goes back into your ${where}.`;
     const added = Number(investment.value) > 0 ? ` It is added to the ${money(investment.value)} already in it.` : "";
-    if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name}?`,
-      text: putIn ? `${text}${added}` : text,
+    if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} of your own money to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name} to you?`,
+      text: `${APART}${putIn ? added : ""}`,
       confirmButtonText: putIn ? "Record money added" : "Record money taken out" }))) return;
     setBusy(true);
     setError("");
     try {
       await api(`/api/v1/accounting/investments/${investment.id}/move/`, { method: "POST",
-        body: JSON.stringify({ ...values, kind, ...(values.session_id ? { session_id: Number(values.session_id) } : {}), idempotency_key: crypto.randomUUID() }) });
+        body: JSON.stringify({ ...values, kind, source: OWNER, idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -188,46 +167,12 @@ function MoveForm({ investment, kind, sessions, spare, preset, onSaved, onCancel
       <fieldset disabled={busy} className="loanFields">
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
           max={putIn ? undefined : investment.value} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        <FormField label={putIn ? "Money source" : "Money goes to"}>
-          <select name="origin" value={origin} onChange={(event) => setOrigin(event.target.value)}>
-            <option value="BUSINESS">{putIn ? "From the business" : "Back into the business"}</option>
-            {putIn && <option value="EARLIER">{EARLIER[1]}</option>}
-            <option value="OWN">{putIn ? OWNER[1] : "Me, the owner (out of the business)"}</option>
-          </select>
-        </FormField>
-        {earlier
-          ? <><input type="hidden" name="source" value={EARLIER[0]} />
-            <p className="muted">For business money that was put in before it was recorded here. It counts as the business&apos;s
-              money in the investment, but nothing is taken from the till, cash or bank now.</p></>
-          : own
-          ? <><input type="hidden" name="source" value={OWNER[0]} />
-            <p className="muted">{putIn ? "Nothing is taken from the business: its cash, till and bank stay as they are."
-              : "Nothing goes back into the business: its cash, till and bank stay as they are."}</p></>
-          : <FormField label={putIn ? "Taken from" : "Paid to"}>
-            <select name="source" value={account} onChange={(event) => setAccount(event.target.value)}>
-              {BUSINESS.map(([value, label]) => <option key={value} value={value}>
-                {label}{putIn && available(value) != null ? ` · ${money(available(value))} expected` : ""}</option>)}
-              {sessions.length > 0 && AGENCY.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </FormField>}
-        {agency && sessions.length > 1 && (
-          <FormField label="M-Pesa outlet">
-            <select name="session_id" required defaultValue="">
-              <option value="" disabled>Choose the outlet</option>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{s.outlet} · cash {money(s.cash)} · float {money(s.float)}</option>)}
-            </select>
-          </FormField>
-        )}
-        {agency && sessions.length === 1 && <p className="muted">{sessions[0].outlet} now: cash {money(sessions[0].cash)} · float {money(sessions[0].float)}</p>}
-        {agency
-          ? <p className="muted">Agency money moves today, through the open shift.</p>
-          : <><FormField label={putIn ? "Date the money went in" : "Date the money came out"} name="occurred_on" type="date" max={today()} defaultValue={today()} required />
-            {putIn && <p className="muted">Already invested earlier? Choose the day it really went in: interest is worked out from that day.</p>}</>}
+        <p className="muted">{putIn ? "From your own money." : "Back to you."} {APART}</p>
+        <FormField label={putIn ? "Date the money went in" : "Date the money came out"} name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+        {putIn && <p className="muted">Already invested earlier? Choose the day it really went in: interest is worked out from that day.</p>}
         <FormField label="Transaction code or reference (optional)" name="reference" maxLength={120} autoComplete="off" />
         <FormField label="Note (optional)" name="note" maxLength={500} autoComplete="off" />
       </fieldset>
-      {short && <p className="investWarning">That is more than the {money(available(source))} the app expects in your {sourceName(source).toLowerCase()}.
-        Check the amount, or record any missing sales or starting money first.</p>}
       {!putIn && <p className="muted">Paying a supplier for stock? Record it when you receive the stock: choose
         “Paid the supplier now → from my investment”, so the withdrawal and the stock it paid for are linked.</p>}
       <div className="actionRow">
@@ -458,7 +403,7 @@ function RateSource({ investment, funds, canMove, onChanged }) {
   );
 }
 
-function InvestmentCard({ investment, funds, sessions, spare, preset, month, canMove, canCorrect, canRemove, onChanged }) {
+function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect, canRemove, onChanged }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const card = useRef(null);
@@ -490,27 +435,12 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
   };
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
-      text: m.source === OWNER[0] ? "It was your own money, so your cash, till and bank do not change."
-        : m.source === EARLIER[0] ? "It was business money put in before, so your cash, till and bank do not change."
-        : m.source ? `The money goes back to your ${sourceName(m.source).toLowerCase()}.` : "The investment's value goes back to what it was.",
+      text: `The investment's value goes back to what it was. ${APART}`,
       confirmButtonText: "Undo", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. entered twice" }] });
     if (!values) return;
     setError("");
     try {
       await api(`/api/v1/accounting/investments/movements/${m.id}/undo/`, { method: "POST", body: JSON.stringify({ reason: values.reason }) });
-      await onChanged();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-  // Money recorded as the owner's own that was really the business's: it moves to the business's share.
-  const claim = async (m) => {
-    if (!(await confirmAction({ title: `Was this ${money(m.amount)} the business's money?`,
-      text: "It moves to the business's money in this investment, on the same date, and the business's share of the interest earned since is worked out again. Your cash, till and bank do not change.",
-      confirmButtonText: "Yes, it was the business's" }))) return;
-    setError("");
-    try {
-      await api(`/api/v1/accounting/investments/movements/${m.id}/business/`, { method: "POST", body: JSON.stringify({}) });
       await onChanged();
     } catch (err) {
       setError(err.message);
@@ -533,17 +463,10 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
-        <div><dt>From the shop</dt><dd>{money(investment.from_shop)}</dd></div>
-        <div><dt>From my own money</dt><dd>{money(investment.from_owner)}</dd></div>
         <div><dt>Total invested</dt><dd><strong>{money(investment.invested)}</strong> <small>interest is earned on this</small></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
-        {Number(investment.owner_value) !== 0 && <>
-          <div><dt>Business's share of interest</dt><dd>{money(investment.shop_interest)} <small>in profit</small></dd></div>
-          <div><dt>My share of interest</dt><dd>{money(investment.owner_interest)} <small>not in the business's books</small></dd></div>
-          <div><dt>Business's money in it now</dt><dd>{money(investment.shop_value)} <small>in the books</small></dd></div>
-        </>}
         {investment.estimate && <div><dt>Estimated since {date(investment.estimate.since)}</dt>
           <dd>+ {money(investment.estimate.net)} <small>after {percent(investment.tax_rate)} tax</small></dd></div>}
         {investment.estimate && <div><dt>Estimated value today</dt><dd>{money(investment.estimate.value)}</dd></div>}
@@ -565,10 +488,9 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
               <td>{KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
               <td>{money(m.amount)}{m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
-              <td>{m.source ? sourceName(m.source) : "—"}</td>
+              <td>{m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
               <td>{m.reference || m.note || "—"}</td>
               <td>{!m.reversed_at && canCorrect && <div className="actionRow">
-                {m.kind === "DEPOSIT" && m.source === OWNER[0] && <button type="button" className="secondary" onClick={() => void claim(m)}>It was the business&apos;s money</button>}
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
             </tr>
           ))}</tbody>
@@ -587,7 +509,7 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
       )}
       {form === "MONTHLY" ? <MonthlyCheckForm investment={investment} month={month} onCancel={() => setForm(null)} onSaved={done} />
         : form === "DEPOSIT" || form === "WITHDRAWAL"
-        ? <MoveForm key={preset?.nonce ?? form} investment={investment} kind={form} sessions={sessions} spare={spare}
+        ? <MoveForm key={preset?.nonce ?? form} investment={investment} kind={form}
           preset={form === "DEPOSIT" ? preset : null} onCancel={() => setForm(null)} onSaved={done} />
         : form === "STATEMENT"
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
@@ -602,36 +524,6 @@ function InvestmentCard({ investment, funds, sessions, spare, preset, month, can
       </div>}
       <FormError title="Could not do it." message={error} />
     </li>
-  );
-}
-
-// Money the app expects in the till, drawer and bank: what could be moved into an investment.
-function SpareMoney({ spare, investments, canMove, onInvest }) {
-  const [target, setTarget] = useState(investments[0]?.id);
-  const places = spare.filter((p) => Number(p.expected) > 0);
-  return (
-    <section className="panel investSpare" aria-labelledby="spare-heading">
-      <header>
-        <div>
-          <h2 id="spare-heading">Money you could invest</h2>
-          <p className="muted">What the app expects in each place now. Keep enough for change and the day's buying; invest the rest.</p>
-        </div>
-        {canMove && investments.length > 1 && <label>Into
-          <select value={target} onChange={(event) => setTarget(Number(event.target.value))}>
-            {investments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-          </select>
-        </label>}
-      </header>
-      {places.length
-        ? <ul>{places.map((p) => (
-          <li key={p.method}>
-            <span>{p.label}</span>
-            <strong>{money(p.expected)}</strong>
-            {canMove && investments.length > 0 &&
-              <button type="button" className="secondary" onClick={() => onInvest({ id: target, source: p.method, amount: String(Number(p.expected)) })}>Invest</button>}
-          </li>))}</ul>
-        : <p className="muted">No spare money recorded in the till, drawer or bank right now.</p>}
-    </section>
   );
 }
 
@@ -656,8 +548,6 @@ export function InvestmentsPage() {
   if (error) return <ErrorState message={error} retry={load} />;
   if (!data) return <Loading />;
   const canMove = can("accounting.add_investmentmovement");
-  const spare = data.spare_money || [];
-  const till = spare.find((p) => p.method === "MPESA");
   const due = data.investments.filter((i) => i.check_due);
   const rated = data.investments.find((i) => i.earning) || data.investments.find((i) => i.current_rate);
   const ratedAt = rated?.earning ? rated.earning.annual_rate : rated?.current_rate?.annual_rate;
@@ -673,28 +563,21 @@ export function InvestmentsPage() {
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
-      <p className="muted">Spare money kept in a money market fund (MMF) or similar. Putting the business's money in or taking it out
-        does not change profit; only its share of the interest is income. Your own money from outside the business earns interest with the rest
-        but is kept out of the business's books.</p>
+      <p className="muted">Your own money kept in a money market fund (MMF) or similar. It is kept completely apart from the business:
+        nothing is taken from or put into the till, cash drawer, bank or M-Pesa agency, and the money and its interest are never in the
+        business's money, profit or net worth.</p>
       <div className="metrics investMetrics">
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
             <small>Goes up every day as interest builds</small></article>}
-        <article><span>From the shop</span><strong>{money(data.from_shop)}</strong>
-          <small>The business's money in investments</small></article>
-        <article><span>From my own money</span><strong>{money(data.from_owner)}</strong>
-          <small>Put in from outside the business</small></article>
         <article><span>Total invested</span><strong>{money(data.invested)}</strong>
-          <small>Shop and own money together; interest is earned on this</small></article>
+          <small>Your own money; interest is earned on this</small></article>
         <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
-          {Number(data.owner_interest) !== 0 && <small>{money(data.shop_interest)} the business's, in profit · {money(data.owner_interest)} yours</small>}</article>
-        {Number(data.shop_value) !== Number(data.total_value) && <article><span>Business's money in investments</span>
-          <strong>{money(data.shop_value)}</strong><small>Its money and interest: what the books and net worth count</small></article>}
+          <small>Yours, not the business's profit</small></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
           <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}
-        {till && <article><span>Expected in Lipa na M-Pesa till</span><strong>{money(till.expected)}</strong></article>}
       </div>
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
         <div>
@@ -715,11 +598,9 @@ export function InvestmentsPage() {
           await load();
           if (deposit && row?.id) setPreset({ id: row.id, kind: "DEPOSIT", nonce: Date.now() });
         }} />}
-      {data.investments.length > 0 && <SpareMoney spare={spare} investments={data.investments} canMove={canMove}
-        onInvest={(choice) => setPreset({ ...choice, nonce: Date.now() })} />}
       {data.investments.length
-        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} sessions={data.agency_sessions}
-          spare={spare} preset={preset?.id === i.id ? preset : null} month={data.this_month}
+        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds}
+          preset={preset?.id === i.id ? preset : null} month={data.this_month}
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
           canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
         : <Empty>No investment accounts yet. Add your MMF to start tracking what you put in, take out and earn.</Empty>}

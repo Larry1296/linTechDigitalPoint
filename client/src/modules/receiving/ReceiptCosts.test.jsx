@@ -23,17 +23,18 @@ beforeEach(() => {
   api.mockResolvedValue({ investments: [mmf, { id: 4, name: "Empty fund", value: "0.00" }] });
 });
 
-it("pays the supplier from the MMF, withdrawn to M-Pesa or the bank", async () => {
+it("pays the supplier from the MMF as the owner's own money, never through the till or bank", async () => {
   render(<Harness />);
   const paid = screen.getByLabelText("Paid the supplier now?");
   fireEvent.change(paid, { target: { value: (await screen.findByRole("option", { name: "Yes, from my investment (MMF)" })).value } });
   expect(screen.queryByLabelText("Take it out of")).toBeNull();  // the only fund holding money is chosen for you
   expect(screen.getByText(/Sanlam MMF holds KSh 30,000/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Withdrawn to"), { target: { value: "BANK" } });
+  expect(screen.queryByLabelText("Withdrawn to")).toBeNull();
+  expect(screen.getByText(/paid straight to the supplier as your own money/)).toBeInTheDocument();
   expect(receiptCostsProblem(latest())).toBe("");
-  expect(receiptCostsPayload(latest()).payment).toEqual({ method: "INVESTMENT", amount: "20000", investment_id: 3, via: "BANK" });
+  expect(receiptCostsPayload(latest()).payment).toEqual({ method: "INVESTMENT", amount: "20000", investment_id: 3 });
   expect(receiptCostsPayload(latest())).not.toHaveProperty("investment_name");
-  expect(paymentSummary(latest())).toBe("20000 paid now from Sanlam MMF (taken out to bank)");
+  expect(paymentSummary(latest())).toBe("20000 paid now from Sanlam MMF (your own money, not the business's)");
   fireEvent.change(screen.getByLabelText(/Amount paid now/), { target: { value: "35000" } });
   expect(screen.getByText(/record interest from its statement first/)).toBeInTheDocument();
 });

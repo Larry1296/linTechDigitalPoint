@@ -29,7 +29,7 @@ def test_everything_recorded_so_far_leaves_out_what_was_undone():
         post_transaction(session=session, transaction_type="CUSTOMER_WITHDRAWAL", transaction_amount="400", user=owner, idempotency_key="w1")
     mmf = client.post("/api/v1/accounting/investments/", {"name": "CIC MMF", "annual_rate": "13"}, format="json").json()["id"]
     client.post("/api/v1/accounting/money-check/starting/", {"method": "MPESA", "amount": "10000", "idempotency_key": "start"}, format="json")
-    moved = client.post(f"/api/v1/accounting/investments/{mmf}/move/", {"kind": "DEPOSIT", "amount": "3000", "source": "MPESA", "idempotency_key": "in"}, format="json").json()
+    moved = client.post(f"/api/v1/accounting/investments/{mmf}/move/", {"kind": "DEPOSIT", "amount": "3000", "source": "OWNER", "idempotency_key": "in"}, format="json").json()
     client.post(f"/api/v1/accounting/investments/movements/{moved['movements'][0]['id']}/undo/", {"reason": "Not done"}, format="json")
     records = client.get("/api/v1/inventory/dashboard/").json()["records"]
     agency = records["mpesa"]

@@ -34,19 +34,19 @@ def test_net_worth_adds_shop_money_live_agency_money_and_investments_less_what_i
                        description="Token", key="power", paid=False, due_date=timezone.localdate() + timedelta(days=7))
     client.post("/api/v1/accounting/money-check/starting/", {"method": "MPESA", "amount": "10000", "idempotency_key": "start"}, format="json")
     mmf = client.post("/api/v1/accounting/investments/", {"name": "CIC MMF", "annual_rate": "13"}, format="json").json()["id"]
-    client.post(f"/api/v1/accounting/investments/{mmf}/move/", {"kind": "DEPOSIT", "amount": "3000", "source": "MPESA", "idempotency_key": "in"}, format="json")
+    client.post(f"/api/v1/accounting/investments/{mmf}/move/", {"kind": "DEPOSIT", "amount": "3000", "source": "OWNER", "idempotency_key": "in"}, format="json")
     last_month = (timezone.localdate().replace(day=1) - timedelta(days=1)).replace(day=1)
     client.post("/api/v1/mpesa/commission/", {"outlet": outlet.pk, "period": str(last_month), "amount": "500", "reference": "SJK9COM001",
                 "settlement_method": "MPESA", "idempotency_key": "c1"}, format="json")
     worth = client.get("/api/v1/inventory/dashboard/").json()["net_worth"]
     groups = {g["key"]: g for g in worth["groups"]}
     till = next(i for i in groups["money"]["items"] if i["key"] == "shop-mpesa")
-    assert D(str(till["amount"])) == D("7500")  # 10,000 starting less 3,000 invested, plus the 500 commission kept there
-    assert D(str(groups["money"]["amount"])) == D("7500")  # plus the commission kept in the owner's M-Pesa
+    assert D(str(till["amount"])) == D("10500")  # 10,000 starting plus the 500 commission kept there
+    assert D(str(groups["money"]["amount"])) == D("10500")  # the owner's own money in the MMF is not the business's
     shift = groups["agency"]["items"][0]
     assert shift["state"] == "OPEN" and (D(str(shift["cash"])), D(str(shift["float"]))) == (D("6000"), D("19000"))
     assert (D(str(shift["opening_cash"])), D(str(shift["opening_float"]))) == (D("5000"), D("20000"))
-    assert D(str(groups["investments"]["amount"])) == D("3000") and D(str(groups["expenses"]["amount"])) == D("200")
+    assert D(str(groups.get("investments", {"amount": 0})["amount"])) == 0 and D(str(groups["expenses"]["amount"])) == D("200")
     assert D(str(worth["owns"])) == D("35500") and D(str(worth["owes"])) == D("200") and D(str(worth["net_worth"])) == D("35300")
     assert worth["left_out"] == [] and len(worth["history"]) == 1 and D(str(worth["history"][0]["net_worth"])) == D("35300")
     # When the shift closes, the agency's money is what was counted at the close.

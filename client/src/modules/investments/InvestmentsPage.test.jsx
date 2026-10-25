@@ -9,8 +9,8 @@ import { InvestmentsPage } from "./InvestmentsPage";
 
 const LOW = { code: "MMF", label: "Money market fund", risk: 1, risk_label: "Low", risk_note: "Short-term loans to the government and banks." };
 const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", value: "20150.00", put_in: "20000.00", taken_out: "0.00",
-  from_shop: "15000.00", from_owner: "5000.00", invested: "20000.00",
-  shop_interest: "112.50", owner_interest: "37.50", shop_value: "15112.50", owner_value: "5037.50",
+  from_shop: "0.00", from_owner: "20000.00", invested: "20000.00",
+  shop_interest: "0.00", owner_interest: "150.00", shop_value: "0.00", owner_value: "20150.00",
   interest: "150.00", fees: "0.00", tax_rate: "15.00", check_due: false, kind: LOW,
   current_rate: { month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" },
   rates: [{ month: "2026-10-01", label: "October 2026", annual_rate: "12.000", statement_balance: null, recorded_on: "2026-10-01", recorded_by: "Owner" }],
@@ -22,18 +22,16 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
   earning: { balance: "20161.26", annual_rate: "12.000", estimated_balance: true, day: { gross: "6.63", tax: "0.99", net: "5.64" },
     month: { gross: "201.61", tax: "30.24", net: "171.37" }, year: { gross: "2554.10", tax: "383.12", net: "2170.98" } }, movements: [
     { id: 8, kind: "INTEREST", amount: "150.00", occurred_on: "2026-09-30", source: "", reference: "", note: "", statement_balance: "20150.00", reversed_at: null },
-    { id: 9, kind: "WITHDRAWAL", amount: "5000.00", occurred_on: "2026-09-20", source: "MPESA", reference: "INV-77", note: "", statement_balance: null, reversed_at: null,
+    { id: 9, kind: "WITHDRAWAL", amount: "5000.00", occurred_on: "2026-09-20", source: "OWNER", reference: "INV-77", note: "", statement_balance: null, reversed_at: null,
       purchase: { id: 4, receipt_number: "INV-77", supplier: "Phone Hub" } },
-    { id: 7, kind: "DEPOSIT", amount: "20000.00", occurred_on: "2026-09-01", source: "AGENCY_CASH", reference: "", note: "", statement_balance: null, reversed_at: null }] };
-const session = { id: 5, outlet: "Main agency", cash: "45000.00", float: "30000.00" };
+    { id: 7, kind: "DEPOSIT", amount: "20000.00", occurred_on: "2026-09-01", source: "OWNER", reference: "", note: "", statement_balance: null, reversed_at: null }] };
 
 const KINDS = [LOW, { code: "SACCO", label: "Sacco deposits", risk: 2, risk_label: "Low to medium", risk_note: "Depends on how the Sacco is managed." }];
 const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)", short: "CIC", kind: LOW, annual_rate: "8.120" },
   { code: "KCB_MMF_KES", name: "KCB Money Market Fund (KES)", short: "KCB", kind: LOW, annual_rate: null }];
-const listing = (investment) => ({ investments: [investment], from_shop: "15000.00", from_owner: "5000.00", invested: "20000.00",
-    shop_value: "15112.50", shop_interest: "112.50", owner_interest: "37.50", total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026", agency_sessions: [session],
-    funds: FUNDS, kinds: KINDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" },
-    spare_money: [{ method: "CASH", label: "Cash in the drawer", expected: "0.00" }, { method: "MPESA", label: "Lipa na M-Pesa till", expected: "64000.00" }] });
+const listing = (investment) => ({ investments: [investment], from_shop: "0.00", from_owner: "20000.00", invested: "20000.00",
+    shop_value: "0.00", shop_interest: "0.00", owner_interest: "150.00", total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026",
+    funds: FUNDS, kinds: KINDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" } });
 beforeEach(() => {
   vi.clearAllMocks();
   api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing(mmf)));
@@ -42,82 +40,54 @@ beforeEach(() => {
 it("shows what the MMF holds, what went in and the interest, with dated history", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  expect(screen.getByText(/kept completely apart from the business/)).toBeInTheDocument();
   expect(screen.getByText("Recorded value, with interest").nextSibling).toHaveTextContent("KSh 20,150");
   const metrics = screen.getByText("Total invested", { selector: ".investMetrics span" }).closest("div");
-  expect(within(metrics).getByText("From the shop").nextSibling).toHaveTextContent("KSh 15,000");
-  expect(within(metrics).getByText("From my own money").nextSibling).toHaveTextContent("KSh 5,000");
   expect(within(metrics).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
-  expect(within(card).getByText("From the shop").nextSibling).toHaveTextContent("KSh 15,000");
-  expect(within(card).getByText("From my own money").nextSibling).toHaveTextContent("KSh 5,000");
-  expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
-  // Only the business's share of the interest is profit; the owner's own money is kept out of the books.
-  expect(within(card).getByText("Business's share of interest").nextSibling).toHaveTextContent("KSh 112.5 in profit");
-  expect(within(card).getByText("My share of interest").nextSibling).toHaveTextContent("KSh 37.5");
-  expect(within(metrics).getByText("Business's money in investments").nextSibling).toHaveTextContent("KSh 15,112.5");
+  // Nothing about the business: no business share, no money from the shop, no business share of interest.
+  expect(screen.queryByText("From the shop")).toBeNull();
+  expect(screen.queryByText(/Business's share of interest|Business's money in/)).toBeNull();
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
+  expect(screen.getByText("Yours, not the business's profit")).toBeInTheDocument();
+  expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
   expect(within(card).getByText("Recorded value").nextSibling).toHaveTextContent("KSh 20,150");
   expect(within(card).getByText("Interest earned").nextSibling).toHaveTextContent("KSh 150");
   const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row");
   expect(rows[1]).toHaveTextContent("Interest");
   expect(rows[2]).toHaveTextContent("Taken out · paid for stock INV-77 (Phone Hub)");
+  expect(rows[2]).toHaveTextContent("Me");
   expect(rows[3]).toHaveTextContent("Put in");
-  expect(rows[3]).toHaveTextContent("M-Pesa agency cash");
+  expect(rows[3]).toHaveTextContent("My own money");
+  expect(within(card).queryByRole("button", { name: "It was the business's money" })).toBeNull();
 });
 
-it("puts spare agency cash into the MMF through the open shift", async () => {
+it("puts in the owner's own money only, of any amount, never from the till, drawer, bank or agency", async () => {
   render(<InvestmentsPage />);
-  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  expect(await screen.findByRole("heading", { name: "Sanlam MMF" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Money you could invest" })).toBeNull();
+  const card = screen.getByRole("heading", { name: "Sanlam MMF" }).closest("li");
   fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
   const form = within(card).getByRole("form", { name: "Add money" });
-  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "10000" } });
-  fireEvent.change(within(form).getByLabelText("Taken from"), { target: { value: "AGENCY_CASH" } });
-  expect(within(form).getByText(/Main agency now: cash KSh 45,000/)).toBeInTheDocument();
-  expect(within(form).queryByLabelText("Date the money went in")).toBeNull();
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
-  const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "10000", source: "AGENCY_CASH" }));
-});
-
-it("puts in the owner's own money from outside, of any amount, without a warning", async () => {
-  render(<InvestmentsPage />);
-  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
-  const form = within(card).getByRole("form", { name: "Add money" });
-  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "900000" } });
-  fireEvent.change(within(form).getByLabelText("Money source"), { target: { value: "OWN" } });
+  expect(within(form).queryByLabelText("Money source")).toBeNull();
   expect(within(form).queryByLabelText("Taken from")).toBeNull();
-  expect(within(form).getByText(/Nothing is taken from the business/)).toBeInTheDocument();
+  expect(within(form).getByText(/From your own money. Nothing is taken from or put into the business's cash, till, bank or M-Pesa agency./)).toBeInTheDocument();
+  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "900000" } });
   fireEvent.change(within(form).getByLabelText("Date the money went in"), { target: { value: "2026-08-15" } });
-  expect(within(form).queryByText(/more than the/)).toBeNull();
   await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "900000", source: "OWNER", occurred_on: "2026-08-15" }));
-  expect(JSON.parse(options.body)).not.toHaveProperty("origin");
 });
 
-it("adds business money that was already in the investment without taking it from the till", async () => {
+it("takes money out back to the owner, never into the business", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
-  const form = within(card).getByRole("form", { name: "Add money" });
-  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "1300" } });
-  fireEvent.change(within(form).getByLabelText("Money source"), { target: { value: "EARLIER" } });
-  expect(within(form).queryByLabelText("Taken from")).toBeNull();
-  expect(within(form).getByText(/nothing is taken from the till, cash or bank now/)).toBeInTheDocument();
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
+  fireEvent.click(within(card).getByRole("button", { name: "Take money out" }));
+  const form = within(card).getByRole("form", { name: "Take money out" });
+  expect(within(form).getByText(/Back to you. Nothing is taken from or put into the business's/)).toBeInTheDocument();
+  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "1000" } });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money taken out" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "1300", source: "EARLIER" }));
-});
-
-it("marks money recorded as the owner's own as the business's", async () => {
-  const own = { id: 11, kind: "DEPOSIT", amount: "1300.00", occurred_on: "2026-09-01", source: "OWNER", reference: "", note: "", statement_balance: null, reversed_at: null };
-  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing({ ...mmf, movements: [...mmf.movements, own] })));
-  render(<InvestmentsPage />);
-  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  const claims = within(card).getAllByRole("button", { name: "It was the business's money" });
-  expect(claims).toHaveLength(1);
-  await act(async () => { fireEvent.click(claims[0]); });
-  expect(api.mock.calls.some(([p, o]) => p === "/api/v1/accounting/investments/movements/11/business/" && o.method === "POST")).toBe(true);
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "WITHDRAWAL", amount: "1000", source: "OWNER" }));
 });
 
 it("records a statement balance and can undo a mistake", async () => {
@@ -138,23 +108,6 @@ it("removes an investment recorded by mistake, undoing everything in it", async 
   await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "Remove this investment" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/remove/");
   expect(JSON.parse(options.body)).toEqual({ reason: "Entered twice" });
-});
-
-it("offers the till's spare money for investing, filled in and warned when it is more than expected", async () => {
-  render(<InvestmentsPage />);
-  const spare = await screen.findByRole("region", { name: "Money you could invest" });
-  expect(within(spare).queryByText("Cash in the drawer")).toBeNull();  // nothing there
-  expect(within(spare).getByText("Lipa na M-Pesa till").nextSibling).toHaveTextContent("KSh 64,000");
-  fireEvent.click(within(spare).getByRole("button", { name: "Invest" }));
-  const form = screen.getByRole("form", { name: "Add money" });
-  expect(within(form).getByLabelText(/Amount/)).toHaveValue(64000);
-  expect(within(form).getByLabelText("Taken from")).toHaveValue("MPESA");
-  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "70000" } });
-  expect(within(form).getByText(/more than the KSh 64,000 the app expects/)).toBeInTheDocument();
-  fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "50000" } });
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
-  const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "DEPOSIT", amount: "50000", source: "MPESA" }));
 });
 
 it("shows the rate, the interest estimated since the statement and what the money earns a day, a month and a year", async () => {

@@ -37,11 +37,11 @@ def _supplier(purchase):
 def _source(entry):
     """Where a supplier payment's money came from, from the entries recorded beside it."""
     key = entry.source_key.partition(":")[2] or entry.source_key  # older payments were saved without a "kind:" prefix
-    if CashEntry.objects.filter(source_key=f"owner-pays:{key}").exists():
-        return "OWNER"
     from .models import InvestmentMovement
     if InvestmentMovement.objects.filter(idempotency_key=f"{key}:investment").exists():
         return "INVESTMENT"
+    if CashEntry.objects.filter(source_key=f"owner-pays:{key}").exists():
+        return "OWNER"
     return entry.account.payment_method
 
 
@@ -81,7 +81,7 @@ def _paid_on(receipt, day):
 @transaction.atomic
 def pay_supplier(*, receipt, amount, source, user, key, paid_on=None, investment_id=None, via=None, reference=""):
     """Records money paid to the supplier of a receipt, on the day it was really paid."""
-    from .services import pay_purchase, post
+    from .services import pay_purchase
     lock_business()
     purchase = SupplierPurchase.objects.select_for_update().filter(receipt=receipt).first()
     if not purchase or _opening(receipt):
@@ -96,18 +96,24 @@ def pay_supplier(*, receipt, amount, source, user, key, paid_on=None, investment
     reference = (reference or receipt.receipt_number)[:160]
     if source == "INVESTMENT":
         from .investments import pay_supplier as from_investment
-        return from_investment(investment_id=investment_id, purchase=purchase, amount=amount, via=via, key=key, user=user, reference=reference)
+        return from_investment(investment_id=investment_id, purchase=purchase, amount=amount, key=key, user=user, reference=reference,
+                               occurred_at=occurred_at)
     if source == "OWNER":
-        # The owner paid out of their own pocket: owner money put into the business and paid straight on to the
-        # supplier. Recorded as "other money", so the shop drawer and till are unchanged.
-        from .services import purchase_outstanding
-        if Decimal(str(amount)) > purchase_outstanding(purchase):
-            raise ValidationError("Payment exceeds what is still owed to the supplier for this receipt.")
-        post(unit=purchase.business_unit, method="OTHER", amount=Decimal(str(amount)).quantize(Decimal("0.01")), kind="OPENING",
-             reference=f"Owner's own money to pay {_supplier(purchase)} for {receipt.receipt_number}"[:160], key=f"owner-pays:{key}",
-             user=user, occurred_at=occurred_at, branch=receipt.branch)
-        return pay_purchase(purchase=purchase, amount=amount, method="OTHER", key=key, user=user, reference=reference, occurred_at=occurred_at)
+        return owner_pays(purchase=purchase, amount=amount, key=key, user=user, reference=reference, occurred_at=occurred_at,
+                          words=f"Owner's own money to pay {_supplier(purchase)} for {receipt.receipt_number}")
     return pay_purchase(purchase=purchase, amount=amount, method=source, key=key, user=user, reference=reference, occurred_at=occurred_at)
+
+
+def owner_pays(*, purchase, amount, key, user, reference, occurred_at=None, words):
+    """The owner paid out of their own pocket (or their own investment): owner money put into the business and paid
+    straight on to the supplier. Recorded as "other money", so the shop drawer, till and bank are unchanged."""
+    from .services import pay_purchase, post, purchase_outstanding
+    amount = Decimal(str(amount)).quantize(Decimal("0.01"))
+    if amount > purchase_outstanding(purchase):
+        raise ValidationError("Payment exceeds what is still owed to the supplier for this receipt.")
+    post(unit=purchase.business_unit, method="OTHER", amount=amount, kind="OPENING", reference=words[:160], key=f"owner-pays:{key}",
+         user=user, occurred_at=occurred_at, branch=purchase.receipt.branch)
+    return pay_purchase(purchase=purchase, amount=amount, method="OTHER", key=key, user=user, reference=reference, occurred_at=occurred_at)
 
 
 @transaction.atomic

@@ -706,18 +706,16 @@ def top_customers(ctx, args):
 def investments(ctx, args):
     from apps.accounting import fund_rates
     from apps.accounting.investment_interest import earnings, estimate, rate_now
-    from apps.accounting.investments import shares, totals, value
+    from apps.accounting.investments import settle_books, totals, value
     from apps.accounting.models import Investment
+    settle_books()
     rows = []
     for inv in Investment.objects.filter(removed_at__isnull=True):
         t = totals(inv)
         guess, rate = estimate(inv), rate_now(inv)
         fund = fund_rates.summary(inv.fund)
-        share = shares(inv)
         row = {"investment": inv.name, "value_now": _money(value(inv)),
-               "business_money_in_it": _money(share["shop"]), "owners_own_money_in_it": _money(share["owner"]),
-               "business_share_of_interest": _money(share["shop_interest"]), "owners_share_of_interest": _money(share["owner_interest"]),
-               "business_value_in_the_books": _money(share["shop_value"]),
+               "kept_apart": "The owner's own money, kept apart from the business: not in the business's money, profit or net worth.",
                **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}}
         if rate is not None:
             balance = guess["value"] if guess else value(inv)
@@ -873,7 +871,7 @@ TOOLS = {
                           "a month whose commission is not recorded yet; each outlet's money in operation now; recent commission entries "
                           "(including undone ones and why).", _schema({"months": {"type": "integer"}, **LIMIT}), "mpesa.view_mpesacommissionentry", "mpesa"),
     "money_position": (money_position, "Where the money is right now and what the business is worth: shop drawer, till and bank, M-Pesa "
-                       "agency cash and float, investments, money lent out, commission owed, customers owing, stock at cost, minus "
+                       "agency cash and float, money lent out, commission owed, customers owing, stock at cost, minus "
                        "suppliers and unpaid running costs; plus recent net worth history.", _schema(), "accounting.view_profit", "reports"),
     "money_owed_to_business": (money_owed_to_business, "Who owes the business money now: customers with unpaid sales (by customer, "
                                "by age, overdue), refunds owed to customers, and (if allowed) money lent out and loan status.",
@@ -887,7 +885,7 @@ TOOLS = {
                    _schema({"sale_number": {"type": "string"}, "customer": {"type": "string"}, **LIMIT}), "commerce.view_sale", None),
     "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
                       _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
-    "investments": (investments, "Investments such as money market funds: value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
+    "investments": (investments, "Investments such as money market funds, the owner's own money kept apart from the business (never in its money, profit or net worth): value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
                     _schema(), "accounting.view_investment", "investments"),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),

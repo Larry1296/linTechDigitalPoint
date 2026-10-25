@@ -1,7 +1,7 @@
 import { profitText, stockText } from "./plainMoney";
 import { NetWorthPanel } from "./NetWorthPanel";
 
-const KINDS = { INCOME: "Money in from a sale", EXPENSE: "Money spent", PURCHASE: "Paid a supplier", PRINCIPAL: "M-Pesa customer money", OPENING: "Starting balance", LOAN: "Money lent or repaid", INVESTMENT: "Moved to or from an investment" };
+const KINDS = { INCOME: "Money in from a sale", EXPENSE: "Money spent", PURCHASE: "Paid a supplier", PRINCIPAL: "M-Pesa customer money", OPENING: "Starting balance", LOAN: "Money lent or repaid", INVESTMENT: "Moved to or from an investment (before investments were kept apart)" };
 
 export function OutstandingPanel({ title, data, nameField, empty, note, money }) {
   return <section className="accountingPanel"><h2>{title}</h2>{data.restricted ? <p>You don't have access to this.</p> : <>

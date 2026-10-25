@@ -45,7 +45,7 @@ def open_cic(client, name="CIC MMF", **extra):
 
 
 def put_in(client, pk, amount, day):
-    moved = client.post(f"/api/v1/accounting/investments/{pk}/move/", {"kind": "DEPOSIT", "amount": amount, "source": "CASH",
+    moved = client.post(f"/api/v1/accounting/investments/{pk}/move/", {"kind": "DEPOSIT", "amount": amount, "source": "OWNER",
                         "occurred_on": str(day), "idempotency_key": f"in-{pk}-{day}"}, format="json")
     assert moved.status_code == 201, moved.content
     return moved.json()

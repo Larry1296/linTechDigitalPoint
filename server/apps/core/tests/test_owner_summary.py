@@ -58,7 +58,7 @@ def test_interest_earned_on_an_investment_is_not_products_sold():
         from apps.accounting.investments import move, open_investment, record_statement
         Store.objects.create(name="Main")
         fund = open_investment(user=owner, name="CIC MMF")
-        move(investment=fund, user=owner, kind="DEPOSIT", amount="1000", source="MPESA", key="dep")
+        move(investment=fund, user=owner, kind="DEPOSIT", amount="1000", source="OWNER", key="dep")
         record_statement(investment=fund, user=owner, balance="1250", key="stmt")
     summary = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["all_time"]
     assert (D(str(summary["products"])), D(str(summary["sales"])), D(str(summary["profit"]))) == (D("0"), D("0"), D("0"))

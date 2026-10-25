@@ -48,8 +48,8 @@ def investment_row(investment):
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"],
-            # Money in it now by where it came from; together they are the total invested, which interest is earned on.
-            # Only the business's part, and its share of the interest, is in the books and profit.
+            # The owner's own money, kept apart from the business: none of it is in the books. The shop_* figures stay
+            # for older clients and are always 0.
             "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"],
             "shop_interest": share["shop_interest"], "owner_interest": share["owner_interest"],
             "shop_value": share["shop_value"], "owner_value": share["owner_value"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
@@ -66,22 +66,6 @@ def investment_row(investment):
 
 def _purchase(purchase):
     return {"id": purchase.pk, "receipt_number": purchase.receipt.receipt_number, "supplier": purchase.supplier.name if purchase.supplier_id else ""}
-
-
-def _spare_money():
-    """What the app expects in the shop's own till, drawer and bank: the money that could be invested."""
-    from .money_check import places
-    return [{"method": p["method"], "label": p["label"], "expected": p["expected"]} for p in places() if p["method"] != "OTHER"]
-
-
-def _agency_sessions():
-    from apps.mpesa.models import MpesaSession
-    from apps.mpesa.services import session_balances
-    rows = []
-    for session in MpesaSession.objects.filter(status=MpesaSession.OPEN).select_related("outlet"):
-        cash, electronic = session_balances(session)
-        rows.append({"id": session.pk, "outlet": session.outlet.display_name, "cash": cash, "float": electronic})
-    return rows
 
 
 class InvestmentInput(serializers.Serializer):
@@ -124,8 +108,7 @@ class InvestmentsView(APIView):
                                     "annual_rate": (fund_rates.latest(code).annual_rate if fund_rates.latest(code) else None)}
                                    for code, fund in fund_rates.FUNDS.items()],
                          "kinds": [kind_row(code) for code in KINDS],
-                         "this_month": month_label(timezone.localdate()),
-                         "spare_money": _spare_money(), "agency_sessions": _agency_sessions()})
+                         "this_month": month_label(timezone.localdate())})
 
     def post(self, request):
         _require(request, "accounting.add_investment")
@@ -150,7 +133,7 @@ class InvestmentsView(APIView):
 class MoveInput(serializers.Serializer):
     kind = serializers.ChoiceField(choices=["DEPOSIT", "WITHDRAWAL"])
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
-    source = serializers.ChoiceField(choices=sorted(SOURCES))
+    source = serializers.ChoiceField(choices=sorted(SOURCES), required=False, default="OWNER")
     occurred_on = serializers.DateField(required=False, allow_null=True)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     note = serializers.CharField(required=False, allow_blank=True, default="")

@@ -6,8 +6,7 @@ import { label } from "../../core/ui/labels";
 import { TextBox } from "../../components/forms/TextBox";
 
 export const NEW_RECEIPT_COSTS = { document_status: "SUPPLIER_DOCUMENT", landed_costs: [], payment_method: "", payment_amount: "",
-  investment_id: "", investment_name: "", payment_via: "MPESA" };
-const VIA = [["MPESA", "M-Pesa"], ["BANK", "Bank"]];
+  investment_id: "", investment_name: "" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const PAID_BY = [["SUPPLIER_INVOICE", "On the supplier's invoice"], ["CASH", "Paid now in cash"], ["MPESA", "Paid now by M-Pesa"], ["BANK", "Paid now by bank"]];
 
@@ -24,17 +23,17 @@ export function receiptCostsProblem(details) {
 }
 
 export function receiptCostsPayload(details) {
-  const { payment_method, payment_amount, investment_id, payment_via, ...rest } = details;
+  const { payment_method, payment_amount, investment_id, ...rest } = details;
   delete rest.investment_name;  // shown in the review only
   if (!payment_method || Number(payment_amount) <= 0) return rest;
-  const fromInvestment = payment_method === "INVESTMENT" ? { investment_id: Number(investment_id), via: payment_via } : {};
+  const fromInvestment = payment_method === "INVESTMENT" ? { investment_id: Number(investment_id) } : {};
   return { ...rest, payment: { method: payment_method, amount: payment_amount, ...fromInvestment } };
 }
 
 export function paymentSummary(details) {
   if (!details.payment_method) return "Owed to the supplier";
   if (details.payment_method === "INVESTMENT")
-    return `${details.payment_amount} paid now from ${details.investment_name || "your investment"} (taken out to ${details.payment_via === "BANK" ? "bank" : "M-Pesa"})`;
+    return `${details.payment_amount} paid now from ${details.investment_name || "your investment"} (your own money, not the business's)`;
   if (details.payment_method === "OWNER") return `${details.payment_amount} paid now from your own pocket (money you put into the business)`;
   return `${details.payment_amount} paid now (${label(details.payment_method)})`;
 }
@@ -118,16 +117,11 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
           {investments.map((i) => <option key={i.id} value={i.id}>{i.name} · holds {money(i.value)}</option>)}
         </select>
       </label>}
-      <label>Withdrawn to
-        <select value={details.payment_via} onChange={(e) => set({ payment_via: e.target.value })}>
-          {VIA.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-        </select>
-      </label>
       {investment && <p className={Number(details.payment_amount) > Number(investment.value) ? "formWarning" : "muted"}>
         {investment.name} holds {money(investment.value)}.{" "}
         {Number(details.payment_amount) > Number(investment.value)
           ? "That is less than the amount paid: record interest from its statement first, or pay part from elsewhere."
-          : `It is recorded as taken out to ${details.payment_via === "BANK" ? "the bank" : "M-Pesa"} and paid straight to the supplier, so your till and bank stay as they are.`}
+          : "It is taken out to you and paid straight to the supplier as your own money, so the business's till and bank are not touched."}
       </p>}
     </div>}
     {details.payment_method && <label>Amount paid now ({businessCurrency()})

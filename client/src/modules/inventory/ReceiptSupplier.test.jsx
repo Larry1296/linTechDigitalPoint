@@ -29,7 +29,7 @@ it("shows what is owed and records a payment on the day it was paid, from where 
   fireEvent.change(screen.getByLabelText("Where the money came from"), { target: { value: "OWNER" } });
   fireEvent.click(screen.getByRole("button", { name: "Review payment" }));
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
-  expect(confirmAction.mock.calls[0][0].text).toMatch(/drawer and till stay as they are/);
+  expect(confirmAction.mock.calls[0][0].text).toMatch(/drawer, till and bank stay as they are/);
   const [url, options] = api.mock.calls.at(-1);
   expect(url).toBe("/api/v1/inventory/receipts/9/pay-supplier/");
   expect(JSON.parse(options.body)).toMatchObject({ amount: "760", source: "OWNER", paid_on: "2026-10-14" });
