@@ -51,7 +51,8 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await expect(page.getByRole('status').filter({hasText:/Test charger.* added/})).toBeVisible();
   await page.goto('/admin/pos');
   await page.getByRole('button',{name:/^Test charger/}).first().click();
-  // Charging sells nothing yet; the cash taken on the checkout completes the sale.
+  // Complete sale opens the checkout. Charging sells nothing yet; the cash taken on the checkout completes the sale.
+  await page.getByRole('button',{name:/^Complete sale/}).click();
   await page.getByRole('button',{name:/^Charge/}).click();
   await page.getByRole('button',{name:/^Take .* cash$/}).click();
   await expect(page.getByText(/Sale complete/)).toBeVisible();
