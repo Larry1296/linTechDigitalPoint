@@ -165,9 +165,12 @@
 .posInline label { flex: 1 1 180px; }
 .posInline button { margin: 0; }
 
-/* The sale so far. It stops short of the assistant's button (fixed bottom-right, 52px high, 20px up). */
+/* The sale so far. It stops short of the assistant's button (fixed 20px from the bottom-right; 12px on phones), which
+   on the till is only its round 56px icon, never the wide labelled pill that would cover Complete sale. */
+body:has(.posSaleBar) .helpChatLauncher { width: 56px; height: 56px; padding: 0; justify-content: center; }
+body:has(.posSaleBar) .helpChatLauncher span { display: none; }
 .posSaleBar {
-  position: sticky; bottom: 16px; z-index: 20; display: flex; align-items: center; gap: 14px; margin: 22px 76px 0 0; padding: 10px 10px 10px 16px;
+  position: sticky; bottom: 16px; z-index: 20; display: flex; align-items: center; gap: 14px; margin: 22px 88px 0 0; padding: 10px 10px 10px 16px;
   border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 14px 36px rgb(2 18 45 / 18%);
 }
 .posSaleBarIcon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; color: var(--primary); background: var(--primary2); }
@@ -236,6 +239,7 @@
 @keyframes posFade { from { opacity: 0; } }
 @keyframes posRise { from { opacity: 0; transform: translateY(12px) scale(0.985); } }
 @keyframes posBump { 40% { transform: scale(1.12); } }
+@media (max-width: 520px) { .posPage .posSaleBar { margin-right: 76px; } }
 @media (prefers-reduced-motion: reduce) { .posSheetBackdrop, .posSheet, .posSaleBarCount { animation: none; } }
 
 /* Tablets and phones: the window fills the screen and scrolls as one, with Charge kept in reach at the bottom. */
@@ -248,7 +252,7 @@
   .posSheetActions { position: sticky; bottom: 0; padding: 10px 0 4px; background: var(--surface); }
 }
 @media (max-width: 600px) {
-  .posSaleBar { gap: 10px; margin-right: 68px; padding: 8px; }
+  .posSaleBar { gap: 10px; margin-right: 88px; padding: 8px; }
   .posSaleBarIcon, .posSaleBarGo kbd { display: none; }
   .posSaleBarTotal { font-size: 17px; }
   .posSaleBarGo { padding: 0 14px; }

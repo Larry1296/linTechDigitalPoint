@@ -186,7 +186,7 @@ export function ChatWidget({
           {note && <p className="helpChatNote">{note}</p>}
         </section>
       )}
-      <button type="button" className="helpChatLauncher" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button type="button" className="helpChatLauncher" aria-label={open ? "Close" : launcherLabel} aria-expanded={open} onClick={() => setOpen(!open)}>
         {open ? <X size={22} aria-hidden="true" /> : launcherIcon}
         <span>{open ? "Close" : launcherLabel}</span>
       </button>
