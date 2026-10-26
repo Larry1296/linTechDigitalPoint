@@ -1,11 +1,15 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SessionLockOverlay } from "./SessionLockOverlay";
+import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
 
-beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { vi.useRealTimers(); });
+beforeEach(() => { vi.useFakeTimers(); rememberPasswordLength("Safe-pass-1848"); });
+afterEach(() => { vi.useRealTimers(); forgetPasswordLength(); });
 const show = (onUnlock) => render(<SessionLockOverlay locked seconds={0} username="owner" busy={false} error="" onStay={vi.fn()} onUnlock={onUnlock} onLogout={vi.fn()} />);
 const field = () => screen.getByLabelText("Password");
+const typeOut = async (text) => {
+  for (let end = 1; end <= text.length; end += 1) await act(async () => { fireEvent.change(field(), { target: { value: text.slice(0, end) } }); });
+};
 
 it("opens at once when a saved or pasted password fills the field", async () => {
   const onUnlock = vi.fn(async () => true);
@@ -14,27 +18,45 @@ it("opens at once when a saved or pasted password fills the field", async () => 
   expect(onUnlock).toHaveBeenCalledWith("Safe-pass-1848", { quiet: true });
 });
 
-it("tries a typed password once typing pauses, quietly, and keeps what was typed when it is wrong", async () => {
-  const onUnlock = vi.fn(async () => false);
+it("never tries a typed password part-way, even when typing pauses", async () => {
+  const onUnlock = vi.fn(async () => true);
   show(onUnlock);
-  for (const value of ["S", "Sa", "Saf", "Safe", "Safe-", "Safe-p", "Safe-pa", "Safe-pas"]) fireEvent.change(field(), { target: { value } });
-  expect(onUnlock).not.toHaveBeenCalled();  // still typing
-  await act(async () => { vi.advanceTimersByTime(1000); });
-  expect(onUnlock).toHaveBeenCalledTimes(1);
-  expect(onUnlock).toHaveBeenCalledWith("Safe-pas", { quiet: true });
-  expect(field()).toHaveValue("Safe-pas");
+  await typeOut("Safe-pass-18");
+  await act(async () => { vi.advanceTimersByTime(5000); });
+  expect(onUnlock).not.toHaveBeenCalled();
 });
 
-it("never tries a short password, the same text twice, or more than twice per lock", async () => {
+it("tries a typed password quietly once it is as long as the real one, and keeps what was typed when it is wrong", async () => {
   const onUnlock = vi.fn(async () => false);
   show(onUnlock);
-  const type = async (value) => { fireEvent.change(field(), { target: { value } }); await act(async () => { vi.advanceTimersByTime(1000); }); };
-  await type("short");
+  await typeOut("Safe-pass-184x");
+  expect(onUnlock).toHaveBeenCalledTimes(1);
+  expect(onUnlock).toHaveBeenCalledWith("Safe-pass-184x", { quiet: true });
+  expect(field()).toHaveValue("Safe-pass-184x");
+});
+
+it("waits for Enter when the password's length is not known", async () => {
+  forgetPasswordLength();
+  const onUnlock = vi.fn(async () => true);
+  show(onUnlock);
+  await typeOut("Safe-pass-1848");
+  await act(async () => { vi.advanceTimersByTime(5000); });
   expect(onUnlock).not.toHaveBeenCalled();
-  await type("wrongpass1");
-  await type("wrongpass");
-  await type("wrongpass1");  // already tried
-  await type("wrongpass12");  // a third automatic try is not made: Enter still works
+  await act(async () => { fireEvent.submit(field().closest("form")); });
+  expect(onUnlock).toHaveBeenLastCalledWith("Safe-pass-1848");
+});
+
+it("never tries a short pasted password, the same text twice, or more than twice per lock", async () => {
+  forgetPasswordLength();
+  const onUnlock = vi.fn(async () => false);
+  show(onUnlock);
+  const paste = async (value) => { fireEvent.change(field(), { target: { value: "" } }); await act(async () => { fireEvent.change(field(), { target: { value } }); }); };
+  await paste("short");
+  expect(onUnlock).not.toHaveBeenCalled();
+  await paste("wrongpass1");
+  await paste("wrongpass");
+  await paste("wrongpass1");  // already tried
+  await paste("wrongpass12");  // a third automatic try is not made: Enter still works
   expect(onUnlock.mock.calls.map(([value]) => value)).toEqual(["wrongpass1", "wrongpass"]);
   await act(async () => { fireEvent.submit(field().closest("form")); });
   expect(onUnlock).toHaveBeenLastCalledWith("wrongpass12");

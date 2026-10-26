@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, resetCsrfToken } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
+import { rememberPasswordLength } from "../../core/auth/passwordLength";
 
 function safeNext(search) {
   const value = new URLSearchParams(search).get("next");
@@ -36,6 +37,7 @@ export function useAuthForm() {
         },
       );
       resetCsrfToken();
+      rememberPasswordLength(data.password);
       await signedIn();
       const destination = identity.organization ? next || "/admin/dashboard" : identity.memberships?.length ? "/select-business" : "/onboarding";
       navigate(destination, { replace: true });

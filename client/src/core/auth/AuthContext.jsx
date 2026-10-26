@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { api, resetCsrfToken, setActiveOrganization, setActiveBranch, setWorkspaceLocked, clearAccessToken, refreshAccess, accessNeedsRefresh } from "../api/client";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SessionLockOverlay } from "./SessionLockOverlay";
+import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
 
 const AuthContext = createContext(null);
 const SESSION_EVENT_KEY = "workspace-session-event";
@@ -84,6 +85,7 @@ export function AuthProvider({ children }) {
   }, [updateAccess, lock]);
   const clearIdentity = useCallback(() => {
     clearAccessToken();
+    forgetPasswordLength();
     setActiveBranch(null);
     window.dispatchEvent(new Event("session-signed-out"));
     access.current = { deadline: null, locked: false, serverTime: 0 };
@@ -235,6 +237,7 @@ export function AuthProvider({ children }) {
         window.location.assign("/admin/dashboard");
         return;
       }
+      rememberPasswordLength(password);
       applyIdentity(data, true);
       lastRenewal.current = Date.now();
       broadcast("unlocked");

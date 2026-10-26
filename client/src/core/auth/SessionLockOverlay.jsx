@@ -3,23 +3,23 @@ import { useEffect, useRef, useState } from "react";
 import { LockKeyhole, Timer } from "lucide-react";
 import { PasswordField } from "../../components/forms/PasswordField";
 import { FormError } from "../../components/forms/FormNotice";
+import { knownPasswordLength } from "./passwordLength";
 
-// How long typing must pause before a typed password is tried by itself, the shortest password worth trying, and how
-// many automatic tries one lock allows: the server blocks unlocking for a minute after 5 wrong passwords, so automatic
-// tries never use up more than two of them and never repeat the same text.
-const PAUSE_MS = 1000;
+// The shortest password worth trying when its length is not known, and how many automatic tries one lock allows: the server blocks unlocking for a
+// minute after 5 wrong passwords, so automatic tries never use up more than two of them and never repeat the same text.
 const SHORTEST = 8;
 const AUTO_TRIES = 2;
 
 export function SessionLockOverlay({ locked, seconds, username, busy, error, onStay, onUnlock, onLogout }) {
   const panel = useRef(null);
   const [password, setPassword] = useState("");
-  const auto = useRef({ tried: new Set(), timer: null });
-  // The workspace opens by itself once the right password is in: at once when it is filled in all at once (a saved
-  // password, autofill or paste), otherwise after a short pause in typing. A wrong automatic try stays quiet.
+  const auto = useRef({ tried: new Set() });
+  // The workspace opens by itself once the right password is in: when it is filled in all at once (a saved password,
+  // autofill or paste), or when what is typed reaches the length of the password this tab last signed in with, never
+  // part-way through typing. When that length is not known, typing waits for Enter. A wrong automatic try stays quiet.
   const tryQuietly = async (value) => {
     const state = auto.current;
-    if (!locked || busy || value.length < SHORTEST || state.tried.has(value) || state.tried.size >= AUTO_TRIES) return;
+    if (!locked || busy || (value.length < SHORTEST && value.length !== knownPasswordLength()) || state.tried.has(value) || state.tried.size >= AUTO_TRIES) return;
     state.tried.add(value);
     const opened = await onUnlock(value, { quiet: true });
     if (!opened) panel.current?.querySelector("input")?.focus();
@@ -28,11 +28,8 @@ export function SessionLockOverlay({ locked, seconds, username, busy, error, onS
     const value = event.target.value;
     const filled = value.length - password.length > 2;  // more than a keystroke at once: autofill or paste
     setPassword(value);
-    clearTimeout(auto.current.timer);
-    if (filled) void tryQuietly(value);
-    else auto.current.timer = setTimeout(() => void tryQuietly(value), PAUSE_MS);
+    if (filled || value.length === knownPasswordLength()) void tryQuietly(value);
   };
-  useEffect(() => () => clearTimeout(auto.current.timer), []);
   useEffect(() => { auto.current.tried = new Set(); }, [locked]);
   useEffect(() => {
     const previous = document.activeElement;
@@ -62,7 +59,7 @@ export function SessionLockOverlay({ locked, seconds, username, busy, error, onS
       <h1 id="session-lock-title">{locked ? "Workspace locked" : "Still working?"}</h1>
       <p id="session-lock-description">{locked ? `${SESSION_EXPIRED_MESSAGE} Continue where you left off.` : "Your workspace has been idle. Stay logged in to continue, or it will lock when the countdown ends."}</p>
       {!locked && <p className="sessionCountdown" role="timer" aria-label="Seconds until workspace locks">{Math.max(0, seconds)}<small>seconds remaining</small></p>}
-      {locked ? <form onSubmit={async event => { event.preventDefault(); clearTimeout(auto.current.timer); const value = password; setPassword(""); await onUnlock(value); }}>
+      {locked ? <form onSubmit={async event => { event.preventDefault(); const value = password; setPassword(""); await onUnlock(value); }}>
         <PasswordField name="password" autoComplete="current-password" required value={password} onChange={change} readOnly={busy} />
         <button type="submit" disabled={busy}>{busy ? "Unlocking…" : "Unlock"}</button>
         <FormError title="Could not unlock." message={error} />
