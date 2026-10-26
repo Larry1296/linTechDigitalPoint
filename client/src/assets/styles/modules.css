@@ -1716,9 +1716,11 @@ form a:not(.button, .pageBackLink),
 .admin > main {
   min-width: 0;
 }
-/* Card rows on every page: the cards in a row share one height and together fill it. A card with more to say grows
-   wider rather than taller (short figures and labels do not wrap while there is room), and cards that do not fit start a
-   new row, centred. Scoped to the workspace (.admin) so it wins over each grid's own columns. */
+/* Card rows on every page: each card is as wide as its figures and labels (which do not wrap on wider screens), so
+   how many fit in a row depends on how long the cards are. The row's spare room is shared out between its cards, so
+   every row is filled and the cards in a row keep one height. A description or list inside a card wraps within it and never
+   makes the card wider. Cards that do not fit start a new row, centred. Scoped to the workspace (.admin) so it wins
+   over each grid's own columns. */
 .admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) {
   display: flex;
   flex-wrap: wrap;
@@ -1726,20 +1728,21 @@ form a:not(.button, .pageBackLink),
   align-items: stretch;
 }
 .admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) > * {
-  /* Every card starts from the same width and the row's spare room is shared out; a card never gets narrower than its
-     figures and labels (which do not wrap), so one with more to show is wider, while a long description just wraps. */
-  flex: 1 1 var(--card-min, 170px);
-  min-width: min-content;
+  flex: 1 0 auto;
+  min-width: min(150px, 100%);
   max-width: 100%;
 }
-:is(.outletCards, .recordsGrid, .chamaCards) { --card-min: 260px; }
-.factTiles { --card-min: 110px; }
+.admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) > * > :not(span, strong, b, dt, dd, h2, h3) {
+  width: 0;
+  min-width: 100%;
+}
 @media (min-width: 601px) {
   .admin :is(.metrics, .reportCards, .reportPosition, .factTiles, .accountingKpis, .platformStats) > * > :is(span, strong, dt, dd),
   .admin .cards > * > :is(h2, h3, span, strong) {
     white-space: nowrap;
   }
 }
+
 .admin > main :is(img, video, canvas, svg) {
   max-width: 100%;
 }
@@ -2286,7 +2289,6 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
   .productDetailHeader .actionRow { grid-column: 1 / -1; }
   .factTiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
 
 .openingStock { display:grid; gap:10px; margin:0; padding:16px; border:1.5px solid var(--primary); border-radius:14px; background:var(--primary2); }
 .openingStock legend { padding:0 6px; font-weight:700; color:var(--text); }
