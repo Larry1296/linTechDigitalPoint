@@ -1729,9 +1729,18 @@ form a:not(.button, .pageBackLink),
 }
 .admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) > * {
   flex: 1 0 auto;
-  min-width: min(150px, 100%);
+  /* Wide enough that a description wraps onto a few lines, not many, so cards stay low. */
+  min-width: min(210px, 100%);
   max-width: 100%;
 }
+/* Compact cards: less padding and spacing, so a row of figures takes little height. */
+.admin :is(.metrics, .reportCards, .accountingKpis) > * {
+  padding: 14px 16px;
+  gap: 4px;
+}
+.admin .metrics strong { font-size: 21px; }
+.admin .reportCards > * { min-width: min(260px, 100%); }  /* their descriptions are the longest */
+.admin :is(.metrics, .reportCards, .accountingKpis) > * > :is(p, small) { line-height: 1.35; }
 .admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) > * > :not(span, strong, b, dt, dd, h2, h3) {
   width: 0;
   min-width: 100%;
