@@ -1716,9 +1716,29 @@ form a:not(.button, .pageBackLink),
 .admin > main {
   min-width: 0;
 }
-.cards,
-.metrics {
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+/* Card rows on every page: the cards in a row share one height and together fill it. A card with more to say grows
+   wider rather than taller (short figures and labels do not wrap while there is room), and cards that do not fit start a
+   new row, centred. Scoped to the workspace (.admin) so it wins over each grid's own columns. */
+.admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+}
+.admin :is(.cards, .metrics, .reportCards, .reportPosition, .explainFacts, .factTiles, .outletCards, .recordsGrid, .accountingKpis, .platformStats, .chamaCards) > * {
+  /* Every card starts from the same width and the row's spare room is shared out; a card never gets narrower than its
+     figures and labels (which do not wrap), so one with more to show is wider, while a long description just wraps. */
+  flex: 1 1 var(--card-min, 170px);
+  min-width: min-content;
+  max-width: 100%;
+}
+:is(.outletCards, .recordsGrid, .chamaCards) { --card-min: 260px; }
+.factTiles { --card-min: 110px; }
+@media (min-width: 601px) {
+  .admin :is(.metrics, .reportCards, .reportPosition, .factTiles, .accountingKpis, .platformStats) > * > :is(span, strong, dt, dd),
+  .admin .cards > * > :is(h2, h3, span, strong) {
+    white-space: nowrap;
+  }
 }
 .admin > main :is(img, video, canvas, svg) {
   max-width: 100%;
