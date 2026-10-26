@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { PasswordField } from "../../components/forms/PasswordField";
 import { FormError } from "../../components/forms/FormNotice";
 import { Loading } from "../../components/States";
+import { knownPasswordLength, rememberPasswordLength } from "./passwordLength";
 
 const STATUS = "/api/v1/auth/protected/";
 const day = (value) => new Date(value).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
@@ -38,24 +39,38 @@ export function ProtectedPasswordForm({ state, onOpen }) {
   const [form, setForm] = useState({ password: "", proof: "", next: "", again: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const field = (key) => ({ value: form[key], onChange: (event) => setForm({ ...form, [key]: event.target.value }), readOnly: busy, required: true });
+  // The password opens the pages by itself once what is typed is as long as the one this tab last opened them with,
+  // never part-way through typing; when that length is not known, it waits for Enter. A wrong automatic try stays
+  // quiet, and there are at most two, never of the same text.
+  const [tried] = useState(() => new Set());
+  const field = (key) => ({ value: form[key], onChange: (event) => change(key, event.target.value), readOnly: busy, required: true });
+  const change = (key, value) => {
+    const next = { ...form, [key]: value };
+    setForm(next);
+    if (mode === "unlock" && key === "password" && !busy && value.length === knownPasswordLength("protected")
+      && !tried.has(value) && tried.size < 2) {
+      tried.add(value);
+      void open(next, true);
+    }
+  };
   const switchTo = (next) => { setMode(next); setError(""); setForm({ password: "", proof: "", next: "", again: "" }); };
-  async function submit(event) {
-    event.preventDefault();
-    if (mode !== "unlock" && form.next !== form.again) { setError("The two new passwords are not the same."); return; }
-    setBusy(true); setError("");
+  async function open(values, quiet = false) {
+    if (mode !== "unlock" && values.next !== values.again) { setError("The two new passwords are not the same."); return; }
+    setBusy(true); if (!quiet) setError("");
     try {
       const data = mode === "unlock"
-        ? await api("/api/v1/auth/protected/unlock/", { method: "POST", body: JSON.stringify({ password: form.password }) })
-        : await api("/api/v1/auth/protected/password/", { method: "POST", body: JSON.stringify({ proof: form.proof, new_password: form.next }) });
+        ? await api("/api/v1/auth/protected/unlock/", { method: "POST", body: JSON.stringify({ password: values.password }) })
+        : await api("/api/v1/auth/protected/password/", { method: "POST", body: JSON.stringify({ proof: values.proof, new_password: values.next }) });
+      rememberPasswordLength(mode === "unlock" ? values.password : values.next, "protected");
       onOpen(data.protected);
     } catch (err) {
-      if (err.data?.code === "protected_expired") { switchTo("renew"); setForm((f) => ({ ...f, proof: form.password })); }
-      setError(err.message);
+      if (err.data?.code === "protected_expired") { switchTo("renew"); setForm((f) => ({ ...f, proof: values.password })); setError(err.message); }
+      else if (!quiet) setError(err.message);
     } finally {
       setBusy(false);
     }
   }
+  const submit = (event) => { event.preventDefault(); void open(form); };
   const titles = { first: "Set a password for protected pages", unlock: "Enter your protected pages password",
     renew: "Time for a new protected pages password", forgot: "Set a new protected pages password" };
   const notes = {

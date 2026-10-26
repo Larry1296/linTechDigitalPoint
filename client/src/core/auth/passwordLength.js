@@ -1,14 +1,15 @@
-// The length of the password this tab last signed in or unlocked with (never the password itself), so the lock screen
-// can try a typed password by itself the moment it is as long as the real one. Kept for this tab only and forgotten
-// on sign-out.
+// The length of a password this tab last opened something with (never the password itself), so a password field can
+// try what is typed by itself the moment it is as long as the real one. "sign-in" is the sign-in password (the lock
+// screen); "protected" is the protected pages password. Kept for this tab only and forgotten on sign-out.
 const KEY = "workspace-password-length";
+const key = (kind) => `${KEY}:${kind}`;
 
-export function rememberPasswordLength(password) {
-  try { if (password) sessionStorage.setItem(KEY, String(password.length)); } catch { /* Storage may be disabled. */ }
+export function rememberPasswordLength(password, kind = "sign-in") {
+  try { if (password) sessionStorage.setItem(key(kind), String(password.length)); } catch { /* Storage may be disabled. */ }
 }
-export function knownPasswordLength() {
-  try { return Number(sessionStorage.getItem(KEY)) || null; } catch { return null; }
+export function knownPasswordLength(kind = "sign-in") {
+  try { return Number(sessionStorage.getItem(key(kind))) || null; } catch { return null; }
 }
 export function forgetPasswordLength() {
-  try { sessionStorage.removeItem(KEY); } catch { /* Storage may be disabled. */ }
+  try { for (const kind of ["sign-in", "protected"]) sessionStorage.removeItem(key(kind)); } catch { /* Storage may be disabled. */ }
 }
