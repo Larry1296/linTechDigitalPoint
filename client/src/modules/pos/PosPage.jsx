@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CheckCircle2, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
 import { businessCurrency } from "../../core/organization/presentation";
 import { useAuth } from "../../core/auth/AuthContext";
 import { api } from "../../core/api/client";
@@ -27,8 +27,8 @@ const byGroup = (a, b) => (a === "Services" ? 1 : b === "Services" ? -1 : a.loca
 // A steady colour per category, so the tiles are easy to tell apart at a glance.
 const hue = (text) => [...text].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 360, 7);
 
-// A product on the counter: one tap adds one more; the badge says how many are in the sale.
-function Tile({ p, inCart, onAdd, user }) {
+// A product on the counter: one tap adds one more; the badge says how many are in the sale and − takes one off.
+function Tile({ p, inCart, onAdd, onLess, user }) {
   const empty = stockLimit(p) < 1;
   const service = p.product_type === "SERVICE";
   return <article className={`posTile${inCart ? " inCart" : ""}`}>
@@ -39,6 +39,7 @@ function Tile({ p, inCart, onAdd, user }) {
       <span className={`posTileStock${empty ? " out" : ""}`}>{service ? "Service" : empty ? "Out of stock" : `${Number(p.available).toLocaleString()} in stock`}</span>
       {inCart > 0 && <span className="posTileCount" aria-label={`${inCart} in the sale`}>{inCart}</span>}
     </button>
+    {inCart > 0 && <button type="button" className="posTileLess" onClick={() => onLess(p)} aria-label={`One less ${p.product_name}`}><Minus size={16} /></button>}
     <ProductActions row={p} user={user} />
   </article>;
 }
@@ -163,6 +164,10 @@ export function PosPage() {
   const [lastAdded, setLastAdded] = useState("");
   const setLine = (id, changes) => setCart((c) => c.map((y) => (y.p.id === id ? { ...y, ...changes } : y)));
   const removeLine = (id) => setCart((c) => c.filter((y) => y.p.id !== id));
+  // One less from a tile; the last one leaves the sale.
+  const less = (p) => setCart((c) => c.flatMap((y) => (y.p.id !== p.id ? [y] : y.q > 1 ? [{ ...y, q: y.q - 1, qText: undefined }] : [])));
+  // The sale's lines opened from the bar, to change quantities or remove items without leaving the products.
+  const [showLines, setShowLines] = useState(false);
   // Line amount at the agreed price less its discount; this is what the customer is charged before any sale discount.
   const lineAmount = (x) => Math.max(0, Number(x.price ?? x.p.selling_price) * x.q - Number(x.discount || 0));
   const search = () =>
@@ -194,9 +199,9 @@ export function PosPage() {
   const items = cart.reduce((sum, x) => sum + x.q, 0);
   const subtotal = cart.reduce((sum, x) => sum + lineAmount(x), 0);
   const total = Math.max(0, subtotal - Number(discount || 0));
-  const clear = () => { setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); setLastAdded(""); };
+  const clear = () => { setShowLines(false); setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); setLastAdded(""); };
   const step = checkout ? "pay" : sheet;
-  const openSheet = () => { if (cart.length) { setResult(undefined); setSheet("review"); } };
+  const openSheet = () => { if (cart.length) { setShowLines(false); setResult(undefined); setSheet("review"); } };
   const newSale = () => { setResult(undefined); setShowReceipt(false); setSheet(null); };
   // F2 opens the checkout from anywhere on the till, as on most tills; scanners never send it.
   useEffect(() => {
@@ -285,7 +290,7 @@ export function PosPage() {
           <section key={name} className="posGroup">
             <h2>{name}</h2>
             <div className="posTiles">
-              {products.map((p) => <Tile key={p.id} p={p} inCart={counts[p.id] || 0} onAdd={add} user={user} />)}
+              {products.map((p) => <Tile key={p.id} p={p} inCart={counts[p.id] || 0} onAdd={add} onLess={less} user={user} />)}
             </div>
           </section>
         ))}
@@ -293,11 +298,21 @@ export function PosPage() {
 
       {/* The sale so far, always in view while products are picked; the checkout opens only when asked for. */}
       <div className={`posSaleBar${cart.length ? "" : " empty"}`} role="region" aria-label="Sale so far">
+        {showLines && cart.length > 0 && <div className="posSaleBarLines" id="pos-bar-lines">
+          <div className="posCartHead">
+            <h3>Current sale</h3>
+            <button type="button" className="posIconButton" onClick={clear} aria-label="Clear the sale"><Trash2 size={16} /></button>
+          </div>
+          <div className="posLines">
+            {cart.map((x) => <CartLine key={x.p.id} x={x} setLine={setLine} remove={removeLine} canChangePrice={canChangePrice} lineAmount={lineAmount} />)}
+          </div>
+        </div>}
         <span className="posSaleBarIcon" aria-hidden="true"><ShoppingCart size={20} /></span>
-        {cart.length ? <span className="posSaleBarInfo">
-          <b key={items} className="posSaleBarCount">{items} {items === 1 ? "item" : "items"}</b>
+        {cart.length ? <button type="button" className="posSaleBarInfo posSaleBarItems" onClick={() => setShowLines((open) => !open)}
+          aria-expanded={showLines} aria-controls="pos-bar-lines">
+          <b key={items} className="posSaleBarCount">{items} {items === 1 ? "item" : "items"} <span className="posSaleBarEdit">· {showLines ? "Hide" : "Change"} <ChevronDown size={15} aria-hidden="true" /></span></b>
           {lastAdded && <small>Added {lastAdded}</small>}
-        </span> : <span className="posSaleBarInfo"><small>Tap products or scan a barcode to start a sale.</small></span>}
+        </button> : <span className="posSaleBarInfo"><small>Tap products or scan a barcode to start a sale.</small></span>}
         {cart.length > 0 && <strong className="posSaleBarTotal">{money(total)}</strong>}
         <button type="button" className="posSaleBarGo" disabled={!cart.length} onClick={openSheet}>
           Complete sale <kbd aria-hidden="true">F2</kbd>

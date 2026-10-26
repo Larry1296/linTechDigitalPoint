@@ -182,3 +182,21 @@ it("opens the checkout only when asked, and going back to the products keeps the
   fireEvent.keyDown(document, { key: "Escape" });
   expect(panel()).toBeInTheDocument();
 });
+
+it("changes the sale without leaving the products: − on a tile, and quantities or removing from the bar", async () => {
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Charger/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Earphones/ }));
+  const bar = () => screen.getByRole("region", { name: "Sale so far" });
+  expect(bar()).toHaveTextContent("3 items");
+  fireEvent.click(screen.getByRole("button", { name: "One less Charger" }));
+  expect(bar()).toHaveTextContent("2 items");
+  fireEvent.click(within(bar()).getByRole("button", { name: /2 items/ }));
+  fireEvent.click(within(bar()).getByRole("button", { name: "One more Earphones" }));
+  expect(bar()).toHaveTextContent("3 items");
+  fireEvent.click(within(bar()).getByRole("button", { name: "Remove Charger" }));
+  expect(bar()).toHaveTextContent("2 items");
+  expect(screen.queryByRole("button", { name: "One less Charger" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});

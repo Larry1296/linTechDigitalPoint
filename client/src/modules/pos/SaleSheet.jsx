@@ -5,7 +5,7 @@ const STEPS = [["review", "Review"], ["pay", "Payment"], ["done", "Done"]];
 
 // The checkout window over the whole till: review the sale, take the payment, then the sale is done. It opens only when the
 // cashier asks for it, so products can be picked first. While payment is being taken it cannot be closed; the checkout's own
-// Cancel or Change the basket lets it go.
+// Cancel or Change items lets it go.
 export function SaleSheet({ step, onClose, children }) {
   const panel = useRef(null);
   useEffect(() => {

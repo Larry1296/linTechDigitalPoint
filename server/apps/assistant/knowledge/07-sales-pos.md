@@ -3,6 +3,9 @@
 ## How do I make a sale at the counter?
 Open **Point of Sale** and tap products to add them to the sale (or search by name, item code or barcode); the bar at the bottom shows the items and the total. Press **Complete sale** (or F2) to open the checkout: check the items and quantities, choose the customer if any, press **Charge** and take the payment (Cash, Till or Paybill, Prompt, Bank, or Owed). For cash, the change is worked out. **Add more products** goes back with the sale kept. Stock updates as soon as the sale is completed, and a receipt is produced.
 
+## How do I remove an item or change the quantity at the till?
+On a product's tile, **−** takes one off. Press the item count on the bottom bar (**Change**) to see the sale's lines: **−** and **+** change the quantity, the box takes a typed number, and **×** removes the item; the bin clears the whole sale. The same controls are in the **Complete sale** window. After **Charge**, press **Change items** (before any payment is taken) to go back and change them.
+
 ## Which payment methods can I record?
 Cash, M-Pesa, bank and other payments, recorded against each sale so your takings and stock stay in one place.
 

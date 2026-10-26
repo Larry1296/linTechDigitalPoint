@@ -80,7 +80,11 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
         <p className="posToPay">{checkout.status === "COMPLETED" ? "Paid" : "To pay"} <strong>{money(open ? left : checkout.total)}</strong></p>
         {Number(checkout.paid) > 0 && open && <p className="muted">Total {money(checkout.total)} · paid so far {money(checkout.paid)}</p>}
       </div>
-      {open && <button type="button" className="secondary" onClick={() => void cancel()} disabled={busy}>Cancel</button>}
+      <div className="posCheckoutHeadActions">
+        {/* Nothing taken yet: the items can still be changed (quantities, removing one), then charged again. */}
+        {open && checkout.payments.every((p) => p.status !== "CONFIRMED") && <button type="button" className="secondary" onClick={() => void changeBasket()} disabled={busy}>Change items</button>}
+        {open && <button type="button" className="secondary" onClick={() => void cancel()} disabled={busy}>Cancel</button>}
+      </div>
     </header>
 
     {checkout.payments.length > 0 && <ul className="posTenders" aria-label="Payments taken">
@@ -179,6 +183,5 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
     </>}
     {open && promptOut && <p className="muted">Waiting for the customer to answer the prompt. Take it back (×) to pay another way.</p>}
     <FormError title="Could not take the payment." message={error} />
-    {open && checkout.payments.every((p) => p.status !== "CONFIRMED") && <button type="button" className="linkButton" onClick={() => void changeBasket()} disabled={busy}>Change the basket</button>}
   </section>;
 }
