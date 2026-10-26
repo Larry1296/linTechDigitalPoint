@@ -203,7 +203,12 @@ export function PosPage() {
   const step = checkout ? "pay" : sheet;
   const openSheet = () => { if (cart.length) { setShowLines(false); setResult(undefined); setSheet("review"); } };
   const newSale = () => { setResult(undefined); setShowReceipt(false); setSheet(null); };
-  // F2 opens the checkout from anywhere on the till, as on most tills; scanners never send it.
+  // Marks the page as the till so the assistant's button shrinks to its icon and keeps clear of Complete sale.
+  useEffect(() => {
+    document.body.classList.add("posTill");
+    return () => document.body.classList.remove("posTill");
+  }, []);
+    // F2 opens the checkout from anywhere on the till, as on most tills; scanners never send it.
   useEffect(() => {
     if (step) return undefined;
     const key = (event) => { if (event.key === "F2") { event.preventDefault(); openSheet(); } };

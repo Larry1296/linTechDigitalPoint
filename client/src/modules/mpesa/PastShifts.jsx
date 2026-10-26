@@ -67,7 +67,7 @@ export function PastShifts() {
             <option value="">Choose when the shift ran</option>
             {shifts.map((row) => (
               <option key={row.id} value={row.id}>
-                {shiftPeriod(row)} · {row.outlet} · {row.operator} ({row.records} {row.records === 1 ? "record" : "records"})
+                {shiftPeriod(row)} · {row.outlet} · {row.operator} ({row.records} {row.records === 1 ? "record" : "records"}){row.commission ? ` · commission ${businessCurrency()} ${figure(row.commission.earned)}` : ""}
               </option>
             ))}
           </select>
@@ -81,6 +81,12 @@ export function PastShifts() {
             ? ` (cash ${signed(shift.cash_variance)}, float ${signed(shift.float_variance)} against what was expected).`
             : ", as expected."}
           {shift.month_forecast && ` When it closed, ${shift.month_forecast.label}'s commission was heading for ${businessCurrency()} ${figure(shift.month_forecast.forecast)} (${businessCurrency()} ${figure(shift.month_forecast.so_far)} so far, ${shift.month_forecast.days_left} ${shift.month_forecast.days_left === 1 ? "working day" : "working days"} left).`}
+        </p>
+      )}
+      {shift?.commission && (
+        <p className="pastShiftCommission">
+          Commission earned in this shift: <b>{businessCurrency()} {figure(shift.commission.earned)}</b>
+          {shift.commission.unknown > 0 && <span className="muted"> · {shift.commission.unknown} {shift.commission.unknown === 1 ? "transaction" : "transactions"} not worked out yet</span>}
         </p>
       )}
       {shift && !records && !error && <p className="muted" role="status">Loading the shift's records…</p>}

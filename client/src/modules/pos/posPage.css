@@ -47,11 +47,11 @@
   border-radius: 999px; color: var(--on-primary); background: var(--primary); font-size: 13px; font-weight: 800;
 }
 .posTile .posActions { border-top: 1px solid var(--line); }
-.posTileLess {
-  position: absolute; top: 8px; left: 8px; display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0;
+.posTile > .posTileLess {
+  position: absolute; top: 7px; right: 42px; display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0; gap: 0;
   border: 1px solid var(--line); border-radius: 999px; color: var(--text); background: var(--surface); box-shadow: var(--shadow);
 }
-.posTileLess:hover { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, var(--line)); }
+.posTile > .posTileLess:hover { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, var(--line)); }
 
 .posCartHead { display: flex; align-items: center; gap: 8px; }
 .posCartHead h3 { margin: 0; flex: 1; font-size: 18px; }
@@ -166,9 +166,10 @@
 .posInline button { margin: 0; }
 
 /* The sale so far. It stops short of the assistant's button (fixed 20px from the bottom-right; 12px on phones), which
-   on the till is only its round 56px icon, never the wide labelled pill that would cover Complete sale. */
-body:has(.posSaleBar) .helpChatLauncher { width: 56px; height: 56px; padding: 0; justify-content: center; }
-body:has(.posSaleBar) .helpChatLauncher span { display: none; }
+   on the till is only its round 56px icon, never the wide labelled pill that would cover Complete sale. The till page
+   marks the body with posTill (a class, not :has(), which older browsers on shop computers ignore). */
+body.posTill .helpChatLauncher { width: 56px; height: 56px; padding: 0; justify-content: center; }
+body.posTill .helpChatLauncher span { display: none; }
 .posSaleBar {
   position: sticky; bottom: 16px; z-index: 20; display: flex; align-items: center; gap: 14px; margin: 22px 88px 0 0; padding: 10px 10px 10px 16px;
   border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 14px 36px rgb(2 18 45 / 18%);

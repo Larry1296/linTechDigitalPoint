@@ -373,9 +373,9 @@ def test_a_closed_shifts_records_can_be_opened_again_by_its_time(db):
     client.force_login(owner)
     empty = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1000", "opening_float": "5000"}, format="json").json()
     client.post(f"/api/v1/mpesa/sessions/{empty['id']}/reconcile/", {"actual_cash": "1000", "actual_float": "5000"}, format="json")
-    first = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1000", "opening_float": "5000"}, format="json").json()
+    first = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1000", "opening_float": "5000", "commission_balance": "100"}, format="json").json()
     client.post("/api/v1/mpesa/transactions/", {"session": first["id"], "transaction_type": "CUSTOMER_DEPOSIT", "amount": "500",
-                "customer_phone": "0712345678", "customer_id_number": "12345678", "idempotency_key": "p1"}, format="json")
+                "customer_phone": "0712345678", "customer_id_number": "12345678", "idempotency_key": "p1", "commission_balance": "110"}, format="json")
     assert client.get("/api/v1/mpesa/sessions/past/").json() == []  # still open: it is on the desk
     client.post(f"/api/v1/mpesa/sessions/{first['id']}/reconcile/", {"actual_cash": "1500", "actual_float": "4500"}, format="json")
     second = client.post("/api/v1/mpesa/sessions/", {"outlet": outlet.pk, "opening_cash": "1500", "opening_float": "4500"}, format="json").json()
@@ -384,6 +384,8 @@ def test_a_closed_shifts_records_can_be_opened_again_by_its_time(db):
     past = client.get("/api/v1/mpesa/sessions/past/").json()
     assert [(row["id"], row["records"]) for row in past] == [(first["id"], 1)]  # the empty shift has nothing to open
     assert past[0]["closed_at"] and Decimal(past[0]["closing_cash"]) == Decimal("1500")
+    # Each past shift shows the commission it earned: the deposit raised the balance read at opening from 100 to 110.
+    assert Decimal(past[0]["commission"]["earned"]) == Decimal("10") and past[0]["commission"]["unknown"] == 0
     records = client.get(f"/api/v1/mpesa/transactions/?session={first['id']}").json()
     assert [(row["session"], Decimal(row["amount"])) for row in records] == [(first["id"], Decimal("500"))]
 

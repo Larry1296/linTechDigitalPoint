@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from apps.tenancy.permissions import has_business_permission, is_business_manager
@@ -158,9 +159,17 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         # Closed shifts that hold records, newest first, each named by when it ran, so a cleared desk's records can be opened again.
         rows = (self.get_queryset().filter(status=MpesaSession.CLOSED).annotate(records=Count("transactions")).filter(records__gt=0)
                 .prefetch_related(None).select_related("reconciliation").order_by("-opened_at", "-pk"))
-        from .commission_learning import forecast, learn
+        from .commission_learning import earned, forecast, learn, summary
         learned = learn() if rows else None
+        # Each shift's own commission: what its deposits, withdrawals and airtime earned, worked out like the open shift's.
+        results = earned(*learned) if learned else {}
+        by_shift = defaultdict(list)
+        for outlet_rows in (learned[0].values() if learned else []):
+            for row in outlet_rows:
+                if row.standing:
+                    by_shift[row.session_id].append(row)
         return Response([{"id": s.pk, "outlet": s.outlet.display_name, "month_forecast": forecast(s.closed_at, learned), "operator": s.operator.get_full_name() or s.operator.username,
+                          "commission": summary(by_shift[s.pk], results),
                           "opened_at": s.opened_at, "closed_at": s.closed_at, "records": s.records,
                           "opening_cash": s.opening_cash, "opening_float": s.opening_float,
                           "closing_cash": s.closing_cash_actual, "closing_float": s.closing_float_actual,

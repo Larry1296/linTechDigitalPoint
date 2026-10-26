@@ -34,3 +34,13 @@ it("says so when no closed shift has records", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Look at a past shift" }));
   expect(await screen.findByText("No closed shift has records yet.")).toBeInTheDocument();
 });
+
+it("shows the commission each past shift earned, in the list and for the picked shift", async () => {
+  api.getPastMpesaShifts.mockResolvedValue([{ ...shift, commission: { earned: "86.00", measured: 2, learned: 1, unknown: 1 } }]);
+  api.getMpesaShiftTransactions.mockResolvedValue([deposit]);
+  render(<PastShifts />);
+  fireEvent.click(screen.getByRole("button", { name: "Look at a past shift" }));
+  await screen.findByRole("option", { name: /Jane \(2 records\) · commission .*86\.00/ });
+  fireEvent.change(screen.getByLabelText("Shift"), { target: { value: String(shift.id) } });
+  expect(screen.getByText(/Commission earned in this shift/)).toHaveTextContent(/86\.00.*1 transaction not worked out yet/);
+});
