@@ -1,6 +1,6 @@
 import { setBusinessPresentation } from "../organization/presentation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { api, resetCsrfToken, setActiveOrganization, setActiveBranch, setWorkspaceLocked, clearAccessToken, refreshAccess, accessNeedsRefresh } from "../api/client";
+import { api, ApiError, resetCsrfToken, setActiveOrganization, setActiveBranch, setWorkspaceLocked, clearAccessToken, refreshAccess, accessNeedsRefresh } from "../api/client";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SessionLockOverlay } from "./SessionLockOverlay";
 import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
@@ -121,8 +121,12 @@ export function AuthProvider({ children }) {
     await refresh(true);
   }, [refresh]);
 
+  // Business set-up is signed-in work too: activity keeps it alive, and an idle lock covers it without losing the steps done.
+  const inWorkspace = location.pathname.startsWith("/admin") || location.pathname === "/onboarding";
   useEffect(() => {
     const expired = () => {
+      // In the workspace an ended session locks the screen: the page stays as it is and the password signs in again.
+      if (userRef.current && inWorkspace) { lock(); return; }
       clearIdentity();
       setSessionExpired(true);
       setAuthState("expired");
@@ -136,7 +140,7 @@ export function AuthProvider({ children }) {
       window.removeEventListener("session-expired", expired);
       window.removeEventListener("session-locked", sessionLocked);
     };
-  }, [location, navigate, lock, updateAccess, clearIdentity]);
+  }, [location, navigate, lock, updateAccess, clearIdentity, inWorkspace]);
 
   const renew = useCallback(async (explicit = false) => {
     if (renewing.current || access.current.locked || !userRef.current) return;
@@ -166,8 +170,6 @@ export function AuthProvider({ children }) {
     } finally { renewing.current = false; if (explicit) setBusy(false); }
   }, [updateAccess, lock]);
 
-  // Business set-up is signed-in work too: activity keeps it alive, and an idle lock covers it without losing the steps done.
-  const inWorkspace = location.pathname.startsWith("/admin") || location.pathname === "/onboarding";
   useEffect(() => {
     if (!user?.id || !inWorkspace) return;
     const tick = () => {
@@ -231,7 +233,20 @@ export function AuthProvider({ children }) {
     setBusy(true); setAuthState("unlocking"); if (!quiet) setLockError("");
     try {
       const previous = userRef.current;
-      const data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ password, credential: previous?.username }) });
+      let data;
+      try {
+        data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ password, credential: previous?.username }) });
+      } catch (error) {
+        // The session itself ended (its time ran out while the computer slept, or it was signed out elsewhere):
+        // the same password signs in again here, so the page and anything typed on it stay.
+        if (error.status !== 401 || !previous?.username) throw error;
+        try {
+          data = await api("/api/v1/auth/login/", { method: "POST", body: JSON.stringify({ credential: previous.username, password }) });
+        } catch (failed) {
+          if (failed.status === 400) throw new ApiError(400, "Incorrect password. Please try again.");
+          throw failed;
+        }
+      }
       resetCsrfToken();
       if (previous?.id && (previous.id !== data.id || (previous.organization && previous.organization.id !== data.organization?.id))) {
         window.location.assign("/admin/dashboard");

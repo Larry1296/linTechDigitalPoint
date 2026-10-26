@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
@@ -23,7 +24,6 @@ def payload(request, device, include_token=False):
     data=identity(device.user,request)
     data['session']=state(device)
     if include_token:
-        from django.conf import settings
         data.update(access_token=access_token(device),access_expires_in=settings.JWT_ACCESS_SECONDS)
     return data
 
@@ -122,9 +122,11 @@ def unlock(request):
         device.save(update_fields=['failed_unlocks','unlock_blocked_until'])
         SessionAudit.objects.create(session=device,event='UNLOCK_FAILED')
         return Response({'detail':'Incorrect password. Please try again.'},status=400)
+    # The password was just checked, as at sign-in, so the session starts its full life again.
     device.locked_at=None;device.last_user_activity_at=now;device.version+=1
+    device.expires_at=now+timedelta(seconds=settings.DEVICE_ABSOLUTE_SECONDS)
     device.failed_unlocks=0;device.unlock_blocked_until=None
-    device.save(update_fields=['locked_at','last_user_activity_at','version','failed_unlocks','unlock_blocked_until'])
+    device.save(update_fields=['locked_at','last_user_activity_at','version','expires_at','failed_unlocks','unlock_blocked_until'])
     RefreshCredential.objects.filter(session=device,consumed_at=None).update(consumed_at=now)
     raw=issue_credential(device)
     SessionAudit.objects.create(session=device,event='UNLOCK')

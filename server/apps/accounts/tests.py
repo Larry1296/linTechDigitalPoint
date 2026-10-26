@@ -184,3 +184,22 @@ def test_refresh_renews_active_session_and_requires_authentication(settings):
     assert response.data["authenticated"] is True
     assert response.data["access_expires_in"] == settings.JWT_ACCESS_SECONDS
     assert response.data["session"]["idle_timeout"] == settings.DEVICE_IDLE_SECONDS
+
+
+@pytest.mark.django_db
+def test_session_locks_before_its_end_and_unlocking_starts_it_afresh(settings):
+    from datetime import timedelta
+    from apps.accounts.device_auth import COOKIE, create_device, state
+    user = User.objects.create_user("ending-user", password="Strong-pass-1296")
+    device, raw = create_device(user)
+    # Recently active, but the session's absolute end is five minutes away: it already asks for the password.
+    device.expires_at = timezone.now() + timedelta(minutes=5)
+    device.save(update_fields=["expires_at"])
+    assert state(device)["locked"] is True
+    client = APIClient()
+    client.cookies[COOKIE] = raw
+    response = client.post("/api/v1/auth/unlock/", {"password": "Strong-pass-1296"}, format="json")
+    assert response.status_code == 200
+    device.refresh_from_db()
+    assert device.expires_at > timezone.now() + timedelta(seconds=settings.DEVICE_ABSOLUTE_SECONDS - 60)
+    assert response.data["session"]["locked"] is False

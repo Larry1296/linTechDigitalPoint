@@ -221,3 +221,24 @@ it("keeps backend requests relative when VITE_API_BASE_URL is not set (local dev
   const { apiUrl } = await import("./client");
   expect(apiUrl("/api/v1/auth/me/")).toBe("/api/v1/auth/me/");
 });
+it("sends a save again after unlocking when the session could not be renewed", async () => {
+  resetCsrfToken();
+  setWorkspaceLocked(false);
+  let tokenExpired = true;
+  const fetch = vi.fn(async (path) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: "csrf" });
+    if (path.endsWith("/refresh/")) return response(401, { detail: "Please sign in again.", code: "session_expired" });
+    if (tokenExpired) return response(401, { detail: "Token expired.", code: "token_expired" });
+    return response(200, { saved: true });
+  });
+  vi.stubGlobal("fetch", fetch);
+  // The workspace locks (as AuthContext does) when the session has ended; unlocking signs in again.
+  const lockScreen = () => setWorkspaceLocked(true);
+  window.addEventListener("session-expired", lockScreen, { once: true });
+  const saving = api("/api/v1/inventory/receipts/", { method: "POST", body: "{}" });
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([path]) => path.endsWith("/refresh/"))).toBe(true));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  tokenExpired = false;
+  setWorkspaceLocked(false);
+  await expect(saving).resolves.toEqual({ saved: true });
+});

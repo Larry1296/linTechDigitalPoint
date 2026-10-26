@@ -185,13 +185,18 @@ async function request(path, options = {}, retried = false, coordinated = false)
   if (!response.ok) {
     // The server refuses an expired token before running the request, so any request (a sale, creating a business)
     // is safe to send once more with a fresh token.
+    // When the session cannot be renewed the workspace locks, and the request is sent once the person unlocks.
     if (response.status === 401 && data.code === 'token_expired' && protectedPath && !retried && !workspaceLocked) {
-      await refreshAccess();
+      try { await refreshAccess(); } catch (err) {
+        if (![401, 423].includes(err.status) || !workspaceLocked) throw err;
+        await waitForUnlock(requestOptions.signal);
+      }
       return request(path, options, true);
     }
+    // A locked or ended session is refused before the request runs, so a save too is sent again after unlocking.
     if (response.status === 423 && data.code === "session_locked") {
       notifyLocked(data.session);
-      if (safe && protectedPath && !retried) {
+      if (protectedPath && !retried) {
         await waitForUnlock(requestOptions.signal);
         return request(path, options, true);
       }
@@ -205,10 +210,9 @@ async function request(path, options = {}, retried = false, coordinated = false)
     }
     if ([401, 403].includes(response.status) && protectedPath) {
       const state = await checkExpiredSession();
-      if (state === "expired") throw new ApiError(response.status, SESSION_EXPIRED_MESSAGE);
-      if (state === "locked") {
-        if (safe && !retried) { await waitForUnlock(requestOptions.signal); return request(path, options, true); }
-        throw new ApiError(423, SESSION_EXPIRED_MESSAGE);
+      if (state !== "active") {
+        if (!retried && workspaceLocked) { await waitForUnlock(requestOptions.signal); return request(path, options, true); }
+        throw new ApiError(state === "locked" ? 423 : response.status, SESSION_EXPIRED_MESSAGE);
       }
     }
     // M-Pesa and investments need the protected pages password too: let the page ask for it.
@@ -217,9 +221,6 @@ async function request(path, options = {}, retried = false, coordinated = false)
   }
   if (path.startsWith("/api/v1/auth/") && data.authenticated) expiryNotified = false;
   if (workspaceLocked && protectedPath) throw new ApiError(423, SESSION_EXPIRED_MESSAGE);
-  // A fresh, unlocked device session (login/register/unlock) always supersedes a
-  // stale workspaceLocked flag left over from a previous session in this tab —
-  // otherwise refreshAccess() rejects every call right after a brand-new login.
   // A fresh, unlocked device session (login/register/unlock) always supersedes a
   // stale workspaceLocked flag left over from a previous session in this tab —
   // otherwise refreshAccess() rejects every call right after a brand-new login.

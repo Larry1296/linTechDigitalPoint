@@ -15,6 +15,9 @@ from .models import DeviceSession, RefreshCredential, SessionAudit
 
 COOKIE = 'lintech_refresh'
 COOKIE_PATH = '/api/v1/auth/'
+# The workspace locks this long before the session's absolute end, so the person is asked for their password (which
+# starts the session afresh) instead of a save failing because the session ended.
+LOCK_BEFORE_END = 600
 COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'lock', 'logout'}
 PUBLIC_ENDPOINTS = {'csrf', 'login', 'password/reset', 'password/reset/confirm'}
 
@@ -25,7 +28,8 @@ def token_hash(raw):
 
 def state(device):
     now = timezone.now()
-    deadline = device.last_user_activity_at + timedelta(seconds=settings.DEVICE_IDLE_SECONDS)
+    deadline = min(device.last_user_activity_at + timedelta(seconds=settings.DEVICE_IDLE_SECONDS),
+        device.expires_at - timedelta(seconds=min(LOCK_BEFORE_END, settings.DEVICE_ABSOLUTE_SECONDS // 4)))
     return {'id':str(device.pk), 'expires_at':deadline.timestamp(), 'server_time':now.timestamp(),
         'absolute_expires_at':device.expires_at.timestamp(), 'idle_timeout':settings.DEVICE_IDLE_SECONDS,
         'warning_seconds':0, 'locked':bool(device.locked_at or now >= deadline)}
