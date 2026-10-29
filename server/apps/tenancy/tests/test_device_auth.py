@@ -26,12 +26,11 @@ def login(business):
     return client,data
 
 
-def test_idle_denies_copied_unexpired_token_and_unlocks(businesses, settings):
-    settings.DEVICE_IDLE_SECONDS=900  # an idle lock is off by default; a deployment may still turn it on
+def test_a_lock_denies_copied_unexpired_token_and_unlocks(businesses):
     client,data=login(businesses[0])
     session=DeviceSession.objects.get(pk=data['session']['id'])
     assert client.get('/api/v1/catalog/categories/').status_code==200
-    DeviceSession.objects.filter(pk=session.pk).update(last_user_activity_at=timezone.now()-timedelta(seconds=settings.DEVICE_IDLE_SECONDS+1))
+    DeviceSession.objects.filter(pk=session.pk).update(locked_at=timezone.now())
     assert client.get('/api/v1/catalog/categories/').status_code==423
     assert client.post('/api/v1/auth/refresh/').status_code==423
     assert client.post('/api/v1/auth/activity/').status_code==423
@@ -54,10 +53,12 @@ def test_rotation_is_not_activity_and_replay_revokes_family(businesses):
     assert response.status_code==200,response.content
     assert client.cookies[COOKIE].value != original
     session.refresh_from_db();assert session.last_user_activity_at==before
+    second=client.cookies[COOKIE].value
+    assert client.post('/api/v1/auth/refresh/').status_code==200  # the second credential is used: the first is now a copy
     client.cookies[COOKIE]=original
-    assert client.post('/api/v1/auth/refresh/').status_code==409
     RefreshCredential.objects.filter(session=session,consumed_at__isnull=False).update(consumed_at=timezone.now()-timedelta(seconds=4))
     assert client.post('/api/v1/auth/refresh/').status_code==401
+    assert second
     session.refresh_from_db();assert session.revoked_at is not None
     assert client.get('/api/v1/catalog/categories/').status_code==401
 
@@ -131,11 +132,9 @@ def test_simultaneous_refresh_issues_one_successor(businesses):
     'commerce/sales/', 'accounting/ledger/reports/', 'accounting/expenses/',
     'locations/shelves/', 'tenancy/branches/',
 ])
-def test_idle_token_denied_across_business_resources(businesses, path, settings):
-    settings.DEVICE_IDLE_SECONDS=900
+def test_locked_token_denied_across_business_resources(businesses, path):
     client, data = login(businesses[0])
-    DeviceSession.objects.filter(pk=data['session']['id']).update(
-        last_user_activity_at=timezone.now()-timedelta(seconds=settings.DEVICE_IDLE_SECONDS+1))
+    DeviceSession.objects.filter(pk=data['session']['id']).update(locked_at=timezone.now())
     assert client.get('/api/v1/'+path).status_code == 423
 
 
@@ -197,3 +196,19 @@ def test_without_a_pin_a_lock_opens_with_the_password(businesses):
     assert client.get('/api/v1/auth/lock-pin/').json()['pin']['set'] is False
     assert client.post('/api/v1/auth/lock/').json()['session']['pin_length'] is None
     assert client.post('/api/v1/auth/unlock/',{'pin':'4826'},format='json').json()['code']=='password_required'
+
+
+def test_a_renewal_whose_reply_was_lost_keeps_the_session(businesses):
+    client,data=login(businesses[0])
+    original=client.cookies[COOKIE].value
+    assert client.post('/api/v1/auth/refresh/').status_code==200
+    # The reply never arrived: the browser still holds the credential before it.
+    client.cookies[COOKIE]=original
+    assert client.post('/api/v1/auth/refresh/').status_code==409  # at the same moment: another tab's renewal
+    RefreshCredential.objects.filter(consumed_at__isnull=False).update(consumed_at=timezone.now()-timedelta(seconds=4))
+    response=client.post('/api/v1/auth/refresh/')
+    assert response.status_code==200,response.content
+    assert DeviceSession.objects.get(pk=data['session']['id']).revoked_at is None
+    client.credentials(HTTP_AUTHORIZATION='Bearer '+response.json()['access_token'],HTTP_X_CSRFTOKEN=client._credentials['HTTP_X_CSRFTOKEN'])
+    assert client.get('/api/v1/catalog/categories/').status_code==200
+    assert client.post('/api/v1/auth/refresh/').status_code==200

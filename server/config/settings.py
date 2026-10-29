@@ -242,9 +242,8 @@ JWT_KEY_ID = config('JWT_KEY_ID', default='primary')
 JWT_ISSUER = config('JWT_ISSUER', default='lintech-api')
 JWT_AUDIENCE = config('JWT_AUDIENCE', default='lintech-workspace')
 JWT_ACCESS_SECONDS = config('JWT_ACCESS_SECONDS', default=180, cast=int)
-# The workspace never locks for being idle (0): a shop answers customers at any moment, so it stays open for the
-# session's 12 hours, kept alive by refreshing the access token, and locks only when the person locks it.
-DEVICE_IDLE_SECONDS = config('DEVICE_IDLE_SECONDS', default=0, cast=int)
+# The workspace never locks for being idle (there is no idle setting, so no .env can bring one back): it stays open
+# for the session's 12 hours, kept alive by refreshing the access token, and locks only when the person locks it.
 DEVICE_ABSOLUTE_SECONDS = config('DEVICE_ABSOLUTE_SECONDS', default=43200, cast=int)
 REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] = ['apps.accounts.device_auth.DeviceJWTAuthentication']
 MIDDLEWARE[MIDDLEWARE.index('apps.accounts.session_lock.IdleSessionMiddleware')] = 'apps.accounts.device_auth.DeviceAuthenticationMiddleware'

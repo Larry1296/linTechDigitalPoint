@@ -34,14 +34,12 @@ PIN_TRIES = 5
 
 def state(device):
     now = timezone.now()
-    # The session ends 12 hours after the password was last entered; it never locks for being idle unless
-    # DEVICE_IDLE_SECONDS is set.
+    # The session ends 12 hours after the password was last entered. It never locks for being idle, whatever a
+    # server's settings say: a shop answers customers at any moment. It locks only when the person locks it.
     deadline = device.expires_at - timedelta(seconds=min(LOCK_BEFORE_END, settings.DEVICE_ABSOLUTE_SECONDS // 4))
-    if settings.DEVICE_IDLE_SECONDS > 0:
-        deadline = min(deadline, device.last_user_activity_at + timedelta(seconds=settings.DEVICE_IDLE_SECONDS))
     locked = bool(device.locked_at or now >= deadline)
     data = {'id':str(device.pk), 'expires_at':deadline.timestamp(), 'server_time':now.timestamp(),
-        'absolute_expires_at':device.expires_at.timestamp(), 'idle_timeout':settings.DEVICE_IDLE_SECONDS,
+        'absolute_expires_at':device.expires_at.timestamp(), 'idle_timeout':0,
         'warning_seconds':0, 'locked':locked, 'pin_length':None}
     if locked:
         data['pin_length'] = pin_length(device, now < deadline)

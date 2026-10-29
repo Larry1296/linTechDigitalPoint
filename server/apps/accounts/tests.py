@@ -183,7 +183,7 @@ def test_refresh_renews_active_session_and_requires_authentication(settings):
     assert response.status_code == 200
     assert response.data["authenticated"] is True
     assert response.data["access_expires_in"] == settings.JWT_ACCESS_SECONDS
-    assert response.data["session"]["idle_timeout"] == settings.DEVICE_IDLE_SECONDS
+    assert response.data["session"]["idle_timeout"] == 0
 
 
 @pytest.mark.django_db

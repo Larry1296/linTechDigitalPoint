@@ -35,6 +35,13 @@ def locked_response(device):
         'id':device.user_id,'username':device.user.username,'authenticated':True,'session':state(device)},status=423)
 
 
+def lost_reply(device, credential):
+    """Whether a spent credential is the one renewed last and what it was renewed into was never used: the browser
+    just missed the reply. Any other spent credential coming back is a copy, and ends the session."""
+    later=RefreshCredential.objects.filter(session=device,created_at__gt=credential.created_at)
+    return later.exists() and not later.filter(consumed_at__isnull=False).exists()
+
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 @csrf_protect
@@ -52,9 +59,18 @@ def refresh(request):
         # A later replay revokes the entire family. No spent credential is accepted.
         if (timezone.now()-credential.consumed_at).total_seconds() < 3:
             return Response({'detail':'Another tab refreshed. Retry with the current cookie.','code':'refresh_conflict'},status=409)
-        device.revoked_at=timezone.now();device.save(update_fields=['revoked_at'])
-        SessionAudit.objects.create(session=device,event='REFRESH_REUSE_REVOKED')
-        return Response({'detail':'Please sign in again.','code':'session_expired'},status=401)
+        if not lost_reply(device, credential):
+            device.revoked_at=timezone.now();device.save(update_fields=['revoked_at'])
+            SessionAudit.objects.create(session=device,event='REFRESH_REUSE_REVOKED')
+            return Response({'detail':'Please sign in again.','code':'session_expired'},status=401)
+        # The last renewal's reply never reached the browser (the connection dropped or the computer slept), so it
+        # still holds the credential before it. The unused one issued then is retired and the renewal goes ahead.
+        RefreshCredential.objects.filter(session=device,consumed_at=None).update(consumed_at=timezone.now())
+        SessionAudit.objects.create(session=device,event='REFRESH_LOST_REPLY')
+        raw=issue_credential(device)
+        if state(device)['locked']:
+            return set_cookie(locked_response(device),raw,device)
+        return set_cookie(Response(payload(request,device,True)),raw,device)
     if state(device)['locked']:
         if not device.locked_at:
             device.locked_at=timezone.now();device.save(update_fields=['locked_at'])

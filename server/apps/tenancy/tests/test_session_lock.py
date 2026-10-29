@@ -17,7 +17,6 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def locked_client(settings):
-    settings.DEVICE_IDLE_SECONDS = 900  # an idle lock is off by default; a deployment may still turn it on
     cache.clear()
     user = User.objects.create_user('lock-owner', password='Strong-pass-1296')
     org = Organization.objects.create(name='Locked business', slug='locked-business', owner=user)
@@ -35,22 +34,21 @@ def device(client):
 
 
 def expire(client):
-    DeviceSession.objects.filter(pk=device(client).pk).update(last_user_activity_at=timezone.now()-timedelta(seconds=settings.DEVICE_IDLE_SECONDS + 1))
+    # A locked session (locked by hand in another tab, or at the end of its 12 hours) whose access token is still unexpired.
+    DeviceSession.objects.filter(pk=device(client).pk).update(locked_at=timezone.now())
 
 
-def test_polling_does_not_extend_access_but_explicit_activity_does(locked_client):
+def test_neither_polling_nor_hours_untouched_lock_the_workspace(locked_client):
     client, user, org = locked_client
     original = device(client).last_user_activity_at
     for path in ['/api/v1/auth/me/', '/api/v1/auth/session/', '/api/v1/inventory/dashboard/']:
         assert client.get(path).status_code == 200
         assert device(client).last_user_activity_at == original
-    DeviceSession.objects.filter(pk=device(client).pk).update(last_user_activity_at=timezone.now()-timedelta(seconds=100))
+    DeviceSession.objects.filter(pk=device(client).pk).update(last_user_activity_at=timezone.now()-timedelta(hours=11))
+    assert client.get('/api/v1/inventory/dashboard/').status_code == 200
     response = client.post('/api/v1/auth/refresh/', {}, format='json')
-    assert response.status_code == 200
-    assert response.data['session']['expires_at'] < time.time() + settings.DEVICE_IDLE_SECONDS + 5
-    response = client.post('/api/v1/auth/activity/', {}, format='json')
-    assert response.status_code == 200
-    assert response.data['session']['expires_at'] > time.time() + settings.DEVICE_IDLE_SECONDS - 5
+    assert response.status_code == 200 and response.data['session']['locked'] is False
+    assert response.data['session']['expires_at'] > time.time() + settings.DEVICE_ABSOLUTE_SECONDS - 700
 
 
 def test_expired_access_blocks_reads_writes_refresh_and_private_media(locked_client):
