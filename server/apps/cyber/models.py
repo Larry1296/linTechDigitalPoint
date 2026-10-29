@@ -12,7 +12,7 @@ from apps.core.models import TimeStamped
 class CyberServiceProfile(TimeStamped):
     BILLING_UNITS = [
         (value, value.replace("_", " ").title())
-        for value in ["PER_PAGE", "PER_COPY", "PER_SHEET", "PER_DOCUMENT", "PER_HOUR", "PER_ITEM", "FIXED"]
+        for value in ["PER_PAGE", "PER_COPY", "PER_SHEET", "PER_DOCUMENT", "PER_HOUR", "PER_ITEM", "PER_KG", "FIXED"]
     ]
     variant = models.OneToOneField(ProductVariant, related_name="cyber_profile", on_delete=models.PROTECT)
     billing_unit = models.CharField(max_length=20, choices=BILLING_UNITS)

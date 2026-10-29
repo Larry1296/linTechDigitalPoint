@@ -3,7 +3,7 @@ from django.contrib.auth.models import Permission
 from .context import organization_id
 from .models import Membership
 
-DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts", "chama"}
+DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts", "chama", "hotel"}
 
 def membership_for(user):
     if not user or not user.is_authenticated or not user.is_active:
@@ -30,9 +30,9 @@ def _business_permissions(user):
             result.add(key)
         elif membership.role == "ACCOUNTANT" and app == "accounting":
             result.add(key)
-        elif membership.role == "CASHIER" and key in {"commerce.add_sale", "commerce.view_sale", "commerce.add_payment", "commerce.view_payment", "accounts.view_customerprofile", "accounts.add_customerprofile", "catalog.view_product", "catalog.view_productvariant"}:
+        elif membership.role == "CASHIER" and key in {"commerce.add_sale", "commerce.view_sale", "commerce.add_payment", "commerce.view_payment", "accounts.view_customerprofile", "accounts.add_customerprofile", "catalog.view_product", "catalog.view_productvariant", "hotel.view_stay"}:
             result.add(key)
-        elif membership.role == "SERVICE_ATTENDANT" and key in {"cyber.view_cyberserviceprofile", "cyber.view_cyberjob", "cyber.add_cyberjob", "cyber.change_cyberjob", "cyber.complete_cyber_job"}:
+        elif membership.role == "SERVICE_ATTENDANT" and (app == "hotel" and code.endswith(("_stay", "_staydeposit", "_room")) or key in {"cyber.view_cyberserviceprofile", "cyber.view_cyberjob", "cyber.add_cyberjob", "cyber.change_cyberjob", "cyber.complete_cyber_job"}):
             result.add(key)
     return result
 

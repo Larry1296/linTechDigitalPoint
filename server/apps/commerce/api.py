@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from apps.core.models import AuditLog
 from uuid import uuid4
 from django.contrib.auth.models import User
-from django.db.models import F,Sum
+from django.db.models import F,Q,Sum
 from django.db import transaction
 from apps.catalog.identity import display_name
 from apps.catalog.display_images import variant_images
@@ -136,9 +136,16 @@ def pos_catalog(request):
     search = request.query_params.get("q", "").strip()
     from apps.tenancy.middleware import effective_modules
     enabled = effective_modules(request.organization)
-    # Only what this business sells: a barbershop sees services, a mama mboga sees produce.
-    kinds = [kind for kind, module in ((Product.STOCK_ITEM, "inventory"), (Product.SERVICE, "services")) if module in enabled]
-    rows = search_variants(ProductVariant.objects.select_related("product__category").filter(active=True, product__active=True, product__product_type__in=kinds), search)
+    # Only what this business sells: a barbershop sees services, a mama mboga sees produce, a hotel its menu and drinks.
+    # Kitchen stock is cooked, not sold (unless the owner sells it too), and room nights are charged from the rooms desk.
+    sold = Q(product__product_type=Product.STOCK_ITEM) if "inventory" in enabled else Q(pk__in=[])
+    if "services" in enabled:
+        sold |= Q(product__product_type=Product.SERVICE, menu_item__isnull=True)
+    if "menu" in enabled:
+        sold |= Q(menu_item__available=True)
+    variants = (ProductVariant.objects.select_related("product__category", "menu_item").filter(sold, active=True, product__active=True)
+                .filter(room_type__isnull=True).exclude(kitchen_ingredient__sold_at_till=False))
+    rows = search_variants(variants, search)
     rows = list(rows[:50] if search else rows)
     stock = defaultdict(list)
     for balance in StockBalance.objects.filter(lot__variant_id__in=[v.id for v in rows]).select_related("lot", "shelf__zone__store", "shelf__level__stack").order_by("shelf__code", "id"):
@@ -149,7 +156,7 @@ def pos_catalog(request):
         summary = variant_summary(v, balances=balances)
         if not has_business_permission(request.user, 'accounting.view_profit'):
             summary.pop('buying_price', None)
-        result.append({**summary, "available": sum((x.quantity-x.reserved for x in balances), Decimal("0")), "locations": [{"zone": x.shelf.zone.name, "stack": x.shelf.level.stack.display_name if x.shelf.level_id else None, "level": x.shelf.level.level_number if x.shelf.level_id else None, "shelf_code": x.shelf.code, "shelf_name": x.shelf.display_name, "available": x.quantity-x.reserved} for x in balances if x.quantity > 0]})
+        result.append({**summary, "menu_item": hasattr(v, "menu_item"), "available": sum((x.quantity-x.reserved for x in balances), Decimal("0")), "locations": [{"zone": x.shelf.zone.name, "stack": x.shelf.level.stack.display_name if x.shelf.level_id else None, "level": x.shelf.level.level_number if x.shelf.level_id else None, "shelf_code": x.shelf.code, "shelf_name": x.shelf.display_name, "available": x.quantity-x.reserved} for x in balances if x.quantity > 0]})
     return Response(result)
 def _quantity(value):
     try: number=Decimal(str(value or 0))

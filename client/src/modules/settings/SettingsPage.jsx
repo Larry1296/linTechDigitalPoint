@@ -198,9 +198,9 @@ function BusinessSettings() {
     </fieldset>
     {data.plan_modules && allowed.some((id) => !data.plan_modules.includes(id)) && <p className="muted">Tools marked Pro plan are not in your current plan. <Link to="/admin/subscription">Upgrade to Pro</Link> to use them.</p>}
     {notes.length > 0 && <p className="muted" role="status">{notes.join(" ")}</p>}
-    {MONEY_PARTS.filter((part) => profile.modules.has(part.module)).length > 1 && <BusinessPartsChoice parts={MONEY_PARTS.filter((part) => profile.modules.has(part.module))}
+    {MONEY_PARTS.filter((part) => part.modules.some((module) => profile.modules.has(module))).length > 1 && <BusinessPartsChoice parts={MONEY_PARTS.filter((part) => part.modules.some((module) => profile.modules.has(module)))}
       sector={profile.sector} value={profile} onChange={(next) => setProfile({ ...profile, ...next })} />}
-    {profile.modules.has("mpesa") && MONEY_PARTS.filter((part) => profile.modules.has(part.module)).length > 1 && profile.money_mode === "ONE_DRAWER" &&
+    {profile.modules.has("mpesa") && MONEY_PARTS.filter((part) => part.modules.some((module) => profile.modules.has(module))).length > 1 && profile.money_mode === "ONE_DRAWER" &&
       <fieldset className="checkList">
         <legend>When customers pay for sales by M-Pesa, where does the money go?</legend>
         <label><input type="radio" name="sale_mpesa_to" checked={profile.sale_mpesa_to === "AGENT_LINE"} onChange={() => setProfile({ ...profile, sale_mpesa_to: "AGENT_LINE" })} /> To the agent line</label>

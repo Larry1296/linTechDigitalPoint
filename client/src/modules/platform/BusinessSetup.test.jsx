@@ -42,7 +42,7 @@ it("keeps tools that need each other together, within what the business can use"
   expect([...off.modules].sort()).toEqual(["pos", "services"]);   // POS still has services to sell
   expect(off.notes).toEqual(["Shelves & locations was turned off because it needs Products & stock."]);
   expect(fitModules(profiles, "SERVICES", new Set(["inventory", "pos", "locations", "mpesa"])).modules).toEqual(new Set(["mpesa"]));
-  expect(moduleProblem(profiles, "MIXED", new Set(["reports"]))).toBe("Turn on Products & stock or Services & jobs.");
+  expect(moduleProblem(profiles, "MIXED", new Set(["reports"]))).toBe("Turn on Products & stock or Services & jobs or Menu & kitchen or Rooms & guests.");
   expect(moduleProblem(profiles, "SERVICES", new Set(["mpesa"]))).toBe("");
   expect(searchSectors(profiles.sectors.SERVICES, "kinyozi").map((sector) => sector.id)).toEqual(["barber"]);
 });
@@ -124,7 +124,7 @@ it("sets up a business that does both, with its own description, categories and 
   fireEvent.click(screen.getByRole("button", { name: /^Products & stock/ }));
   fireEvent.click(screen.getByRole("button", { name: /^Services & jobs/ }));
   next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Turn on Products & stock or Services & jobs.");
+  expect(screen.getByRole("alert")).toHaveTextContent("Turn on Products & stock or Services & jobs or Menu & kitchen or Rooms & guests.");
   fireEvent.click(screen.getByRole("button", { name: /^Products & stock/ }));
   fireEvent.click(screen.getByRole("button", { name: /^Services & jobs/ }));
   expect(screen.queryByRole("button", { name: /^Shelves & locations/ })).toHaveAttribute("aria-pressed", "false");  // turned off with stock

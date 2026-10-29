@@ -84,7 +84,7 @@ def checkout_pay(request, pk):
     service.add_payment(checkout, user=request.user, method=str(data.get("method") or ""), amount=data.get("amount"),
                         cash_given=data.get("cash_given"), reference=str(data.get("reference") or ""), phone=str(data.get("phone") or ""),
                         incoming_id=data.get("incoming_id"), code=str(data.get("code") or ""), due_date=data.get("due_date") or None,
-                        customer_id=data.get("customer_id") or None)
+                        customer_id=data.get("customer_id") or None, stay_id=data.get("stay_id") or None)
     checkout.refresh_from_db()
     return Response(service.checkout_data(checkout, user=request.user, with_candidates=True), status=201)
 

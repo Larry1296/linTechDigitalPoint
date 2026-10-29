@@ -112,7 +112,9 @@ export function DashboardPage() {
     on("pos") && can("commerce.add_sale") && ["/admin/pos", "Record a sale", true],
     on("inventory") && can("inventory.add_stockreceipt") && ["/admin/quick-receive", "Receive stock"],
     on("inventory") && can("catalog.view_product") && ["/admin/product-lookup", "Product lookup"],
+    on("rooms") && can("hotel.view_stay") && ["/admin/rooms", "Front desk", !on("pos")],
     on("services") && can("cyber.view_cyberjob") && ["/admin/cyber", "Service desk"],
+    on("menu") && can("hotel.add_kitchenuse") && ["/admin/kitchen", "Kitchen use"],
     can("accounting.add_expense") && ["/admin/expenses", "Record money spent"],
     can("accounting.view_profit") && ["/admin/reports", "Full reports"],
   ].filter(Boolean);

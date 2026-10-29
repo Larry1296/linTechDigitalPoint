@@ -131,7 +131,7 @@ def _services(request, product_id=None, removed=False):
 
 def _unit(unit):
     return {"PER_PAGE": "page", "PER_COPY": "copy", "PER_SHEET": "sheet", "PER_DOCUMENT": "document", "PER_HOUR": "hour",
-            "PER_ITEM": "item"}.get(unit, "")
+            "PER_ITEM": "item", "PER_KG": "kg"}.get(unit, "")
 
 
 class NewServiceInput(serializers.Serializer):

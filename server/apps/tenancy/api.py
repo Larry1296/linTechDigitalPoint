@@ -238,7 +238,8 @@ class PartNames(serializers.DictField):
 class StarterService(serializers.Serializer):
     name = serializers.CharField(max_length=180)
     selling_price = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0)
-    billing_unit = serializers.ChoiceField(choices=[unit for unit, _ in CyberServiceProfile.BILLING_UNITS], default="FIXED")
+    # A menu item (MENU) and a kind of room (PER_NIGHT) are set up by the hotel tools, everything else as a service.
+    billing_unit = serializers.ChoiceField(choices=[unit for unit, _ in CyberServiceProfile.BILLING_UNITS] + ["MENU", "PER_NIGHT"], default="FIXED")
     requires_job = serializers.BooleanField(default=False)
 
 
@@ -249,9 +250,16 @@ def seed_starter_records(user, modules, categories, services):
     if "inventory" in modules:
         for name in dict.fromkeys(name.strip() for name in categories if name.strip()):
             Category.objects.get_or_create(slug=slugify(name)[:50] or "category", defaults={"name": name[:120]})
-    if "services" in modules:
-        from apps.cyber.services import create_service
-        for service in services:
+    from apps.hotel import menu, rooms
+    for service in services:
+        if service["billing_unit"] == "MENU":
+            if "menu" in modules:
+                menu.add_item(name=service["name"], price=service["selling_price"])
+        elif service["billing_unit"] == "PER_NIGHT":
+            if "rooms" in modules:
+                rooms.add_room_type(name=service["name"], rate=service["selling_price"])
+        elif "services" in modules:
+            from apps.cyber.services import create_service
             create_service(user, **service)
 
 

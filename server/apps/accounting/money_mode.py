@@ -19,8 +19,9 @@ ONE_DRAWER, SEPARATE_CASH = "ONE_DRAWER", "SEPARATE_CASH"
 MODES = {ONE_DRAWER: "One drawer for everything, each part's money labelled",
          SEPARATE_CASH: "A separate cash drawer for each part of the business"}
 # The parts of the business, in order, with the tool that turns each on and how its money is named.
-PARTS = [("SHOP", "inventory", "Shop", "Shop sales"), ("CYBER", "services", "Cyber", "Cyber and services"),
-         ("MPESA", "mpesa", "M-Pesa", "M-Pesa commission")]
+# A hotel's menu runs its shop part (the restaurant and bar) and its rooms its services part.
+PARTS = [("SHOP", ("inventory", "menu"), "Shop", "Shop sales"), ("CYBER", ("services", "rooms"), "Cyber", "Cyber and services"),
+         ("MPESA", ("mpesa",), "M-Pesa", "M-Pesa commission")]
 NAMES = {key: name for key, _, name, _ in PARTS}
 MONEY_NAMES = {key: money for key, _, _, money in PARTS}
 
@@ -51,7 +52,7 @@ def business_parts(organization=None):
         return ["SHOP"]
     from apps.tenancy.middleware import effective_modules
     enabled = effective_modules(organization)
-    parts = [key for key, module, _, _ in PARTS if module in enabled]
+    parts = [key for key, modules, _, _ in PARTS if enabled & set(modules)]
     return parts or ["SHOP"]
 
 
@@ -76,8 +77,13 @@ def has_parts(organization=None):
     return structure(organization) == WITH_PARTS and len(business_parts(organization)) > 1
 
 
+HOTEL_SECTORS = {"hotel", "hotel_rooms", "lodging"}
+
+
 def default_name(key, sector=""):
     """A part's usual name. The services part is "Cyber" for a cyber (and for businesses set up before kinds existed)."""
+    if sector in HOTEL_SECTORS:
+        return {"SHOP": "Restaurant & bar", "CYBER": "Rooms"}.get(key, NAMES[key])
     if key == "CYBER" and sector and "cyber" not in sector:
         return "Services"
     return NAMES[key]

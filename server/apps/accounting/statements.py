@@ -15,8 +15,8 @@ from .models import Expense, JournalEntry, JournalLine, LedgerAccount, SupplierP
 ZERO = Decimal("0")
 CASH_ACCOUNTS = {code for code, (_, _, is_cash) in CHART.items() if is_cash}
 UNITS = [
-    {"key": "retail", "name": "Retail shop", "revenue": ["4000"], "costs": ["5000"]},
-    {"key": "services", "name": "Cyber & services", "revenue": ["4020"], "costs": ["5010"]},
+    {"key": "retail", "name": "Retail shop", "revenue": ["4000", "4030"], "costs": ["5000", "5020"]},
+    {"key": "services", "name": "Cyber & services", "revenue": ["4020", "4040"], "costs": ["5010"]},
     {"key": "mpesa", "name": "M-Pesa agency commission", "revenue": ["4010"], "costs": []},
     {"key": "other", "name": "Other income", "revenue": ["4900"], "costs": []},
     {"key": "interest", "name": "Interest on investments", "revenue": ["4910"], "costs": []},

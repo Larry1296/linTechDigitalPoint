@@ -16,7 +16,7 @@ import { CyberPay, useOpenCyberCheckout } from "./CyberPay";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const UNITS = [["PER_PAGE", "page", "pages"], ["PER_COPY", "copy", "copies"], ["PER_SHEET", "sheet", "sheets"], ["PER_DOCUMENT", "document", "documents"],
-  ["PER_HOUR", "hour", "hours"], ["PER_ITEM", "item", "items"], ["FIXED", "", "times"]];
+  ["PER_HOUR", "hour", "hours"], ["PER_ITEM", "item", "items"], ["PER_KG", "kg", "kg"], ["FIXED", "", "times"]];
 const unit = (code) => UNITS.find(([value]) => value === code) || UNITS[UNITS.length - 1];
 const per = (code) => (unit(code)[1] ? ` per ${unit(code)[1]}` : "");
 const PERIODS = [["all", "Since the start"], ["month", "This month"], ["week", "This week"]];

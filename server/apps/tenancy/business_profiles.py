@@ -21,6 +21,10 @@ MODULES = {
     "inventory": {"label": "Products & stock", "description": "Products, prices, receiving stock and stock counts."},
     "locations": {"label": "Shelves & locations", "description": "Map your racks and shelves so anyone finds an item fast."},
     "services": {"label": "Services & jobs", "description": "Your service price list, plus job cards for work handed in, such as repairs."},
+    "menu": {"label": "Menu & kitchen", "description": "Meals and drinks you make, sold at the till without counting plates; "
+                                                        "the kitchen's stock and what it used, as the cost of meals."},
+    "rooms": {"label": "Rooms & guests", "description": "Rooms, bookings, check-in and check-out, and each guest's bill: "
+                                                         "nights, food and drinks charged to the room, and deposits."},
     "pos": {"label": "Point of sale", "description": "Record each sale at the counter and send receipts by WhatsApp or email."},
     "customers": {"label": "Customers", "description": "Customer records, credit sales and balances owed."},
     "expenses": {"label": "Expenses", "description": "Record money spent, such as rent, transport and electricity."},
@@ -49,8 +53,9 @@ EXTRAS = {
 
 # A tool that only works alongside another. Each entry lists alternatives: any one of them will do.
 MODULE_NEEDS = {
-    "pos": ("inventory", "services"),  # a sale needs something to sell: products or services
-    "locations": ("inventory",),       # shelves hold stock
+    "pos": ("inventory", "services", "menu"),  # a sale needs something to sell: products, services or a menu
+    "locations": ("inventory",),               # shelves hold stock
+    "menu": ("pos", "rooms"),                  # meals are sold at the till, or charged to a guest's room
 }
 
 BUSINESS_MODELS = {
@@ -58,22 +63,22 @@ BUSINESS_MODELS = {
         "label": "I sell goods",
         "phrase": "only sell goods",
         "hint": "You buy, grow or make products and sell them: a duka, kibanda, hardware or farm produce.",
-        "modules": ["inventory", "locations", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
-        "requires": ["inventory"],
+        "modules": ["inventory", "locations", "menu", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
+        "requires": ["inventory", "menu"],
     },
     SERVICES: {
         "label": "I provide services",
         "phrase": "only provide services",
         "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
-        "modules": ["services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
-        "requires": ["services", "mpesa"],  # at least one: an M-Pesa agent sells no priced services
+        "modules": ["services", "rooms", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
+        "requires": ["services", "rooms", "mpesa"],  # at least one: an M-Pesa agent sells no priced services
     },
     MIXED: {
         "label": "Both goods and services",
         "phrase": "sell goods and provide services",
         "hint": "You sell products and also offer services, such as a cyber that sells phone accessories.",
         "modules": list(MODULES),
-        "requires": ["inventory", "services"],  # at least one; the setup suggestions turn on both
+        "requires": ["inventory", "services", "menu", "rooms"],  # at least one; the setup suggestions turn on both
     },
 }
 
@@ -87,8 +92,22 @@ SIZES = {
 BASE = ["pos", "expenses", "reports"]
 
 
-def _service(name, unit="FIXED", job=False):
-    return {"name": name, "billing_unit": unit, "requires_job": job}
+def _service(name, unit="FIXED", job=False, price=""):
+    return {"name": name, "billing_unit": unit, "requires_job": job, **({"selling_price": price} if price else {})}
+
+
+def _dish(name, price=""):
+    """A starter menu item: priced at setup, then sold at the till."""
+    return _service(name, "MENU", price=price)
+
+
+def _room(name, price=""):
+    """A starter kind of room, priced a night."""
+    return _service(name, "PER_NIGHT", price=price)
+
+
+EATERY_MENU = [_dish("Tea"), _dish("Chapati"), _dish("Mandazi"), _dish("Beans"), _dish("Rice & beans"), _dish("Ugali & sukuma"),
+               _dish("Pilau"), _dish("Chips")]
 
 
 def _sector(id, label, hint, modules, categories=(), services=(), keywords=""):
@@ -120,8 +139,12 @@ SECTORS = {
                 ["Hair products", "Skin care", "Make-up", "Fragrance"], keywords="cosmetics"),
         _sector("stationery", "Bookshop & stationery", "Books, stationery and school supplies", ["inventory", "locations", *BASE],
                 ["Books", "Stationery", "School supplies"], keywords="books school"),
-        _sector("food", "Food kiosk, café or hotel", "Meals, snacks and drinks", ["inventory", *BASE],
-                ["Meals", "Snacks", "Drinks"], keywords="restaurant kibanda hotel cafe chips"),
+        _sector("hotel", "Hotel / restaurant (eatery)", "You cook and sell meals and drinks: a hoteli or restaurant",
+                ["menu", "inventory", "customers", *BASE], ["Kitchen stock", "Bottled drinks"], EATERY_MENU,
+                keywords="hoteli restaurant eatery nyama choma mama ntilie kibanda food"),
+        _sector("food", "Food kiosk & café", "Snacks, tea and quick meals made on site", ["menu", "inventory", *BASE],
+                ["Kitchen stock", "Bottled drinks"], [_dish("Tea"), _dish("Coffee"), _dish("Mandazi"), _dish("Samosa"), _dish("Chips"), _dish("Smokie")],
+                keywords="kibanda cafe chips snacks fast food"),
         _sector("drinks", "Drinks & wines shop", "Soft drinks, beer, wines and spirits", ["inventory", "locations", *BASE],
                 ["Soft drinks", "Beer", "Wines", "Spirits"], keywords="liquor bar"),
         _sector("gas_water", "Gas & water refill", "Cooking gas refills, cylinders and water", ["inventory", "customers", *BASE],
@@ -158,7 +181,7 @@ SECTORS = {
                 services=[_service("Exterior wash"), _service("Full wash"), _service("Engine wash"), _service("Motorbike wash")],
                 keywords="carwash"),
         _sector("laundry", "Laundry & dry cleaning", "Washing, ironing and dry cleaning", ["services", "customers", *BASE],
-                services=[_service("Wash & fold", "PER_ITEM", job=True), _service("Dry cleaning", "PER_ITEM", job=True), _service("Ironing", "PER_ITEM")],
+                services=[_service("Wash & fold", "PER_KG", job=True), _service("Dry cleaning", "PER_ITEM", job=True), _service("Ironing", "PER_ITEM")],
                 keywords="dhobi laundry"),
         _sector("cyber", "Cyber café & printing", "Printing, photocopy, typing and online services", ["services", *BASE],
                 services=[_service("Printing", "PER_PAGE"), _service("Photocopy", "PER_COPY"), _service("Scanning", "PER_PAGE"),
@@ -170,6 +193,9 @@ SECTORS = {
         _sector("cleaning", "Cleaning & fumigation", "Homes, offices and pest control", ["services", "customers", *BASE],
                 services=[_service("House cleaning"), _service("Office cleaning"), _service("Fumigation"), _service("Carpet cleaning", "PER_ITEM")],
                 keywords="cleaners"),
+        _sector("lodging", "Lodging / guest house", "Rooms by the night, without a restaurant",
+                ["rooms", "customers", "expenses", "reports"], services=[_room("Single room"), _room("Double room")],
+                keywords="lodge lodging guest house bnb airbnb rooms accommodation motel"),
         _sector("mpesa_agent", "M-Pesa / mobile money agent", "Deposits, withdrawals and float", ["mpesa", "expenses", "reports"],
                 keywords="agent mobile money float"),
         _sector("other_services", "Other service provider", "Not listed? Name your business: customers pay for your skill or time", ["services", *BASE]),
@@ -196,6 +222,10 @@ SECTORS = {
         _sector("tailor_shop", "Tailor with fabrics & clothes", "Tailoring plus fabric and ready-made clothes",
                 ["inventory", "services", "customers", *BASE], ["Fabrics", "Ready-made clothes"],
                 [_service("Alterations", job=True), _service("Dress making", job=True)], keywords="tailor boutique"),
+        _sector("hotel_rooms", "Hotel with rooms & restaurant", "Rooms by the night, plus meals and drinks for guests and walk-ins",
+                ["rooms", "menu", "inventory", "customers", *BASE], ["Kitchen stock", "Bottled drinks"],
+                [_room("Single room"), _room("Double room"), _room("Deluxe room"), _dish("Breakfast"), _dish("Lunch"), _dish("Supper"), _dish("Tea")],
+                keywords="hotel lodge resort guest house rooms restaurant accommodation"),
         _sector("other_mixed", "Other mix of goods and services", "Not listed? Name your business: you sell products and offer services", ["inventory", "services", *BASE]),
     ],
 }

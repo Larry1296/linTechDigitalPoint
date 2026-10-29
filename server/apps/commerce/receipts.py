@@ -11,7 +11,7 @@ from django.utils.html import escape
 from apps.tenancy.models import ReceiptLink
 from .models import Sale
 
-METHODS = {"CASH": "Cash", "MPESA": "M-Pesa", "BANK": "Bank", "OTHER": "Other", "CASH_ON_PICKUP": "Cash on pickup"}
+METHODS = {"CASH": "Cash", "MPESA": "M-Pesa", "BANK": "Bank", "OTHER": "Other", "CASH_ON_PICKUP": "Cash on pickup", "DEPOSIT": "Paid in advance"}
 
 
 def app_url(request):

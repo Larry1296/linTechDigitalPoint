@@ -32,8 +32,7 @@ import {
   Coins,
   Store,
   Briefcase,
-  Users,
-} from "lucide-react";
+  Users, BedDouble, ChefHat, ConciergeBell, UtensilsCrossed, BookUser } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import { useKeyboardShortcuts } from "../core/ui/keyboardShortcuts";
 import { SubscriptionBanner } from "../modules/billing/SubscriptionBanner";
@@ -112,8 +111,17 @@ const cyberLinks = [
   { to: "/admin/cyber", label: "Service Desk", icon: MonitorCog, permission: "cyber.view_cyberjob", end: true },
   { to: "/admin/cyber/income", label: "Income by service", icon: Coins, permission: "cyber.view_cyberjob" },
 ];
+// A hotel's rooms and its kitchen: the front desk and guests, then the menu and what the kitchen used.
+const hotelLinks = [
+  { to: "/admin/rooms", label: "Front desk", icon: ConciergeBell, permission: "hotel.view_stay", end: true },
+  { to: "/admin/rooms/guests", label: "Guests & bookings", icon: BookUser, permission: "hotel.view_stay" },
+  { to: "/admin/rooms/setup", label: "Rooms & prices", icon: BedDouble, permission: "hotel.view_room" },
+  { to: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: "hotel.view_menuitem" },
+  { to: "/admin/kitchen", label: "Kitchen", icon: ChefHat, permission: "hotel.view_kitchenuse" },
+];
 const operations = [
   { title: "Overview", links: [links[0]] },
+  { title: "Hotel", icon: BedDouble, collapsible: true, links: hotelLinks },
   { title: "Shop Management", icon: Store, collapsible: true, links: shopLinks },
   { title: "Cyber Services", icon: MonitorCog, collapsible: true, links: cyberLinks },
   { title: "M-Pesa Agent", icon: Smartphone, collapsible: true, links: [{ to: "/admin/mpesa", label: "Agent desk", icon: Smartphone, permission: "mpesa.view_mpesasession", end: true }, { to: "/admin/mpesa/commission", label: "Commission", icon: Coins, permission: "mpesa.view_mpesacommissionentry" }] },
@@ -159,7 +167,7 @@ export function StaffLayout() {
     menuButtonRef.current?.focus();
   }
   const organization = user.organization;
-  const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports", "/admin/chama":"chama"};
+  const moduleFor = {"/admin/quick-receive":"inventory", "/admin/opening-stock":"inventory", "/admin/expenses":"expenses","/admin/product-lookup":"inventory", "/admin/pos":"pos", "/admin/products":"inventory", "/admin/receive":"inventory", "/admin/receipts":"inventory", "/admin/adjust-stock":"inventory", "/admin/stock-check":"inventory", "/admin/categories":"inventory", "/admin/brands":"inventory", "/admin/shelf-management":"locations", "/admin/cyber":"services", "/admin/cyber/income":"services", "/admin/mpesa":"mpesa", "/admin/mpesa/commission":"mpesa", "/admin/investments":"investments", "/admin/reports":"reports", "/admin/chama":"chama", "/admin/rooms":"rooms", "/admin/rooms/guests":"rooms", "/admin/rooms/setup":"rooms", "/admin/menu":"menu", "/admin/kitchen":"menu"};
   // The services part is named for this business: "Cyber Services" only for a cyber, else the name its owner gave it.
   const servicesPart = organization.parts?.find((part) => part.key === "CYBER")?.name;
   const servicesTitle = servicesPart && servicesPart !== "Cyber" ? (/services?$/i.test(servicesPart) ? servicesPart : `${servicesPart} services`)
@@ -202,7 +210,7 @@ export function StaffLayout() {
             <SidebarNavigation
               sections={operations.map((section) => ({
                 ...section,
-                title: section.links === cyberLinks ? servicesTitle : section.title,
+                title: section.links === cyberLinks ? servicesTitle : section.links === hotelLinks && !organization.enabled_modules.includes("rooms") ? "Kitchen & menu" : section.title,
                 links: section.links.filter(
                   (item) =>
                     (!moduleFor[item.to] || organization.enabled_modules.includes(moduleFor[item.to])) &&

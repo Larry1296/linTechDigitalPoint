@@ -41,8 +41,8 @@ class Sale(TimeStamped):
     idempotency_key = models.CharField(max_length=120, null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     branch = models.ForeignKey("core.Store", null=True, blank=True, on_delete=models.PROTECT, editable=False)
-    POS="POS"; ONLINE="ONLINE"; CYBER="CYBER"
-    number=models.CharField(max_length=40); channel=models.CharField(max_length=10,choices=[(POS,"POS"),(ONLINE,"Online"),(CYBER,"Cyber")]); status=models.CharField(max_length=20,default="COMPLETED"); order=models.OneToOneField(Order,null=True,blank=True,related_name="sale",on_delete=models.PROTECT); customer=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,blank=True,on_delete=models.SET_NULL); subtotal=models.DecimalField(max_digits=14,decimal_places=2,default=0); discount=models.DecimalField(max_digits=14,decimal_places=2,default=0); total=models.DecimalField(max_digits=14,decimal_places=2,default=0); cogs=models.DecimalField(max_digits=14,decimal_places=2,default=0); gross_profit=models.DecimalField(max_digits=14,decimal_places=2,default=0); created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="sales_created")
+    POS="POS"; ONLINE="ONLINE"; CYBER="CYBER"; ROOMS="ROOMS"
+    number=models.CharField(max_length=40); channel=models.CharField(max_length=10,choices=[(POS,"POS"),(ONLINE,"Online"),(CYBER,"Cyber"),(ROOMS,"Rooms")]); status=models.CharField(max_length=20,default="COMPLETED"); order=models.OneToOneField(Order,null=True,blank=True,related_name="sale",on_delete=models.PROTECT); customer=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,blank=True,on_delete=models.SET_NULL); subtotal=models.DecimalField(max_digits=14,decimal_places=2,default=0); discount=models.DecimalField(max_digits=14,decimal_places=2,default=0); total=models.DecimalField(max_digits=14,decimal_places=2,default=0); cogs=models.DecimalField(max_digits=14,decimal_places=2,default=0); gross_profit=models.DecimalField(max_digits=14,decimal_places=2,default=0); created_by=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,on_delete=models.SET_NULL,related_name="sales_created")
     # Accrual amounts: tax collected for the tax authority is kept out of revenue.
     tax_total=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"))
     net_total=models.DecimalField(max_digits=14,decimal_places=2,default=Decimal("0"))
@@ -70,7 +70,7 @@ class SaleAllocation(TenantModel):
         default_manager_name = "objects"
 class Payment(TenantModel):
     STATUSES=[(x,x.replace("_"," ").title()) for x in ["PENDING","MANUAL_REVIEW","COMPLETED","FAILED","REFUNDED","REVERSED"]]
-    sale=models.ForeignKey(Sale,null=True,blank=True,related_name="payments",on_delete=models.PROTECT); order=models.ForeignKey(Order,null=True,blank=True,related_name="payments",on_delete=models.PROTECT); method=models.CharField(max_length=20,choices=[(x,x.title()) for x in ["CASH","MPESA","BANK","OTHER","CASH_ON_PICKUP"]]); amount=models.DecimalField(max_digits=14,decimal_places=2); reference=models.CharField(max_length=100,blank=True); status=models.CharField(max_length=20,choices=STATUSES,default="PENDING"); idempotency_key=models.CharField(max_length=100); provider_transaction_id=models.CharField(max_length=120,null=True,blank=True); created_at=models.DateTimeField(default=timezone.now,editable=False); updated_at=models.DateTimeField(default=timezone.now)
+    sale=models.ForeignKey(Sale,null=True,blank=True,related_name="payments",on_delete=models.PROTECT); order=models.ForeignKey(Order,null=True,blank=True,related_name="payments",on_delete=models.PROTECT); method=models.CharField(max_length=20,choices=[(x,x.title()) for x in ["CASH","MPESA","BANK","OTHER","CASH_ON_PICKUP","DEPOSIT"]]); amount=models.DecimalField(max_digits=14,decimal_places=2); reference=models.CharField(max_length=100,blank=True); status=models.CharField(max_length=20,choices=STATUSES,default="PENDING"); idempotency_key=models.CharField(max_length=100); provider_transaction_id=models.CharField(max_length=120,null=True,blank=True); created_at=models.DateTimeField(default=timezone.now,editable=False); updated_at=models.DateTimeField(default=timezone.now)
     class Meta:
         constraints=[models.CheckConstraint(condition=Q(sale__isnull=False)|Q(order__isnull=False),name="payment_has_subject")]
         base_manager_name = "objects"
@@ -217,10 +217,10 @@ class CheckoutPayment(TimeStamped):
     Cash and bank are confirmed by the cashier. Till payments are confirmed by attaching the payment Safaricom reported
     (``incoming``), never by an amount alone. A prompt is confirmed by Safaricom's answer to that very prompt. OWED is the
     part a named customer takes on credit."""
-    CASH, TILL, PROMPT, BANK, OWED = "CASH", "TILL", "PROMPT", "BANK", "OWED"
+    CASH, TILL, PROMPT, BANK, OWED, ROOM = "CASH", "TILL", "PROMPT", "BANK", "OWED", "ROOM"
     PENDING, CONFIRMED, FAILED, VOID = "PENDING", "CONFIRMED", "FAILED", "VOID"
     checkout = models.ForeignKey(Checkout, on_delete=models.PROTECT, related_name="payments")
-    method = models.CharField(max_length=6, choices=[(CASH, "Cash"), (TILL, "Paid to the till"), (PROMPT, "M-Pesa prompt"), (BANK, "Bank"), (OWED, "Owed by the customer")])
+    method = models.CharField(max_length=6, choices=[(CASH, "Cash"), (TILL, "Paid to the till"), (PROMPT, "M-Pesa prompt"), (BANK, "Bank"), (OWED, "Owed by the customer"), (ROOM, "Charged to a guest's room")])
     amount = models.DecimalField(max_digits=14, decimal_places=2)  # what it pays towards the checkout
     status = models.CharField(max_length=10, choices=[(x, x.title()) for x in (PENDING, CONFIRMED, FAILED, VOID)], default=PENDING)
     cash_given = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)  # cash handed over; change is the rest

@@ -68,8 +68,8 @@ def _item_remaining(item, sale):
 
 
 def _revenue_account(item):
-    from apps.accounting.ledger import REVENUE_ACCOUNT
-    return REVENUE_ACCOUNT[item.variant.product.product_type]
+    from apps.accounting.ledger import revenue_account
+    return revenue_account(item.variant)
 
 
 @transaction.atomic

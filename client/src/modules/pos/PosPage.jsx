@@ -21,7 +21,8 @@ import { TextBox } from "../../components/forms/TextBox";
 
 const ALL = "All";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const groupOf = (p) => (p.product_type === "SERVICE" ? "Services" : p.category_name || "Uncategorised");
+// A dish from the menu sits under its own heading (Breakfast, Meals), like products; other services together.
+const groupOf = (p) => (p.product_type === "SERVICE" && !p.menu_item ? "Services" : p.category_name || "Uncategorised");
 // Services last, the rest alphabetically.
 const byGroup = (a, b) => (a === "Services" ? 1 : b === "Services" ? -1 : a.localeCompare(b));
 // A steady colour per category, so the tiles are easy to tell apart at a glance.
@@ -36,7 +37,7 @@ function Tile({ p, inCart, onAdd, onLess, user }) {
       <span className="posTileMark" style={{ "--tile-hue": hue(groupOf(p)) }} aria-hidden="true">{p.product_name.slice(0, 1).toUpperCase()}</span>
       <span className="posTileName">{p.product_name}{p.variant_name && p.variant_name !== "Standard" ? <small> · {p.variant_name}</small> : null}</span>
       <span className="posTilePrice">{money(p.selling_price)}</span>
-      <span className={`posTileStock${empty ? " out" : ""}`}>{service ? "Service" : empty ? "Out of stock" : `${Number(p.available).toLocaleString()} in stock`}</span>
+      <span className={`posTileStock${empty ? " out" : ""}`}>{p.menu_item ? "Made to order" : service ? "Service" : empty ? "Out of stock" : `${Number(p.available).toLocaleString()} in stock`}</span>
       {inCart > 0 && <span className="posTileCount" aria-label={`${inCart} in the sale`}>{inCart}</span>}
     </button>
     {inCart > 0 && <button type="button" className="posTileLess" onClick={() => onLess(p)} aria-label={`One less ${p.product_name}`}><Minus size={16} /></button>}

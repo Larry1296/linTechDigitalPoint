@@ -85,6 +85,7 @@ BRANCH_PATHS = {
     "inventory.purchasereturnline": "purchase_return__branch",
     "commerce.orderitem": "order__branch", "commerce.orderstatushistory": "order__branch",
     "cyber.cyberjobline": "job__branch",
+    "hotel.kitchenuseline": "use__branch", "hotel.staycharge": "stay__branch", "hotel.staydeposit": "stay__branch",
     "mpesa.mpesaoutlet": "store", "mpesa.mpesasession": "outlet__store",
     "mpesa.mpesatransaction": "outlet__store", "mpesa.mpesacommissionentry": "outlet__store",
     "mpesa.mpesareconciliation": "session__outlet__store",

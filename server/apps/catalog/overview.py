@@ -8,7 +8,7 @@ from django.utils import timezone
 ZERO = Decimal("0")
 # Plain names for stock movements; "in" adds to the shelves, "out" takes away, "moved" changes shelf only.
 MOVEMENTS = {"OPENING_STOCK": "Opening stock entered", "PURCHASE_RECEIPT": "Received from supplier", "SALE": "Sold",
-             "ONLINE_ORDER": "Sold online", "CYBER_CONSUMPTION": "Used in a service", "TRANSFER": "Moved to another shelf",
+             "ONLINE_ORDER": "Sold online", "CYBER_CONSUMPTION": "Used in a service", "KITCHEN_USE": "Used in the kitchen", "TRANSFER": "Moved to another shelf",
              "CUSTOMER_RETURN": "Returned by customer", "SALE_RETURN": "Returned by customer", "SUPPLIER_RETURN": "Returned to supplier",
              "PURCHASE_RETURN": "Returned to supplier", "DAMAGE": "Damaged", "LOSS": "Lost", "STOCKTAKE_ADJUSTMENT": "Stock count correction",
              "STOCK_ADJUSTMENT": "Stock adjustment", "MANUAL_ADJUSTMENT": "Stock adjustment", "ORDER_RESERVATION": "Set aside for an order",

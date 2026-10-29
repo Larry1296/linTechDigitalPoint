@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Banknote, CheckCircle2, Clock, Landmark, Smartphone, UserRound, X } from "lucide-react";
+import { Banknote, BedDouble, CheckCircle2, Clock, Landmark, Smartphone, UserRound, X } from "lucide-react";
 import { api } from "../../core/api/client";
 import { businessCurrency } from "../../core/organization/presentation";
 import { confirmAction } from "../../core/ui/alerts";
@@ -11,13 +11,14 @@ import { CustomerChooser } from "./CustomerChooser";
 const POLL_MS = 2500;
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const time = (value) => new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const PAID_WITH = { CASH: "Cash", TILL: "Paid to the till", PROMPT: "M-Pesa prompt", BANK: "Bank", OWED: "Owed by the customer" };
+const PAID_WITH = { CASH: "Cash", TILL: "Paid to the till", PROMPT: "M-Pesa prompt", BANK: "Bank", OWED: "Owed by the customer", ROOM: "Charged to the room" };
 const OPEN = ["AWAITING", "PART_PAID"];
 
 // How the customer pays a charged basket: cash, the till, a prompt to their phone, bank, or owed by a named customer. Several
 // can be combined. The sale is made by the server once the payments cover the amount; till payments and prompts are
 // confirmed by Safaricom's own record, never by an amount alone. Owed is always offered: with no customer chosen before
-// charging, the one who owes it is chosen (or added) there.
+// charging, the one who owes it is chosen (or added) there. In a hotel, a guest who is in may charge it to their room: it
+// joins their bill, paid when they check out.
 export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDone, onBack, user, customers = [], setCustomers }) {
   const [way, setWay] = useState("CASH");
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,9 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
   const [reference, setReference] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [owedBy, setOwedBy] = useState("");
+  const [guests, setGuests] = useState(null);
+  const [stayId, setStayId] = useState("");
+  const rooms = user?.organization?.enabled_modules?.includes("rooms") && user?.permissions?.includes("hotel.view_stay");
   const left = Number(checkout.left);
   const open = OPEN.includes(checkout.status);
   const promptOut = checkout.payments.find((p) => p.method === "PROMPT" && p.status === "PENDING");
@@ -58,8 +62,12 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
     } finally { setBusy(false); }
   };
   const pay = (body) => send("pay/", body);
+  useEffect(() => {
+    if (way !== "ROOM" || guests) return;
+    api("/api/v1/hotel/stays/in-house/").then(setGuests).catch((e) => { setGuests([]); setError(e.message); });
+  }, [way, guests]);
   const cancel = async () => {
-    const received = checkout.payments.some((p) => p.status === "CONFIRMED" && p.method !== "CASH" && p.method !== "OWED");
+    const received = checkout.payments.some((p) => p.status === "CONFIRMED" && !["CASH", "OWED", "ROOM"].includes(p.method));
     if (!(await confirmAction({ title: "Cancel this checkout?",
       text: received ? "Money has already reached the business for it. A manager cancels it, and the M-Pesa payment is kept for a refund."
         : "Nothing is sold. Hand back any cash you took.", confirmButtonText: "Cancel checkout" }))) return;
@@ -109,7 +117,7 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
     {open && left > 0 && !promptOut && <>
       <div className="posWays" role="tablist" aria-label="How the customer pays">
         {[["CASH", "Cash", Banknote], ["TILL", paybill ? "Paybill" : "Till", Smartphone], ...(express?.ready ? [["PROMPT", "Prompt", Smartphone]] : []),
-          ["BANK", "Bank", Landmark], ["OWED", "Owed", UserRound]].map(([id, name, Icon]) =>
+          ["BANK", "Bank", Landmark], ["OWED", "Owed", UserRound], ...(rooms ? [["ROOM", "Room", BedDouble]] : [])].map(([id, name, Icon]) =>
           <button type="button" role="tab" key={id} aria-selected={way === id} className={way === id ? "on" : ""} onClick={() => { setWay(id); setError(""); }}>
             <Icon size={17} aria-hidden="true" /> {name}
           </button>)}
@@ -179,6 +187,17 @@ export function CheckoutPanel({ checkout, express, customerPhone, onChange, onDo
           : <p className="muted">Choose the customer before charging to leave it owed by them.</p>}
         <label>Due date (optional)<input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
         <button disabled={busy || !(checkout.customer_id || owedBy)}>Leave {money(left)} owed by the customer</button>
+      </form>}
+
+      {way === "ROOM" && <form className="posWay" onSubmit={(e) => { e.preventDefault(); void pay({ method: "ROOM", stay_id: stayId }); }}>
+        {guests === null ? <p className="muted">Finding the guests who are in…</p>
+          : guests.length ? <label>Guest's room<select value={stayId} onChange={(e) => setStayId(e.target.value)} autoFocus>
+            <option value="">Choose the room</option>
+            {guests.map((g) => <option key={g.id} value={g.id}>Room {g.room} · {g.guest}</option>)}
+          </select></label>
+          : <p className="muted">No guest is checked in, so nothing can be charged to a room.</p>}
+        <p className="muted">It goes on the guest's bill, paid when they check out (or from what they paid in advance).</p>
+        <button disabled={busy || !stayId}>Charge {money(left)} to the room</button>
       </form>}
     </>}
     {open && promptOut && <p className="muted">Waiting for the customer to answer the prompt. Take it back (×) to pay another way.</p>}

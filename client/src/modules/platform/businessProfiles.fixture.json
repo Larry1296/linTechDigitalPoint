@@ -8,6 +8,7 @@
    "modules": [
     "inventory",
     "locations",
+    "menu",
     "pos",
     "customers",
     "expenses",
@@ -19,7 +20,8 @@
     "investments"
    ],
    "requires": [
-    "inventory"
+    "inventory",
+    "menu"
    ]
   },
   {
@@ -29,6 +31,7 @@
    "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
    "modules": [
     "services",
+    "rooms",
     "pos",
     "customers",
     "expenses",
@@ -41,6 +44,7 @@
    ],
    "requires": [
     "services",
+    "rooms",
     "mpesa"
    ]
   },
@@ -53,6 +57,8 @@
     "inventory",
     "locations",
     "services",
+    "menu",
+    "rooms",
     "pos",
     "customers",
     "expenses",
@@ -65,7 +71,9 @@
    ],
    "requires": [
     "inventory",
-    "services"
+    "services",
+    "menu",
+    "rooms"
    ]
   }
  ],
@@ -108,12 +116,28 @@
    "needs": []
   },
   {
+   "id": "menu",
+   "label": "Menu & kitchen",
+   "description": "Meals and drinks you make, sold at the till without counting plates; the kitchen's stock and what it used, as the cost of meals.",
+   "needs": [
+    "pos",
+    "rooms"
+   ]
+  },
+  {
+   "id": "rooms",
+   "label": "Rooms & guests",
+   "description": "Rooms, bookings, check-in and check-out, and each guest's bill: nights, food and drinks charged to the room, and deposits.",
+   "needs": []
+  },
+  {
    "id": "pos",
    "label": "Point of sale",
    "description": "Record each sale at the counter and send receipts by WhatsApp or email.",
    "needs": [
     "inventory",
-    "services"
+    "services",
+    "menu"
    ]
   },
   {
@@ -628,18 +652,101 @@
     "keywords": "books school"
    },
    {
-    "id": "food",
-    "label": "Food kiosk, café or hotel",
-    "hint": "Meals, snacks and drinks",
+    "id": "hotel",
+    "label": "Hotel / restaurant (eatery)",
+    "hint": "You cook and sell meals and drinks: a hoteli or restaurant",
     "modules": {
      "SOLO": [
       "inventory",
+      "menu",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "menu",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "menu",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Kitchen stock",
+     "Bottled drinks"
+    ],
+    "services": [
+     {
+      "name": "Tea",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Chapati",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Mandazi",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Beans",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Rice & beans",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Ugali & sukuma",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Pilau",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Chips",
+      "billing_unit": "MENU",
+      "requires_job": false
+     }
+    ],
+    "keywords": "hoteli restaurant eatery nyama choma mama ntilie kibanda food"
+   },
+   {
+    "id": "food",
+    "label": "Food kiosk & café",
+    "hint": "Snacks, tea and quick meals made on site",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "menu",
       "pos",
       "expenses",
       "reports"
      ],
      "SMALL": [
       "inventory",
+      "menu",
       "pos",
       "expenses",
       "reports",
@@ -647,6 +754,7 @@
      ],
      "MEDIUM": [
       "inventory",
+      "menu",
       "pos",
       "expenses",
       "reports",
@@ -655,12 +763,42 @@
      ]
     },
     "categories": [
-     "Meals",
-     "Snacks",
-     "Drinks"
+     "Kitchen stock",
+     "Bottled drinks"
     ],
-    "services": [],
-    "keywords": "restaurant kibanda hotel cafe chips"
+    "services": [
+     {
+      "name": "Tea",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Coffee",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Mandazi",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Samosa",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Chips",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Smokie",
+      "billing_unit": "MENU",
+      "requires_job": false
+     }
+    ],
+    "keywords": "kibanda cafe chips snacks fast food"
    },
    {
     "id": "drinks",
@@ -1295,7 +1433,7 @@
     "services": [
      {
       "name": "Wash & fold",
-      "billing_unit": "PER_ITEM",
+      "billing_unit": "PER_KG",
       "requires_job": true
      },
      {
@@ -1477,6 +1615,48 @@
      }
     ],
     "keywords": "cleaners"
+   },
+   {
+    "id": "lodging",
+    "label": "Lodging / guest house",
+    "hint": "Rooms by the night, without a restaurant",
+    "modules": {
+     "SOLO": [
+      "rooms",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "rooms",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "rooms",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [],
+    "services": [
+     {
+      "name": "Single room",
+      "billing_unit": "PER_NIGHT",
+      "requires_job": false
+     },
+     {
+      "name": "Double room",
+      "billing_unit": "PER_NIGHT",
+      "requires_job": false
+     }
+    ],
+    "keywords": "lodge lodging guest house bnb airbnb rooms accommodation motel"
    },
    {
     "id": "mpesa_agent",
@@ -1879,6 +2059,85 @@
      }
     ],
     "keywords": "tailor boutique"
+   },
+   {
+    "id": "hotel_rooms",
+    "label": "Hotel with rooms & restaurant",
+    "hint": "Rooms by the night, plus meals and drinks for guests and walk-ins",
+    "modules": {
+     "SOLO": [
+      "inventory",
+      "menu",
+      "rooms",
+      "pos",
+      "customers",
+      "expenses",
+      "reports"
+     ],
+     "SMALL": [
+      "inventory",
+      "menu",
+      "rooms",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "staff"
+     ],
+     "MEDIUM": [
+      "inventory",
+      "menu",
+      "rooms",
+      "pos",
+      "customers",
+      "expenses",
+      "reports",
+      "branches",
+      "staff"
+     ]
+    },
+    "categories": [
+     "Kitchen stock",
+     "Bottled drinks"
+    ],
+    "services": [
+     {
+      "name": "Single room",
+      "billing_unit": "PER_NIGHT",
+      "requires_job": false
+     },
+     {
+      "name": "Double room",
+      "billing_unit": "PER_NIGHT",
+      "requires_job": false
+     },
+     {
+      "name": "Deluxe room",
+      "billing_unit": "PER_NIGHT",
+      "requires_job": false
+     },
+     {
+      "name": "Breakfast",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Lunch",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Supper",
+      "billing_unit": "MENU",
+      "requires_job": false
+     },
+     {
+      "name": "Tea",
+      "billing_unit": "MENU",
+      "requires_job": false
+     }
+    ],
+    "keywords": "hotel lodge resort guest house rooms restaurant accommodation"
    },
    {
     "id": "other_mixed",

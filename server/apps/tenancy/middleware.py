@@ -7,7 +7,7 @@ from .models import Membership, BranchMembership
 
 # Authentication/account recovery and tenant selection do not read business records.
 ACCOUNT_PATHS = {"csrf", "login", "logout", "me", "refresh", "session", "unlock", "lock", "activity", "password/change", "password/reset", "password/reset/confirm"}
-MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "locations", "commerce": "pos", "cyber": "services", "mpesa": "mpesa", "accounting": "reports", "store": "inventory", "chama": "chama"}
+MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "locations", "commerce": "pos", "cyber": "services", "mpesa": "mpesa", "accounting": "reports", "store": "inventory", "chama": "chama", "hotel": "rooms"}
 
 def module_for_path(relative):
     if relative in {"inventory/dashboard", "chama/setup"}:
@@ -18,6 +18,8 @@ def module_for_path(relative):
         return "expenses"
     if relative == "accounting/administration/users":
         return "staff"
+    if relative.startswith(("hotel/menu", "hotel/kitchen")):
+        return "menu"
     return MODULE_PATHS.get(relative.split("/")[0])
 
 def resolve_membership(request):

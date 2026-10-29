@@ -52,7 +52,7 @@ def test_a_mixed_business_is_created_with_its_own_tools_contacts_and_location(ow
     ("GOODS", ["inventory", "services"], "Services & jobs cannot be used when you only sell goods"),
     ("SERVICES", ["services", "locations"], "Shelves & locations cannot be used when you only provide services"),
     ("SERVICES", ["services", "inventory", "pos"], "Products & stock cannot be used when you only provide services"),
-    ("SERVICES", ["pos", "reports"], "Turn on Services & jobs or M-Pesa agency"),
+    ("SERVICES", ["pos", "reports"], "Turn on Services & jobs or Rooms & guests or M-Pesa agency"),
     ("MIXED", ["reports"], "Turn on Products & stock or Services & jobs"),
 ])
 def test_tools_that_do_not_fit_the_business_are_explained(owner, model, modules, message):
@@ -127,7 +127,8 @@ def test_the_business_catalogue_is_public_and_every_suggestion_is_valid(client):
             if model == "SERVICES":
                 assert not sector["categories"] and "inventory" not in sector["modules"]["MEDIUM"]
             if model == "GOODS":
-                assert not sector["services"] and "services" not in sector["modules"]["MEDIUM"]
+                # A goods business sells no services; an eatery's starter list is its menu.
+                assert all(service["billing_unit"] == "MENU" for service in sector["services"]) and "services" not in sector["modules"]["MEDIUM"]
 
 
 def test_setup_asks_about_agency_chama_and_investments_instead_of_assuming_them(client):
@@ -271,3 +272,22 @@ def test_a_listed_kind_is_offered_to_the_next_owner_with_its_tools_and_starter_l
     assert create(owner, name="Late", business_model="SERVICES", sector=kind.sector_id, enabled_modules=["services"]).status_code == 400
     response = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["services", "pos", "expenses"]}, format="json")
     assert response.status_code == 200, response.content
+
+
+def test_a_hotel_with_rooms_is_set_up_with_its_menu_and_kinds_of_room_priced(owner):
+    response = create(owner, name="Mlima Hotel", business_model="MIXED", sector="hotel_rooms", plan="PRO",
+        enabled_modules=["rooms", "menu", "inventory", "pos", "customers", "reports"], starter_categories=["Kitchen stock", "Bottled drinks"],
+        starter_services=[{"name": "Double room", "selling_price": "3500", "billing_unit": "PER_NIGHT"},
+                          {"name": "Breakfast", "selling_price": "350", "billing_unit": "MENU"}])
+    assert response.status_code == 201, response.content
+    from apps.hotel.models import MenuItem, RoomType
+    with organization_context(Organization.objects.get(name="Mlima Hotel")):
+        assert [(t.variant.product.name, t.variant.selling_price) for t in RoomType.objects.all()] == [("Double room", Decimal("3500"))]
+        assert [(m.variant.product.name, m.variant.selling_price) for m in MenuItem.objects.all()] == [("Breakfast", Decimal("350"))]
+
+
+def test_a_lodging_runs_on_its_rooms_alone(owner):
+    response = create(owner, name="Amani Lodge", business_model="SERVICES", sector="lodging", plan="PRO",
+        enabled_modules=["rooms", "customers", "expenses", "reports"],
+        starter_services=[{"name": "Single room", "selling_price": "1200", "billing_unit": "PER_NIGHT"}])
+    assert response.status_code == 201, response.content

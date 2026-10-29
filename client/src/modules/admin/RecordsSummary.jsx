@@ -1,7 +1,7 @@
 import { profitText, stockText } from "./plainMoney";
 
 const CHANNELS = { POS: "at the counter", CYBER: "services", ONLINE: "online" };
-const METHODS = { CASH: "Cash", MPESA: "M-Pesa", BANK: "Bank", OTHER: "Other", CASH_ON_PICKUP: "Cash on pickup" };
+const METHODS = { CASH: "Cash", MPESA: "M-Pesa", BANK: "Bank", OTHER: "Other", CASH_ON_PICKUP: "Cash on pickup", DEPOSIT: "Paid in advance (guests)" };
 
 function Group({ title, rows }) {
   const shown = rows.filter(Boolean);

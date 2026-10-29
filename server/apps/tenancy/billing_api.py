@@ -19,7 +19,7 @@ PLAN_FEATURES = {"inventory": "Products & stock", "services": "Services & jobs",
                  "customers": "Customers & credit", "expenses": "Expenses", "mpesa": "M-Pesa agency",
                  "reports": "Profit & loss, balance sheet and reports", "locations": "Shelves & locations",
                  "staff": "Staff accounts & roles", "branches": "More than one branch", "chama": "Chama management",
-                 "investments": "Investments (MMF)"}
+                 "investments": "Investments (MMF)", "menu": "Menu & kitchen for eateries", "rooms": "Rooms, bookings & guests' bills"}
 
 
 def plan_data(plan, organization=None, sector=None):

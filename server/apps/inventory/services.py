@@ -392,6 +392,18 @@ def consume_stock_fifo(*, variant, quantity, reference, movement_type, user=None
         if need == 0:
             break
     return cost
+
+
+def service_tool_on(variant, enabled):
+    """Whether the tool that sells this service is on: a dish needs the menu, a room night the rooms, any other the services."""
+    from apps.hotel.models import MenuItem, RoomType
+    if MenuItem.objects.filter(variant_id=variant.pk).exists():
+        return "menu" in enabled
+    if RoomType.objects.filter(variant_id=variant.pk).exists():
+        return "rooms" in enabled
+    return "services" in enabled
+
+
 @transaction.atomic
 def complete_sale(*,lines,channel,number,user=None,customer=None,discount=0,discount_reason="",payment_method="CASH",payment_status="COMPLETED",payment_reference="",idempotency_key=None,paid_amount=None,due_date=None,allow_below_cost=False,require_customer_for_balance=False):
     """Completes a sale from actual agreed prices and FIFO cost layers; see apps/commerce/pricing.py.
@@ -425,7 +437,7 @@ def complete_sale(*,lines,channel,number,user=None,customer=None,discount=0,disc
         qty = _d(line["quantity"])
         if qty <= 0 or not variant.active or not variant.product.active:
             raise ValidationError("Choose an active item and a positive quantity.")
-        if variant.product.product_type == "SERVICE" and "services" not in enabled:
+        if variant.product.product_type == "SERVICE" and not service_tool_on(variant, enabled):
             raise ValidationError("Services are not enabled for this business.")
         if variant.product.product_type != "SERVICE" and "inventory" not in enabled:
             raise ValidationError("Products & stock are not enabled for this business.")

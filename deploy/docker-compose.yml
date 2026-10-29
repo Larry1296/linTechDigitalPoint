@@ -37,8 +37,8 @@ services:
       db:
         condition: service_healthy
 
-  # Jobs the app runs by itself. Every 6 hours: money market fund rates (e.g. CIC's), which it looks up only when due,
-  # every 10 days (docker compose logs scheduler to see them).
+  # Jobs the app runs by itself (docker compose logs scheduler to see them). Every hour: hotel guests' nights that are
+  # due. Every 6 hours: money market fund rates (e.g. CIC's), which it looks up only when due, every 10 days.
   scheduler:
     image: ${IMAGE_PREFIX}-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -53,9 +53,14 @@ services:
     command:
       - |
         sleep 120
+        hour=0
         while true; do
-          python manage.py refresh_fund_rates || echo "Fund rates: the check failed; trying again later"
-          sleep 21600
+          python manage.py charge_room_nights || echo "Room nights: the run failed; trying again in an hour"
+          if [ $$((hour % 6)) -eq 0 ]; then
+            python manage.py refresh_fund_rates || echo "Fund rates: the check failed; trying again later"
+          fi
+          hour=$$((hour + 1))
+          sleep 3600
         done
     depends_on:
       - app

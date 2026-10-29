@@ -212,9 +212,10 @@ def _attach(checkout, incoming, *, user=None, method=Tender.TILL, tender=None):
 
 @transaction.atomic
 def add_payment(checkout, *, user, method, amount=None, cash_given=None, reference="", phone="", incoming_id=None, code="", due_date=None,
-                customer_id=None):
+                customer_id=None, stay_id=None):
     """One way the customer pays. Returns the payment; the sale is made as soon as the payments cover the amount.
-    Owed money may name its customer here (``customer_id``), when no customer was chosen before charging."""
+    Owed money may name its customer here (``customer_id``), when no customer was chosen before charging. A hotel guest's
+    food and drinks may be charged to their room (``stay_id``): the guest owes it on their bill, paid at check-out."""
     from . import mpesa_express
     checkout = _locked(checkout, user)
     if checkout.status not in (Checkout.AWAITING, Checkout.PART_PAID):
@@ -248,6 +249,16 @@ def add_payment(checkout, *, user, method, amount=None, cash_given=None, referen
         if due_date:
             checkout.basket = {**checkout.basket, "due_date": str(due_date)}
             checkout.save(update_fields=["basket", "updated_at"])
+    elif method == Tender.ROOM:
+        from apps.hotel.rooms import stay_for_till
+        stay = stay_for_till(stay_id)
+        if checkout.basket.get("stay_id") not in (None, stay.pk):
+            raise ValidationError("Part of this sale is already charged to another room.")
+        checkout.customer_id = stay.guest_id
+        checkout.basket = {**checkout.basket, "stay_id": stay.pk}
+        checkout.save(update_fields=["customer", "basket", "updated_at"])
+        tender = Tender.objects.create(checkout=checkout, method=method, amount=wanted, status=Tender.CONFIRMED, recorded_by=user,
+                                       reference=stay.number, detail=f"Room {stay.room.number}, {stay.guest_name}"[:255])
     elif method == Tender.PROMPT:
         push = mpesa_express.send(mpesa_express.setup_for(checkout.organization), phone=phone, amount=wanted, user=user,
                                   reference=checkout.number[-12:])
@@ -256,7 +267,7 @@ def add_payment(checkout, *, user, method, amount=None, cash_given=None, referen
     elif method == Tender.TILL:
         tender = _till(checkout, user=user, incoming_id=incoming_id, code=code)
     else:
-        raise ValidationError("Choose cash, the till, a prompt, bank or owed.")
+        raise ValidationError("Choose cash, the till, a prompt, bank, owed or a guest's room.")
     _settle(checkout)
     return tender
 
@@ -315,12 +326,16 @@ def _complete(checkout):
                              due_date=basket.get("due_date") or None)
             if sale.total != checkout.total:
                 raise ValidationError(f"The sale came to {sale.total:,.2f}, not the {checkout.total:,.2f} charged.")
-            for tender in checkout.payments.filter(status=Tender.CONFIRMED).exclude(method=Tender.OWED).select_related("incoming").order_by("pk"):
+            for tender in checkout.payments.filter(status=Tender.CONFIRMED).exclude(method__in=[Tender.OWED, Tender.ROOM]).select_related("incoming").order_by("pk"):
                 code = tender.incoming.transaction_id if tender.incoming_id else (tender.reference if tender.method == Tender.TILL else None)
                 tender.payment = Payment.objects.create(sale=sale, method=SALE_METHOD[tender.method], amount=tender.amount, status="COMPLETED",
                                                         reference=tender.reference, provider_transaction_id=code or None,
                                                         idempotency_key=f"checkout-payment:{tender.pk}")
                 tender.save(update_fields=["payment", "updated_at"])
+            # Charged to a room: on the guest's bill, after the money paid here, so a deposit only pays what is left.
+            if basket.get("stay_id") and checkout.payments.filter(status=Tender.CONFIRMED, method=Tender.ROOM).exists():
+                from apps.hotel.rooms import charge_till_sale
+                charge_till_sale(basket["stay_id"], sale)
             for variant in basket.get("below_floor", []):
                 AuditLog.objects.create(action="SALE_BELOW_MINIMUM_PRICE", object_type="Sale", object_id=str(sale.pk), user=checkout.cashier,
                                         after={"variant": variant, "checkout": checkout.number})
@@ -377,6 +392,9 @@ def void_payment(checkout, tender, *, user):
         Incoming.objects.filter(pk=tender.incoming_id).update(status=Incoming.UNMATCHED, used_amount=0, note="", updated_at=timezone.now())
     tender.status, tender.incoming = Tender.VOID, None
     tender.save(update_fields=["status", "incoming", "updated_at"])
+    if tender.method == Tender.ROOM and not checkout.payments.filter(method=Tender.ROOM, status=Tender.CONFIRMED).exists():
+        checkout.basket = {key: value for key, value in checkout.basket.items() if key != "stay_id"}
+        checkout.save(update_fields=["basket", "updated_at"])
     _settle(checkout)
     return tender
 

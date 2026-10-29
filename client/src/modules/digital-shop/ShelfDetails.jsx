@@ -10,7 +10,7 @@ import { apiUrl } from "../../core/api/client";
 const MOVEMENTS = {
   PURCHASE_RECEIPT: "Received", OPENING_STOCK: "Opening stock", SALE: "Sold", TRANSFER: "Transferred",
   STOCK_ADJUSTMENT: "Count adjusted", MANUAL_ADJUSTMENT: "Count adjusted", ORDER_RESERVATION: "Reserved",
-  RESERVATION_RELEASE: "Reservation released", CYBER_CONSUMPTION: "Used for a service",
+  RESERVATION_RELEASE: "Reservation released", CYBER_CONSUMPTION: "Used for a service", KITCHEN_USE: "Used in the kitchen",
 };
 const number = (value) => Number(value).toLocaleString("en-KE", { maximumFractionDigits: 3 });
 const money = (value) => `${businessCurrency()} ${Number(value).toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;

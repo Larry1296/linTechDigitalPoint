@@ -17,15 +17,16 @@ from .models import StockBalance, StockLot, StockReceipt, Movement
 from rest_framework.exceptions import ValidationError
 
 ZERO = Decimal('0')
-UNITS = [('SHOP', 'Products / sales', 'pos', 'commerce.view_sale'),
-         ('CYBER', 'Services', 'services', 'cyber.view_cyberjob'),
-         ('MPESA', 'M-Pesa agency', 'mpesa', 'mpesa.view_mpesasession')]
+# Each part, and the tools (with the permission to see them) that run it: a hotel's rooms are its services part.
+UNITS = [('SHOP', 'Products / sales', [('pos', 'commerce.view_sale')]),
+         ('CYBER', 'Services', [('services', 'cyber.view_cyberjob'), ('rooms', 'hotel.view_stay')]),
+         ('MPESA', 'M-Pesa agency', [('mpesa', 'mpesa.view_mpesasession')])]
 
 
 # Accrual figures come from posted journals. Each P&L account belongs to a business unit; an expense
 # belongs to the unit it was recorded for, or is shared between the parts it names; stock losses belong to the shop.
-REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4020': 'CYBER', '4010': 'MPESA'}
-COST_UNIT = {'5000': 'SHOP', '5010': 'CYBER'}
+REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4030': 'SHOP', '4020': 'CYBER', '4040': 'CYBER', '4010': 'MPESA'}
+COST_UNIT = {'5000': 'SHOP', '5020': 'SHOP', '5010': 'CYBER'}
 # Interest earned on investments (e.g. a CIC money market fund) is not a sale of anything: it is kept apart from
 # sales and from the trading profit, and investment figures stay on the protected Investments page.
 INVESTMENT_INCOME = {'4910'}
@@ -102,7 +103,7 @@ def unit_series(trend_rows, period_rows, units, profit_visible, first_month, sta
     ``<PART>_sales``, ``<PART>_costs`` (running costs, shared ones by each part's share) and ``<PART>_profit``, and the
     same for ``TOTAL``, the whole business, which the parts add up to (costs and profit None when the viewer may not
     see them)."""
-    keys = [key for key, _, _, _ in UNITS if key in units]
+    keys = [key for key, _, _ in UNITS if key in units]
     if len(keys) < 2:
         return [], []
 
@@ -172,7 +173,7 @@ def dashboard_snapshot(request):
     enabled = effective_modules(request.organization)
     permits = lambda permission: has_business_permission(request.user, permission)
     profit_visible = permits('accounting.view_profit')
-    visible_units = [key for key, _, module, permission in UNITS if module in enabled and permits(permission)]
+    visible_units = [key for key, _, runs in UNITS if any(module in enabled and permits(permission) for module, permission in runs)]
     books = CashEntry.objects.filter(business_unit__in=visible_units, occurred_at__lte=now)
     daily = pnl_rows(today, today)
     totals = accrual_totals(daily, visible_units)
@@ -187,13 +188,13 @@ def dashboard_snapshot(request):
                          'business_type': request.organization.business_type, 'currency': request.organization.currency,
                          'timezone': request.organization.timezone},
         'enabled_modules': sorted(enabled), 'generated_at': now, 'business_date': today,
-        'financial_scope': 'enabled_operations' if len(visible_units) == sum(module in enabled for _, _, module, _ in UNITS) else 'permitted_operations',
+        'financial_scope': 'enabled_operations' if len(visible_units) == sum(any(module in enabled for module, _ in runs) for _, _, runs in UNITS) else 'permitted_operations',
         'today': {**totals, 'sales': sales.count(), 'items_sold': SaleItem.objects.filter(sale__in=sales).aggregate(v=Sum('quantity'))['v'] or ZERO,
                   'restricted': not bool(visible_units)},
         'business_units': [], 'financial_trend': [],
     }
     ever_rows = pnl_rows(date(1900, 1, 1), date(9999, 12, 31))  # since the start, records dated ahead included
-    for key, name, module, permission in UNITS:
+    for key, name, runs in UNITS:
         allowed = key in visible_units
         unit = accrual_totals(daily, [key])
         ever = accrual_totals(ever_rows, [key]) if allowed else None
@@ -203,7 +204,7 @@ def dashboard_snapshot(request):
             unit = {field: None for field in unit}
         elif not profit_visible:
             unit.update(cogs=None, expenses=None, stock_corrections=None, profit=None)
-        data['business_units'].append({'key': key, 'name': name, 'enabled': module in enabled, 'restricted': not allowed, **unit, 'all_time': ever})
+        data['business_units'].append({'key': key, 'name': name, 'enabled': any(module in enabled for module, _ in runs), 'restricted': not allowed, **unit, 'all_time': ever})
         if key == 'SHOP':
             data['retail'] = {**unit, 'sales': sales.exclude(channel=Sale.CYBER).count() if allowed else None, 'restricted': not allowed}
         elif key == 'CYBER':
@@ -299,7 +300,7 @@ def dashboard_snapshot(request):
     data['has_parts'] = has_parts()
     data['unit_period'] = [{'key': key, 'name': names.get(key, name), **{field: value if profit_visible or field == 'revenue' else None
                             for field, value in accrual_totals(period_rows, [key]).items()}}
-                           for key, name, _, _ in UNITS if key in visible_units]
+                           for key, name, _ in UNITS if key in visible_units]
     data['expense_breakdown'] = []
     if profit_visible and visible_units:
         grouped_expenses = {}

@@ -2,17 +2,18 @@ import { TextBox } from "../../components/forms/TextBox";
 // How the owner keeps the money of the parts of the business: one drawer with each part's money labelled, or a cash
 // drawer for each part. Chosen when the business is set up and changeable in Settings; the money check, "money you
 // should hold" and the dashboard all follow it.
+// A hotel's menu runs its shop part (the restaurant and bar), and its rooms its services part.
 export const MONEY_PARTS = [
-  { key: "SHOP", module: "inventory", name: "Shop" },
-  { key: "CYBER", module: "services", name: "Cyber / services" },
-  { key: "MPESA", module: "mpesa", name: "M-Pesa agency" },
+  { key: "SHOP", modules: ["inventory", "menu"], name: "Shop" },
+  { key: "CYBER", modules: ["services", "rooms"], name: "Cyber / services" },
+  { key: "MPESA", modules: ["mpesa"], name: "M-Pesa agency" },
 ];
 
 // The parts this business runs, from the tools it chose (the shop when none of them is on), with the owner's own names.
 export function businessParts(organization) {
   const enabled = new Set(organization?.enabled_modules || []);
   const named = Object.fromEntries((organization?.parts || []).map((part) => [part.key, part.name]));
-  const parts = MONEY_PARTS.filter((part) => enabled.has(part.module)).map((part) => ({ ...part, name: named[part.key] || part.name }));
+  const parts = MONEY_PARTS.filter((part) => part.modules.some((module) => enabled.has(module))).map((part) => ({ ...part, name: named[part.key] || part.name }));
   return parts.length ? parts : MONEY_PARTS.slice(0, 1);
 }
 
@@ -28,7 +29,9 @@ export const STRUCTURES = [
     hint: "Like a salon that also sells hair products. Everything is counted together, with no parts." },
 ];
 // A part's usual name, as the server gives it when the owner has not named it.
-export const defaultPartName = (key, sector = "") => (key === "CYBER" && sector && !sector.includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa" }[key]);
+const HOTEL_SECTORS = ["hotel", "hotel_rooms", "lodging"];
+export const defaultPartName = (key, sector = "") => (HOTEL_SECTORS.includes(sector) && key !== "MPESA" ? { SHOP: "Restaurant & bar", CYBER: "Rooms" }[key]
+  : key === "CYBER" && sector && !sector.includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa" }[key]);
 const ROLES = { SHOP: "Products you sell", CYBER: "Services you offer", MPESA: "M-Pesa agency" };
 
 export const MONEY_MODES = [

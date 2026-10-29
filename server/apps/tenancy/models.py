@@ -2,9 +2,13 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-MODULES = ["inventory", "locations", "pos", "services", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"]
+MODULES = ["inventory", "locations", "pos", "services", "menu", "rooms", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"]
+HOTEL_MODULES = {"menu", "rooms"}
+
+
 def default_modules():
-    return list(MODULES)
+    # The hotel tools are only for a hotel: a business set up without choosing its tools never gets them.
+    return [module for module in MODULES if module not in HOTEL_MODULES]
 
 def logo_path(instance, filename):
     # Random names: logos are public (they print on customer receipts) but not enumerable.

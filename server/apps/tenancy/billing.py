@@ -20,8 +20,8 @@ from django.utils import timezone
 
 TRIAL_DAYS = 30
 RUNNING, ENDED = {"TRIAL", "ACTIVE"}, "EXPIRED"
-# What still works after a subscription ends: record counter sales and look at products, services and customers.
-ENDED_MODULES = {"pos", "inventory", "services", "customers"}
+# What still works after a subscription ends: record counter sales and look at products, services, the menu and customers.
+ENDED_MODULES = {"pos", "inventory", "services", "menu", "customers"}
 ENDED_WRITES = (re.compile(r"^commerce/pos/complete$"), re.compile(r"^commerce/customers$"), re.compile(r"^commerce/sales/\d+/payments$"))
 WARN_DAYS = 5
 

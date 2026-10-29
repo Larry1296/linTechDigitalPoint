@@ -28,12 +28,15 @@ CHART = {
     '2100': ('Accrued service costs', 'LIABILITY', False),
     '2150': ('Accrued expenses (unpaid bills)', 'LIABILITY', False),
     '2200': ('Tax payable', 'LIABILITY', False),
+    '2300': ('Guest deposits (paid in advance, not yet used)', 'LIABILITY', False),
     '3000': ('Opening equity', 'EQUITY', False),
     '4000': ('Retail sales', 'REVENUE', False), '4010': ('Agency commission', 'REVENUE', False),
     '4020': ('Service revenue', 'REVENUE', False), '4900': ('Other income', 'REVENUE', False),
     '4910': ('Interest earned on investments', 'REVENUE', False),
+    '4030': ('Food and drinks made (menu)', 'REVENUE', False), '4040': ('Rooms and guest services', 'REVENUE', False),
     '5000': ('Cost of goods sold (retail)', 'COGS', False),
     '5010': ('Service direct costs (materials and configured cost)', 'COGS', False),
+    '5020': ('Food used in the kitchen (cost of meals)', 'COGS', False),
     '6000': ('Operating expenses', 'EXPENSE', False),
     '6100': ('Stock losses and corrections', 'EXPENSE', False),
     '6200': ('Investment fees and losses', 'EXPENSE', False),
@@ -41,8 +44,20 @@ CHART = {
 # Revenue and direct cost accounts by what was sold. Services include Cyber jobs.
 REVENUE_ACCOUNT = {'STOCK_ITEM': '4000', 'SERVICE': '4020'}
 COST_ACCOUNT = {'STOCK_ITEM': '5000', 'SERVICE': '5010'}
+# A guest's deposit used against their bill is paid from what the hotel holds for them, not from a till.
 CASH_CODES = {'CASH': '1000', 'BANK': '1010', 'MPESA': '1020', 'OTHER': '1030',
-              'CASH_ON_PICKUP': '1000', 'AGENCY_CASH': '1300', 'AGENCY_FLOAT': '1310', 'FLOAT': '1310'}
+              'CASH_ON_PICKUP': '1000', 'AGENCY_CASH': '1300', 'AGENCY_FLOAT': '1310', 'FLOAT': '1310', 'DEPOSIT': '2300'}
+
+
+def revenue_account(variant):
+    """Where a sold item's revenue goes: a dish from the menu and a room night have their own, so a hotel sees each."""
+    from apps.hotel.models import MenuItem, RoomType
+    if variant.product.product_type == 'SERVICE':
+        if MenuItem.objects.filter(variant_id=variant.pk).exists():
+            return '4030'
+        if RoomType.objects.filter(variant_id=variant.pk).exists():
+            return '4040'
+    return REVENUE_ACCOUNT[variant.product.product_type]
 
 
 def money(value):
@@ -154,7 +169,7 @@ def post_sale(sale):
         return None
     revenue = {}
     for item in sale.items.select_related('variant__product'):
-        account = REVENUE_ACCOUNT[item.variant.product.product_type]
+        account = revenue_account(item.variant)
         revenue[account] = revenue.get(account, Decimal(0)) + item.net_amount
     lines = [('1100', money(sale.total), 0)] if sale.total else []
     lines += [(account, 0, money(amount)) for account, amount in revenue.items() if money(amount)]

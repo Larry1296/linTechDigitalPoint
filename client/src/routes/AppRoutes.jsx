@@ -36,6 +36,10 @@ import { CyberIncomePage, CyberServiceIncomePage } from "../modules/cyber/CyberI
 import { MpesaDashboardPage } from "../modules/mpesa/MpesaDashboardPage";
 import { MpesaCommissionPage } from "../modules/mpesa/MpesaCommissionPage";
 import { ChamaDetailPage, ChamaHomePage, ChamaSetupPage } from "../modules/chama/ChamaPages";
+import { FrontDeskPage, GuestsPage } from "../modules/hotel/FrontDeskPage";
+import { StayPage } from "../modules/hotel/StayPage";
+import { RoomsSetupPage } from "../modules/hotel/RoomsSetupPage";
+import { KitchenPage, MenuPage } from "../modules/hotel/MenuKitchenPages";
 export function AppRoutes() {
   return (
     <Routes>
@@ -75,6 +79,12 @@ export function AppRoutes() {
         <Route path="product-lookup" element={<ProductLookupPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="pos" element={<PosPage />} />
+        <Route path="rooms" element={<FrontDeskPage />} />
+        <Route path="rooms/guests" element={<GuestsPage />} />
+        <Route path="rooms/setup" element={<RoomsSetupPage />} />
+        <Route path="rooms/stays/:id" element={<StayPage />} />
+        <Route path="menu" element={<MenuPage />} />
+        <Route path="kitchen" element={<KitchenPage />} />
         <Route path="quick-receive" element={<QuickReceivePage key="purchase" />} />
         <Route path="opening-stock" element={<QuickReceivePage key="opening" defaultSource="OPENING" />} />
         <Route path="receive" element={<ReceivePage />} />

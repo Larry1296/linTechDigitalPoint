@@ -10,6 +10,7 @@ urlpatterns = [
     path("cyber/", include("apps.cyber.urls")),
     path("mpesa/", include("apps.mpesa.urls")),
     path("chama/", include("apps.chama.urls")),
+    path("hotel/", include("apps.hotel.urls")),
     path("assistant/", include("apps.assistant.urls")),
     path("business-assistant/", include("apps.assistant.business_urls")),
     path("", include("apps.core.urls")),

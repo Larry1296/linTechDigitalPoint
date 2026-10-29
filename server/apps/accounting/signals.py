@@ -12,9 +12,11 @@ def payment_posted(sender, instance, **kwargs):
     from .ledger import post_collection
     post_collection(instance)
     sale = instance.sale
+    if instance.method == 'DEPOSIT':
+        return  # a guest's deposit counted as money in when it was paid; using it moves no money
     # The sale is finalized before its payment is posted by POS and Cyber services. The money counts on the
     # day it was confirmed (updated_at), the same day as its journal, not the day an M-Pesa prompt was sent.
-    post(unit='CYBER' if sale.channel == 'CYBER' else 'SHOP', method=instance.method,
+    post(unit='CYBER' if sale.channel in ('CYBER', 'ROOMS') else 'SHOP', method=instance.method,
         amount=instance.amount, cogs=sale.cogs * instance.amount / sale.total if sale.total else 0,
         kind='INCOME', reference=sale.number, key=f'payment:{instance.pk}', user=sale.created_by, occurred_at=instance.updated_at, branch=sale.branch)
 

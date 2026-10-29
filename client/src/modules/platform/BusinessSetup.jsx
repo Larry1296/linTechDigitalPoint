@@ -15,7 +15,14 @@ import { TextBox } from "../../components/forms/TextBox";
 
 const STEP_LABELS = { business: "Your business", plan: "Your plan", kind: "Kind of business", extras: "Other things you do", tools: "Tools & starter list", chama: "Your chama",
   place: "Location & contacts", money: "Money", review: "Review" };
-const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item" };
+// The priced starter lists, by the tool that uses them; a menu item or a kind of room is told apart by its unit.
+const PRICE_LISTS = [
+  { module: "services", title: "Your service price list", one: "service", nameLabel: "Service name", add: "Add a service", unit: "FIXED" },
+  { module: "menu", title: "Your menu", one: "dish", nameLabel: "Dish or drink", add: "Add to the menu", unit: "MENU" },
+  { module: "rooms", title: "Your kinds of room, priced a night", one: "room", nameLabel: "Kind of room", add: "Add a kind of room", unit: "PER_NIGHT" },
+];
+const kindOf = (service) => (service.billing_unit === "MENU" ? "menu" : service.billing_unit === "PER_NIGHT" ? "rooms" : "services");
+const UNIT_LABELS = { FIXED: "each", PER_PAGE: "per page", PER_COPY: "per copy", PER_SHEET: "per sheet", PER_DOCUMENT: "per document", PER_HOUR: "per hour", PER_ITEM: "per item", PER_KG: "per kg", PER_NIGHT: "a night", MENU: "each" };
 
 // A guided set-up that adapts to how the business makes money and what kind it is. Every choice can be changed later in Settings.
 export function BusinessSetupPage() {
@@ -145,7 +152,7 @@ function SetupWizard({ catalogue, user, refresh }) {
   };
   // The parts of the business that take money of their own (shop, services, M-Pesa agency): with more than one, the
   // owner chooses whether their cash sits in one drawer or a drawer each.
-  const earningParts = MONEY_PARTS.filter((part) => chosen.has(part.module));
+  const earningParts = MONEY_PARTS.filter((part) => part.modules.some((module) => chosen.has(module)));
   const withParts = earningParts.length > 1 && money.structure === "PARTS";
   const partName = (key) => money.part_names[key]?.trim() || defaultPartName(key, sectorId);
   const problem = {
@@ -177,8 +184,8 @@ function SetupWizard({ catalogue, user, refresh }) {
         name: name.trim(), business_model: model, sector: sectorId, business_size: size, business_type: typeLabel.slice(0, 100), plan,
         enabled_modules: [...chosen],
         starter_categories: chosen.has("inventory") ? chosenCategories : [],
-        starter_services: chosen.has("services") ? pricedServices.map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
-          ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })) : [],
+        starter_services: pricedServices.filter((service) => chosen.has(kindOf(service))).map(({ name: serviceName, selling_price, billing_unit, requires_job }) =>
+          ({ name: serviceName.trim(), selling_price, billing_unit, requires_job })),
         ...details, opening_cash: money.opening_cash || 0, opening_bank: money.opening_bank || 0,
         ...(withParts ? { structure: "PARTS", money_mode: money.money_mode, part_names: Object.fromEntries(earningParts.map((part) => [part.key, money.part_names[part.key]?.trim() || ""])) }
           : { structure: "SINGLE", money_mode: "ONE_DRAWER" }),
@@ -308,17 +315,18 @@ function SetupWizard({ catalogue, user, refresh }) {
       </fieldset>
       {moduleNotes.length > 0 && <FormSuccess message={moduleNotes.join(" ")} />}
 
-      {chosen.has("services") && <fieldset className="choiceGroup starterList">
-        <legend>Your service price list <small>Leave a price blank to skip that service.</small></legend>
-        {services.map((service, index) => <div className="starterService" key={index}>
-          <label><span className="sr">Service name</span><TextBox value={service.name} onChange={(e) => setService(index, { name: e.target.value })} maxLength={180} placeholder="Service name" /></label>
-          <label><span className="sr">Price for {service.name || "this service"}</span>
+      {/* One starter list, shown in up to three parts: services, a hotel's menu and its kinds of room, each priced. */}
+      {PRICE_LISTS.filter((list) => chosen.has(list.module)).map((list) => <fieldset className="choiceGroup starterList" key={list.module}>
+        <legend>{list.title} <small>Leave a price blank to skip {list.one === "service" ? "that service" : `that ${list.one}`}.</small></legend>
+        {services.map((service, index) => kindOf(service) === list.module && <div className="starterService" key={index}>
+          <label><span className="sr">{list.nameLabel}</span><TextBox value={service.name} onChange={(e) => setService(index, { name: e.target.value })} maxLength={180} placeholder={list.nameLabel} /></label>
+          <label><span className="sr">Price for {service.name || `this ${list.one}`}</span>
             <input type="number" min="0" step="0.01" inputMode="decimal" value={service.selling_price} onChange={(e) => setService(index, { selling_price: e.target.value })} placeholder={`${details.currency} ${UNIT_LABELS[service.billing_unit] || ""}`} />
           </label>
-          <button type="button" className="iconButton" aria-label={`Remove ${service.name || "service"}`} onClick={() => setServices(services.filter((_, i) => i !== index))}><X size={16} aria-hidden="true" /></button>
+          <button type="button" className="iconButton" aria-label={`Remove ${service.name || list.one}`} onClick={() => setServices(services.filter((_, i) => i !== index))}><X size={16} aria-hidden="true" /></button>
         </div>)}
-        <button type="button" className="secondary addRow" onClick={() => setServices([...services, { name: "", selling_price: "", billing_unit: "FIXED", requires_job: false }])}><Plus size={16} aria-hidden="true" /> Add a service</button>
-      </fieldset>}
+        <button type="button" className="secondary addRow" onClick={() => setServices([...services, { name: "", selling_price: "", billing_unit: list.unit, requires_job: false }])}><Plus size={16} aria-hidden="true" /> {list.add}</button>
+      </fieldset>)}
 
       {chosen.has("inventory") && <fieldset className="choiceGroup starterList">
         <legend>Product categories <small>Groups for the things you sell.</small></legend>
@@ -375,7 +383,9 @@ function SetupWizard({ catalogue, user, refresh }) {
         <div><dt>What it does</dt><dd>{typeLabel} · {modelLabel}</dd><button type="button" className="linkButton" onClick={() => goTo("kind")}>Change</button></div>
         <div><dt>Also does</dt><dd>{catalogue.modules.filter((m) => extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ") || "None of these"}</dd><button type="button" className="linkButton" onClick={() => goTo("extras")}>Change</button></div>
         <div><dt>Tools</dt><dd>{catalogue.modules.filter((m) => !extraIds.includes(m.id) && chosen.has(m.id)).map((m) => m.label).join(", ")}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>
-        {chosen.has("services") && <div><dt>Services</dt><dd>{pricedServices.map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}`).join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
+        {PRICE_LISTS.filter((list) => chosen.has(list.module)).map((list) => <div key={list.module}><dt>{{ services: "Services", menu: "Menu", rooms: "Rooms" }[list.module]}</dt>
+          <dd>{pricedServices.filter((s) => kindOf(s) === list.module).map((s) => `${s.name.trim()} ${details.currency} ${s.selling_price}${list.module === "rooms" ? " a night" : ""}`).join(", ") || "None yet; add them later"}</dd>
+          <button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>)}
         {chosen.has("inventory") && <div><dt>Categories</dt><dd>{chosenCategories.join(", ") || "None yet; add them later"}</dd><button type="button" className="linkButton" onClick={() => goTo("tools")}>Change</button></div>}
         {chosen.has("chama") && <div><dt>Chama</dt><dd>{chama.name} · {details.currency} {Number(chama.contribution_amount || 0).toLocaleString()} each · {chamaPayload(chama).members.length} members · treasurer {chama.members.find((m) => m.role === "TREASURER")?.full_name || "—"}</dd><button type="button" className="linkButton" onClick={() => goTo("chama")}>Change</button></div>}
         <div><dt>First branch</dt><dd>{details.branch_name}{details.address ? ` · ${details.address}` : ""}</dd><button type="button" className="linkButton" onClick={() => goTo("place")}>Change</button></div>
