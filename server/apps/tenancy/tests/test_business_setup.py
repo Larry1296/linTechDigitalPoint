@@ -193,6 +193,18 @@ def test_an_owner_registers_with_their_name_phone_and_a_confirmed_password():
     assert (user.get_full_name(), user.account_profile.phone) == ("Wanjiru Kamau", "0712345678")
 
 
+def test_a_token_left_from_an_earlier_sign_in_does_not_stop_someone_registering():
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION="Bearer left.over.token")
+    response = client.post("/api/v1/tenancy/register/", REGISTRATION, format="json")
+    assert response.status_code == 201, response.content
+
+
+def test_a_refused_security_token_is_answered_in_json_so_the_app_retries():
+    response = APIClient(enforce_csrf_checks=True).post("/api/v1/tenancy/register/", REGISTRATION, format="json")
+    assert response.status_code == 403 and response.json()["code"] == "csrf_failed"
+
+
 @pytest.mark.parametrize("changes,message", [
     ({"password_confirm": "Different-pass-2026"}, "The two passwords do not match."),
     ({"phone": "12ab"}, "Enter a phone number"),

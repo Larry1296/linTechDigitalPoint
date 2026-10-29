@@ -175,6 +175,7 @@ CSRF_COOKIE_SECURE = COOKIE_SECURE
 SESSION_COOKIE_SECURE = COOKIE_SECURE
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_FAILURE_VIEW = "apps.accounts.api.csrf_failure"
 CSRF_COOKIE_SAMESITE = "Lax"  # dukaflow.co.ke and api.dukaflow.co.ke are one site, so Lax cookies still reach the API
 # The HttpOnly cookie identifies the account after idle access locks.
 # Only explicit activity or password unlock renews the shorter access deadline.

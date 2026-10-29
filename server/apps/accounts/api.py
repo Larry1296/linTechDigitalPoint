@@ -31,6 +31,10 @@ class AddressViewSet(viewsets.ModelViewSet):
 def csrf(request):
     from django.middleware.csrf import get_token
     return Response({"csrfToken":get_token(request)})
+def csrf_failure(request, reason=""):
+    # JSON, not Django's HTML page, so the app fetches a fresh security token and sends the request again by itself.
+    from django.http import JsonResponse
+    return JsonResponse({"detail":"CSRF check failed. Try again.","code":"csrf_failed"},status=403)
 def identity(user, request=None):
     from apps.tenancy.context import organization_context
     from apps.tenancy.middleware import resolve_membership

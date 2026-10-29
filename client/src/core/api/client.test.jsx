@@ -196,6 +196,40 @@ it("fetches a fresh security token and retries a sign-in the server refused for 
   resetCsrfToken();
 });
 
+it("registers without a token left from an earlier sign-in and never calls a refusal an expired session", async () => {
+  resetCsrfToken();
+  const session = { locked: false, idle_deadline: new Date(Date.now() + 600000).toISOString(), server_time: new Date().toISOString() };
+  const expired = vi.fn();
+  window.addEventListener("session-expired", expired);
+  const fetch = vi.fn(async (path) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: "csrf" });
+    if (path.endsWith("/login/")) return response(200, { authenticated: true, access_token: "old-token", access_expires_in: 180, session });
+    if (path.endsWith("/me/")) return response(200, { authenticated: false });
+    return response(403, { detail: "Not allowed." });
+  });
+  vi.stubGlobal("fetch", fetch);
+  await api("/api/v1/auth/login/", { method: "POST", body: "{}" });
+  await expect(api("/api/v1/tenancy/register/", { method: "POST", body: "{}" })).rejects.toThrow("Not allowed.");
+  const [, options] = fetch.mock.calls.find(([path]) => path === "/api/v1/tenancy/register/");
+  expect(options.headers.Authorization).toBeUndefined();
+  expect(expired).not.toHaveBeenCalled();
+  window.removeEventListener("session-expired", expired);
+  clearAccessToken();
+});
+it("retries once with a fresh security token when the server answers csrf_failed", async () => {
+  resetCsrfToken();
+  let token = 0;
+  const fetch = vi.fn(async (path, options) => {
+    if (path.endsWith("/csrf/")) return response(200, { csrfToken: `token-${++token}` });
+    return options.headers["X-CSRFToken"] === "token-1"
+      ? response(403, { detail: "CSRF check failed. Try again.", code: "csrf_failed" })
+      : response(201, { id: 1 });
+  });
+  vi.stubGlobal("fetch", fetch);
+  await expect(api("/api/v1/tenancy/register/", { method: "POST", body: "{}" })).resolves.toEqual({ id: 1 });
+  resetCsrfToken();
+});
+
 it("sends every backend request to VITE_API_BASE_URL when the build sets it, with credentials and the CSRF token", async () => {
   vi.resetModules();
   vi.stubEnv("VITE_API_BASE_URL", "https://api.dukaflow.co.ke/");

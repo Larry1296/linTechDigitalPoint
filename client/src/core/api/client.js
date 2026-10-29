@@ -162,7 +162,9 @@ async function request(path, options = {}, retried = false, coordinated = false)
   const requestOptions = { ...options };
   const method = (requestOptions.method || "GET").toUpperCase();
   const safe = ["GET", "HEAD", "OPTIONS"].includes(method);
-  const protectedPath = path.startsWith("/api/v1/") && !path.startsWith("/api/v1/auth/") && path !== "/api/v1/tenancy/platform/";
+  // Registering is done signed out: it never carries a token, and a refusal is never an "expired session".
+  const signedOutPath = path === "/api/v1/tenancy/register/";
+  const protectedPath = path.startsWith("/api/v1/") && !path.startsWith("/api/v1/auth/") && path !== "/api/v1/tenancy/platform/" && !signedOutPath;
   if (workspaceLocked && protectedPath) {
     if (!safe) throw new ApiError(423, SESSION_EXPIRED_MESSAGE);
     await waitForUnlock(requestOptions.signal);
@@ -176,7 +178,7 @@ async function request(path, options = {}, retried = false, coordinated = false)
     requestOptions.headers = { ...requestOptions.headers, "X-Organization-ID": activeOrganization };
   }
   if (activeBranch && protectedPath && !path.startsWith('/api/v1/tenancy/')) requestOptions.headers = { ...requestOptions.headers, 'X-Branch-ID':activeBranch };
-  if (accessToken) requestOptions.headers = { ...requestOptions.headers, Authorization:`Bearer ${accessToken}` };
+  if (accessToken && !signedOutPath) requestOptions.headers = { ...requestOptions.headers, Authorization:`Bearer ${accessToken}` };
   const response = await send(path, { credentials: "include", ...requestOptions });
   // A saved change means figures elsewhere may be out of date: let open pages refresh themselves.
   if (response.ok && !safe && protectedPath) announceDataChanged(path);
@@ -204,7 +206,7 @@ async function request(path, options = {}, retried = false, coordinated = false)
     }
     // The security token changes when someone signs in or out (also in another tab). A refused token is fetched
     // afresh and the request sent once more, so a corrected sign-in is not stuck failing until the page reloads.
-    if (response.status === 403 && !safe && !retried && /CSRF/i.test(data.detail || "")) {
+    if (response.status === 403 && !safe && !retried && (data.code === "csrf_failed" || /CSRF/i.test(data.detail || ""))) {
       resetCsrfToken();
       return request(path, options, true);
     }

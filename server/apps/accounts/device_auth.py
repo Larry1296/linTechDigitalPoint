@@ -20,6 +20,8 @@ COOKIE_PATH = '/api/v1/auth/'
 LOCK_BEFORE_END = 600
 COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'lock', 'logout'}
 PUBLIC_ENDPOINTS = {'csrf', 'login', 'password/reset', 'password/reset/confirm'}
+# Outside /auth/ but for people not signed in: a token left from an earlier sign-in must not stop someone registering.
+PUBLIC_PATHS = {'/api/v1/tenancy/register/'}
 
 
 def token_hash(raw):
@@ -104,7 +106,7 @@ class DeviceAuthenticationMiddleware:
                 if not credential.consumed_at or endpoint == 'refresh':
                     request.device_session=credential.session
                     request.user=credential.session.user
-        elif endpoint not in PUBLIC_ENDPOINTS:
+        elif endpoint not in PUBLIC_ENDPOINTS and request.path not in PUBLIC_PATHS:
             header=request.headers.get('Authorization','')
             if header.startswith('Bearer '):
                 try:
