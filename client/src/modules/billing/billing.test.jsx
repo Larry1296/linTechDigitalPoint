@@ -167,32 +167,22 @@ it("prices a plan for each kind of business and gives one business its own price
   expect(JSON.parse(priced.body)).toEqual({ prices: { BASIC: "300" }, note: "" });
 });
 
-it("deletes a switched-off business only with its name and the administrator's protected pages password", async () => {
+it("deletes a switched-off business only with its name and the administrator's sign-in password", async () => {
   useAuth.mockReturnValue({ user: { platform_admin: true } });
-  let status = { has_password: false, expired: false, lifetime_days: 7, shortest: 6 };
   api.mockImplementation(async (path, options = {}) => {
     if (path === "/api/v1/tenancy/platform-admin/overview/") return overview;
     if (path === "/api/v1/tenancy/platform-admin/businesses/1/") return options.method ? { deleted: "Fresh Cuts", records: 9 } : { ...overview.businesses[0], active: false, members: 1, payments: [] };
-    if (path === "/api/v1/auth/protected/") return { protected: status };
-    if (path === "/api/v1/auth/protected/password/") { status = { ...status, has_password: true }; return { protected: status }; }
     return {};
   });
-  askForm.mockResolvedValue({ confirm_name: "Fresh Cuts", password: "pages-pass" });
+  askForm.mockResolvedValue({ confirm_name: "Fresh Cuts", password: "Sign-in-1" });
   render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: "Fresh Cuts" }));
   const detail = await screen.findByRole("article", { name: "Fresh Cuts subscription" });
-  // No protected pages password yet: it is set first, then the delete is asked for.
-  fireEvent.click(within(detail).getByRole("button", { name: "Delete business for good" }));
-  expect(await within(detail).findByRole("heading", { name: "Set a password for protected pages" })).toBeInTheDocument();
-  expect(askForm).not.toHaveBeenCalled();
-  fireEvent.change(within(detail).getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
-  fireEvent.change(within(detail).getByLabelText("New protected pages password"), { target: { value: "pages-pass" } });
-  fireEvent.change(within(detail).getByLabelText("New password again"), { target: { value: "pages-pass" } });
-  await act(async () => { fireEvent.click(within(detail).getByRole("button", { name: "Save and open" })); });
+  await act(async () => { fireEvent.click(within(detail).getByRole("button", { name: "Delete business for good" })); });
   await waitFor(() => expect(showSuccess).toHaveBeenCalledWith("Business deleted", expect.any(String)));
-  expect(askForm.mock.calls[0][0].fields.map((f) => [f.name, f.type])).toEqual([["confirm_name", undefined], ["password", "password"]]);
+  expect(askForm.mock.calls[0][0].fields.map((f) => [f.name, f.label])).toEqual([["confirm_name", "Business name"], ["password", "Your sign-in password"]]);
   const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/1/" && o?.method === "DELETE");
-  expect(JSON.parse(options.body)).toEqual({ confirm_name: "Fresh Cuts", password: "pages-pass" });
+  expect(JSON.parse(options.body)).toEqual({ confirm_name: "Fresh Cuts", password: "Sign-in-1" });
 });
 
 it("keeps the platform page away from everyone else", () => {

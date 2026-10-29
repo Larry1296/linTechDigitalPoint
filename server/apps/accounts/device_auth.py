@@ -28,13 +28,34 @@ def token_hash(raw):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+# Wrong PINs allowed in one lock; after that only the password opens it.
+PIN_TRIES = 5
+
+
 def state(device):
     now = timezone.now()
-    deadline = min(device.last_user_activity_at + timedelta(seconds=settings.DEVICE_IDLE_SECONDS),
-        device.expires_at - timedelta(seconds=min(LOCK_BEFORE_END, settings.DEVICE_ABSOLUTE_SECONDS // 4)))
-    return {'id':str(device.pk), 'expires_at':deadline.timestamp(), 'server_time':now.timestamp(),
+    # The session ends 12 hours after the password was last entered; it never locks for being idle unless
+    # DEVICE_IDLE_SECONDS is set.
+    deadline = device.expires_at - timedelta(seconds=min(LOCK_BEFORE_END, settings.DEVICE_ABSOLUTE_SECONDS // 4))
+    if settings.DEVICE_IDLE_SECONDS > 0:
+        deadline = min(deadline, device.last_user_activity_at + timedelta(seconds=settings.DEVICE_IDLE_SECONDS))
+    locked = bool(device.locked_at or now >= deadline)
+    data = {'id':str(device.pk), 'expires_at':deadline.timestamp(), 'server_time':now.timestamp(),
         'absolute_expires_at':device.expires_at.timestamp(), 'idle_timeout':settings.DEVICE_IDLE_SECONDS,
-        'warning_seconds':0, 'locked':bool(device.locked_at or now >= deadline)}
+        'warning_seconds':0, 'locked':locked, 'pin_length':None}
+    if locked:
+        data['pin_length'] = pin_length(device, now < deadline)
+    return data
+
+
+def pin_length(device, in_time=True):
+    """The length of the PIN that opens this lock, or None when only the password does: the person locked it themselves
+    (not the session's end), has a PIN, and has not used up the tries."""
+    if not (device.locked_at and in_time and device.failed_unlocks < PIN_TRIES):
+        return None
+    from .protected_pages import pin_for
+    pin = pin_for(device.user, '')
+    return pin.length if pin else None
 
 
 def valid(device):

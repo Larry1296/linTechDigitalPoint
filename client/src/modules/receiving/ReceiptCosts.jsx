@@ -51,7 +51,7 @@ export function usePayableInvestments() {
     api("/api/v1/accounting/investments/")
       .then((data) => { if (live) setInvestments(data.investments.filter((i) => Number(i.value) > 0)); })
       // Without them the supplier is simply paid from cash, M-Pesa or bank; investments stay hidden until the
-      // protected pages password is entered.
+      // Investments page is opened with its PIN.
       .catch((err) => { if (live && err.data?.code === "protected_locked") setLocked(true); });
     return () => { live = false; };
   }, [allowed]);
@@ -109,7 +109,7 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
       </select>
     </label>
     {investmentsLocked && <small>To pay from an investment, open <a href="/admin/investments" target="_blank" rel="noreferrer">Investments</a> with
-      your protected pages password first, then come back.</small>}
+      its PIN first, then come back.</small>}
     {details.payment_method === "INVESTMENT" && <div className="receiptInvestment">
       {investments.length > 1 && <label>Take it out of
         <select value={details.investment_id} required onChange={(e) => chooseInvestment(e.target.value)}>

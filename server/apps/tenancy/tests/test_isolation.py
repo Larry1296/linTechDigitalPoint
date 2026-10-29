@@ -427,7 +427,7 @@ def test_every_domain_model_has_required_scoped_ownership_and_database_guard():
     from apps.tenancy.base import TenantModel, TenantManager
     domains = {'core', 'accounts', 'catalog', 'inventory', 'commerce', 'cyber', 'mpesa', 'accounting'}
     for model in apps.get_models():
-        if model._meta.label in {'accounts.DeviceSession', 'accounts.RefreshCredential', 'accounts.SessionAudit', 'accounts.AccountProfile', 'accounts.ProtectedPagesPassword'}:
+        if model._meta.label in {'accounts.DeviceSession', 'accounts.RefreshCredential', 'accounts.SessionAudit', 'accounts.AccountProfile', 'accounts.ProtectedPagesPassword', 'accounts.LockPin'}:
             continue  # Global account security, like auth.User; never business data.
         if model._meta.app_label not in domains:
             continue

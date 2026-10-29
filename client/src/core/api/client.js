@@ -217,7 +217,7 @@ async function request(path, options = {}, retried = false, coordinated = false)
         throw new ApiError(state === "locked" ? 423 : response.status, SESSION_EXPIRED_MESSAGE);
       }
     }
-    // M-Pesa and investments need the protected pages password too: let the page ask for it.
+    // M-Pesa and investments are private pages with a PIN: let the page ask for it.
     if (response.status === 403 && data.code === "protected_locked") window.dispatchEvent(new Event("protected-locked"));
     throw new ApiError(response.status, data.detail || Object.values(data).flat().join(" ") || "Request failed.", data);
   }

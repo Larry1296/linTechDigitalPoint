@@ -17,6 +17,7 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def locked_client(settings):
+    settings.DEVICE_IDLE_SECONDS = 900  # an idle lock is off by default; a deployment may still turn it on
     cache.clear()
     user = User.objects.create_user('lock-owner', password='Strong-pass-1296')
     org = Organization.objects.create(name='Locked business', slug='locked-business', owner=user)

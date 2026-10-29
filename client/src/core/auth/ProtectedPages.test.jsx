@@ -1,62 +1,89 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("../api/client", () => ({ api: vi.fn() }));
 import { api } from "../api/client";
-import { ProtectedPages } from "./ProtectedPages";
-import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
+import { PRIVATE_IDLE_MS, ProtectedPages } from "./ProtectedPages";
 
-const base = { has_password: true, expired: false, unlocked: false, expires_at: "2026-10-19T10:00:00Z", lifetime_days: 7, shortest: 6 };
-const page = () => render(<MemoryRouter initialEntries={["/admin/mpesa"]}><Routes>
-  <Route element={<ProtectedPages />}><Route path="/admin/mpesa" element={<p>M-Pesa records</p>} /></Route>
+const pages = (mpesa = {}, investments = {}) => ({
+  mpesa: { label: "M-Pesa", own_pin: false, pin_length: 4, unlocked: false, ...mpesa },
+  investments: { label: "Investments", own_pin: false, pin_length: 4, unlocked: false, ...investments },
+});
+const status = (extra = {}) => ({ has_pin: true, needs_password: false, tries_left: 5, pages: pages(), ...extra });
+const page = (path = "/admin/mpesa") => render(<MemoryRouter initialEntries={[path]}><Routes>
+  <Route element={<ProtectedPages />}>
+    <Route path="/admin/mpesa" element={<p>M-Pesa records</p>} />
+    <Route path="/admin/investments" element={<p>Investment records</p>} />
+  </Route>
 </Routes></MemoryRouter>);
+const body = (path) => JSON.parse(api.mock.calls.find(([p]) => p === path)[1].body);
 
-beforeEach(() => { vi.clearAllMocks(); forgetPasswordLength(); });
-const typeOut = async (input, text) => {
-  for (let end = 1; end <= text.length; end += 1) await act(async () => { fireEvent.change(input, { target: { value: text.slice(0, end) } }); });
-};
+beforeEach(() => { vi.clearAllMocks(); });
+afterEach(() => { vi.useRealTimers(); });
 
-it("asks for the protected pages password before showing the page", async () => {
-  api.mockImplementation(async (path) => path.endsWith("unlock/") ? { protected: { ...base, unlocked: true } } : { protected: base });
+it("opens a private page the moment its PIN is typed", async () => {
+  api.mockImplementation(async (path) => path.endsWith("unlock/") ? { protected: status({ pages: pages({ unlocked: true }, { unlocked: true }) }) } : { protected: status() });
   page();
-  fireEvent.change(await screen.findByLabelText("Protected pages password"), { target: { value: "vault-2026" } });
+  const pin = await screen.findByLabelText("PIN");
+  await act(async () => { fireEvent.change(pin, { target: { value: "482" } }); });
   expect(screen.queryByText("M-Pesa records")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  await act(async () => { fireEvent.change(pin, { target: { value: "4826" } }); });
   expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
-  expect(JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/auth/protected/unlock/")[1].body)).toEqual({ password: "vault-2026" });
+  expect(body("/api/v1/auth/protected/unlock/")).toEqual({ page: "mpesa", pin: "4826" });
 });
 
-it("after a week asks for a new password, proved with the old one", async () => {
-  api.mockImplementation(async (path) => path.endsWith("password/") ? { protected: { ...base, unlocked: true } } : { protected: { ...base, expired: true } });
-  page();
-  expect(await screen.findByRole("heading")).toHaveTextContent("Time for a new protected pages password");
-  fireEvent.change(screen.getByLabelText("Your current protected pages password"), { target: { value: "vault-one" } });
-  fireEvent.change(screen.getByLabelText("New protected pages password"), { target: { value: "vault-two" } });
-  fireEvent.change(screen.getByLabelText("New password again"), { target: { value: "vault-two" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save and open" }));
-  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
-  expect(JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/auth/protected/password/")[1].body)).toEqual({ proof: "vault-one", new_password: "vault-two" });
-});
-
-it("opens by itself once the typed password is as long as the real one, never part-way", async () => {
-  rememberPasswordLength("vault-2026", "protected");
-  api.mockImplementation(async (path) => path.endsWith("unlock/") ? { protected: { ...base, unlocked: true } } : { protected: base });
-  page();
-  const input = await screen.findByLabelText("Protected pages password");
-  await typeOut(input, "vault-202");
-  expect(api.mock.calls.some(([p]) => p === "/api/v1/auth/protected/unlock/")).toBe(false);
-  await typeOut(input, "vault-2026");
-  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
-});
-
-it("stays quiet when an automatic try is wrong", async () => {
-  rememberPasswordLength("vault-2026", "protected");
+it("says a page has its own PIN, clears a wrong one and keeps the tries count", async () => {
   api.mockImplementation(async (path) => {
-    if (path.endsWith("unlock/")) throw Object.assign(new Error("That password is not right."), { status: 400 });
-    return { protected: base };
+    if (path.endsWith("unlock/")) throw Object.assign(new Error("Wrong PIN. 4 tries left."), { data: { code: "wrong_pin", protected: status({ tries_left: 4 }) } });
+    return { protected: status({ pages: pages({}, { own_pin: true, pin_length: 6 }) }) };
+  });
+  page("/admin/investments");
+  expect(await screen.findByText("Investments has a PIN of its own.")).toBeInTheDocument();
+  const pin = screen.getByLabelText("PIN");
+  await act(async () => { fireEvent.change(pin, { target: { value: "111111" } }); });
+  expect(await screen.findByText("Wrong PIN. 4 tries left.")).toBeInTheDocument();
+  expect(pin).toHaveValue("");
+});
+
+it("asks for the sign-in password after too many wrong PINs", async () => {
+  api.mockImplementation(async (path) => path.endsWith("unlock/") ? { protected: status({ pages: pages({ unlocked: true }) }) } : { protected: status({ needs_password: true, tries_left: 0 }) });
+  page();
+  expect(await screen.findByText(/Too many wrong PINs/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
+  expect(body("/api/v1/auth/protected/unlock/")).toEqual({ page: "mpesa", password: "Sign-in-1" });
+});
+
+it("sets the lock PIN the first time, then opens the page with it", async () => {
+  api.mockImplementation(async (path) => {
+    if (path.endsWith("unlock/")) return { protected: status({ pages: pages({ unlocked: true }) }) };
+    if (path.endsWith("lock-pin/")) return {};
+    return { protected: status({ has_pin: false }) };
   });
   page();
-  await typeOut(await screen.findByLabelText("Protected pages password"), "vault-2027");
-  expect(api.mock.calls.filter(([p]) => p === "/api/v1/auth/protected/unlock/")).toHaveLength(1);
-  expect(screen.queryByText("That password is not right.")).toBeNull();
+  expect(await screen.findByRole("heading", { name: "Set your lock PIN" })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
+  fireEvent.change(screen.getByLabelText("New PIN (4 to 6 digits)"), { target: { value: "4826" } });
+  fireEvent.change(screen.getByLabelText("New PIN again"), { target: { value: "4826" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save and open" })); });
+  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
+  expect(body("/api/v1/auth/lock-pin/")).toEqual({ password: "Sign-in-1", pin: "4826" });
+});
+
+it("locks an open private page after five minutes untouched", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  let open = true;
+  api.mockImplementation(async (path) => {
+    if (path.endsWith("protected/lock/")) open = false;
+    return { protected: status({ pages: pages({ unlocked: open }) }) };
+  });
+  page();
+  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
+  await act(async () => { vi.advanceTimersByTime(PRIVATE_IDLE_MS - 10000); });
+  fireEvent.keyDown(window, { key: "a" });  // synthetic: not a person
+  expect(screen.getByText("M-Pesa records")).toBeInTheDocument();
+  await act(async () => { vi.advanceTimersByTime(15000); });
+  expect(await screen.findByLabelText("PIN")).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith("/api/v1/auth/protected/lock/", { method: "POST" });
 });

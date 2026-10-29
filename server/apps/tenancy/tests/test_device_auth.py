@@ -26,7 +26,8 @@ def login(business):
     return client,data
 
 
-def test_idle_denies_copied_unexpired_token_and_unlocks(businesses):
+def test_idle_denies_copied_unexpired_token_and_unlocks(businesses, settings):
+    settings.DEVICE_IDLE_SECONDS=900  # an idle lock is off by default; a deployment may still turn it on
     client,data=login(businesses[0])
     session=DeviceSession.objects.get(pk=data['session']['id'])
     assert client.get('/api/v1/catalog/categories/').status_code==200
@@ -130,8 +131,69 @@ def test_simultaneous_refresh_issues_one_successor(businesses):
     'commerce/sales/', 'accounting/ledger/reports/', 'accounting/expenses/',
     'locations/shelves/', 'tenancy/branches/',
 ])
-def test_idle_token_denied_across_business_resources(businesses, path):
+def test_idle_token_denied_across_business_resources(businesses, path, settings):
+    settings.DEVICE_IDLE_SECONDS=900
     client, data = login(businesses[0])
     DeviceSession.objects.filter(pk=data['session']['id']).update(
         last_user_activity_at=timezone.now()-timedelta(seconds=settings.DEVICE_IDLE_SECONDS+1))
     assert client.get('/api/v1/'+path).status_code == 423
+
+
+def test_an_idle_workspace_stays_open_for_the_whole_session(businesses):
+    client,data=login(businesses[0])
+    DeviceSession.objects.filter(pk=data['session']['id']).update(last_user_activity_at=timezone.now()-timedelta(hours=11))
+    assert client.get('/api/v1/catalog/categories/').status_code==200
+    response=client.post('/api/v1/auth/refresh/')
+    assert response.status_code==200 and response.json()['session']['locked'] is False
+    assert response.json()['session']['expires_at'] > timezone.now().timestamp()+settings.DEVICE_ABSOLUTE_SECONDS-700
+
+
+def set_pin(client, pin='4826'):
+    return client.post('/api/v1/auth/lock-pin/',{'password':'Safe-pass-1848','pin':pin},format='json')
+
+
+def test_a_lock_the_person_made_opens_with_their_pin(businesses):
+    client,data=login(businesses[0])
+    assert client.post('/api/v1/auth/lock-pin/',{'password':'wrong','pin':'4826'},format='json').status_code==400
+    assert set_pin(client,'1111').status_code==400
+    assert set_pin(client,'12a4').status_code==400
+    assert set_pin(client).json()['pin']['length']==4
+    session=DeviceSession.objects.get(pk=data['session']['id'])
+    expires=session.expires_at
+    locked=client.post('/api/v1/auth/lock/')
+    assert locked.status_code==200 and locked.json()['session']['pin_length']==4
+    assert client.get('/api/v1/auth/me/').json()['session']['pin_length']==4
+    wrong=client.post('/api/v1/auth/unlock/',{'pin':'0000'},format='json')
+    assert wrong.status_code==400 and wrong.json()['detail']=='Wrong PIN. 4 tries left.'
+    response=client.post('/api/v1/auth/unlock/',{'pin':'4826'},format='json')
+    assert response.status_code==200,response.content
+    assert response.json()['session']['locked'] is False
+    session.refresh_from_db()
+    # A PIN opens the lock but never lengthens the session: only the password does.
+    assert session.expires_at==expires and session.failed_unlocks==0
+    client.credentials(HTTP_AUTHORIZATION='Bearer '+response.json()['access_token'],HTTP_X_CSRFTOKEN=client._credentials['HTTP_X_CSRFTOKEN'])
+    assert client.get('/api/v1/catalog/categories/').status_code==200
+
+
+def test_too_many_wrong_pins_or_the_session_end_need_the_password(businesses):
+    client,data=login(businesses[0])
+    set_pin(client)
+    client.post('/api/v1/auth/lock/')
+    for _ in range(5):
+        assert client.post('/api/v1/auth/unlock/',{'pin':'0000'},format='json').status_code==400
+    refused=client.post('/api/v1/auth/unlock/',{'pin':'4826'},format='json')
+    assert refused.status_code==400 and refused.json()['code']=='password_required'
+    assert refused.json()['session']['pin_length'] is None
+    assert client.post('/api/v1/auth/unlock/',{'password':'Safe-pass-1848'},format='json').status_code==200
+    # Near the session's end the workspace locks by itself, and only the password (which starts it afresh) opens it.
+    DeviceSession.objects.filter(pk=data['session']['id']).update(expires_at=timezone.now()+timedelta(minutes=5))
+    state=client.get('/api/v1/auth/session/').json()['session']
+    assert state['locked'] is True and state['pin_length'] is None
+    assert client.post('/api/v1/auth/unlock/',{'pin':'4826'},format='json').json()['code']=='password_required'
+
+
+def test_without_a_pin_a_lock_opens_with_the_password(businesses):
+    client,data=login(businesses[0])
+    assert client.get('/api/v1/auth/lock-pin/').json()['pin']['set'] is False
+    assert client.post('/api/v1/auth/lock/').json()['session']['pin_length'] is None
+    assert client.post('/api/v1/auth/unlock/',{'pin':'4826'},format='json').json()['code']=='password_required'

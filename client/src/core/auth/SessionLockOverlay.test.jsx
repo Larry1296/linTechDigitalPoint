@@ -5,7 +5,7 @@ import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
 
 beforeEach(() => { vi.useFakeTimers(); rememberPasswordLength("Safe-pass-1848"); });
 afterEach(() => { vi.useRealTimers(); forgetPasswordLength(); });
-const show = (onUnlock) => render(<SessionLockOverlay locked seconds={0} username="owner" busy={false} error="" onStay={vi.fn()} onUnlock={onUnlock} onLogout={vi.fn()} />);
+const show = (onUnlock) => render(<SessionLockOverlay username="owner" pinLength={null} busy={false} error="" onUnlock={onUnlock} onPin={vi.fn()} onLogout={vi.fn()} />);
 const field = () => screen.getByLabelText("Password");
 const typeOut = async (text) => {
   for (let end = 1; end <= text.length; end += 1) await act(async () => { fireEvent.change(field(), { target: { value: text.slice(0, end) } }); });

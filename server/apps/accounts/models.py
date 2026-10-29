@@ -34,8 +34,24 @@ class DeviceSession(models.Model):
     # The protected pages are open on this device while this matches ``version``: locking or unlocking the
     # workspace changes the version, so they close again with it.
     protected_version = models.PositiveIntegerField(null=True, blank=True)
+    # The private pages open on this device (keys of protected_pages.PAGES), while protected_version matches.
+    protected_open = models.JSONField(default=list, blank=True)
     protected_failures = models.PositiveIntegerField(default=0)
     protected_blocked_until = models.DateTimeField(null=True, blank=True)
+
+
+class LockPin(models.Model):
+    """A short PIN that opens a lock in a moment. ``page`` blank is the person's lock PIN: it opens the workspace after
+    they locked it, and every private page without a PIN of its own. A private page's key (see protected_pages.PAGES)
+    is that page's own PIN."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="lock_pins", on_delete=models.CASCADE)
+    page = models.CharField(max_length=20, blank=True, default="")
+    digest = models.CharField(max_length=128)
+    length = models.PositiveSmallIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "page"], name="accounts_lockpin_user_page")]
 
 
 class RefreshCredential(models.Model):
@@ -59,7 +75,9 @@ class AccountProfile(models.Model):
 
 
 class ProtectedPagesPassword(models.Model):
-    """A person's password for the protected pages (M-Pesa, investments), apart from their sign-in password.
+    """No longer used: the private pages open with PINs now (see LockPin). Kept so earlier records stay.
+
+    A person's password for the protected pages (M-Pesa, investments), apart from their sign-in password.
 
     Every password they ever set stays, so none can be used twice; the newest is the one in use, for seven days.
     The digest uses one salt per person, so a new password is checked against all the old ones in a single lookup.

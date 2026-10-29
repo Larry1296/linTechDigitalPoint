@@ -4,7 +4,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormField } from "../../components/forms/FormField";
 import { ErrorState, Loading } from "../../components/States";
-import { confirmAction } from "../../core/ui/alerts";
+import { askForm, confirmAction } from "../../core/ui/alerts";
 import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
@@ -39,6 +39,7 @@ export function SettingsPage() {
     </section>}
     {isAdmin && <BranchSettings />}
     {isAdmin && <StaffSettings isOwner={role === "OWNER"} />}
+    <PinSettings />
     <PasswordSettings />
   </>;
 }
@@ -381,6 +382,64 @@ function StaffSettings({ isOwner }) {
       <button disabled={busy}>{busy ? "Adding…" : "Add staff member"}</button>
       <Notice notice={notice} place="add" />
     </form>
+  </section>;
+}
+
+// The lock PIN opens the workspace after it is locked, and the private pages (M-Pesa, investments). Each private page
+// can share that PIN or have its own. Every change is confirmed with the sign-in password.
+function PinSettings() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [which, setWhich] = useState("");
+  const load = useCallback(() => api("/api/v1/auth/lock-pin/").then(setData).catch((e) => setError(e.message)), []);
+  useEffect(() => { void load(); }, [load]);
+  if (!data) return error ? <ErrorState message={error} retry={load} /> : <Loading />;
+  const name = (page) => (page ? `${data.pages[page].label}'s own PIN` : "your lock PIN");
+  const send = async (method, body, done) => {
+    setBusy(true); setError(""); setSaved("");
+    try { setData(await api("/api/v1/auth/lock-pin/", { method, body: JSON.stringify(body) })); setSaved(done); return true; }
+    catch (e) { setError(e.message); return false; }
+    finally { setBusy(false); }
+  };
+  const save = async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    if (!/^\d{4,6}$/.test(form.get("pin"))) { setError("A PIN is 4 to 6 digits."); return; }
+    if (form.get("pin") !== form.get("again")) { setError("The two PINs are not the same."); return; }
+    if (await send("POST", { page: which, pin: form.get("pin"), password: form.get("password") }, `Saved ${name(which)}.`)) formElement.reset();
+  };
+  const share = async (page) => {
+    const values = await askForm({ title: `${data.pages[page].label} uses your lock PIN`, confirmButtonText: "Use lock PIN",
+      text: "Its own PIN is removed and your lock PIN opens it again.",
+      fields: [{ name: "password", label: "Your sign-in password", type: "password", required: true }] });
+    if (values) await send("DELETE", { page, password: values.password }, `${data.pages[page].label} now opens with your lock PIN.`);
+  };
+  return <section className="formCard pinSettings" aria-labelledby="pin-heading">
+    <h2 id="pin-heading">Lock PIN and private pages</h2>
+    <p>The workspace locks only when you press Lock, and opens with your lock PIN. M-Pesa and investments are private pages: they lock after 5 minutes untouched and open with a PIN too, your lock PIN or one of their own.</p>
+    <div className="pinRow"><strong>Lock PIN</strong><span>{data.pin.set ? `Set · ${data.pin.length} digits` : "Not set yet"}</span></div>
+    {Object.entries(data.pages).map(([page, info]) => <div className="pinRow" key={page}>
+      <strong>{info.label}</strong>
+      <span>{info.own_pin ? `Its own PIN · ${info.length} digits` : "Uses your lock PIN"}</span>
+      {info.own_pin && <button type="button" className="secondary" disabled={busy} onClick={() => void share(page)}>Use lock PIN instead</button>}
+    </div>)}
+    <form onSubmit={(event) => void save(event)}>
+      <label>PIN to set
+        <select value={which} onChange={(event) => setWhich(event.target.value)}>
+          <option value="">{data.pin.set ? "Change my lock PIN" : "My lock PIN"}</option>
+          {data.pin.set && Object.entries(data.pages).map(([page, info]) => <option key={page} value={page}>{info.own_pin ? `Change ${info.label}'s own PIN` : `Give ${info.label} its own PIN`}</option>)}
+        </select>
+      </label>
+      <FormField label="New PIN (4 to 6 digits)" name="pin" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" />
+      <FormField label="New PIN again" name="again" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" />
+      <FormField label="Your sign-in password" name="password" type="password" required autoComplete="current-password" />
+      <button disabled={busy}>{busy ? "Saving…" : "Save PIN"}</button>
+    </form>
+    <FormError title="Could not save the PIN." message={error} />
+    <FormSuccess message={saved} />
   </section>;
 }
 

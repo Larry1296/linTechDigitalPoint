@@ -3008,3 +3008,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .combinedTable th[scope="row"], .combinedTable thead th:first-child { text-align: left; font-weight: 500; }
 .combinedTable tfoot th, .combinedTable tfoot td { font-weight: 800; border-bottom: 0; }
 .dashPartLinks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; }
+.pinField { display:grid; gap:6px; justify-items:center; }
+.pinField input { width:min(100%, 220px); text-align:center; font-size:32px; letter-spacing:.5em; padding:10px 0 10px .5em; }
+.pinField small { color:var(--muted); }
+.pinSettings { display:grid; gap:14px; }
+.pinSettings .pinRow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between; }

@@ -19,15 +19,13 @@ export function AuthProvider({ children }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [authState, setAuthState] = useState("signed_out");
   const locked = ["locking", "locked", "unlocking"].includes(authState);
-  const [seconds, setSeconds] = useState(null);
+  const [pinLength, setPinLength] = useState(null);
   const [busy, setBusy] = useState(false);
   const [lockError, setLockError] = useState("");
   const userRef = useRef(null);
   const access = useRef({ deadline: null, locked: false, serverTime: 0 });
   const lockGeneration = useRef(0);
   const lastRefreshAttempt = useRef(0);
-  const renewing = useRef(false);
-  const lastRenewal = useRef(0);
 
   const lock = useCallback(() => {
     if (access.current.locked) return;
@@ -36,9 +34,9 @@ export function AuthProvider({ children }) {
     setWorkspaceLocked(true);
     setAuthState("locking");
     setSessionExpired(true);
-    setSeconds(0);
     broadcast('lock');
-    void api('/api/v1/auth/lock/', { method:'POST' }).catch(() => {}).finally(() => { if (access.current.locked) setAuthState('locked'); });
+    void api('/api/v1/auth/lock/', { method:'POST' }).then(data => setPinLength(data?.session?.pin_length ?? null)).catch(() => {})
+      .finally(() => { if (access.current.locked) setAuthState('locked'); });
   }, []);
   const updateAccess = useCallback((state, allowUnlock = false) => {
     if (!state) return;
@@ -46,12 +44,11 @@ export function AuthProvider({ children }) {
     if (state.server_time < access.current.serverTime) return;
     access.current.serverTime = state.server_time;
     access.current.deadline = Date.now() + (state.expires_at - state.server_time) * 1000;
-    if (state.locked || access.current.deadline <= Date.now()) { lock(); return; }
+    if (state.locked || access.current.deadline <= Date.now()) { setPinLength(state.pin_length ?? null); lock(); return; }
     access.current.locked = false;
     setAuthState("authenticated");
     setSessionExpired(false);
     setLockError("");
-    setSeconds(Math.ceil((access.current.deadline - Date.now()) / 1000));
     setWorkspaceLocked(false);
   }, [lock]);
   const applyIdentity = useCallback((data, allowUnlock = false) => {
@@ -92,7 +89,7 @@ export function AuthProvider({ children }) {
     userRef.current = null;
     setUser(null);
     setAuthState("signed_out");
-    setSeconds(null);
+    setPinLength(null);
     setLockError("");
     resetCsrfToken();
     setBusinessPresentation(null);
@@ -121,7 +118,7 @@ export function AuthProvider({ children }) {
     await refresh(true);
   }, [refresh]);
 
-  // Business set-up is signed-in work too: activity keeps it alive, and an idle lock covers it without losing the steps done.
+  // Business set-up is signed-in work too: a lock covers it without losing the steps done.
   const inWorkspace = location.pathname.startsWith("/admin") || location.pathname === "/onboarding";
   useEffect(() => {
     const expired = () => {
@@ -142,53 +139,18 @@ export function AuthProvider({ children }) {
     };
   }, [location, navigate, lock, updateAccess, clearIdentity, inWorkspace]);
 
-  const renew = useCallback(async (explicit = false) => {
-    if (renewing.current || access.current.locked || !userRef.current) return;
-    renewing.current = true;
-    lastRenewal.current = Date.now();
-    if (explicit) { setBusy(true); setLockError(""); }
-    try {
-      let data;
-      try {
-        data = await api("/api/v1/auth/activity/", { method: "POST" });
-      } catch (error) {
-        // A stale access token (routine rotation, not idle time) surfaces as 401 here
-        // because this endpoint is exempt from the generic silent-refresh-and-retry path.
-        // Refresh it once and retry before treating this as anything session-related.
-        if (error.status === 401) {
-          await refreshAccess();
-          data = await api("/api/v1/auth/activity/", { method: "POST" });
-        } else throw error;
-      }
-      updateAccess(data.session);
-      broadcast("sync");
-    } catch (error) {
-      if (error.status === 423) lock();
-      // A 401 here means refreshAccess() already dispatched session-expired or
-      // session-locked itself; nothing idle-lock-specific to do on top of that.
-      else if (error.status !== 401) setLockError(error.message || "Could not renew the session. Check your connection.");
-    } finally { renewing.current = false; if (explicit) setBusy(false); }
-  }, [updateAccess, lock]);
-
   useEffect(() => {
     if (!user?.id || !inWorkspace) return;
+    // The workspace never locks for being idle: whether the page is in view or not, its access token is renewed
+    // before it runs out, so the session stays open for its 12 hours and a customer's question is answered at once.
+    // It locks only when the person locks it, or when those 12 hours end (then the password starts it afresh).
     const tick = () => {
       if (access.current.locked || access.current.deadline == null) return;
-      const remaining = Math.ceil((access.current.deadline - Date.now()) / 1000);
-      setSeconds(Math.max(0, remaining));
-      if (remaining <= 0) lock();
-      else if (!document.hidden && accessNeedsRefresh() && Date.now() - lastRefreshAttempt.current >= 15000) {
+      if (access.current.deadline <= Date.now()) lock();
+      else if (accessNeedsRefresh() && Date.now() - lastRefreshAttempt.current >= 15000) {
         lastRefreshAttempt.current = Date.now();
         void refreshAccess().catch(() => {});
       }
-    };
-    const activity = event => {
-      if (!event.isTrusted) return;
-      if (document.hidden || access.current.locked || access.current.deadline == null) return;
-      const remaining = access.current.deadline - Date.now();
-      if (remaining <= 0) { lock(); return; }
-
-      if (Date.now() - lastRenewal.current >= 30000) void renew();
     };
     const sync = async (allowUnlock = false) => {
       tick();
@@ -210,8 +172,6 @@ export function AuthProvider({ children }) {
         else void sync(JSON.parse(event.newValue)?.action === "unlocked");
       } catch { /* Ignore unrelated storage data. */ }
     };
-    const events = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"];
-    for (const event of events) window.addEventListener(event, activity, { passive: true, capture: true });
     const timer = window.setInterval(tick, 1000);
     window.addEventListener("focus", visibility);
     window.addEventListener("online", visibility);
@@ -219,14 +179,34 @@ export function AuthProvider({ children }) {
     document.addEventListener("visibilitychange", visibility);
     return () => {
       window.clearInterval(timer);
-      for (const event of events) window.removeEventListener(event, activity, { capture: true });
       window.removeEventListener("focus", visibility);
       window.removeEventListener("online", visibility);
       window.removeEventListener("storage", storage);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [user?.id, inWorkspace, lock, renew, updateAccess, refresh, clearIdentity, navigate]);
+  }, [user?.id, inWorkspace, lock, updateAccess, refresh, clearIdentity, navigate]);
 
+  // A lock the person made opens with their PIN. A wrong one says how many tries are left; after the last, the server
+  // stops offering the PIN (pin_length becomes null) and the lock screen asks for the password.
+  const unlockWithPin = async (pin) => {
+    if (busy) return false;
+    setBusy(true); setAuthState("unlocking"); setLockError("");
+    try {
+      const data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ pin }) });
+      resetCsrfToken();
+      applyIdentity(data, true);
+      broadcast("unlocked");
+      return true;
+    } catch (error) {
+      if (error.status === 401) { clearIdentity(); setAuthState('expired'); navigate('/login?reason=session-expired', { replace:true }); }
+      else {
+        setAuthState('locked');
+        if (error.data?.session) setPinLength(error.data.session.pin_length ?? null);
+        setLockError(error.message);
+      }
+      return false;
+    } finally { setBusy(false); }
+  };
   // quiet: an automatic try (see SessionLockOverlay); a wrong password then shows no error and returns false.
   const unlock = async (password, { quiet = false } = {}) => {
     if (busy) return false;
@@ -254,7 +234,6 @@ export function AuthProvider({ children }) {
       }
       rememberPasswordLength(password);
       applyIdentity(data, true);
-      lastRenewal.current = Date.now();
       broadcast("unlocked");
       return true;
     } catch (error) {
@@ -270,15 +249,15 @@ export function AuthProvider({ children }) {
     broadcast("logout");
     navigate("/", { replace: true });
   };
-  // The idle lock only ever applies to the authenticated workspace (/admin and business set-up): a valid
+  // The lock only ever applies to the authenticated workspace (/admin and business set-up): a valid
   // device session picked up while browsing the public site must never hide or
   // overlay-lock public pages like the homepage, /login, or /register.
   const lockedHere = locked && inWorkspace;
   const overlay = Boolean(user) && lockedHere;
   return <AuthContext.Provider value={{ user, loading, sessionExpired, locked, authState, lock, refresh, signedIn, logout }}>
     <div className="sessionWorkspace" style={lockedHere ? { visibility: "hidden" } : undefined} inert={overlay ? true : undefined} aria-hidden={overlay ? true : undefined}>{children}</div>
-    {overlay && <SessionLockOverlay locked={locked} seconds={seconds} username={user.username} busy={busy} error={lockError}
-      onStay={() => renew(true)} onUnlock={unlock} onLogout={() => logout().catch(error => setLockError(error.message))} />}
+    {overlay && <SessionLockOverlay username={user.username} pinLength={pinLength} busy={busy} error={lockError}
+      onUnlock={unlock} onPin={unlockWithPin} onLogout={() => logout().catch(error => setLockError(error.message))} />}
   </AuthContext.Provider>;
 }
 export function useAuth() {

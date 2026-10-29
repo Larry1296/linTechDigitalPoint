@@ -100,8 +100,6 @@
 .statusPill + .statusPill { margin-left:6px; }
 .subscriptionCountdown { font-variant-numeric:tabular-nums; white-space:nowrap; }
 .subscriptionEnds { color:var(--muted); font-size:13px; }
-.platformProtected { display:grid; gap:10px; justify-items:start; margin-top:14px; }
-.platformProtected .protectedCard { margin:0; }
 /* What one business pays for each plan, and the price for each kind of business on a plan. */
 .platformPrices { display:grid; gap:6px; margin:0 0 12px; padding:0; list-style:none; }
 .platformPrices small { color:var(--muted); }

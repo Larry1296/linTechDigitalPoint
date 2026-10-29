@@ -8,7 +8,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: vi.fn() }));
-vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), askForm: vi.fn(async () => ({ password: "Sign-in-1" })) }));
 
 const settings = { name: "Alpha", business_type: "Duka / general shop", business_model: "GOODS", sector: "duka", business_size: "SMALL", phone: "", email: "", address: "", currency: "KES", timezone: "Africa/Nairobi",
   country: "KE", enabled_modules: ["inventory", "pos"], available_modules: ["inventory", "pos", "mpesa"], receipt_footer: "" };
@@ -17,8 +17,20 @@ const staff = { roles: ["ADMIN", "MANAGER", "CASHIER"], staff: [
   { id: 2, username: "jane", email: "", name: "Jane", role: "CASHIER", status: "ACTIVE" },
 ] };
 
+let pins;
+function pinState(options) {
+  if (options.method === "POST") {
+    const { page, pin } = JSON.parse(options.body);
+    if (page) pins.pages[page] = { ...pins.pages[page], own_pin: true, length: pin.length };
+    else pins.pin = { set: true, length: pin.length };
+  }
+  if (options.method === "DELETE") { const { page } = JSON.parse(options.body); pins.pages[page] = { ...pins.pages[page], own_pin: false, length: null }; }
+  return structuredClone(pins);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  pins = { pin: { set: false, length: null }, pages: { mpesa: { label: "M-Pesa", own_pin: false, length: null }, investments: { label: "Investments", own_pin: false, length: null } } };
   api.mockImplementation(async (path, options = {}) => {
     if (path === "/api/v1/tenancy/business-profiles/") return profiles;
     if (path === "/api/v1/tenancy/settings/") return options.method === "PATCH" ? { ...settings, ...JSON.parse(options.body) } : settings;
@@ -26,6 +38,7 @@ beforeEach(() => {
       { id: 1, name: "Main branch", address: "", phone: "", email: "", is_active: true, is_main: true },
       { id: 2, name: "Old stall", address: "Kiandas", phone: "", email: "", is_active: false, is_main: false }];
     if (path === "/api/v1/tenancy/staff/") return options.method === "POST" ? { id: 3, username: "sam" } : staff;
+    if (path === "/api/v1/auth/lock-pin/") return pinState(options);
     return {};
   });
 });
@@ -65,12 +78,38 @@ it("lets the owner change a role and suspend a staff member", async () => {
   expect(bodies).toEqual([{ role: "MANAGER" }, { status: "SUSPENDED" }]);
 });
 
-it("shows only the password form to other staff", () => {
+it("shows only the PIN and password forms to other staff", async () => {
   renderAs("CASHIER");
   expect(screen.getByRole("heading", { name: "Change your password" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Lock PIN and private pages" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Business details" })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Staff" })).toBeNull();
-  expect(api).not.toHaveBeenCalled();
+  expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/v1/auth/lock-pin/"]);
+});
+
+it("sets the lock PIN, gives a private page its own, and shares the lock PIN again", async () => {
+  renderAs("CASHIER");
+  const card = (await screen.findByRole("heading", { name: "Lock PIN and private pages" })).closest("section");
+  expect(within(card).getByText("Not set yet")).toBeInTheDocument();
+  const fill = (pin, again = pin) => {
+    fireEvent.change(within(card).getByLabelText("New PIN (4 to 6 digits)"), { target: { value: pin } });
+    fireEvent.change(within(card).getByLabelText("New PIN again"), { target: { value: again } });
+    fireEvent.change(within(card).getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
+  };
+  fill("4826", "4827");
+  fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
+  expect(await within(card).findByText("The two PINs are not the same.")).toBeInTheDocument();
+  fill("4826");
+  fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
+  expect(await within(card).findByText("Set · 4 digits")).toBeInTheDocument();
+  fireEvent.change(within(card).getByLabelText("PIN to set"), { target: { value: "mpesa" } });
+  fill("573918");
+  fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
+  expect(await within(card).findByText("Its own PIN · 6 digits")).toBeInTheDocument();
+  const sent = api.mock.calls.filter(([path, o]) => path === "/api/v1/auth/lock-pin/" && o?.method === "POST").map(([, o]) => JSON.parse(o.body));
+  expect(sent).toEqual([{ page: "", pin: "4826", password: "Sign-in-1" }, { page: "mpesa", pin: "573918", password: "Sign-in-1" }]);
+  fireEvent.click(within(card).getByRole("button", { name: "Use lock PIN instead" }));
+  await waitFor(() => expect(within(card).getAllByText("Uses your lock PIN")).toHaveLength(2));
 });
 
 it("checks the new passwords match before sending", async () => {
@@ -80,7 +119,7 @@ it("checks the new passwords match before sending", async () => {
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "Other-pass-2026" } });
   fireEvent.click(screen.getByRole("button", { name: "Change password" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("do not match");
-  expect(api).not.toHaveBeenCalled();
+  expect(api).not.toHaveBeenCalledWith("/api/v1/auth/password/change/", expect.anything());
 });
 
 it("lets the owner add a branch and refreshes the branch menu", async () => {
