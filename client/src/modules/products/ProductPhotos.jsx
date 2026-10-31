@@ -26,10 +26,8 @@ export function ProductPhotos({
     : main?.file || main?.image_url;
   const submit = async (event) => {
     event.preventDefault();
-    if (!file && !(reuse && (scope || adding))) {
-      setError("Choose a Product display image to upload.");
-      return;
-    }
+    // Photos are optional: a new type can be added without one. Changing a photo needs one chosen (or the main photo reused).
+    if (!adding && !file && !(reuse && scope)) return;
     const data = new FormData(event.currentTarget);
     if (file) data.set("display_image", file);
     data.set("use_product_image", String(reuse));
@@ -142,10 +140,9 @@ export function ProductPhotos({
               file={file}
               onChange={setFile}
               existingUrl={adding ? "" : existingUrl}
-              required
             />
           )}
-          <button>
+          <button disabled={!adding && !file && !(reuse && scope)}>
             {saving
               ? "Saving…"
               : adding
