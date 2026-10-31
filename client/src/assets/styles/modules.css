@@ -1907,7 +1907,7 @@ form a:not(.button, .pageBackLink),
 @media (max-height: 600px) and (min-width: 600px) {
   .sessionLockCard { width: min(100%, 700px); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: row dense; column-gap: 28px; align-items: center; text-align: left; }
   .sessionLockCard > :is(.sessionLockIcon, .eyebrow, h1, #session-lock-description) { grid-column: 1; justify-self: start; }
-  .sessionLockCard > form { grid-column: 2; grid-row: 1 / span 3; align-self: end; }
+  .sessionLockCard > :is(form, .pinField) { grid-column: 2; grid-row: 1 / span 3; align-self: end; }
   .sessionLockCard > .sessionCountdown { grid-column: 2; grid-row: 1 / span 2; align-self: end; }
   .sessionLockCard > button:not(.secondary) { grid-column: 2; grid-row: 3; }
   .sessionLockCard > button.secondary { grid-column: 2; grid-row: 4; align-self: start; }
@@ -3008,8 +3008,32 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .combinedTable th[scope="row"], .combinedTable thead th:first-child { text-align: left; font-weight: 500; }
 .combinedTable tfoot th, .combinedTable tfoot td { font-weight: 800; border-bottom: 0; }
 .dashPartLinks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; }
-.pinField { display:grid; gap:6px; justify-items:center; }
-.pinField input { width:min(100%, 220px); text-align:center; font-size:32px; letter-spacing:.5em; padding:10px 0 10px .5em; }
+/* A PIN shows one box per digit, a dot in each typed one and the next one lit; the real input lies unseen over the
+   boxes, so a tap anywhere on them brings up the keypad. */
+.pinField { display:grid; gap:8px; justify-items:center; justify-self:stretch; }
+.pinField > label { font-weight:700; }
+.pinBoxes { --pin-box:48px; --pin-gap:10px; position:relative; box-sizing:border-box; width:min(100%, calc(var(--pin-length) * (var(--pin-box) + var(--pin-gap)) - var(--pin-gap))); display:grid; grid-template-columns:repeat(var(--pin-length), minmax(0, 1fr)); gap:var(--pin-gap); }
+.pinBox { box-sizing:border-box; aspect-ratio:6 / 7; display:grid; place-items:center; border:1.5px solid var(--line); border-radius:12px; background:var(--surface); transition:border-color .12s, box-shadow .12s; }
+.pinBoxFilled::after { content:""; width:12px; height:12px; border-radius:50%; background:var(--text); }
+.pinBoxActive { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
+.pinBoxesError .pinBox { border-color:var(--danger, #b42318); }
+.pinBoxes input { position:absolute; inset:0; width:100%; height:100%; min-height:0; margin:0; padding:0; border:0; opacity:0; color:transparent; caret-color:transparent; background:none; cursor:pointer; }
 .pinField small { color:var(--muted); }
+.pinField [role="alert"] { justify-self:stretch; text-align:left; }
+/* A card that opens with a PIN is narrow, its boxes and buttons sized to the PIN rather than the screen. */
+.sessionLockCard:has(> .pinField) { width:min(100%, 400px); }
+.sessionLockCard > .linkButton { justify-self:center; }
+/* Short screens keep the PIN card whole and centred with no scrolling: smaller boxes, no hint, and sideways the boxes,
+   the password link and Log out stacked on the right. */
+@media (max-height:600px) {
+  .pinField { gap:6px; }
+  .pinField > small { display:none; }
+  .pinBoxes { --pin-box:42px; --pin-gap:8px; }
+}
+@media (max-height:600px) and (min-width:600px) {
+  .sessionLockCard:has(> .pinField) { width:min(100%, 640px); }
+  .sessionLockCard > .pinField { grid-row:1 / span 2; }
+  .sessionLockCard > .linkButton { grid-column:2; grid-row:3; justify-self:center; }
+}
 .pinSettings { display:grid; gap:14px; }
 .pinSettings .pinRow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between; }
