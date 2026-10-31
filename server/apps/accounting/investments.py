@@ -377,9 +377,10 @@ def claim(*, movement, user, place, amount=None, note=""):
     from .models import DailyClosing, FinancialPeriod
     from .money_check import expected
     from .services import post as post_cash
+    from .money_check import _drawer, _place_label
     lock_business()
     movement = InvestmentMovement.objects.select_for_update(of=("self",)).select_related("investment").get(pk=movement.pk)
-    place = str(place or "").upper()
+    place, unit = place_key(place)
     if place not in BUSINESS:
         raise ValidationError("Choose where the business's money came from: the cash drawer, Lipa na M-Pesa till, bank or other money.")
     if movement.kind != InvestmentMovement.DEPOSIT or movement.reversed_at or movement.whose == BUSINESS_MONEY or movement.purchase_id:
@@ -390,16 +391,17 @@ def claim(*, movement, user, place, amount=None, note=""):
     if amount > own_value(movement.investment):
         raise ValidationError(f"Only {own_value(movement.investment):,.2f} of your own money is still in {movement.investment.name}: "
                               "money taken out since came from it. Mark less, or undo that first.")
-    has = expected(place)[0]
+    drawer = _drawer(place, unit)
+    has = expected(place, drawer)[0]
     if amount > has:
-        raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows, "
+        raise ValidationError(f"{_place_label(place, unit)} only has {has:,.2f} of the business's money as far as the app knows, "
                               "so no more of it can be in the investment.")
     day = movement.occurred_on
     account_closed = DailyClosing.objects.filter(account__payment_method=place, date__gte=day).exists()
     if account_closed or FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
         day = timezone.localdate()
     words = f"Put into {movement.investment.name}: the business's money, from {PLACE_WORDS[place]}"
-    entry = post_cash(unit="SHOP", method=place, amount=-amount, kind="INVESTMENT", reference=f"{words} (first recorded as own money)"[:160],
+    entry = post_cash(unit=drawer or unit or "SHOP", method=place, amount=-amount, kind="INVESTMENT", reference=f"{words} (first recorded as own money)"[:160],
                       key=f"investment-claim:{movement.pk}", user=user, occurred_at=_moment(day), branch=movement.branch, journal=False)
     note = str(note or "").strip()
     InvestmentMovement.objects.filter(pk=movement.pk).update(
@@ -415,6 +417,20 @@ def claim(*, movement, user, place, amount=None, note=""):
 SWITCH = "business-money-in"
 
 
+def place_key(key):
+    """(place, unit) from a key of business_places(): "MPESA", or "CASH-SHOP" for one part's own cash drawer."""
+    place, _, unit = str(key or "").upper().partition("-")
+    return place, (unit or None)
+
+
+def business_places():
+    """Every place the business's money is expected in, with how much: one row per cash drawer when each part keeps
+    its own. [{"key", "method", "unit", "label", "expected"}], only places expecting money."""
+    from .money_check import places
+    return [{"key": f"{row['method']}-{row['unit']}" if row["unit"] else row["method"], "method": row["method"], "unit": row["unit"],
+             "label": row["label"], "expected": row["expected"]} for row in places() if row["expected"] > 0]
+
+
 @transaction.atomic
 def business_money_in(*, investment, user, amounts, key, occurred_on=None):
     """The business's money already in the investment, recorded as the owner's own: ``amounts`` {place: amount} of what
@@ -422,29 +438,31 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
     business's money put in from that place and, on the same day, as that much of the owner's own taken out, so the
     fund's value stays the same, the place no longer expects the money, and the business's money in the investment is
     right. Sales and profit do not change. Undoing either half undoes both."""
-    from .money_check import expected
+    from .money_check import _drawer, _place_label, expected
     lock_business()
     if InvestmentMovement.objects.filter(idempotency_key__startswith=f"{SWITCH}:{key}:").exists():
         return investment
-    rows = [(str(place).upper(), _amount(amount)) for place, amount in (amounts or {}).items() if amount not in (None, "", 0, "0")]
+    rows = [(str(name).upper(), _amount(amount)) for name, amount in (amounts or {}).items() if amount not in (None, "", 0, "0")]
     if not rows:
         raise ValidationError("Enter how much of the business's money from each place is in the investment.")
-    for place, amount in rows:
+    for name, amount in rows:
+        place, unit = place_key(name)
         if place not in BUSINESS:
             raise ValidationError("Choose the cash drawer, Lipa na M-Pesa till, bank or other money.")
-        has = expected(place)[0]
+        has = expected(place, _drawer(place, unit))[0]
         if amount > has:
-            raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows.")
+            raise ValidationError(f"{_place_label(place, unit)} only has {has:,.2f} of the business's money as far as the app knows.")
     total = sum((amount for _, amount in rows), Decimal("0"))
     if total > own_value(investment):
         raise ValidationError(f"{investment.name} holds {own_value(investment):,.2f} recorded as your own money, so no more than that "
                               "can be the business's. Record any money put in that is missing first.")
     note = "The business's money already in the fund, first recorded as your own"
-    for place, amount in rows:
-        move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place,
-             key=f"{SWITCH}:{key}:business:{place}", occurred_on=occurred_on, note=note)
+    for place_name, amount in rows:
+        place, unit = place_key(place_name)
+        move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place, unit=unit,
+             key=f"{SWITCH}:{key}:business:{place_name}", occurred_on=occurred_on, note=note)
         move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=amount, source=OWNER,
-             key=f"{SWITCH}:{key}:own:{place}", occurred_on=occurred_on, note=note)
+             key=f"{SWITCH}:{key}:own:{place_name}", occurred_on=occurred_on, note=note)
     return investment
 
 

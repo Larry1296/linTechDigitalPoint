@@ -443,7 +443,7 @@ function RateSource({ investment, funds, canMove, onChanged }) {
 // What each place expects, taken in turn until the owner's own money in the fund is used up: {method: "amount"}.
 const fill = (places, room) => places.reduce(([left, chosen], p) => {
   const take = Math.min(Number(p.expected), Math.max(left, 0));
-  return [left - take, { ...chosen, [p.method]: take ? String(take) : "" }];
+  return [left - take, { ...chosen, [p.key]: take ? String(take) : "" }];
 }, [room, {}])[1];
 
 // The business's money already in the fund but recorded as the owner's own: how much from each place. Each place starts
@@ -473,8 +473,8 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
       <p className="muted">The business's money (what it sold and earned, less what it spent) that you put into {investment.name}. Each place shows
         what the app expects there; keep it, or enter how much of it is in the fund.</p>
       <fieldset disabled={busy} className="loanFields">
-        {places.map((p) => <FormField key={p.method} label={`From ${p.label.toLowerCase()} (expects ${money(p.expected)})`} type="number" min="0" step="0.01"
-          max={Number(p.expected)} value={amounts[p.method]} onChange={(event) => setAmounts({ ...amounts, [p.method]: event.target.value })} />)}
+        {places.map((p) => <FormField key={p.key} label={`From ${p.label.toLowerCase()} (expects ${money(p.expected)})`} type="number" min="0" step="0.01"
+          max={Number(p.expected)} value={amounts[p.key]} onChange={(event) => setAmounts({ ...amounts, [p.key]: event.target.value })} />)}
         <FormField label="Date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
       </fieldset>
       <p className="muted">Together {money(total)}, out of {money(investment.owner_value)} recorded as your own money in it.</p>
@@ -522,7 +522,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
     const values = await askForm({ title: `Was this ${money(m.amount)} the business's money?`,
       text: `It came out of the business's place on ${date(m.occurred_on)}: that place goes down by it and the business's money in ${investment.name} goes up. Sales and profit stay as they are.`,
       confirmButtonText: "It was the business's money", fields: [
-        { name: "place", label: "It came from", type: "select", value: "MPESA", options: PLACES },
+        { name: "place", label: "It came from", type: "select", value: places[0]?.key ?? "MPESA",
+          options: places.length ? places.map((p) => [p.key, `${p.label} (expects ${money(p.expected)})`]) : PLACES },
         { name: "amount", label: `How much of it was the business's (${businessCurrency()})`, type: "number", value: String(Number(m.amount)), max: String(Number(m.amount)), required: true },
       ] });
     if (!values) return;

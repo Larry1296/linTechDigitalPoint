@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -90,13 +90,12 @@ class InvestmentsView(APIView):
     def get(self, request):
         settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
-        from .money_check import PLACES, expected
-        each = [{"method": method, "label": label, "expected": expected(method)[0]} for method, label in PLACES]
+        each = business_places()
         in_places = sum((row["expected"] for row in each), Decimal("0"))
         return Response({"investments": rows,
                          # The business's money the app expects in its drawer, till, bank and other money, not in investments.
                          "business_in_places": in_places,
-                         "business_places": [row for row in each if row["expected"] > 0],
+                         "business_places": each,
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),

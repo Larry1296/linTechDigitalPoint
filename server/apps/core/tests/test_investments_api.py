@@ -617,3 +617,30 @@ def test_the_businesss_money_already_in_the_fund_is_recorded_in_one_step_and_und
     assert (D(str(back["value"])), D(str(back["shop_value"])), D(str(back["owner_value"]))) == (D("50000"), D("30000"), D("20000"))
     money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
     assert money["CASH"] == D("8000")
+
+
+def test_with_a_cash_drawer_for_each_part_the_businesss_money_in_the_fund_comes_from_each_drawer(shop):
+    client, org, owner, *_ = shop
+    org.enabled_modules = ["inventory", "pos", "services", "reports", "expenses", "investments"]
+    org.settings = {"money_mode": "SEPARATE_CASH"}
+    org.save(update_fields=["enabled_modules", "settings"])
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("4471"), kind="INCOME", reference="Sales", key="shop", user=owner)
+        post(unit="CYBER", method="CASH", amount=D("900"), kind="INCOME", reference="Services", key="cyber", user=owner)
+        post(unit="SHOP", method="MPESA", amount=D("309"), kind="INCOME", reference="Till", key="till", user=owner)
+    own = _move(client, mmf, "DEPOSIT", "10000", "OWNER", "own").json()["movements"][0]["id"]
+    places = {row["key"]: D(str(row["expected"])) for row in client.get("/api/v1/accounting/investments/").json()["business_places"]}
+    assert places == {"CASH-SHOP": D("4471"), "CASH-CYBER": D("900"), "MPESA": D("309")}
+    row = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH-SHOP": "4471", "CASH-CYBER": "900", "MPESA": "309"},
+                      "idempotency_key": "drawers"}, format="json")
+    assert row.status_code == 201, row.content
+    assert (D(str(row.json()["shop_value"])), D(str(row.json()["owner_value"]))) == (D("5680"), D("4320"))
+    assert client.get("/api/v1/accounting/investments/").json()["business_places"] == []
+    # Marking a deposit names the drawer too.
+    with organization_context(org):
+        post(unit="CYBER", method="CASH", amount=D("500"), kind="INCOME", reference="More services", key="cyber-2", user=owner)
+    marked = client.post(f"/api/v1/accounting/investments/movements/{own}/business/", {"place": "CASH-CYBER", "amount": "500"}, format="json")
+    assert marked.status_code == 200, marked.content
+    assert client.post(f"/api/v1/accounting/investments/movements/{own}/business/", {"place": "CASH", "amount": "1"}, format="json").status_code == 400
