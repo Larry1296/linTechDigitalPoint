@@ -71,7 +71,7 @@ it("lets the owner set a page's PIN the first time, then opens it; staff are ask
   page();
   expect(await screen.findByRole("heading", { name: "Set the M-Pesa PIN" })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
-  fireEvent.change(screen.getByLabelText("M-Pesa PIN (4 to 6 digits)"), { target: { value: "4826" } });
+  fireEvent.change(screen.getByLabelText("M-Pesa PIN (4 to 6 numbers)"), { target: { value: "4826" } });
   fireEvent.change(screen.getByLabelText("The PIN again"), { target: { value: "4826" } });
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save and open" })); });
   expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
@@ -103,4 +103,12 @@ it("locks an open private page after five minutes untouched", async () => {
   await act(async () => {});
   expect(screen.getByLabelText("PIN")).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith("/api/v1/auth/protected/lock/", { method: "POST" });
+});
+
+it("keeps letters out of a new PIN as it is typed", async () => {
+  api.mockImplementation(async () => ({ protected: status({ pages: pages({ pin_set: false, pin_length: null }) }) }));
+  page();
+  const pin = await screen.findByLabelText("M-Pesa PIN (4 to 6 numbers)");
+  fireEvent.change(pin, { target: { value: "48ab26" } });
+  expect(pin).toHaveValue("4826");
 });

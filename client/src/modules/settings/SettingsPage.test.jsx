@@ -91,7 +91,7 @@ it("lets anyone set their own lock PIN, but only shows who sets the private page
   renderAs("CASHIER");
   const card = (await screen.findByRole("heading", { name: "Lock PIN and private pages" })).closest("section");
   const fill = (pin, again = pin) => {
-    fireEvent.change(within(card).getByLabelText("New PIN (4 to 6 digits)"), { target: { value: pin } });
+    fireEvent.change(within(card).getByLabelText("New PIN (4 to 6 numbers)"), { target: { value: pin } });
     fireEvent.change(within(card).getByLabelText("New PIN again"), { target: { value: again } });
     fireEvent.change(within(card).getByLabelText("Your sign-in password"), { target: { value: "Sign-in-1" } });
   };
@@ -212,4 +212,13 @@ it("lets the owner keep a staff member out of the pages they choose", async () =
   const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/staff/2/" && o?.method === "PATCH");
   expect(JSON.parse(options.body)).toEqual({ hidden_pages: ["loans", "mpesa"] });
   expect(screen.getByText("None: the owner sees every page")).toBeInTheDocument();
+});
+
+it("keeps letters out of a new PIN in Settings", async () => {
+  renderAs("CASHIER");
+  const card = (await screen.findByRole("heading", { name: "Lock PIN and private pages" })).closest("section");
+  const pin = within(card).getByLabelText("New PIN (4 to 6 numbers)");
+  pin.value = "12ab";
+  fireEvent.input(pin);
+  expect(pin).toHaveValue("12");
 });

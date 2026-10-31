@@ -698,10 +698,13 @@ export function InvestmentsPage() {
       {Number(data.business_in_places) > 0 && Number(data.owner_value) > 0 && <section className="investReminder" role="status" aria-label="Business money not marked">
         <div>
           <b>The app expects {money(data.business_in_places)} of the business's money in its till, drawer or bank</b>
-          <p>If that money is really in an investment, press “The business's money is in here” on its card: it fills in what each place
-            expects, and records it as the business's money in the fund in one step. Then the business's money here is right and the till,
-            drawer and bank are not expected to hold it.</p>
+          <p>If that money is really in an investment, record it as the business's money there: each place is filled in with what the app
+            expects, in one step. Then the business's money here is right and the till, drawer and bank are not expected to hold it.
+            From then on, say whose money it is each time you put money in or take it out.</p>
         </div>
+        {canMove && data.investments.find((i) => Number(i.owner_value) > 0) && <button type="button"
+          onClick={() => setPreset({ id: data.investments.find((i) => Number(i.owner_value) > 0).id, kind: "BUSINESS", nonce: Date.now() })}>
+          The business's money is in here</button>}
       </section>}
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
         <div>

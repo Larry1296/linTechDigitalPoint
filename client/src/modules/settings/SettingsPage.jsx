@@ -408,7 +408,7 @@ function PinSettings() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    if (!/^\d{4,6}$/.test(form.get("pin"))) { setError("A PIN is 4 to 6 digits."); return; }
+    if (!/^\d{4,6}$/.test(form.get("pin"))) { setError("A PIN is 4 to 6 numbers (0 to 9), with no letters."); return; }
     if (form.get("pin") !== form.get("again")) { setError("The two PINs are not the same."); return; }
     setBusy(true); setError(""); setSaved("");
     try {
@@ -435,8 +435,8 @@ function PinSettings() {
           {data.is_owner && Object.entries(data.pages).map(([page, info]) => <option key={page} value={page}>{info.set ? `Change or reset the ${info.label} PIN` : `Set the ${info.label} PIN`}</option>)}
         </select>
       </label>
-      <FormField label="New PIN (4 to 6 digits)" name="pin" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" />
-      <FormField label="New PIN again" name="again" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" />
+      <FormField label="New PIN (4 to 6 numbers)" name="pin" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} />
+      <FormField label="New PIN again" name="again" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} />
       <FormField label="Your sign-in password" name="password" type="password" required autoComplete="current-password" />
       <button disabled={busy}>{busy ? "Saving…" : "Save PIN"}</button>
     </form>

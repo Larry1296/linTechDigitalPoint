@@ -66,7 +66,9 @@ function PrivatePageLock({ page, state, onOpen }) {
   const [form, setForm] = useState({ password: "", pin: "", again: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const field = (key) => ({ value: form[key], onChange: (event) => setForm({ ...form, [key]: event.target.value }), readOnly: busy, required: true });
+  // A PIN is numbers only: anything else typed into a PIN box is dropped as it is typed.
+  const field = (key) => ({ value: form[key], readOnly: busy, required: true,
+    onChange: (event) => setForm({ ...form, [key]: key === "password" ? event.target.value : event.target.value.replace(/\D/g, "").slice(0, 6) }) });
   async function send(body) {
     setBusy(true); setError("");
     try {
@@ -82,7 +84,7 @@ function PrivatePageLock({ page, state, onOpen }) {
   // The owner sets the page's PIN the first time, confirmed with their sign-in password.
   async function setPin(event) {
     event.preventDefault();
-    if (!/^\d{4,6}$/.test(form.pin)) { setError("A PIN is 4 to 6 digits."); return; }
+    if (!/^\d{4,6}$/.test(form.pin)) { setError("A PIN is 4 to 6 numbers (0 to 9), with no letters."); return; }
     if (form.pin !== form.again) { setError("The two PINs are not the same."); return; }
     setBusy(true); setError("");
     try {
@@ -104,7 +106,7 @@ function PrivatePageLock({ page, state, onOpen }) {
         {page === "investments" ? " It is yours alone: nobody else can open it." : " Give it to the people who run it."} Only you can change or reset it, in Settings.</p>
       <form onSubmit={setPin}>
         <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />
-        <PasswordField label={`${info.label} PIN (4 to 6 digits)`} inputMode="numeric" autoComplete="off" maxLength={6} {...field("pin")} />
+        <PasswordField label={`${info.label} PIN (4 to 6 numbers)`} inputMode="numeric" autoComplete="off" maxLength={6} {...field("pin")} />
         <PasswordField label="The PIN again" inputMode="numeric" autoComplete="off" maxLength={6} {...field("again")} />
         <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save and open"}</button>
         <FormError title="Could not save." message={error} />
