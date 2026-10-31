@@ -136,6 +136,67 @@ def dashboard(request):
     return Response(dashboard_snapshot(request))
 
 
+# What the people working in the business undid or corrected, as the owner reads it: action -> what it was.
+STAFF_UNDOS = {
+    "MPESA_TRANSACTION_REVERSED": "Cancelled an M-Pesa transaction",
+    "MPESA_TRANSACTION_CORRECTED": "Corrected an M-Pesa transaction",
+    "MPESA_RECONCILIATION": "Closed an M-Pesa shift with a different count",
+    "SALE_RETURNED": "Took back a whole sale",
+    "SALE_ITEMS_RETURNED": "Took back items from a sale",
+    "SALE_CREDIT_NOTE": "Lowered a sale's price",
+    "SALE_DEBIT_NOTE": "Raised a sale's price",
+    "PAYMENT_NOT_RECEIVED": "Marked a payment as not received",
+    "CYBER_JOB_CANCELLED": "Cancelled a service job",
+    "STAY_CANCELLED": "Cancelled a room booking",
+    "STAY_NO_SHOW": "Marked a guest as not coming",
+}
+
+
+def _undo_detail(log, sales):
+    after, before = log.after or {}, log.before or {}
+    if log.action == "MPESA_TRANSACTION_REVERSED":
+        return f"{str(after.get('type', '')).replace('_', ' ').lower()} {after.get('original', '')} of {after.get('amount', '')}".strip()
+    if log.action == "MPESA_TRANSACTION_CORRECTED":
+        return f"{before.get('reference', '')}: {before.get('amount', '')} changed to {after.get('amount', '')}"
+    if log.action == "MPESA_RECONCILIATION":
+        return f"cash {after.get('cash_variance')}, float {after.get('float_variance')} against what was expected"
+    if log.object_type == "Sale":
+        return " · ".join(str(part) for part in [sales.get(log.object_id), after.get("return"), after.get("amount")] if part)
+    if log.object_type == "Payment":
+        return f"{after.get('method', '')} {after.get('amount', '')}".strip()
+    return str(after.get("number") or "")
+
+
+@api_view(["GET"])
+@permission_classes([IsInternalStaff])
+def staff_undos(request):
+    """For the owner: everything the business's staff undid or corrected in the last 30 days, newest first, each with who
+    did it, when and the reason they gave."""
+    from datetime import timedelta
+    from django.db.models import Q
+    from apps.core.models import AuditLog
+    from apps.tenancy.models import Membership
+    from apps.tenancy.permissions import is_business_owner
+    if not is_business_owner(request.user):
+        return Response({"detail": "What staff undid is for the business owner.", "code": "owner_only"}, status=403)
+    staff = Membership.objects.filter(organization=request.organization).exclude(role="OWNER").values_list("user_id", flat=True)
+    logs = list(AuditLog.objects.filter(action__in=STAFF_UNDOS, user_id__in=list(staff), created_at__gte=timezone.now() - timedelta(days=30))
+                .exclude(Q(action="MPESA_TRANSACTION_REVERSED") & Q(after__reason__startswith="Corrected:"))  # shown as the correction
+                .exclude(action="MPESA_RECONCILIATION", after__cash_variance="0.00", after__float_variance="0.00")
+                .select_related("user").order_by("-created_at")[:50])
+    sales = dict(Sale.objects.filter(pk__in=[int(log.object_id) for log in logs if log.object_type == "Sale" and log.object_id.isdigit()]).values_list("pk", "number"))
+    sales = {str(key): value for key, value in sales.items()}
+    if any(log.action == "MPESA_RECONCILIATION" for log in logs):
+        from apps.mpesa.models import MpesaReconciliation
+        reasons = dict(MpesaReconciliation.objects.filter(pk__in=[log.object_id for log in logs if log.action == "MPESA_RECONCILIATION"]).values_list("pk", "reason"))
+    else:
+        reasons = {}
+    return Response([{"id": log.pk, "at": log.created_at, "who": log.user.get_full_name() or log.user.username if log.user else "",
+                      "what": STAFF_UNDOS[log.action], "detail": _undo_detail(log, sales),
+                      "reason": (reasons.get(int(log.object_id)) if log.action == "MPESA_RECONCILIATION" else (log.after or {}).get("reason")) or ""}
+                     for log in logs])
+
+
 @api_view(["GET"])
 @permission_classes([IsInternalStaff])
 def work_dashboard(request):

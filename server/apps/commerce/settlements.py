@@ -124,7 +124,11 @@ def return_sale(*, sale, user, reason):
         return sale
     if sale.status != 'COMPLETED' or sale.items.filter(variant__product__product_type='SERVICE').exists():
         raise ValidationError('Full stock returns are supported for completed goods sales.')
-    return _undo_sale(sale, user, reason, status='REFUNDED')
+    sale = _undo_sale(sale, user, reason, status='REFUNDED')
+    from apps.core.models import AuditLog
+    AuditLog.objects.create(action='SALE_RETURNED', object_type='Sale', object_id=str(sale.pk), user=user,
+                            after={'sale': sale.number, 'amount': str(sale.total), 'reason': reason.strip()})
+    return sale
 
 
 @transaction.atomic

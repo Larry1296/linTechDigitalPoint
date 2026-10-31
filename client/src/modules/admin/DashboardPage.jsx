@@ -15,6 +15,7 @@ import { BusinessAnalysis } from "./BusinessAnalysis";
 import { StockQuickSearch } from "./StockQuickSearch";
 import { SalesProfits } from "./SalesProfits";
 import { WorkDashboard } from "./WorkDashboard";
+import { StaffUndos } from "./StaffUndos";
 
 // On phones tables stack row by row; each figure is labelled with its column heading so it still says what it is.
 function useColumnLabels(root) {
@@ -170,6 +171,7 @@ function BusinessDashboard() {
     {on("inventory") && can("catalog.view_product") && <StockQuickSearch />}
     <InvestmentReminder />
     <CommissionReminder />
+    {user?.roles?.[0] === "OWNER" && <StaffUndos />}
     <section className="dashKpis" aria-label="Where the business has reached">
       {kpis.map(([label, value, detail, href, tone]) => {
         const body = <><span>{label}</span><strong>{value}</strong><small>{detail}</small></>;

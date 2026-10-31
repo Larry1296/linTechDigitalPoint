@@ -204,13 +204,15 @@ function ChangeForm({ stay, onSaved, onClose }) {
 }
 
 function CancelForm({ stay, act, onClose }) {
+  // An employee says why: the business owner sees it with what staff undid.
+  const employee = useAuth().user?.roles?.[0] === "EMPLOYEE";
   const held = Number(stay.bill.held);
   const [form, setForm] = useState({ reason: "", no_show: false, keep_paid: false, give_back_by: "CASH" });
   const { busy, error, submit } = useSubmit(() => act("cancel", form));
   return <form className="hotelForm" onSubmit={(e) => void submit(e)} aria-label="Cancel the booking">
     <fieldset disabled={busy} className="chamaPlainFieldset"><div className="formGrid">
       <label className="checkLine"><input type="checkbox" checked={form.no_show} onChange={(e) => setForm({ ...form, no_show: e.target.checked })} /> The guest did not come</label>
-      <label className="wide">Reason<TextBox value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} maxLength={200} /></label>
+      <label className="wide">Reason{employee ? " (the business owner sees it)" : ""}<TextBox value={form.reason} required={employee} onChange={(e) => setForm({ ...form, reason: e.target.value })} maxLength={200} /></label>
       {held > 0 && <label>{money(held)} was paid<select value={form.keep_paid ? "KEEP" : form.give_back_by} onChange={(e) => setForm({ ...form, keep_paid: e.target.value === "KEEP", give_back_by: e.target.value === "KEEP" ? form.give_back_by : e.target.value })}>
         {METHODS.map(([id, name]) => <option key={id} value={id}>Give it back by {name.toLowerCase()}</option>)}
         <option value="KEEP">Keep it as the booking's price</option>

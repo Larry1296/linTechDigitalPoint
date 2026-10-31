@@ -117,13 +117,26 @@ def test_on_the_agent_desk_an_employee_records_and_counts_blind_without_seeing_m
     desk = jane.get('/api/v1/mpesa/dashboard/').json()
     assert desk['employee'] is True and desk['session']['id'] == shift and 'opening_cash' not in desk['session']
     assert not {'cash', 'float', 'in_operation', 'commission', 'commission_month', 'deposits'} & set(desk)
-    assert all(set(source) == {'value', 'label'} for source in desk['sources'])
+    assert 'sources' not in desk
+    for kind in ['FLOAT_TOPUP', 'CASH_REBALANCE']:
+        refused = jane.post('/api/v1/mpesa/transactions/', {'session': shift, 'transaction_type': kind, 'amount': '1000', 'paid_by': 'OUTSIDE',
+                                                          'idempotency_key': f'jane-{kind}'}, format='json')
+        assert refused.status_code == 400 and 'Only the business owner' in str(refused.json()), kind
     deposit = jane.post('/api/v1/mpesa/transactions/', {'session': shift, 'transaction_type': 'CUSTOMER_DEPOSIT', 'amount': '500',
                                                       'customer_phone': '0712345678', 'idempotency_key': 'jane-1'}, format='json')
     assert deposit.status_code == 201, deposit.content
     listed = jane.get('/api/v1/mpesa/transactions/').json()
     assert [row['id'] for row in listed] == [deposit.json()['id']] and not any('commission' in key for key in listed[0])
     assert jane.get('/api/v1/inventory/dashboard/work/').json()['mpesa'] == {'shift_open': True, 'transactions': 1}
+    # Cancelling something they recorded needs a reason, which the owner sees with who did it.
+    twice = jane.post('/api/v1/mpesa/transactions/', {'session': shift, 'transaction_type': 'CUSTOMER_DEPOSIT', 'amount': '300',
+                                                    'customer_phone': '0712345678', 'idempotency_key': 'jane-2'}, format='json').json()
+    assert jane.post(f"/api/v1/mpesa/transactions/{twice['id']}/reverse/", {'reason': ''}, format='json').status_code == 400
+    assert jane.post(f"/api/v1/mpesa/transactions/{twice['id']}/reverse/", {'reason': 'Entered twice', 'idempotency_key': 'undo-2'}, format='json').status_code == 201
+    assert jane.get('/api/v1/inventory/dashboard/staff-undos/').status_code == 403
+    undone = boss.get('/api/v1/inventory/dashboard/staff-undos/').json()
+    assert [(row['who'], row['what'], row['reason']) for row in undone] == [('Jane', 'Cancelled an M-Pesa transaction', 'Entered twice')]
+    assert '300' in undone[0]['detail']
     for path in ['/api/v1/mpesa/analysis/', '/api/v1/mpesa/commission/', '/api/v1/mpesa/sessions/past/', '/api/v1/mpesa/reconciliation/',
                  f"/api/v1/mpesa/transactions/commission-advice/?session={shift}&type=CUSTOMER_DEPOSIT&amount=500"]:
         assert jane.get(path).status_code == 403, path
@@ -135,6 +148,9 @@ def test_on_the_agent_desk_an_employee_records_and_counts_blind_without_seeing_m
         record = MpesaReconciliation.objects.get()
     assert record.cash_variance == -100 and record.float_variance == 0 and 'for the owner to check' in record.reason
     assert jane.get('/api/v1/mpesa/dashboard/').json()['session'] is None
+    # The blind count's difference is in the owner's list too, with the note for them to check.
+    newest = boss.get('/api/v1/inventory/dashboard/staff-undos/').json()[0]
+    assert newest['what'] == 'Closed an M-Pesa shift with a different count' and 'for the owner to check' in newest['reason']
 
 
 def test_the_owner_can_give_an_employee_investments_too(boss):

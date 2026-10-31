@@ -13,6 +13,10 @@ from apps.core.models import AuditLog
 from .models import MpesaCommissionEntry, MpesaReconciliation, MpesaSession, MpesaTransaction
 
 
+# Float top-ups and cash rebalances move the business's money into the agency: only the owner records them.
+OWNERS_MOVES = {"FLOAT_TOPUP", "CASH_REBALANCE"}
+
+
 def on_shift(user, session):
     """Whether ``user`` works on ``session``: its operator, an owner or manager, or an employee, who records on the
     shift the owner opened and closes it at the end of the day."""
@@ -274,6 +278,9 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
     privileged = is_business_manager(user)
     if not on_shift(user, session):
         raise ValidationError("You can only post to your assigned M-Pesa session.")
+    if transaction_type in OWNERS_MOVES and is_employee(user):
+        # Bringing float or cash into the agency moves the business's money between its places: the owner's to do.
+        raise ValidationError("Only the business owner tops up the float or brings in cash. Ask them to record it.")
     value = amount(transaction_amount)
     customer = customer_details(transaction_type, customer_name, customer_phone, customer_id_number)
     provider_reference = (provider_reference or "").strip().upper() or None
@@ -399,7 +406,8 @@ def reverse_transaction(*, original, user, idempotency_key, reason, allow_invest
     if source:
         from apps.accounting.services import reverse
         reverse(entry=source, user=user, reason=f"Reversed on the M-Pesa desk: {reason}", allow_transfer=True)
-    audit("MPESA_TRANSACTION_REVERSED", reversal, user, after={"original": original.internal_reference, "reason": reason})
+    audit("MPESA_TRANSACTION_REVERSED", reversal, user, after={"original": original.provider_reference or original.internal_reference, "reason": reason,
+                                                             "type": original.transaction_type, "amount": str(original.amount)})
     return reversal, True
 
 

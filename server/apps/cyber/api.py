@@ -132,7 +132,7 @@ class CyberJobViewSet(viewsets.ReadOnlyModelViewSet):
     def transition(self, request, pk=None):
         if not has_business_permission(request.user, "cyber.change_cyberjob"):
             return Response({"detail": "Cyber job update permission required."}, status=403)
-        job = set_job_status(job=self.get_object(), status=request.data.get("status"), user=request.user)
+        job = set_job_status(job=self.get_object(), status=request.data.get("status"), user=request.user, reason=request.data.get("reason", ""))
         return Response(self.get_serializer(job).data)
 
     @action(detail=True, methods=["post"])

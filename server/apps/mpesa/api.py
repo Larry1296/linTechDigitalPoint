@@ -457,9 +457,9 @@ def dashboard(request):
     from .commission_learning import for_shift, forecast
     from .services import agency_sources
     if is_employee(request.user):
-        # An employee records the shift's transactions; the agency's money, its commission and the other parts' money
-        # are the owner's. Where float or cash can come from is listed without what each place holds.
-        return Response({"employee": True, "sources": [{"value": row["value"], "label": row["label"]} for row in agency_sources()],
+        # An employee records the shift's customer transactions; the agency's money, its commission, topping up the
+        # float or bringing in cash are the owner's.
+        return Response({"employee": True,
                          "session": SessionSerializer(session, context={"request": request}).data if session else None,
                          "transaction_count": entries.count()})
     return Response({"sources": agency_sources(), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})

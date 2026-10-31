@@ -118,6 +118,7 @@ def test_the_reading_a_shift_opens_with_measures_its_first_transaction(db):
     assert results[after_payout.pk] == (Decimal("18.00"), "measured")
     from apps.mpesa.commission_learning import for_shift
     assert for_shift(second) == {"earned": Decimal("18.00"), "measured": 1, "learned": 0, "unknown": 0}  # the opening is not a transaction
+    reconcile_session(session=second, user=operator, actual_cash="4500", actual_float="5500", reason="closing for the next check")  # one shift open at a time
     other = MpesaOutlet.objects.create(store=outlet.store, display_name="Second till")
     with pytest.raises(ValidationError, match="below zero"):
         open_session(outlet=other, operator=operator, opening_cash="0", opening_float="0", commission_balance="-1")

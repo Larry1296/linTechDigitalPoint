@@ -547,12 +547,15 @@ export function MpesaDashboardPage() {
             </div>
           )}
           <div className="deskActions">
-            <button onClick={() => void rebalance("FLOAT_TOPUP")}>
-              Float top-up
-            </button>
-            <button onClick={() => void rebalance("CASH_REBALANCE")}>
-              Cash rebalance
-            </button>
+            {/* Topping up the float and bringing in cash move the business's money: the owner records them. */}
+            {!employee && <>
+              <button onClick={() => void rebalance("FLOAT_TOPUP")}>
+                Float top-up
+              </button>
+              <button onClick={() => void rebalance("CASH_REBALANCE")}>
+                Cash rebalance
+              </button>
+            </>}
             {canCorrect && !employee && <button className="secondary" onClick={() => setCorrecting(true)}>
               Correct money in operation
             </button>}

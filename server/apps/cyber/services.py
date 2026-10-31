@@ -106,8 +106,12 @@ def delete_job(*, job, user):
 
 
 @transaction.atomic
-def set_job_status(*, job, status, user):
+def set_job_status(*, job, status, user, reason=""):
     job = CyberJob.objects.select_for_update().get(pk=job.pk)
+    reason = str(reason or "").strip()[:240]
+    from apps.tenancy.permissions import is_employee
+    if status == "CANCELLED" and not reason and is_employee(user):
+        raise ValidationError("Say why the job is cancelled: the business owner sees it.")
     if job.status in ["COMPLETED", "CANCELLED"]:
         raise ValidationError("A completed or cancelled job cannot be changed.")
     allowed = {choice[0] for choice in CyberJob.STATUSES} - {"COMPLETED"}
@@ -119,7 +123,7 @@ def set_job_status(*, job, status, user):
         job.started_at = timezone.now()
     job.save(update_fields=["status", "started_at", "updated_at"])
     action = "CYBER_JOB_CANCELLED" if status == "CANCELLED" else "CYBER_JOB_STARTED" if status == "IN_PROGRESS" else "CYBER_JOB_UPDATED"
-    audit(action, job, user, before={"status": before}, after={"status": status})
+    audit(action, job, user, before={"status": before}, after={"status": status, "number": job.number, **({"reason": reason} if reason else {})})
     return job
 
 

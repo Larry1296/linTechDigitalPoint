@@ -445,6 +445,9 @@ def cancel(stay, *, user, reason="", no_show=False, keep_paid=False, give_back_b
     stay = _locked(stay)
     if stay.status != Stay.BOOKED:
         raise ValidationError("Only a booking not yet checked in can be cancelled.")
+    from apps.tenancy.permissions import is_employee
+    if not str(reason or "").strip() and is_employee(user):
+        raise ValidationError("Say why the booking is called off: the business owner sees it.")
     held = sum((d.held for d in stay.deposits.all()), Decimal("0"))
     if held > 0:
         if keep_paid:
@@ -458,6 +461,9 @@ def cancel(stay, *, user, reason="", no_show=False, keep_paid=False, give_back_b
     stay.status = Stay.NO_SHOW if no_show else Stay.CANCELLED
     stay.note = (f"{stay.note} · {reason}" if stay.note and reason else reason or stay.note)[:255]
     stay.save()
+    from apps.core.models import AuditLog
+    AuditLog.objects.create(action="STAY_NO_SHOW" if no_show else "STAY_CANCELLED", object_type="Stay", object_id=str(stay.pk), user=user,
+                            after={"number": stay.number, "reason": str(reason or "").strip(), "kept_paid": bool(keep_paid and held > 0)})
     return stay
 
 
