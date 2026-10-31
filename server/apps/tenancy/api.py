@@ -434,7 +434,15 @@ def staff_data(membership):
     user = membership.user
     return {"id": membership.pk, "user_id": user.pk, "username": user.get_username(), "email": user.email,
             "name": user.get_full_name(), "role": membership.role, "status": membership.status,
-            "joined_at": membership.joined_at}
+            "hidden_pages": membership.hidden_pages or [], "joined_at": membership.joined_at}
+
+
+def hideable_pages(organization):
+    """The pages the owner can keep staff out of, for the parts this business runs."""
+    from .middleware import effective_modules
+    from .permissions import PAGES
+    enabled = effective_modules(organization)
+    return [{"key": key, "label": label} for key, (label, module, _) in PAGES.items() if module is None or module in enabled]
 
 class StaffInput(serializers.Serializer):
     username = serializers.CharField(max_length=150)
@@ -455,6 +463,14 @@ class StaffInput(serializers.Serializer):
 class StaffUpdateInput(serializers.Serializer):
     role = serializers.ChoiceField(choices=STAFF_ROLES, required=False)
     status = serializers.ChoiceField(choices=["ACTIVE", "SUSPENDED"], required=False)
+    hidden_pages = serializers.ListField(child=serializers.CharField(max_length=20), required=False)
+
+    def validate_hidden_pages(self, value):
+        from .permissions import PAGES
+        unknown = sorted(set(value) - set(PAGES))
+        if unknown:
+            raise serializers.ValidationError(f"There is no such page: {', '.join(unknown)}.")
+        return sorted(set(value))
 
 @api_view(["GET", "POST"])
 @permission_classes([permissions.IsAuthenticated])
@@ -464,7 +480,7 @@ def staff(request):
         return denied
     memberships = Membership.objects.filter(organization=request.organization).select_related("user").order_by("joined_at", "pk")
     if request.method == "GET":
-        return Response({"roles": STAFF_ROLES, "staff": [staff_data(m) for m in memberships]})
+        return Response({"roles": STAFF_ROLES, "staff": [staff_data(m) for m in memberships], "pages": hideable_pages(request.organization)})
     form = StaffInput(data=request.data)
     form.is_valid(raise_exception=True)
     values = dict(form.validated_data)
@@ -498,7 +514,9 @@ def staff_member(request, pk):
     form.is_valid(raise_exception=True)
     if form.validated_data.get("role") == "ADMIN" and request.membership.role != "OWNER":
         return Response({"detail": "Only the owner can make someone an administrator."}, status=403)
-    before = {"role": membership.role, "status": membership.status}
+    if "hidden_pages" in form.validated_data and request.membership.role != "OWNER":
+        return Response({"detail": "Only the business owner chooses which pages someone cannot open."}, status=403)
+    before = {"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or []}
     for field, value in form.validated_data.items():
         setattr(membership, field, value)
     try:
@@ -506,7 +524,7 @@ def staff_member(request, pk):
     except DjangoValidationError as exc:
         return Response({"detail": " ".join(exc.messages)}, status=400)
     from apps.core.models import AuditLog
-    AuditLog.objects.create(action="STAFF_CHANGED", object_type="Membership", object_id=str(membership.pk), user=request.user, before=before, after={"role": membership.role, "status": membership.status})
+    AuditLog.objects.create(action="STAFF_CHANGED", object_type="Membership", object_id=str(membership.pk), user=request.user, before=before, after={"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or []})
     return Response(staff_data(membership))
 
 class SettingsInput(serializers.Serializer):

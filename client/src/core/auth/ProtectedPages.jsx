@@ -12,9 +12,9 @@ const STATUS = "/api/v1/auth/protected/";
 export const PRIVATE_IDLE_MS = 5 * 60 * 1000;
 const pageOf = (pathname) => (pathname.startsWith("/admin/investments") ? "investments" : "mpesa");
 
-// The private pages (M-Pesa and investments) are the only pages that lock by themselves. Each opens with the person's
-// lock PIN, or with a PIN of its own when they set one in Settings; one PIN opens every page that shares it. An open
-// page locks again after five minutes untouched, with "Lock now", or when the workspace locks or they sign out.
+// The private pages (M-Pesa and investments) are the only pages that lock by themselves. Each opens only with its own
+// PIN, the business's, which only the owner sets or resets; investments are the owner's alone. An open page locks again
+// after five minutes untouched, with "Lock now", or when the workspace locks or they sign out.
 export function ProtectedPages() {
   const page = pageOf(useLocation().pathname);
   const [state, setState] = useState(null);
@@ -62,13 +62,10 @@ function useIdleLock(open, lockNow) {
 
 function PrivatePageLock({ page, state, onOpen }) {
   const info = state.pages[page];
-  // "pin" enters the PIN; "password" opens with the sign-in password (forgotten PIN, or too many wrong ones);
-  // "set" is the first time, when there is no lock PIN yet.
-  const [mode, setMode] = useState(!state.has_pin ? "set" : state.needs_password ? "password" : "pin");
+  const owner = state.is_owner;
   const [form, setForm] = useState({ password: "", pin: "", again: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { if (state.needs_password && mode === "pin") setMode("password"); }, [state.needs_password, mode]);
   const field = (key) => ({ value: form[key], onChange: (event) => setForm({ ...form, [key]: event.target.value }), readOnly: busy, required: true });
   async function send(body) {
     setBusy(true); setError("");
@@ -82,44 +79,47 @@ function PrivatePageLock({ page, state, onOpen }) {
       return false;
     } finally { setBusy(false); }
   }
+  // The owner sets the page's PIN the first time, confirmed with their sign-in password.
   async function setPin(event) {
     event.preventDefault();
     if (!/^\d{4,6}$/.test(form.pin)) { setError("A PIN is 4 to 6 digits."); return; }
     if (form.pin !== form.again) { setError("The two PINs are not the same."); return; }
     setBusy(true); setError("");
     try {
-      await api("/api/v1/auth/lock-pin/", { method: "POST", body: JSON.stringify({ password: form.password, pin: form.pin }) });
+      await api("/api/v1/auth/lock-pin/", { method: "POST", body: JSON.stringify({ page, password: form.password, pin: form.pin }) });
     } catch (err) { setError(err.message); setBusy(false); return; }
     setBusy(false);
     await send({ pin: form.pin });
   }
-  const titles = { set: "Set your lock PIN", pin: `Enter your PIN for ${info.label}`, password: `Open ${info.label} with your password` };
-  const notes = {
-    set: "M-Pesa and investments are private pages. Choose a PIN of 4 to 6 digits: it opens them, and your workspace after you lock it. In Settings you can give each private page a PIN of its own.",
-    pin: info.own_pin ? `${info.label} has a PIN of its own.` : "Your lock PIN opens the private pages.",
-    password: state.needs_password ? "Too many wrong PINs. Enter your sign-in password to open the private pages." : "Your sign-in password opens every private page.",
-  };
+  if (!info.allowed) return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
+    <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
+    <h1 id="protected-title">{info.kept_out === "hidden" ? `${info.label} is not open to you` : `${info.label} is for the business owner only`}</h1>
+    <p>{info.kept_out === "hidden" ? "The business owner has not given you this page. Ask them if you need it." : "Only the owner of the business can open it."}</p>
+  </section>;
+  if (!info.pin_set) return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
+    <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
+    <h1 id="protected-title">{owner ? `Set the ${info.label} PIN` : `${info.label} has no PIN yet`}</h1>
+    {owner ? <>
+      <p>{info.label} is a private page: it opens only with its own PIN, 4 to 6 digits, different from any other page's.
+        {page === "investments" ? " It is yours alone: nobody else can open it." : " Give it to the people who run it."} Only you can change or reset it, in Settings.</p>
+      <form onSubmit={setPin}>
+        <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />
+        <PasswordField label={`${info.label} PIN (4 to 6 digits)`} inputMode="numeric" autoComplete="off" maxLength={6} {...field("pin")} />
+        <PasswordField label="The PIN again" inputMode="numeric" autoComplete="off" maxLength={6} {...field("again")} />
+        <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save and open"}</button>
+        <FormError title="Could not save." message={error} />
+      </form>
+    </> : <p>Ask the business owner to set it. Then enter the PIN they give you here.</p>}
+  </section>;
+  const waiting = state.blocked_until && new Date(state.blocked_until) > new Date();
   return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
     <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
-    <h1 id="protected-title">{titles[mode]}</h1>
-    <p>{notes[mode]}</p>
-    {mode === "pin" && <>
-      <PinField length={info.pin_length} busy={busy} error={error} onPin={(pin) => send({ pin })} />
-      <button type="button" className="linkButton" disabled={busy} onClick={() => { setMode("password"); setError(""); }}>Forgot your PIN? Use your sign-in password</button>
-      {!info.own_pin && <small>Give this page a PIN of its own in <Link to="/admin/settings">Settings</Link>.</small>}
-    </>}
-    {mode === "password" && <form onSubmit={(event) => { event.preventDefault(); void send({ password: form.password }); }}>
-      <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />
-      <button type="submit" disabled={busy}>{busy ? "Checking…" : "Open"}</button>
-      <FormError title="Could not open." message={error} />
-      {!state.needs_password && <button type="button" className="secondary" disabled={busy} onClick={() => { setMode("pin"); setError(""); }}>Back to PIN</button>}
-    </form>}
-    {mode === "set" && <form onSubmit={setPin}>
-      <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />
-      <PasswordField label="New PIN (4 to 6 digits)" inputMode="numeric" autoComplete="off" maxLength={6} {...field("pin")} />
-      <PasswordField label="New PIN again" inputMode="numeric" autoComplete="off" maxLength={6} {...field("again")} />
-      <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save and open"}</button>
-      <FormError title="Could not save." message={error} />
-    </form>}
+    <h1 id="protected-title">Enter the {info.label} PIN</h1>
+    <p>{info.label} opens only with its own PIN.</p>
+    {waiting
+      ? <p className="formNotice formNoticeError" role="alert">Too many wrong PINs. Wait a few minutes and try again.</p>
+      : <PinField length={info.pin_length} busy={busy} error={error} onPin={(pin) => send({ pin })} />}
+    {owner ? <small>Forgot it? Reset it in <Link to="/admin/settings">Settings</Link> with your sign-in password.</small>
+      : <small>Forgot it? Ask the business owner to reset it.</small>}
   </section>;
 }

@@ -186,7 +186,7 @@ class InvestmentStatementView(APIView):
 
 class InvestmentUndoView(APIView):
     permission_classes = [HasLinTechPermission]
-    permission_required = "accounting.reverse_cashentry"
+    permission_required = "accounting.add_investmentmovement"
 
     def post(self, request, pk):
         movement = undo(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, reason=str(request.data.get("reason") or ""))
@@ -196,7 +196,7 @@ class InvestmentUndoView(APIView):
 class InvestmentClaimView(APIView):
     """Money recorded as the owner's own that was really the business's: from which place, and how much of it."""
     permission_classes = [HasLinTechPermission]
-    permission_required = "accounting.reverse_cashentry"
+    permission_required = "accounting.add_investmentmovement"
 
     def post(self, request, pk):
         movement = claim(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, place=request.data.get("place"),

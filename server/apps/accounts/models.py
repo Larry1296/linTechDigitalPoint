@@ -41,9 +41,8 @@ class DeviceSession(models.Model):
 
 
 class LockPin(models.Model):
-    """A short PIN that opens a lock in a moment. ``page`` blank is the person's lock PIN: it opens the workspace after
-    they locked it, and every private page without a PIN of its own. A private page's key (see protected_pages.PAGES)
-    is that page's own PIN."""
+    """A person's lock PIN (``page`` blank): it opens the workspace after they locked it. Rows with a page's key are
+    from before private pages had the business's own PINs (PagePin) and are no longer used."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="lock_pins", on_delete=models.CASCADE)
     page = models.CharField(max_length=20, blank=True, default="")
     digest = models.CharField(max_length=128)
@@ -90,3 +89,18 @@ class ProtectedPagesPassword(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         constraints = [models.UniqueConstraint(fields=["user", "digest"], name="acco_protected_password_once")]
+
+
+class PagePin(TenantModel):
+    """A private page's PIN, the business's own (see protected_pages.PAGES): the only way to open that page. Only the
+    business owner sets or resets it, confirmed with their sign-in password; each page has a different PIN."""
+    page = models.CharField(max_length=20)
+    digest = models.CharField(max_length=128)
+    length = models.PositiveSmallIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name="+", on_delete=models.SET_NULL)
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [models.UniqueConstraint(fields=["organization", "page"], name="acco_pagepin_page_org")]

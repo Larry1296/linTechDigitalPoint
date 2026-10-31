@@ -1,10 +1,14 @@
-"""PINs, and the private pages they open: the M-Pesa agency and the investments.
+"""The private pages, the M-Pesa agency and the investments, and the PINs that open them.
 
-Each person has a lock PIN (4 to 6 digits). It opens the workspace after they lock it, and every private page that
-has no PIN of its own; a private page can instead have its own PIN. Signing in opens the dashboard, never a private
-page: once its PIN is entered a page stays open on that device until it is left untouched for a while (the browser
-locks it), the person locks it, the workspace locks or they sign out. After five wrong PINs only the sign-in password
-opens the private pages again on that device.
+Each private page has its own PIN, the business's (PagePin), different from the other's, and opens only with it: the
+sign-in password never opens a private page, so someone who signs in to run the business cannot get past a PIN they
+were not given. Only the business owner sets and resets these PINs, in Settings, with their own sign-in password; a
+forgotten PIN is reset by the owner. The investments are the owner's alone: nobody else can open them, with or without
+the PIN. After five wrong PINs a device waits a few minutes before trying again. Signing in opens the dashboard, never
+a private page: once its PIN is entered a page stays open on that device until it is left untouched for a while (the
+browser locks it), the person locks it, the workspace locks or they sign out.
+
+Each person's own lock PIN (LockPin) opens the workspace after they lock it, and nothing else.
 """
 import re
 from datetime import timedelta
@@ -15,15 +19,17 @@ from django.utils import timezone
 from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from .models import DeviceSession, LockPin, SessionAudit
+from apps.tenancy.permissions import is_business_owner
+from .models import DeviceSession, LockPin, PagePin, SessionAudit
 
 # Each private page: its name, and the addresses of its records.
 PAGES = {
     'mpesa': ('M-Pesa', ('/api/v1/mpesa/',)),
     'investments': ('Investments', ('/api/v1/accounting/investments/',)),
 }
+OWNER_ONLY = {'investments'}
 TRIES = 5
-BLOCK = timedelta(minutes=1)
+BLOCK = timedelta(minutes=5)
 # Dashboard nudges say only that something is due, never an amount, so they work without the PIN.
 OPEN_PATHS = {'/api/v1/accounting/investments/reminder/', '/api/v1/mpesa/commission/due/'}
 
@@ -38,22 +44,36 @@ def is_protected(path):
     return page_of(path) is not None
 
 
-def pins(user):
-    """The person's PINs by page ('' is the lock PIN)."""
-    return {pin.page: pin for pin in LockPin.objects.filter(user=user)}
+def page_pins():
+    """The business's private page PINs by page."""
+    return {pin.page: pin for pin in PagePin.objects.all()}
 
 
-def pin_for(user, page, known=None):
-    """The PIN that opens ``page`` ('' for the workspace): the page's own, else the lock PIN; None when neither is set."""
-    known = pins(user) if known is None else known
-    return known.get(page) or known.get('')
+def lock_pin_of(user):
+    """The person's own lock PIN, which opens the workspace after they lock it; None when not set."""
+    return LockPin.objects.filter(user=user, page='').first()
 
 
-def sharing(page, known):
-    """The pages one PIN opens together: a page with its own PIN opens alone; the rest share the lock PIN."""
-    if page in known:
-        return [page]
-    return [key for key in PAGES if key not in known]
+def kept_out(user, page):
+    """Why ``user`` cannot open ``page``: 'owner_only' (the investments), 'hidden' (the owner kept them out of it), or None."""
+    from apps.tenancy.permissions import membership_for
+    if is_business_owner(user):
+        return None
+    if page in OWNER_ONLY:
+        return 'owner_only'
+    membership = membership_for(user)
+    return 'hidden' if membership and page in (membership.hidden_pages or []) else None
+
+
+def allowed(user, page):
+    return kept_out(user, page) is None
+
+
+def refusal_text(user, page):
+    reason = kept_out(user, page)
+    if reason == 'owner_only':
+        return f'{PAGES[page][0]} is for the business owner only.'
+    return f'The business owner has not given you {PAGES[page][0]}.'
 
 
 def is_open(device, page=None):
@@ -63,23 +83,38 @@ def is_open(device, page=None):
 
 
 def status(device):
-    known = pins(device.user)
+    known = page_pins()
+    owner = is_business_owner(device.user)
     now = timezone.now()
     blocked = device.protected_blocked_until if device.protected_blocked_until and device.protected_blocked_until > now else None
     pages = {}
     for key, (label, _) in PAGES.items():
-        pin = pin_for(device.user, key, known)
-        pages[key] = {'label': label, 'own_pin': key in known, 'pin_length': pin.length if pin else None,
-                      'unlocked': bool(pin and is_open(device, key))}
-    return {'has_pin': '' in known, 'pages': pages, 'needs_password': device.protected_failures >= TRIES,
-            'blocked_until': blocked, 'tries_left': max(0, TRIES - device.protected_failures)}
+        pin = known.get(key)
+        may = allowed(device.user, key)
+        pages[key] = {'label': label, 'allowed': may, 'kept_out': kept_out(device.user, key), 'pin_set': bool(pin), 'pin_length': pin.length if pin and may else None,
+                      'unlocked': bool(may and pin and is_open(device, key))}
+    return {'is_owner': owner, 'pages': pages, 'blocked_until': blocked, 'tries_left': max(0, TRIES - device.protected_failures)}
 
 
 def guard(request):
-    """The refusal for a private page's records on a device where that page is not open, else None."""
-    device = request.device_session
+    """The refusal for a private page's records on a device where that page is not open, else None. It runs before the
+    business is chosen for the request, so it works the business out the same way."""
     page = page_of(request.path)
-    if not page or (is_open(device, page) and pin_for(device.user, page)):
+    if not page:
+        return None
+    from apps.tenancy.context import organization_context
+    from apps.tenancy.middleware import resolve_membership
+    membership = getattr(request, 'membership', None) or resolve_membership(request)
+    with organization_context(membership.organization if membership else None):
+        return _guard(request, page)
+
+
+def _guard(request, page):
+    device = request.device_session
+    if not allowed(device.user, page):
+        return JsonResponse({'detail': refusal_text(device.user, page), 'code': 'owner_only', 'page': page,
+                             'protected': status(device)}, status=403, json_dumps_params={'default': str})
+    if is_open(device, page) and page_pins().get(page):
         return None
     return JsonResponse({'detail': f'{PAGES[page][0]} is a private page. Enter its PIN to open it.',
                          'code': 'protected_locked', 'page': page, 'protected': status(device)},
@@ -92,24 +127,26 @@ def locked_device(request):
 
 def blocked(device):
     if device.protected_blocked_until and device.protected_blocked_until > timezone.now():
-        return Response({'detail': 'Too many wrong tries. Wait a minute and try again.', 'protected': status(device)}, status=429)
+        return Response({'detail': 'Too many wrong PINs. Wait a few minutes and try again.', 'code': 'blocked', 'protected': status(device)}, status=429)
     return None
 
 
-def failed(device, wrong_pin):
+def failed(device, page):
     device.protected_failures += 1
-    if not wrong_pin:
+    left = max(0, TRIES - device.protected_failures)
+    if not left:
+        # A pause, never the password: the PIN stays the only way in. The owner can reset a forgotten one.
         device.protected_blocked_until = timezone.now() + BLOCK
+        device.protected_failures = 0
     device.save(update_fields=['protected_failures', 'protected_blocked_until'])
     SessionAudit.objects.create(session=device, event='PROTECTED_FAILED')
-    left = max(0, TRIES - device.protected_failures)
-    if not wrong_pin:
-        detail = 'Incorrect password. Wait a minute and try again.'
-    elif left:
+    if left:
         detail = f'Wrong PIN. {left} {"try" if left == 1 else "tries"} left.'
+    elif is_business_owner(device.user):
+        detail = f'Wrong PIN {TRIES} times. Wait {BLOCK.seconds // 60} minutes, or reset the {PAGES[page][0]} PIN in Settings with your sign-in password.'
     else:
-        detail = 'Wrong PIN too many times. Enter your sign-in password to open the private pages.'
-    return Response({'detail': detail, 'code': 'wrong_pin' if wrong_pin else 'wrong_password', 'protected': status(device)}, status=400)
+        detail = f'Wrong PIN {TRIES} times. Wait {BLOCK.seconds // 60} minutes, or ask the business owner to reset the {PAGES[page][0]} PIN.'
+    return Response({'detail': detail, 'code': 'wrong_pin', 'protected': status(device)}, status=400)
 
 
 def open_pages(device, pages, event):
@@ -141,29 +178,25 @@ def protected_status(request):
 @permission_classes([permissions.IsAuthenticated])
 @transaction.atomic
 def protected_unlock(request):
-    """Open a private page with its PIN (which opens the pages sharing it too), or every private page with the
-    sign-in password, which is also the way back after too many wrong PINs."""
+    """Open a private page with its PIN, the only way in."""
     device = locked_device(request)
     refusal = blocked(device)
     if refusal:
         return refusal
-    page, pin, password = request.data.get('page'), request.data.get('pin'), request.data.get('password')
+    page, pin = request.data.get('page'), request.data.get('pin')
     if page not in PAGES:
         return Response({'detail': 'Choose a private page to open.'}, status=400)
-    known = pins(device.user)
-    if password is not None:
-        if not isinstance(password, str) or not device.user.check_password(password):
-            return failed(device, wrong_pin=False)
-        return open_pages(device, list(PAGES), 'PROTECTED_UNLOCK_PASSWORD')
-    expected = pin_for(device.user, page, known)
+    if not allowed(device.user, page):
+        return Response({'detail': refusal_text(device.user, page), 'code': 'owner_only', 'protected': status(device)}, status=403)
+    if request.data.get('password') is not None:
+        return Response({'detail': f'{PAGES[page][0]} opens with its PIN only.', 'code': 'pin_only', 'protected': status(device)}, status=400)
+    expected = page_pins().get(page)
     if not expected:
-        return Response({'detail': 'Set your lock PIN first.', 'code': 'pin_unset', 'protected': status(device)}, status=400)
-    if device.protected_failures >= TRIES:
-        return Response({'detail': 'Enter your sign-in password to open the private pages.', 'code': 'password_required',
-                         'protected': status(device)}, status=400)
+        detail = f'Set the {PAGES[page][0]} PIN first.' if is_business_owner(device.user) else f'The business owner has not set the {PAGES[page][0]} PIN yet.'
+        return Response({'detail': detail, 'code': 'pin_unset', 'protected': status(device)}, status=400)
     if not isinstance(pin, str) or not check_password(pin, expected.digest):
-        return failed(device, wrong_pin=True)
-    return open_pages(device, sharing(page, known), 'PROTECTED_UNLOCK')
+        return failed(device, page)
+    return open_pages(device, [page], 'PROTECTED_UNLOCK')
 
 
 @api_view(['POST'])
@@ -180,36 +213,49 @@ def protected_lock(request):
 
 
 def pin_settings(user):
-    known = pins(user)
-    lock = known.get('')
+    lock = lock_pin_of(user)
+    known = page_pins()
+    owner = is_business_owner(user)
     return {'pin': {'set': bool(lock), 'length': lock.length if lock else None, 'updated_at': lock.updated_at if lock else None},
-            'pages': {key: {'label': label, 'own_pin': key in known, 'length': known[key].length if key in known else None}
-                      for key, (label, _) in PAGES.items()}}
+            'is_owner': owner,
+            'pages': {key: {'label': label, 'set': key in known, 'length': known[key].length if key in known and owner else None,
+                            'updated_at': known[key].updated_at if key in known and owner else None}
+                      for key, (label, _) in PAGES.items() if owner or allowed(user, key)}}
 
 
-@api_view(['GET', 'POST', 'DELETE'])
+def _weak(pin):
+    if not isinstance(pin, str) or not re.fullmatch(r'\d{4,6}', pin):
+        return 'A PIN is 4 to 6 digits.'
+    if len(set(pin)) == 1 or pin in '0123456789' or pin in '9876543210':
+        return 'Choose a PIN harder to guess than repeated or running digits.'
+    return None
+
+
+@api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
+@transaction.atomic
 def lock_pin(request):
-    """The person's PINs. POST sets the lock PIN, or with ``page`` that private page's own PIN; DELETE with ``page``
-    makes the page use the lock PIN again. Changes need the sign-in password."""
+    """PINs. POST without ``page`` sets the person's own lock PIN; with ``page`` it sets or resets that private page's
+    PIN, which only the business owner can do. Every change needs the sign-in password."""
     if request.method == 'GET':
         return Response(pin_settings(request.user))
     page = request.data.get('page') or ''
     if page and page not in PAGES:
         return Response({'detail': 'There is no such private page.'}, status=400)
+    if page and not is_business_owner(request.user):
+        return Response({'detail': 'Only the business owner sets or resets the private pages\' PINs.', 'code': 'owner_only'}, status=403)
     if not request.user.check_password(request.data.get('password') or ''):
         return Response({'detail': 'Your sign-in password is incorrect.', 'code': 'wrong_password'}, status=400)
-    if request.method == 'DELETE':
-        if not page:
-            return Response({'detail': 'Your lock PIN can be changed, not removed.'}, status=400)
-        LockPin.objects.filter(user=request.user, page=page).delete()
-        return Response(pin_settings(request.user))
     pin = request.data.get('pin')
-    if not isinstance(pin, str) or not re.fullmatch(r'\d{4,6}', pin):
-        return Response({'detail': 'A PIN is 4 to 6 digits.'}, status=400)
-    if len(set(pin)) == 1 or pin in '0123456789' or pin in '9876543210':
-        return Response({'detail': 'Choose a PIN harder to guess than repeated or running digits.'}, status=400)
-    if page and not LockPin.objects.filter(user=request.user, page='').exists():
-        return Response({'detail': 'Set your lock PIN first.', 'code': 'pin_unset'}, status=400)
-    LockPin.objects.update_or_create(user=request.user, page=page, defaults={'digest': make_password(pin), 'length': len(pin)})
+    problem = _weak(pin)
+    if problem:
+        return Response({'detail': problem}, status=400)
+    if page:
+        others = [other for other in PagePin.objects.exclude(page=page) if check_password(pin, other.digest)]
+        if others:
+            return Response({'detail': f'Choose a PIN different from the {PAGES[others[0].page][0]} PIN: each private page has its own.'}, status=400)
+        PagePin.objects.update_or_create(page=page, defaults={'digest': make_password(pin), 'length': len(pin), 'updated_by': request.user})
+        # Devices already open on the page stay open until they lock; every new opening needs the new PIN.
+    else:
+        LockPin.objects.update_or_create(user=request.user, page='', defaults={'digest': make_password(pin), 'length': len(pin)})
     return Response(pin_settings(request.user))

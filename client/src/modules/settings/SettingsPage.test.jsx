@@ -14,23 +14,23 @@ const settings = { name: "Alpha", business_type: "Duka / general shop", business
   country: "KE", enabled_modules: ["inventory", "pos"], available_modules: ["inventory", "pos", "mpesa"], receipt_footer: "" };
 const staff = { roles: ["ADMIN", "MANAGER", "CASHIER"], staff: [
   { id: 1, username: "owner", email: "", name: "", role: "OWNER", status: "ACTIVE" },
-  { id: 2, username: "jane", email: "", name: "Jane", role: "CASHIER", status: "ACTIVE" },
-] };
+  { id: 2, username: "jane", email: "", name: "Jane", role: "CASHIER", status: "ACTIVE", hidden_pages: ["loans"] },
+], pages: [{ key: "mpesa", label: "M-Pesa agency" }, { key: "loans", label: "Money lent" }] };
 
 let pins;
 function pinState(options) {
   if (options.method === "POST") {
     const { page, pin } = JSON.parse(options.body);
-    if (page) pins.pages[page] = { ...pins.pages[page], own_pin: true, length: pin.length };
+    if (page) pins.pages[page] = { ...pins.pages[page], set: true, length: pin.length };
     else pins.pin = { set: true, length: pin.length };
   }
-  if (options.method === "DELETE") { const { page } = JSON.parse(options.body); pins.pages[page] = { ...pins.pages[page], own_pin: false, length: null }; }
   return structuredClone(pins);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  pins = { pin: { set: false, length: null }, pages: { mpesa: { label: "M-Pesa", own_pin: false, length: null }, investments: { label: "Investments", own_pin: false, length: null } } };
+  // A cashier: the owner has set the M-Pesa PIN; Investments, the owner's alone, is not listed for them.
+  pins = { pin: { set: false, length: null }, is_owner: false, pages: { mpesa: { label: "M-Pesa", set: true, length: null } } };
   api.mockImplementation(async (path, options = {}) => {
     if (path === "/api/v1/tenancy/business-profiles/") return profiles;
     if (path === "/api/v1/tenancy/settings/") return options.method === "PATCH" ? { ...settings, ...JSON.parse(options.body) } : settings;
@@ -87,10 +87,9 @@ it("shows only the PIN and password forms to other staff", async () => {
   expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/v1/auth/lock-pin/"]);
 });
 
-it("sets the lock PIN, gives a private page its own, and shares the lock PIN again", async () => {
+it("lets anyone set their own lock PIN, but only shows who sets the private pages' PINs", async () => {
   renderAs("CASHIER");
   const card = (await screen.findByRole("heading", { name: "Lock PIN and private pages" })).closest("section");
-  expect(within(card).getByText("Not set yet")).toBeInTheDocument();
   const fill = (pin, again = pin) => {
     fireEvent.change(within(card).getByLabelText("New PIN (4 to 6 digits)"), { target: { value: pin } });
     fireEvent.change(within(card).getByLabelText("New PIN again"), { target: { value: again } });
@@ -101,15 +100,9 @@ it("sets the lock PIN, gives a private page its own, and shares the lock PIN aga
   expect(await within(card).findByText("The two PINs are not the same.")).toBeInTheDocument();
   fill("4826");
   fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
-  expect(await within(card).findByText("Set · 4 digits")).toBeInTheDocument();
-  fireEvent.change(within(card).getByLabelText("PIN to set"), { target: { value: "mpesa" } });
-  fill("573918");
-  fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
-  expect(await within(card).findByText("Its own PIN · 6 digits")).toBeInTheDocument();
-  const sent = api.mock.calls.filter(([path, o]) => path === "/api/v1/auth/lock-pin/" && o?.method === "POST").map(([, o]) => JSON.parse(o.body));
-  expect(sent).toEqual([{ page: "", pin: "4826", password: "Sign-in-1" }, { page: "mpesa", pin: "573918", password: "Sign-in-1" }]);
-  fireEvent.click(within(card).getByRole("button", { name: "Use lock PIN instead" }));
-  await waitFor(() => expect(within(card).getAllByText("Uses your lock PIN")).toHaveLength(2));
+  expect(await within(card).findByText(/Saved your lock PIN/)).toBeInTheDocument();
+  expect([...within(card).getByLabelText("PIN to set").options].map((o) => o.value)).toEqual([""]);
+  expect(within(card).getByText("Set by the business owner")).toBeInTheDocument();
 });
 
 it("checks the new passwords match before sending", async () => {
@@ -208,4 +201,15 @@ it("shows tools outside a Basic plan as locked instead of letting the owner tick
   expect(plan).toHaveTextContent("Includes: Products & stock, Services & jobs, Point of sale, Customers, Expenses, M-Pesa agency.");
   expect(plan).toHaveTextContent("switched off until you are on Pro: Reports");
   expect(within(plan).getByRole("link", { name: "Change plan" })).toHaveAttribute("href", "/admin/subscription");
+});
+
+
+it("lets the owner keep a staff member out of the pages they choose", async () => {
+  renderAs("OWNER");
+  expect(await screen.findByLabelText("jane cannot open Money lent")).toBeChecked();  // what Jane is kept out of now
+  fireEvent.click(screen.getByLabelText("jane cannot open M-Pesa agency"));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/tenancy/staff/2/", expect.objectContaining({ method: "PATCH" })));
+  const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/staff/2/" && o?.method === "PATCH");
+  expect(JSON.parse(options.body)).toEqual({ hidden_pages: ["loans", "mpesa"] });
+  expect(screen.getByText("None: the owner sees every page")).toBeInTheDocument();
 });

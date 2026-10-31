@@ -5,6 +5,32 @@ from .models import Membership
 
 DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts", "chama", "hotel"}
 
+
+# Pages the owner can keep an employee out of: (label, module the page belongs to or None, which permissions it is).
+# Keeping someone out of a page takes those permissions away, so the page leaves their menu and its records are refused.
+PAGES = {
+    "sales": ("Selling (till, sales and customers)", "pos", lambda app, code: app == "commerce"),
+    "products": ("Products and stock", "inventory", lambda app, code: app in {"catalog", "inventory"}),
+    "services": ("Services (cyber)", "services", lambda app, code: app == "cyber"),
+    "rooms": ("Rooms and guests", "rooms", lambda app, code: app == "hotel"),
+    "mpesa": ("M-Pesa agency", "mpesa", lambda app, code: app == "mpesa"),
+    "expenses": ("Money spent", "expenses", lambda app, code: app == "accounting" and "expense" in code),
+    "loans": ("Money lent", None, lambda app, code: app == "accounting" and "loan" in code),
+    "money": ("Money check and cash book", None, lambda app, code: app == "accounting" and ("moneycheck" in code or "cashentry" in code or "dailyclosing" in code)),
+    "profit": ("Profit, costs and reports", None, lambda app, code: (app, code) == ("accounting", "view_profit") or (app == "accounting" and "journal" in code)),
+}
+
+
+def hidden(key, pages):
+    app, _, code = key.partition(".")
+    return any(page in PAGES and PAGES[page][2](app, code) for page in pages)
+
+
+def owner_only(key):
+    """Investments are the business owner's alone: never granted to anyone else, whatever their role or permissions."""
+    app, _, code = key.partition(".")
+    return app == "accounting" and "investment" in code
+
 def membership_for(user):
     if not user or not user.is_authenticated or not user.is_active:
         return None
@@ -15,7 +41,11 @@ def _business_permissions(user):
     if not membership:
         return set()
     available = {f"{app}.{code}" for app, code in Permission.objects.filter(content_type__app_label__in=DOMAIN_APPS).values_list("content_type__app_label", "codename")}
-    if membership.role in {"OWNER", "ADMIN"}:
+    if membership.role == "OWNER":
+        return available
+    keep_out = membership.hidden_pages or []
+    available = {key for key in available if not owner_only(key) and not hidden(key, keep_out)}
+    if membership.role == "ADMIN":
         return available
     result = set(membership.permissions) & available
     for key in available:
@@ -38,6 +68,10 @@ def _business_permissions(user):
 
 def has_business_permission(user, permission):
     return permission in business_permissions(user)
+
+def is_business_owner(user):
+    membership = membership_for(user)
+    return bool(membership and membership.role == "OWNER")
 
 def is_business_manager(user):
     membership = membership_for(user)

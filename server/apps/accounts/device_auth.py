@@ -51,8 +51,8 @@ def pin_length(device, in_time=True):
     (not the session's end), has a PIN, and has not used up the tries."""
     if not (device.locked_at and in_time and device.failed_unlocks < PIN_TRIES):
         return None
-    from .protected_pages import pin_for
-    pin = pin_for(device.user, '')
+    from .protected_pages import lock_pin_of
+    pin = lock_pin_of(device.user)
     return pin.length if pin else None
 
 

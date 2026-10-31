@@ -4,7 +4,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormField } from "../../components/forms/FormField";
 import { ErrorState, Loading } from "../../components/States";
-import { askForm, confirmAction } from "../../core/ui/alerts";
+import { confirmAction } from "../../core/ui/alerts";
 import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
@@ -351,9 +351,10 @@ function StaffSettings({ isOwner }) {
   };
   return <section className="formCard">
     <h2>Staff</h2>
-    <p>Give each person their own sign-in. Their role decides what they can see and do.</p>
+    <p>Give each person their own sign-in. Their role decides what they can see and do.
+      {isOwner && " You can also keep anyone out of the pages you choose: they leave that person's menu and stay closed to them. You always see every page, and Investments is yours alone."}</p>
     <div className="tableWrap"><table>
-      <thead><tr><th>Name</th><th>Role</th><th>Status</th><th /></tr></thead>
+      <thead><tr><th>Name</th><th>Role</th><th>Status</th>{isOwner && <th>Pages they cannot open</th>}<th /></tr></thead>
       <tbody>{data.staff.map((member) => {
         const locked = member.role === "OWNER" || (member.role === "ADMIN" && !isOwner);
         return <tr key={member.id}>
@@ -362,6 +363,12 @@ function StaffSettings({ isOwner }) {
             {[...new Set([member.role, ...assignable])].map((role) => <option key={role} value={role}>{shortRole(role)}</option>)}
           </select>}</td>
           <td>{member.status === "ACTIVE" ? "Active" : "Suspended"}</td>
+          {isOwner && <td>{member.role === "OWNER" ? "None: the owner sees every page" : <details className="staffPages">
+            <summary>{member.hidden_pages?.length ? member.hidden_pages.map((key) => data.pages.find((page) => page.key === key)?.label || key).join(", ") : "None"}</summary>
+            {data.pages.map((page) => <label key={page.key}><input type="checkbox" checked={(member.hidden_pages || []).includes(page.key)}
+              aria-label={`${member.username} cannot open ${page.label}`}
+              onChange={(event) => void change(member, { hidden_pages: event.target.checked ? [...(member.hidden_pages || []), page.key] : (member.hidden_pages || []).filter((key) => key !== page.key) })} /> {page.label}</label>)}
+          </details>}</td>}
           <td>{!locked && <button type="button" className="secondary" onClick={() => void change(member, { status: member.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE" })}>
             {member.status === "ACTIVE" ? "Suspend" : "Reactivate"}
           </button>}</td>
@@ -385,8 +392,8 @@ function StaffSettings({ isOwner }) {
   </section>;
 }
 
-// The lock PIN opens the workspace after it is locked, and the private pages (M-Pesa, investments). Each private page
-// can share that PIN or have its own. Every change is confirmed with the sign-in password.
+// Each person's lock PIN opens the workspace after they lock it. The private pages (M-Pesa, investments) each open only
+// with their own PIN, the business's: the owner sets and resets those, each different. Every change needs the sign-in password.
 function PinSettings() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -396,41 +403,36 @@ function PinSettings() {
   const load = useCallback(() => api("/api/v1/auth/lock-pin/").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { void load(); }, [load]);
   if (!data) return error ? <ErrorState message={error} retry={load} /> : <Loading />;
-  const name = (page) => (page ? `${data.pages[page].label}'s own PIN` : "your lock PIN");
-  const send = async (method, body, done) => {
-    setBusy(true); setError(""); setSaved("");
-    try { setData(await api("/api/v1/auth/lock-pin/", { method, body: JSON.stringify(body) })); setSaved(done); return true; }
-    catch (e) { setError(e.message); return false; }
-    finally { setBusy(false); }
-  };
+  const name = (page) => (page ? `the ${data.pages[page].label} PIN` : "your lock PIN");
   const save = async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     if (!/^\d{4,6}$/.test(form.get("pin"))) { setError("A PIN is 4 to 6 digits."); return; }
     if (form.get("pin") !== form.get("again")) { setError("The two PINs are not the same."); return; }
-    if (await send("POST", { page: which, pin: form.get("pin"), password: form.get("password") }, `Saved ${name(which)}.`)) formElement.reset();
-  };
-  const share = async (page) => {
-    const values = await askForm({ title: `${data.pages[page].label} uses your lock PIN`, confirmButtonText: "Use lock PIN",
-      text: "Its own PIN is removed and your lock PIN opens it again.",
-      fields: [{ name: "password", label: "Your sign-in password", type: "password", required: true }] });
-    if (values) await send("DELETE", { page, password: values.password }, `${data.pages[page].label} now opens with your lock PIN.`);
+    setBusy(true); setError(""); setSaved("");
+    try {
+      setData(await api("/api/v1/auth/lock-pin/", { method: "POST", body: JSON.stringify({ page: which, pin: form.get("pin"), password: form.get("password") }) }));
+      setSaved(`Saved ${name(which)}.`);
+      formElement.reset();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return <section className="formCard pinSettings" aria-labelledby="pin-heading">
     <h2 id="pin-heading">Lock PIN and private pages</h2>
-    <p>The workspace locks only when you press Lock, and opens with your lock PIN. M-Pesa and investments are private pages: they lock after 5 minutes untouched and open with a PIN too, your lock PIN or one of their own.</p>
-    <div className="pinRow"><strong>Lock PIN</strong><span>{data.pin.set ? `Set · ${data.pin.length} digits` : "Not set yet"}</span></div>
+    <p>The workspace locks only when you press Lock, and opens with your own lock PIN. M-Pesa and investments are private pages: each
+      opens only with its own PIN, never with a sign-in password, and locks after 5 minutes untouched.
+      {data.is_owner ? " You set and reset their PINs, each different. Give the M-Pesa PIN to the people who run the agency; Investments is yours alone."
+        : " The business owner sets their PINs; ask them if you forget one."}</p>
+    <div className="pinRow"><strong>Your lock PIN</strong><span>{data.pin.set ? `Set · ${data.pin.length} digits` : "Not set yet"}</span></div>
     {Object.entries(data.pages).map(([page, info]) => <div className="pinRow" key={page}>
-      <strong>{info.label}</strong>
-      <span>{info.own_pin ? `Its own PIN · ${info.length} digits` : "Uses your lock PIN"}</span>
-      {info.own_pin && <button type="button" className="secondary" disabled={busy} onClick={() => void share(page)}>Use lock PIN instead</button>}
+      <strong>{info.label} PIN</strong>
+      <span>{!info.set ? "Not set yet" : data.is_owner ? `Set · ${info.length} digits` : "Set by the business owner"}</span>
     </div>)}
     <form onSubmit={(event) => void save(event)}>
       <label>PIN to set
         <select value={which} onChange={(event) => setWhich(event.target.value)}>
           <option value="">{data.pin.set ? "Change my lock PIN" : "My lock PIN"}</option>
-          {data.pin.set && Object.entries(data.pages).map(([page, info]) => <option key={page} value={page}>{info.own_pin ? `Change ${info.label}'s own PIN` : `Give ${info.label} its own PIN`}</option>)}
+          {data.is_owner && Object.entries(data.pages).map(([page, info]) => <option key={page} value={page}>{info.set ? `Change or reset the ${info.label} PIN` : `Set the ${info.label} PIN`}</option>)}
         </select>
       </label>
       <FormField label="New PIN (4 to 6 digits)" name="pin" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" />

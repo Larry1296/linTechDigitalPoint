@@ -11,7 +11,7 @@ from django.contrib.auth.hashers import check_password
 from .device_auth import (PIN_TRIES, COOKIE, COOKIE_PATH, state, valid, cookie_credential,
                           issue_credential, access_token, set_cookie)
 from .models import DeviceSession, RefreshCredential, SessionAudit
-from .protected_pages import pin_for
+from .protected_pages import lock_pin_of
 
 
 class ActivityThrottle(UserRateThrottle):
@@ -137,7 +137,7 @@ def unlock(request):
         # A PIN opens only a lock the person made themselves, and does not lengthen the session: that needs the password.
         if not state(device)['pin_length']:
             return Response({'detail':'Enter your password to unlock.','code':'password_required','session':state(device)},status=400)
-        if not isinstance(pin,str) or not check_password(pin, pin_for(device.user, '').digest):
+        if not isinstance(pin,str) or not check_password(pin, lock_pin_of(device.user).digest):
             device.failed_unlocks+=1
             device.save(update_fields=['failed_unlocks'])
             SessionAudit.objects.create(session=device,event='UNLOCK_FAILED')

@@ -83,6 +83,8 @@ class Membership(models.Model):
     invitation_state = models.CharField(max_length=16, default="ACCEPTED")
     joined_at = models.DateTimeField(default=timezone.now)
     permissions = models.JSONField(default=list, blank=True)
+    # Pages the owner keeps this person out of (keys of permissions.PAGES), whatever their role allows.
+    hidden_pages = models.JSONField(default=list, blank=True)
     def save(self, *args, **kwargs):
         from django.db import transaction
         from django.core.exceptions import ValidationError

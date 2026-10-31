@@ -3069,3 +3069,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
     white-space: nowrap;
   }
 }
+
+/* Staff: the pages the owner keeps someone out of, ticked in a list that opens under their row. */
+.staffPages summary { cursor: pointer; }
+.staffPages label { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-weight: 400; }
+.staffPages input { width: auto; min-height: 0; margin: 0; }
