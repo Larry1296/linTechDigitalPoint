@@ -134,3 +134,9 @@ footer.saasFooter, footer.appFooter, aside.authIntro { background: var(--chrome)
 .poweredBy .platformLogoName {
   white-space: normal;
 }
+/* Wider screens: the footer's three columns run from edge to edge — the business on the left, its links in the
+   middle and who is signed in on the right — so no empty band is left at the side. */
+@media (min-width: 761px) {
+  .appFooter > div:nth-child(2) { align-items: center; }
+  .appFooter > div:last-child { align-items: flex-end; text-align: right; }
+}

@@ -10,6 +10,8 @@
 .posExpressBadge.on { color: #047857; border-color: color-mix(in srgb, #10b981 45%, var(--line)); background: color-mix(in srgb, #10b981 10%, var(--surface)); }
 
 .posCatalog { min-width: 0; display: grid; gap: 14px; }
+/* The till's search runs the whole width of the page, like the product tiles under it. */
+.posCatalog .productSearch { max-width: none; }
 
 /* Category filter */
 .posChips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }

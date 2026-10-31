@@ -5,7 +5,7 @@
 .hotelHead .actionRow > * { margin: 0; }
 .hotelTabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
 .hotelTabs button { margin: 0; }
-.roomBoard { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 12px; margin: 0 0 18px; padding: 0; list-style: none; }
+.roomBoard { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; margin: 0 0 18px; padding: 0; list-style: none; }
 .roomCard { display: grid; gap: 6px; height: 100%; padding: 14px 16px; border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: 14px;
   background: var(--surface); box-shadow: var(--shadow); color: inherit; text-align: left; }
 .roomCard.FREE { border-left-color: var(--owns); }
