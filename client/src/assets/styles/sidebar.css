@@ -121,38 +121,50 @@
   .customerSidebar { display: none; }
 }
 
-/* Desktop: the sidebar runs from under the top bar to the bottom of the window, and the page and footer start at its
-   right edge instead of running underneath it. It starts hidden: the menu button slides it in and the page makes room. */
+/* Desktop: the sidebar is hidden until the menu button opens it. It then slides in over the page from the left, under
+   the top bar, with the page dimmed behind it; the page and footer always keep the whole width of the window. */
 @media (min-width: 1024px) {
-  /* The room beside the sidebar holds the page, and the page (at most 1200px wide) sits in the middle of it, so it
-     stays centred whether the sidebar is shown or hidden. */
-  .workspaceTopbar ~ .admin { display: block; padding-left: var(--workspace-sidebar-width); transition: padding-left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .workspaceTopbar ~ .admin { display: block; }
+  .workspaceTopbar ~ .admin > main { max-width: none; }
   .workspaceTopbar ~ .admin > aside {
     position: fixed;
     top: var(--workspace-topbar-height);
     bottom: 0;
     left: 0;
+    z-index: 25;
     width: var(--workspace-sidebar-width);
     height: auto;
     /* stretch: base.css's align-self:start would otherwise shrink a fixed box to its content. */
     align-self: stretch;
-    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
-  }
-  .workspaceTopbar ~ .admin > main { margin-inline: auto; }
-  .workspaceTopbar ~ .appFooter { margin-left: var(--workspace-sidebar-width); transition: margin-left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
-  .workspaceTopbar ~ .admin.sidebarCollapsed > aside {
+    box-shadow: 12px 0 40px rgb(2 8 23 / 35%);
     transform: translateX(-100%);
     visibility: hidden;
-    box-shadow: none;
     transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 240ms;
   }
-  .workspaceTopbar ~ .admin.sidebarCollapsed { padding-left: 0; }
-  /* With the sidebar hidden, the page uses the whole width of the window. */
-  .workspaceTopbar ~ .admin.sidebarCollapsed > main { max-width: none; }
-  .workspaceTopbar ~ .admin.sidebarCollapsed ~ .appFooter { margin-left: 0; }
+  .workspaceTopbar ~ .admin > aside.sidebarOpen {
+    transform: none;
+    visibility: visible;
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+  }
+  .sidebarBackdrop {
+    display: block;
+    position: fixed;
+    inset: var(--workspace-topbar-height) 0 0 0;
+    z-index: 24;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgb(2 8 23 / 40%);
+    box-shadow: none;
+    cursor: default;
+    animation: sidebarFade 200ms ease-out;
+  }
 }
 @media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
-  .workspaceTopbar ~ .admin, .workspaceTopbar ~ .admin > aside, .workspaceTopbar ~ .appFooter { transition: none; }
+  .workspaceTopbar ~ .admin > aside, .workspaceTopbar ~ .admin > aside.sidebarOpen { transition: none; }
+  .sidebarBackdrop { animation: none; }
 }
 
 /* Phones and tablets: the sidebar is a drawer that slides in over the page from the left,

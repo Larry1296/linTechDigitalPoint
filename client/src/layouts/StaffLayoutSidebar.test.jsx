@@ -14,7 +14,6 @@ import { StaffLayout } from "./StaffLayout";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  localStorage.clear();
   auth.sector = "cyber_shop";
   api.mockImplementation(async (path) => (path === "/api/v1/cyber/services/"
     ? [{ id: 4, name: "Printing", active: true }, { id: 5, name: "Typing", active: true }, { id: 6, name: "Lamination", active: false }] : []));
@@ -26,24 +25,19 @@ const renderAt = async (path) => {
   return screen.getByRole("complementary");
 };
 
-it("starts with the sidebar hidden on a large screen; the menu button shows and hides it, and this device remembers", async () => {
-  localStorage.clear();
+it("keeps the sidebar hidden until the menu button opens it, and choosing a link hides it again", async () => {
   auth.modules = ["pos", "inventory"];
-  const { unmount } = render(<MemoryRouter initialEntries={["/admin/pos"]}><StaffLayout /></MemoryRouter>);
+  render(<MemoryRouter initialEntries={["/admin/pos"]}><StaffLayout /></MemoryRouter>);
   await act(async () => {});
   expect(screen.queryByRole("complementary")).toBeNull();
   const menu = screen.getByRole("button", { name: "Open dashboard menu" });
   expect(menu).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(menu);
-  expect(screen.getByRole("complementary")).toBeVisible();
+  const sidebar = screen.getByRole("complementary");
   expect(menu).toHaveAttribute("aria-expanded", "true");
-  unmount();
-  render(<MemoryRouter initialEntries={["/admin/pos"]}><StaffLayout /></MemoryRouter>);
-  await act(async () => {});
-  expect(screen.getByRole("complementary")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Close dashboard menu" }));
+  fireEvent.click(within(sidebar).getByRole("link", { name: "Sales History" }));
   expect(screen.queryByRole("complementary")).toBeNull();
-  expect(localStorage.getItem("workspace.sidebar")).toBe("closed");
+  expect(screen.getByRole("button", { name: "Open dashboard menu" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("groups the menu by business and opens only the group of the page shown; services open as full pages, not menu items", async () => {

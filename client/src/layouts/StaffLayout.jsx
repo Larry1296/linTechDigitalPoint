@@ -131,25 +131,15 @@ const operations = [
   { title: "Platform", links: [{ to: "/admin/platform", label: "All businesses", icon: ShieldCheck, permission: null, platformAdmin: true, end: true },
     { to: "/admin/platform/assistants", label: "AI assistants", icon: Sparkles, permission: null, platformAdmin: true }] },
 ];
-const SIDEBAR_KEY = "workspace.sidebar";
 export function StaffLayout() {
   const { locale } = useTranslation();
   const { pathname } = useLocation();
   const { user, lock } = useAuth();
-  // The sidebar starts hidden on every screen and opens from the topbar's menu button. Phones and tablets: a drawer
-  // over the page that remembers the page it was opened on, so going to another page closes it. Larger screens: it
-  // slides in beside the page and stays until the menu button hides it again; that choice is kept on this device.
+  // The sidebar is hidden on every screen until the topbar's menu button opens it over the page. It remembers the page
+  // it was opened on, so choosing a link (going to another page) hides it again, and the page always keeps its full width.
   const [openOn, setOpenOn] = useState(null);
-  const [docked, setDocked] = useState(() => { try { return localStorage.getItem(SIDEBAR_KEY) === "open"; } catch { return false; } });
   const compact = useMediaQuery("(max-width: 1023px)");
-  const drawerOpen = compact && openOn === pathname;
-  const sidebarShown = compact ? drawerOpen : docked;
-  function toggleSidebar() {
-    if (compact) { setOpenOn(drawerOpen ? null : pathname); return; }
-    const next = !docked;
-    setDocked(next);
-    try { localStorage.setItem(SIDEBAR_KEY, next ? "open" : "closed"); } catch { /* kept for this visit only */ }
-  }
+  const drawerOpen = openOn === pathname;
   const [switchError, setSwitchError] = useState("");
   const topbarRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -192,9 +182,9 @@ export function StaffLayout() {
   return (
     <>
       <header ref={topbarRef} className="workspaceTopbar" aria-label="Business topbar">
-        <button ref={menuButtonRef} className="workspaceMenu" type="button" aria-label={sidebarShown ? "Close dashboard menu" : "Open dashboard menu"}
-          title={sidebarShown ? "Hide menu" : "Show menu"} aria-expanded={sidebarShown} aria-controls="business-sidebar" onClick={toggleSidebar}>
-          {compact && drawerOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+        <button ref={menuButtonRef} className="workspaceMenu" type="button" aria-label={drawerOpen ? "Close dashboard menu" : "Open dashboard menu"}
+          title={drawerOpen ? "Hide menu" : "Show menu"} aria-expanded={drawerOpen} aria-controls="business-sidebar" onClick={() => setOpenOn(drawerOpen ? null : pathname)}>
+          {drawerOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
         </button>
         <Link className="workspaceBrand" to="/admin/dashboard">
           <BusinessBrand organization={organization} compact />
@@ -210,9 +200,9 @@ export function StaffLayout() {
         </>}
         {switchError && <p role="alert">{switchError}</p>}
       </header>
-      <div className={sidebarShown ? "admin" : "admin sidebarCollapsed"}>
+      <div className="admin">
         {drawerOpen && <button className="sidebarBackdrop" type="button" tabIndex={-1} aria-label="Close dashboard menu" onClick={closeDrawer} />}
-        <aside ref={sidebarRef} id="business-sidebar" className={sidebarShown ? "sidebarOpen" : undefined} aria-label="Dashboard menu" aria-hidden={sidebarShown ? undefined : true} inert={sidebarShown ? undefined : true}>
+        <aside ref={sidebarRef} id="business-sidebar" className={drawerOpen ? "sidebarOpen" : undefined} aria-label="Dashboard menu" aria-hidden={drawerOpen ? undefined : true} inert={drawerOpen ? undefined : true}>
           {compact && <div className="sidebarHeader">
             <Link className="sidebarBrand" to="/admin/dashboard"><BusinessBrand organization={organization} compact /></Link>
             <button className="sidebarClose" type="button" aria-label="Close dashboard menu" onClick={closeDrawer}><X size={22} aria-hidden="true" /></button>
