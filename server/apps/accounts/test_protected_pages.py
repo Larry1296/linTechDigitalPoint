@@ -76,7 +76,7 @@ def test_each_private_page_opens_only_with_its_own_pin_which_the_owner_sets(owne
     assert unlock(client, 'mpesa', password=SIGN_IN).json()['code'] == 'pin_only'
 
 
-def test_investments_are_the_owners_alone_and_staff_open_m_pesa_with_the_pin_the_owner_gave(owner, employee):
+def test_investments_are_the_owners_alone_and_staff_open_m_pesa_with_their_own_pin(owner, employee):
     boss = signed_in(owner)
     set_pin(boss, '4826', page='mpesa')
     set_pin(boss, '573910', page='investments')
@@ -87,11 +87,16 @@ def test_investments_are_the_owners_alone_and_staff_open_m_pesa_with_the_pin_the
     assert staff.get(INVESTMENTS).status_code == 403
     assert 'investments' not in staff.get('/api/v1/auth/lock-pin/').json()['pages']
     assert staff.get('/api/v1/auth/protected/').json()['protected']['pages']['investments']['allowed'] is False
-    # Staff cannot set or reset a private page's PIN, nor use their password to get in.
-    assert set_pin(staff, '9753', page='mpesa').status_code == 403
+    # The owner's PIN is the owner's: staff set their own once, then only the owner resets it. No password gets them in.
+    assert set_pin(staff, '9753', page='investments').status_code == 403
+    assert unlock(staff, 'mpesa', pin='4826').json()['code'] == 'pin_unset'
+    assert set_pin(staff, '8531', page='mpesa').status_code == 200
+    assert set_pin(staff, '7531', page='mpesa').status_code == 403  # set already: the owner resets it
     assert unlock(staff, 'mpesa', password=SIGN_IN).json()['code'] == 'pin_only'
-    assert unlock(staff, 'mpesa', pin='4826').status_code == 200 and staff.get(MPESA).status_code == 200
-    # Their own lock PIN is still theirs to set.
+    assert unlock(staff, 'mpesa', pin='4826').status_code == 400
+    assert unlock(staff, 'mpesa', pin='8531').status_code == 200 and staff.get(MPESA).status_code == 200
+    # Their own lock PIN is theirs to set, different from their page PIN.
+    assert set_pin(staff, '8531').status_code == 400
     assert set_pin(staff, '9753').status_code == 200
 
 
@@ -99,16 +104,21 @@ def test_five_wrong_pins_wait_a_few_minutes_and_the_owner_resets_a_forgotten_pin
     boss = signed_in(owner)
     set_pin(boss, '4826', page='mpesa')
     staff = signed_in(employee)
+    set_pin(staff, '4826', page='mpesa')
     for left in [4, 3, 2, 1]:
         assert unlock(staff, 'mpesa', pin='0000').json()['detail'] == f'Wrong PIN. {left} {"try" if left == 1 else "tries"} left.'
     last = unlock(staff, 'mpesa', pin='0000').json()
-    assert 'ask the business owner to reset the M-Pesa PIN' in last['detail']
+    assert 'ask the business owner to reset your M-Pesa PIN' in last['detail']
     assert unlock(staff, 'mpesa', pin='4826').status_code == 429  # waiting, even with the right PIN
-    # The owner resets it with their own sign-in password; the old PIN no longer opens it.
-    assert set_pin(boss, '8642', page='mpesa').status_code == 200
+    # The owner resets it from Staff; the old PIN no longer opens it, and they set a new one.
+    row = Membership.objects.get(user=employee, role='MANAGER')
+    assert staff.post(f'/api/v1/tenancy/staff/{row.pk}/reset/', {'what': 'pins'}, format='json').status_code == 403
+    reset = boss.post(f'/api/v1/tenancy/staff/{row.pk}/reset/', {'what': 'pins'}, format='json')
+    assert reset.status_code == 200 and reset.json()['page_pins'] == []
     from apps.accounts.models import DeviceSession
     DeviceSession.objects.update(protected_blocked_until=None)
-    assert unlock(staff, 'mpesa', pin='4826').status_code == 400
+    assert unlock(staff, 'mpesa', pin='4826').json()['code'] == 'pin_unset'
+    assert set_pin(staff, '8642', page='mpesa').status_code == 200
     assert unlock(staff, 'mpesa', pin='8642').status_code == 200
 
 
@@ -151,4 +161,5 @@ def test_the_owner_keeps_an_employee_out_of_the_pages_they_choose(owner, employe
     # Only the owner chooses; giving the page back opens it again with its PIN.
     assert staff.patch(f'/api/v1/tenancy/staff/{staff_row.pk}/', {'hidden_pages': []}, format='json').status_code == 403
     boss.patch(f'/api/v1/tenancy/staff/{staff_row.pk}/', {'hidden_pages': []}, format='json')
-    assert unlock(staff, 'mpesa', pin='4826').status_code == 200
+    set_pin(staff, '5824', page='mpesa')
+    assert unlock(staff, 'mpesa', pin='5824').status_code == 200

@@ -39,6 +39,9 @@ def _manages(request):
 @permission_classes([IsInternalStaff])
 @throttle_classes([BusinessAssistantBurstThrottle, BusinessAssistantDailyThrottle])
 def chat(request):
+    if request.membership and request.membership.role == "EMPLOYEE":
+        # The assistant answers about the business's records and money, which are the owner's.
+        return Response({"detail": "The business assistant is for the business owner."}, status=403)
     conversation, problem = _conversation(request.data, MAX_QUESTION, MAX_ANSWER, MAX_TURNS)
     if problem:
         return Response({"detail": problem}, status=400)

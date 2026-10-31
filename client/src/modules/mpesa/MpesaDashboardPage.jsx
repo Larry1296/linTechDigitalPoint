@@ -89,7 +89,7 @@ function OutletForm({ outlet, onSave, onCancel }) {
 
 // Every outlet with its numbers and the money in operation last recorded. Each day except Sunday needs a
 // fresh figure (a shift opened or closed that day); until then the figures show in red as due.
-function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
+function OutletCards({ outlets, canChange, canDelete, canRead, onChanged, employee = false }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const run = async (action) => {
@@ -139,16 +139,18 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
               <dl>
                 <div><dt>Agent number</dt><dd>{outlet.agent_reference || "—"}</dd></div>
                 <div><dt>Store number</dt><dd>{outlet.store_number || "—"}</dd></div>
-                <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
-                <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
-                <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
-                <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
+                {!employee && <>
+                  <div><dt>Money in operation</dt><dd className="outletMoney">{money.total == null ? "Not recorded yet" : amount(money.total)}</dd></div>
+                  <div><dt>Cash</dt><dd className="outletMoney">{money.cash == null ? "—" : amount(money.cash)}</dd></div>
+                  <div><dt>Float</dt><dd className="outletMoney">{money.float == null ? "—" : amount(money.float)}</dd></div>
+                  <div><dt>Commission balance</dt><dd className="outletMoney">{money.commission_balance == null ? "Not recorded yet" : amount(money.commission_balance)}</dd></div>
+                </>}
               </dl>
-              {commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
+              {!employee && commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
               {money.due && outlet.active
                 ? <p className="outletDue" role="status">Update due: today's cash and float are not recorded yet{money.updated_on ? ` (last recorded ${money.updated_on})` : ""}. Open or close a shift to record them.</p>
                 : money.updated_on && <p className="muted">Recorded {money.updated_on}</p>}
-              {canRead && money.open_session && <div className="actionRow">
+              {canRead && !employee && money.open_session && <div className="actionRow">
                 <button type="button" className="secondary" onClick={() => void readCommission(outlet)}>Record commission balance</button>
               </div>}
               {(canChange || canDelete) && <div className="actionRow">
@@ -165,7 +167,9 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged }) {
 }
 
 // Closing: count the drawer, enter the float from the M-Pesa line, and compare the full amount with the opening.
+// An employee counts blind: they enter what they count, never what was expected; the owner sees any difference.
 function CloseShift({ dashboard, onClose, onCancel }) {
+  const employee = Boolean(dashboard.employee);
   const [count, setCount] = useState(emptyCount);
   const [float, setFloat] = useState("");
   const [reason, setReason] = useState("");
@@ -177,8 +181,8 @@ function CloseShift({ dashboard, onClose, onCancel }) {
   const cashVariance = cash - expectedCash;
   const floatVariance = (Number(float) || 0) - expectedFloat;
   const total = cash + (Number(float) || 0);
-  const opening = Number(dashboard.in_operation.opening);
-  const variance = Math.abs(cashVariance) >= 0.005 || (float !== "" && Math.abs(floatVariance) >= 0.005);
+  const opening = Number(dashboard.in_operation?.opening);
+  const variance = !employee && (Math.abs(cashVariance) >= 0.005 || (float !== "" && Math.abs(floatVariance) >= 0.005));
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
@@ -197,11 +201,11 @@ function CloseShift({ dashboard, onClose, onCancel }) {
         <CashCounter count={count} onChange={setCount} legend="Count the agency's own cash" />
         <FormField label="The agency's float on the M-Pesa line" name="actual_float" type="number" min="0" step="0.01" required
           value={float} onChange={(event) => setFloat(event.target.value)} />
-        <dl className="reportPosition">
+        {employee ? <p className="muted">Count carefully: the business owner checks your count against the shift's records.</p> : <dl className="reportPosition">
           <div><dt>Cash: counted vs expected</dt><dd>{amount(cash)} vs {amount(expectedCash)}{Math.abs(cashVariance) >= 0.005 && ` (${cashVariance > 0 ? "+" : ""}${cashVariance.toLocaleString()})`}</dd></div>
           <div><dt>Float: entered vs expected</dt><dd>{amount(float)} vs {amount(expectedFloat)}{float !== "" && Math.abs(floatVariance) >= 0.005 && ` (${floatVariance > 0 ? "+" : ""}${floatVariance.toLocaleString()})`}</dd></div>
           <div><dt>Money in operation now vs at opening</dt><dd><strong>{amount(total)}</strong> vs {amount(opening)} ({total - opening >= 0 ? "+" : ""}{(total - opening).toLocaleString()})</dd></div>
-        </dl>
+        </dl>}
         {variance && <FormField label="Why is there a difference? (required)" name="reason" required value={reason}
           onChange={(event) => setReason(event.target.value)} />}
         <div className="actionRow">
@@ -318,6 +322,8 @@ export function MpesaDashboardPage() {
   useLiveRefresh(load, { pollMs: 20000 });
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
+  // An employee records the shift's transactions and counts at the close; the agency's money and commission are the owner's.
+  const employee = Boolean(dashboard.employee);
   // The commission balance the app works out for each active outlet (last reading, plus commission since, less paid out), added up.
   const reading = outlets.filter((outlet) => outlet.active && outlet.money_in_operation).map((outlet) => outlet.money_in_operation);
   const known = reading.filter((money) => money.commission_balance != null);
@@ -410,14 +416,19 @@ export function MpesaDashboardPage() {
   };
   return (
     <>
-      <span className="eyebrow">The agency's own money only</span>
+      <span className="eyebrow">{employee ? "Your shift" : "The agency's own money only"}</span>
       <h1>M-Pesa Agent</h1>
-      <p className="privacyNotice">
+      {employee ? <p className="privacyNotice">
+        Record each deposit, withdrawal and airtime sale as you do it. Open the shift by counting the cash and entering the float;
+        close it the same way at the end. The business owner checks the counts.
+      </p> : <p className="privacyNotice">
         Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
         business's stock for the agency, like goods on the shelves, and the amounts customers deposit or withdraw are
         never sales. The commission is the profit, the way a charger bought at 100 and sold at 200 makes 100.
-      </p>
-      <div className="metrics">
+      </p>}
+      {employee ? <div className="metrics">
+        <MetricCard label="Transactions this shift">{dashboard.transaction_count}</MetricCard>
+      </div> : <div className="metrics">
         <MetricCard label="Money in operation">
           {amount(dashboard.in_operation.total)}
           {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
@@ -448,18 +459,20 @@ export function MpesaDashboardPage() {
           {amount(dashboard.commission_month.forecast)}
           <small className="muted"> · {amount(dashboard.commission_month.so_far)} so far, {dashboard.commission_month.days_left} {dashboard.commission_month.days_left === 1 ? "working day" : "working days"} left</small>
         </MetricCard>}
-      </div>
-      {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
-      <PartBooks part="MPESA" refreshKey={dashboard.transaction_count} />
-      <MpesaAnalysis refreshKey={dashboard.transaction_count} />
-      <MonthlyReport />
-      <PastShifts />
+      </div>}
+      {!employee && <>
+        {dashboard.session && <ShiftChart transactions={shiftTransactions} openedAt={dashboard.session.opened_at} />}
+        <PartBooks part="MPESA" refreshKey={dashboard.transaction_count} />
+        <MpesaAnalysis refreshKey={dashboard.transaction_count} />
+        <MonthlyReport />
+        <PastShifts />
+      </>}
       <section className="outletSection" aria-labelledby="outlets-heading">
         <div className="sectionHeading">
           <h2 id="outlets-heading">Outlets</h2>
           {canAddOutlet && !addingOutlet && <button type="button" className="secondary" onClick={() => setAddingOutlet(true)}>Add outlet</button>}
         </div>
-        <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} canRead={canPost} onChanged={load} />
+        <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} canRead={canPost} onChanged={load} employee={employee} />
         {canAddOutlet && addingOutlet && <OutletForm onSave={addOutlet} onCancel={() => setAddingOutlet(false)} />}
       </section>
       {!dashboard.session ? (
@@ -498,7 +511,7 @@ export function MpesaDashboardPage() {
             value={openingFloat}
             onChange={(event) => setOpeningFloat(event.target.value)}
           />
-          <FormField
+          {!employee && <><FormField
             label={`Commission balance now (${businessCurrency()})`}
             name="commission_balance"
             type="number"
@@ -518,7 +531,7 @@ export function MpesaDashboardPage() {
                 ? `Filled in with ${amount(lastClose.commission_balance)}: ${commissionSince(lastClose).replace(/^Last/, "last")}. Change it if the agent line shows a different balance.`
                 : `Filled in with the last reading, ${amount(lastClose.commission_balance)}. Change it if the agent line shows a different balance.`}</p>
           <OpeningCheck last={lastClose} cash={countTotal(openingCount)} electronicFloat={openingFloat} opening={opening}
-            onChange={setOpening} canRecordCommission={canRecordCommission} />
+            onChange={setOpening} canRecordCommission={canRecordCommission} /></>}
           <button disabled={!outlets.length}>Open shift</button>
         </form>
         </>
@@ -538,7 +551,7 @@ export function MpesaDashboardPage() {
             <button onClick={() => void rebalance("CASH_REBALANCE")}>
               Cash rebalance
             </button>
-            {canCorrect && <button className="secondary" onClick={() => setCorrecting(true)}>
+            {canCorrect && !employee && <button className="secondary" onClick={() => setCorrecting(true)}>
               Correct money in operation
             </button>}
             <button className="secondary" onClick={() => setClosing(true)}>
@@ -552,18 +565,21 @@ export function MpesaDashboardPage() {
               sessionId={dashboard.session.id}
               availableCash={dashboard.cash}
               availableFloat={dashboard.float}
+              employee={employee}
               onPosted={load}
             />
             <MpesaWithdrawalForm
               sessionId={dashboard.session.id}
               availableCash={dashboard.cash}
               availableFloat={dashboard.float}
+              employee={employee}
               onPosted={load}
             />
             <MpesaAirtimeForm
               sessionId={dashboard.session.id}
               availableCash={dashboard.cash}
               availableFloat={dashboard.float}
+              employee={employee}
               onPosted={load}
             />
           </div>
@@ -596,7 +612,7 @@ export function MpesaDashboardPage() {
                 <span>{signedFigure(entry.cash_delta)}</span>
                 <span>{signedFigure(entry.float_delta)}</span>
                 <span className="agencyActions">
-                  {user?.permissions?.includes("mpesa.reverse_mpesa_transaction") && <CorrectTransaction entry={entry} onDone={load} />}
+                  {user?.permissions?.includes("mpesa.reverse_mpesa_transaction") && <CorrectTransaction entry={entry} onDone={load} employee={employee} />}
                   {/* Money moved to or from an investment is undone on the Investments page, which fixes both sides. */}
                   {!["REVERSAL", "INVESTMENT"].includes(entry.transaction_type) &&
                     !entry.reversal_of && (

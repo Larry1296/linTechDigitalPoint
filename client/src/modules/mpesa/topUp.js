@@ -9,6 +9,7 @@ export const TOPUP_SOURCES = [
 // The choices for a float top-up (with the agency's own drawer cash) or a cash rebalance (without it), with each other
 // part's money and how much it has now.
 export function sourceChoices(sources, amount, { withDrawer }) {
-  const parts = (sources || []).map((source) => [source.value, `${source.label} (${amount(source.available)} there now)`]);
+  // An employee is not shown what each part holds: only where the money can come from.
+  const parts = (sources || []).map((source) => [source.value, source.available == null ? source.label : `${source.label} (${amount(source.available)} there now)`]);
   return [["", "Choose…"], ...(withDrawer ? [TOPUP_SOURCES[0]] : []), ...parts, TOPUP_SOURCES[1]];
 }

@@ -12,10 +12,12 @@ vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true),
 
 const settings = { name: "Alpha", business_type: "Duka / general shop", business_model: "GOODS", sector: "duka", business_size: "SMALL", phone: "", email: "", address: "", currency: "KES", timezone: "Africa/Nairobi",
   country: "KE", enabled_modules: ["inventory", "pos"], available_modules: ["inventory", "pos", "mpesa"], receipt_footer: "" };
-const staff = { roles: ["ADMIN", "MANAGER", "CASHIER"], staff: [
-  { id: 1, username: "owner", email: "", name: "", role: "OWNER", status: "ACTIVE" },
-  { id: 2, username: "jane", email: "", name: "Jane", role: "CASHIER", status: "ACTIVE", hidden_pages: ["loans"] },
-], pages: [{ key: "mpesa", label: "M-Pesa agency" }, { key: "loans", label: "Money lent" }] };
+const staff = { roles: ["EMPLOYEE", "ADMIN", "MANAGER", "CASHIER"], staff: [
+  { id: 1, username: "owner", email: "", name: "", role: "OWNER", status: "ACTIVE", page_pins: [] },
+  { id: 2, username: "jane", email: "", name: "Jane", role: "CASHIER", status: "ACTIVE", hidden_pages: ["loans"], page_pins: [] },
+  { id: 4, username: "kim", email: "", name: "Kim", role: "EMPLOYEE", status: "ACTIVE", open_pages: ["sales"], setup_pending: false, lock_pin_set: true, page_pins: ["mpesa"] },
+], pages: [{ key: "sales", label: "Selling" }, { key: "mpesa", label: "M-Pesa agency" }, { key: "loans", label: "Money lent" }],
+  work_pages: [{ key: "sales", label: "Selling" }, { key: "mpesa", label: "M-Pesa agency" }] };
 
 let pins;
 function pinState(options) {
@@ -30,7 +32,7 @@ function pinState(options) {
 beforeEach(() => {
   vi.clearAllMocks();
   // A cashier: the owner has set the M-Pesa PIN; Investments, the owner's alone, is not listed for them.
-  pins = { pin: { set: false, length: null }, is_owner: false, pages: { mpesa: { label: "M-Pesa", set: true, length: null } } };
+  pins = { pin: { set: false, length: null }, is_owner: false, pages: { mpesa: { label: "M-Pesa", set: true, length: 4, can_set: false } } };
   api.mockImplementation(async (path, options = {}) => {
     if (path === "/api/v1/tenancy/business-profiles/") return profiles;
     if (path === "/api/v1/tenancy/settings/") return options.method === "PATCH" ? { ...settings, ...JSON.parse(options.body) } : settings;
@@ -48,7 +50,7 @@ const renderAs = (role) => {
   return render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 };
 
-it("lets the owner save business details and add staff", async () => {
+it("lets the owner save business details and add an employee with the pages they can open", async () => {
   renderAs("OWNER");
   const business = (await screen.findByRole("heading", { name: "Business details" })).closest("form");
   fireEvent.change(within(business).getByLabelText("Business name"), { target: { value: "Alpha Traders" } });
@@ -58,21 +60,21 @@ it("lets the owner save business details and add staff", async () => {
   const saved = JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/settings/" && o?.method === "PATCH")[1].body);
   expect(saved).toMatchObject({ name: "Alpha Traders", business_model: "GOODS", sector: "duka", enabled_modules: ["inventory", "pos", "mpesa"] });
 
-  const staffForm = screen.getByRole("heading", { name: "Add a staff member" }).closest("form");
-  expect(screen.queryByRole("combobox", { name: "Role for owner" })).toBeNull();
-  fireEvent.change(within(staffForm).getByLabelText("Username"), { target: { value: "sam" } });
-  fireEvent.change(within(staffForm).getByLabelText("Email"), { target: { value: "sam@example.com" } });
-  fireEvent.change(within(staffForm).getByLabelText("Temporary password"), { target: { value: "Strong-pass-2026" } });
-  fireEvent.click(within(staffForm).getByRole("button", { name: "Add staff member" }));
+  const staffForm = screen.getByRole("heading", { name: "Add an employee" }).closest("form");
+  expect(screen.queryByRole("combobox", { name: "Account for owner" })).toBeNull();
+  fireEvent.change(within(staffForm).getByLabelText(/^Username/), { target: { value: "sam" } });
+  fireEvent.change(within(staffForm).getByLabelText(/^Temporary password/), { target: { value: "Strong-pass-2026" } });
+  fireEvent.click(within(staffForm).getByLabelText("They can open M-Pesa agency"));
+  fireEvent.click(within(staffForm).getByRole("button", { name: "Add employee" }));
   await screen.findByText(/Added sam/);
   const added = JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/staff/" && o?.method === "POST")[1].body);
-  expect(added).toMatchObject({ username: "sam", role: "CASHIER", password: "Strong-pass-2026" });
+  expect(added).toMatchObject({ username: "sam", role: "EMPLOYEE", password: "Strong-pass-2026", open_pages: ["mpesa"], email: "" });
 });
 
 it("lets the owner change a role and suspend a staff member", async () => {
   renderAs("OWNER");
-  fireEvent.change(await screen.findByRole("combobox", { name: "Role for jane" }), { target: { value: "MANAGER" } });
-  fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+  fireEvent.change(await screen.findByRole("combobox", { name: "Account for jane" }), { target: { value: "MANAGER" } });
+  fireEvent.click(within(screen.getByText("jane").closest("tr")).getByRole("button", { name: "Suspend" }));
   await waitFor(() => expect(api.mock.calls.filter(([path]) => path === "/api/v1/tenancy/staff/2/")).toHaveLength(2));
   const bodies = api.mock.calls.filter(([path]) => path === "/api/v1/tenancy/staff/2/").map(([, o]) => JSON.parse(o.body));
   expect(bodies).toEqual([{ role: "MANAGER" }, { status: "SUSPENDED" }]);
@@ -87,7 +89,7 @@ it("shows only the PIN and password forms to other staff", async () => {
   expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/v1/auth/lock-pin/"]);
 });
 
-it("lets anyone set their own lock PIN, but only shows who sets the private pages' PINs", async () => {
+it("lets anyone set their own lock PIN; a page PIN already set waits for the owner to reset it", async () => {
   renderAs("CASHIER");
   const card = (await screen.findByRole("heading", { name: "Lock PIN and private pages" })).closest("section");
   const fill = (pin, again = pin) => {
@@ -102,7 +104,7 @@ it("lets anyone set their own lock PIN, but only shows who sets the private page
   fireEvent.submit(within(card).getByRole("button", { name: "Save PIN" }).closest("form"));
   expect(await within(card).findByText(/Saved your lock PIN/)).toBeInTheDocument();
   expect([...within(card).getByLabelText("PIN to set").options].map((o) => o.value)).toEqual([""]);
-  expect(within(card).getByText("Set by the business owner")).toBeInTheDocument();
+  expect(within(card).getByText("M-Pesa PIN").nextSibling).toHaveTextContent("Set · 4 digits");
 });
 
 it("checks the new passwords match before sending", async () => {
@@ -211,7 +213,23 @@ it("lets the owner keep a staff member out of the pages they choose", async () =
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/tenancy/staff/2/", expect.objectContaining({ method: "PATCH" })));
   const [, options] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/staff/2/" && o?.method === "PATCH");
   expect(JSON.parse(options.body)).toEqual({ hidden_pages: ["loans", "mpesa"] });
-  expect(screen.getByText("None: the owner sees every page")).toBeInTheDocument();
+  expect(screen.getByText("Every page")).toBeInTheDocument();
+});
+
+it("lets the owner tick an employee's work pages and reset their sign-in or PINs", async () => {
+  renderAs("OWNER");
+  expect(await screen.findByLabelText("kim can open Selling")).toBeChecked();
+  expect(screen.queryByLabelText("kim can open Money lent")).toBeNull();  // the owner's side is never offered
+  expect(screen.getByText("Lock PIN set · M-Pesa PIN set")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("kim can open M-Pesa agency"));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/tenancy/staff/4/", expect.objectContaining({ method: "PATCH" })));
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/staff/4/")[1].body)).toEqual({ open_pages: ["sales", "mpesa"] });
+  const row = screen.getByText("kim").closest("tr");
+  fireEvent.click(within(row).getByRole("button", { name: "Reset sign-in" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/tenancy/staff/4/reset/", expect.anything()));
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/staff/4/reset/")[1].body)).toEqual({ what: "sign_in", password: "Sign-in-1" });
+  fireEvent.click(within(row).getByRole("button", { name: "Reset PINs" }));
+  await waitFor(() => expect(api.mock.calls.filter(([path]) => path === "/api/v1/tenancy/staff/4/reset/")).toHaveLength(2));
 });
 
 it("keeps letters out of a new PIN in Settings", async () => {

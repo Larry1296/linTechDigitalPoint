@@ -12,8 +12,9 @@ const STATUS = "/api/v1/auth/protected/";
 export const PRIVATE_IDLE_MS = 5 * 60 * 1000;
 const pageOf = (pathname) => (pathname.startsWith("/admin/investments") ? "investments" : "mpesa");
 
-// The private pages (M-Pesa and investments) are the only pages that lock by themselves. Each opens only with its own
-// PIN, the business's, which only the owner sets or resets; investments are the owner's alone. An open page locks again
+// The private pages (M-Pesa and investments) are the only pages that lock by themselves. Each opens only with a PIN,
+// and each person has their own: the owner's, and each employee's for the pages the owner gave them, set by them the
+// first time and reset only by the owner. Investments are the owner's alone. An open page locks again
 // after five minutes untouched, with "Lock now", or when the workspace locks or they sign out.
 export function ProtectedPages() {
   const page = pageOf(useLocation().pathname);
@@ -81,7 +82,7 @@ function PrivatePageLock({ page, state, onOpen }) {
       return false;
     } finally { setBusy(false); }
   }
-  // The owner sets the page's PIN the first time, confirmed with their sign-in password.
+  // The person sets their own PIN for the page the first time, confirmed with their sign-in password.
   async function setPin(event) {
     event.preventDefault();
     if (!/^\d{4,6}$/.test(form.pin)) { setError("A PIN is 4 to 6 numbers (0 to 9), with no letters."); return; }
@@ -100,10 +101,11 @@ function PrivatePageLock({ page, state, onOpen }) {
   </section>;
   if (!info.pin_set) return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
     <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
-    <h1 id="protected-title">{owner ? `Set the ${info.label} PIN` : `${info.label} has no PIN yet`}</h1>
-    {owner ? <>
-      <p>{info.label} is a private page: it opens only with its own PIN, 4 to 6 digits, different from any other page's.
-        {page === "investments" ? " It is yours alone: nobody else can open it." : " Give it to the people who run it."} Only you can change or reset it, in Settings.</p>
+    <h1 id="protected-title">{owner ? `Set the ${info.label} PIN` : `Set your ${info.label} PIN`}</h1>
+    {info.can_set !== false ? <>
+      <p>{info.label} is a private page: it opens only with your own PIN for it, 4 to 6 numbers, different from your lock PIN and any other page's.
+        {owner ? (page === "investments" ? " It is yours alone: nobody else can open it." : " Each employee you give it to sets their own.") + " You can change or reset it in Settings."
+          : " Keep it to yourself. If you forget it, the business owner resets it and you set a new one."}</p>
       <form onSubmit={setPin}>
         <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />
         <PasswordField label={`${info.label} PIN (4 to 6 numbers)`} inputMode="numeric" autoComplete="off" maxLength={6} {...field("pin")} />
@@ -111,17 +113,17 @@ function PrivatePageLock({ page, state, onOpen }) {
         <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save and open"}</button>
         <FormError title="Could not save." message={error} />
       </form>
-    </> : <p>Ask the business owner to set it. Then enter the PIN they give you here.</p>}
+    </> : <p>Ask the business owner to reset your PIN, then set a new one here.</p>}
   </section>;
   const waiting = state.blocked_until && new Date(state.blocked_until) > new Date();
   return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
     <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
-    <h1 id="protected-title">Enter the {info.label} PIN</h1>
-    <p>{info.label} opens only with its own PIN.</p>
+    <h1 id="protected-title">Enter your {info.label} PIN</h1>
+    <p>{info.label} opens only with your own PIN for it.</p>
     {waiting
       ? <p className="formNotice formNoticeError" role="alert">Too many wrong PINs. Wait a few minutes and try again.</p>
       : <PinField length={info.pin_length} busy={busy} error={error} onPin={(pin) => send({ pin })} />}
     {owner ? <small>Forgot it? Reset it in <Link to="/admin/settings">Settings</Link> with your sign-in password.</small>
-      : <small>Forgot it? Ask the business owner to reset it.</small>}
+      : <small>Forgot it? Ask the business owner to reset it, then set a new one.</small>}
   </section>;
 }

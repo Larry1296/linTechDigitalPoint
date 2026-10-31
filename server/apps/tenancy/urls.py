@@ -13,6 +13,7 @@ urlpatterns = [
     path("register/", api.register),
     path("staff/", api.staff),
     path("staff/<int:pk>/", api.staff_member),
+    path("staff/<int:pk>/reset/", api.staff_reset),
     path("settings/", api.business_settings),
     path("settings/logo/", api.business_logo),
     path("plans/", billing_api.public_plans),

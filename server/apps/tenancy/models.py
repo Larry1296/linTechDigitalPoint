@@ -75,7 +75,7 @@ class BusinessKind(models.Model):
 
 
 class Membership(models.Model):
-    ROLES = [(x, x.replace("_", " ").title()) for x in ["OWNER", "ADMIN", "MANAGER", "CASHIER", "INVENTORY", "ACCOUNTANT", "SERVICE_ATTENDANT", "READ_ONLY", "CUSTOM"]]
+    ROLES = [(x, x.replace("_", " ").title()) for x in ["OWNER", "ADMIN", "MANAGER", "CASHIER", "INVENTORY", "ACCOUNTANT", "SERVICE_ATTENDANT", "READ_ONLY", "CUSTOM", "EMPLOYEE"]]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memberships")
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="memberships")
     role = models.CharField(max_length=24, choices=ROLES, default="READ_ONLY")
@@ -85,6 +85,11 @@ class Membership(models.Model):
     permissions = models.JSONField(default=list, blank=True)
     # Pages the owner keeps this person out of (keys of permissions.PAGES), whatever their role allows.
     hidden_pages = models.JSONField(default=list, blank=True)
+    # An employee (role EMPLOYEE) opens only the work pages the owner ticked here (keys of permissions.WORK_PAGES).
+    open_pages = models.JSONField(default=list, blank=True)
+    # Set when the owner creates the account or resets it: the person chooses their own password and lock PIN at their
+    # next sign-in before anything else opens.
+    setup_pending = models.BooleanField(default=False)
     def save(self, *args, **kwargs):
         from django.db import transaction
         from django.core.exceptions import ValidationError

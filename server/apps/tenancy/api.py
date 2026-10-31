@@ -416,7 +416,8 @@ def register(request):
 
 
 # Staff and business settings are managed by the business's owners and administrators.
-STAFF_ROLES = [role for role, _ in Membership.ROLES if role not in {"OWNER", "CUSTOM"}]
+# An employee is the account the owner gives the people who work in the business; the older roles stay for those who have them.
+STAFF_ROLES = ["EMPLOYEE"] + [role for role, _ in Membership.ROLES if role not in {"OWNER", "CUSTOM", "EMPLOYEE"}]
 
 def _require_business_admin(request):
     if not request.organization or not request.membership:
@@ -431,10 +432,15 @@ def _require_business_admin(request):
     return None
 
 def staff_data(membership):
+    from apps.accounts.models import LockPin, PagePin
     user = membership.user
+    owner = membership.role == "OWNER"
     return {"id": membership.pk, "user_id": user.pk, "username": user.get_username(), "email": user.email,
             "name": user.get_full_name(), "role": membership.role, "status": membership.status,
-            "hidden_pages": membership.hidden_pages or [], "joined_at": membership.joined_at}
+            "hidden_pages": membership.hidden_pages or [], "open_pages": membership.open_pages or [], "joined_at": membership.joined_at,
+            # Whether they have chosen their own password and PINs yet; the owner resets any of them for someone who forgot.
+            "setup_pending": membership.setup_pending, "lock_pin_set": LockPin.objects.filter(user=user, page="").exists(),
+            "page_pins": [] if owner else sorted(PagePin.objects.filter(user=user).values_list("page", flat=True))}
 
 
 def hideable_pages(organization):
@@ -444,13 +450,32 @@ def hideable_pages(organization):
     enabled = effective_modules(organization)
     return [{"key": key, "label": label} for key, (label, module, _) in PAGES.items() if module is None or module in enabled]
 
+
+def work_pages(organization):
+    """The pages the owner can give an employee: the work pages of the parts this business runs."""
+    from .permissions import WORK_PAGES
+    return [page for page in hideable_pages(organization) if page["key"] in WORK_PAGES]
+
+
+def _work_pages_value(value):
+    from .permissions import WORK_PAGES
+    unknown = sorted(set(value) - set(WORK_PAGES))
+    if unknown:
+        raise serializers.ValidationError(f"An employee cannot be given: {', '.join(unknown)}. Those pages are the owner's.")
+    return sorted(set(value))
+
 class StaffInput(serializers.Serializer):
     username = serializers.CharField(max_length=150)
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
     first_name = serializers.CharField(max_length=150, allow_blank=True, default="")
     last_name = serializers.CharField(max_length=150, allow_blank=True, default="")
     password = serializers.CharField(write_only=True)
-    role = serializers.ChoiceField(choices=STAFF_ROLES)
+    role = serializers.ChoiceField(choices=STAFF_ROLES, default="EMPLOYEE")
+    open_pages = serializers.ListField(child=serializers.CharField(max_length=20), required=False, default=list)
+
+    def validate_open_pages(self, value):
+        return _work_pages_value(value)
+
     def validate(self, data):
         if User.objects.filter(username=data["username"]).exists():
             raise serializers.ValidationError({"username": "This username is already taken."})
@@ -464,6 +489,10 @@ class StaffUpdateInput(serializers.Serializer):
     role = serializers.ChoiceField(choices=STAFF_ROLES, required=False)
     status = serializers.ChoiceField(choices=["ACTIVE", "SUSPENDED"], required=False)
     hidden_pages = serializers.ListField(child=serializers.CharField(max_length=20), required=False)
+    open_pages = serializers.ListField(child=serializers.CharField(max_length=20), required=False)
+
+    def validate_open_pages(self, value):
+        return _work_pages_value(value)
 
     def validate_hidden_pages(self, value):
         from .permissions import PAGES
@@ -480,21 +509,26 @@ def staff(request):
         return denied
     memberships = Membership.objects.filter(organization=request.organization).select_related("user").order_by("joined_at", "pk")
     if request.method == "GET":
-        return Response({"roles": STAFF_ROLES, "staff": [staff_data(m) for m in memberships], "pages": hideable_pages(request.organization)})
+        return Response({"roles": STAFF_ROLES, "staff": [staff_data(m) for m in memberships], "pages": hideable_pages(request.organization),
+                         "work_pages": work_pages(request.organization)})
     form = StaffInput(data=request.data)
     form.is_valid(raise_exception=True)
     values = dict(form.validated_data)
     role = values.pop("role")
+    pages = values.pop("open_pages")
+    if (role != "EMPLOYEE" or pages) and request.membership.role != "OWNER":
+        return Response({"detail": "Only the business owner adds employees and chooses their pages."}, status=403)
     if role == "ADMIN" and request.membership.role != "OWNER":
         return Response({"detail": "Only the owner can make someone an administrator."}, status=403)
     try:
         with transaction.atomic():
             user = User.objects.create_user(**values)
-            membership = Membership.objects.create(user=user, organization=request.organization, role=role)
+            # They choose their own password and lock PIN when they first sign in.
+            membership = Membership.objects.create(user=user, organization=request.organization, role=role, open_pages=pages, setup_pending=True)
     except DjangoValidationError as exc:
         return Response({"detail": " ".join(exc.messages)}, status=400)
     from apps.core.models import AuditLog
-    AuditLog.objects.create(action="STAFF_ADDED", object_type="Membership", object_id=str(membership.pk), user=request.user, after={"username": user.get_username(), "role": role})
+    AuditLog.objects.create(action="STAFF_ADDED", object_type="Membership", object_id=str(membership.pk), user=request.user, after={"username": user.get_username(), "role": role, "open_pages": pages})
     return Response(staff_data(membership), status=201)
 
 @api_view(["PATCH"])
@@ -514,9 +548,9 @@ def staff_member(request, pk):
     form.is_valid(raise_exception=True)
     if form.validated_data.get("role") == "ADMIN" and request.membership.role != "OWNER":
         return Response({"detail": "Only the owner can make someone an administrator."}, status=403)
-    if "hidden_pages" in form.validated_data and request.membership.role != "OWNER":
+    if {"hidden_pages", "open_pages"} & set(form.validated_data) and request.membership.role != "OWNER":
         return Response({"detail": "Only the business owner chooses which pages someone cannot open."}, status=403)
-    before = {"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or []}
+    before = {"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or [], "open_pages": membership.open_pages or []}
     for field, value in form.validated_data.items():
         setattr(membership, field, value)
     try:
@@ -524,7 +558,53 @@ def staff_member(request, pk):
     except DjangoValidationError as exc:
         return Response({"detail": " ".join(exc.messages)}, status=400)
     from apps.core.models import AuditLog
-    AuditLog.objects.create(action="STAFF_CHANGED", object_type="Membership", object_id=str(membership.pk), user=request.user, before=before, after={"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or []})
+    AuditLog.objects.create(action="STAFF_CHANGED", object_type="Membership", object_id=str(membership.pk), user=request.user, before=before, after={"role": membership.role, "status": membership.status, "hidden_pages": membership.hidden_pages or [], "open_pages": membership.open_pages or []})
+    return Response(staff_data(membership))
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def staff_reset(request, pk):
+    """The owner resets what someone forgot. ``what``: "sign_in" gives them a new temporary ``password`` (they choose
+    their own password and lock PIN again at their next sign-in, and every device they are on is signed out); "pins"
+    clears their private page PINs (``page``, or all of them), so they set new ones the next time they open the page."""
+    denied = _require_business_admin(request)
+    if denied:
+        return denied
+    if request.membership.role != "OWNER":
+        return Response({"detail": "Only the business owner resets someone's sign-in or PINs."}, status=403)
+    membership = Membership.objects.filter(organization=request.organization, pk=pk).select_related("user").first()
+    if not membership:
+        return Response({"detail": "Staff member not found in this business."}, status=404)
+    if membership.role == "OWNER":
+        return Response({"detail": "Reset your own PINs in Settings → Lock PIN and private pages."}, status=400)
+    from django.utils import timezone
+    from apps.accounts.models import DeviceSession, LockPin, PagePin
+    from apps.core.models import AuditLog
+    user, what = membership.user, request.data.get("what")
+    if what == "sign_in":
+        password = request.data.get("password") or ""
+        try:
+            password_validation.validate_password(password, user)
+        except DjangoValidationError as exc:
+            return Response({"detail": " ".join(exc.messages), "field": "password"}, status=400)
+        with transaction.atomic():
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            LockPin.objects.filter(user=user).delete()
+            Membership.objects.filter(pk=membership.pk).update(setup_pending=True)
+            DeviceSession.objects.filter(user=user, revoked_at=None).update(revoked_at=timezone.now())
+    elif what == "pins":
+        from apps.accounts.protected_pages import PAGES as PRIVATE
+        page = request.data.get("page") or None
+        if page and page not in PRIVATE:
+            return Response({"detail": "There is no such private page."}, status=400)
+        pins = PagePin.objects.filter(user=user)
+        (pins.filter(page=page) if page else pins).delete()
+    else:
+        return Response({"detail": "Choose what to reset: their sign-in or their PINs."}, status=400)
+    AuditLog.objects.create(action="STAFF_RESET", object_type="Membership", object_id=str(membership.pk), user=request.user, after={"what": what, "page": request.data.get("page") or ""})
+    membership.refresh_from_db()
     return Response(staff_data(membership))
 
 class SettingsInput(serializers.Serializer):

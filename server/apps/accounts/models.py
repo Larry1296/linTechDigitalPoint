@@ -92,9 +92,11 @@ class ProtectedPagesPassword(models.Model):
 
 
 class PagePin(TenantModel):
-    """A private page's PIN, the business's own (see protected_pages.PAGES): the only way to open that page. Only the
-    business owner sets or resets it, confirmed with their sign-in password; each page has a different PIN."""
+    """A private page's PIN (see protected_pages.PAGES): the only way to open that page. The owner's has no ``user``;
+    each employee the owner lets in sets their own (``user``) once, and only the owner resets it. Each person's pages
+    have different PINs."""
     page = models.CharField(max_length=20)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name="page_pins", on_delete=models.CASCADE)
     digest = models.CharField(max_length=128)
     length = models.PositiveSmallIntegerField()
     updated_at = models.DateTimeField(auto_now=True)
@@ -103,4 +105,5 @@ class PagePin(TenantModel):
     class Meta:
         base_manager_name = "objects"
         default_manager_name = "objects"
-        constraints = [models.UniqueConstraint(fields=["organization", "page"], name="acco_pagepin_page_org")]
+        constraints = [models.UniqueConstraint(fields=["organization", "page"], condition=models.Q(user=None), name="acco_pagepin_page_org_owner"),
+                       models.UniqueConstraint(fields=["organization", "page", "user"], name="acco_pagepin_page_org_user")]

@@ -24,7 +24,7 @@ afterEach(() => { vi.useRealTimers(); });
 it("opens a private page the moment its own PIN is typed", async () => {
   api.mockImplementation(async (path) => path.endsWith("unlock/") ? { protected: status({ pages: pages({ unlocked: true }) }) } : { protected: status() });
   page();
-  expect(await screen.findByRole("heading", { name: "Enter the M-Pesa PIN" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Enter your M-Pesa PIN" })).toBeInTheDocument();
   const pin = screen.getByLabelText("PIN");
   await act(async () => { fireEvent.change(pin, { target: { value: "482" } }); });
   expect(screen.queryByText("M-Pesa records")).toBeNull();
@@ -44,7 +44,7 @@ it("clears a wrong PIN, never offers the sign-in password, and tells staff to as
   expect(await screen.findByText("Wrong PIN. 4 tries left.")).toBeInTheDocument();
   expect(pin).toHaveValue("");
   expect(screen.queryByLabelText(/sign-in password/)).toBeNull();
-  expect(screen.getByText("Forgot it? Ask the business owner to reset it.")).toBeInTheDocument();
+  expect(screen.getByText("Forgot it? Ask the business owner to reset it, then set a new one.")).toBeInTheDocument();
 });
 
 it("keeps investments closed to anyone but the owner", async () => {
@@ -62,7 +62,7 @@ it("waits after too many wrong PINs, and the owner is pointed to Settings to res
   expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/admin/settings");
 });
 
-it("lets the owner set a page's PIN the first time, then opens it; staff are asked to wait for the owner", async () => {
+it("lets the owner set a page's PIN the first time, then opens it", async () => {
   api.mockImplementation(async (path) => {
     if (path.endsWith("unlock/")) return { protected: status({ pages: pages({ unlocked: true }) }) };
     if (path.endsWith("lock-pin/")) return {};
@@ -78,11 +78,16 @@ it("lets the owner set a page's PIN the first time, then opens it; staff are ask
   expect(body("/api/v1/auth/lock-pin/")).toEqual({ page: "mpesa", password: "Sign-in-1", pin: "4826" });
 });
 
-it("tells staff the owner has not set a page's PIN yet", async () => {
-  api.mockImplementation(async () => ({ protected: status({ is_owner: false, pages: pages({ pin_set: false, pin_length: null }) }) }));
+it("lets an employee set their own PIN the first time, and sends them to the owner once it needs a reset", async () => {
+  api.mockImplementation(async () => ({ protected: status({ is_owner: false, pages: pages({ pin_set: false, pin_length: null, can_set: true }) }) }));
+  const { unmount } = page();
+  expect(await screen.findByRole("heading", { name: "Set your M-Pesa PIN" })).toBeInTheDocument();
+  expect(screen.getByText(/the business owner resets it and you set a new one/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save and open" })).toBeInTheDocument();
+  unmount();
+  api.mockImplementation(async () => ({ protected: status({ is_owner: false, pages: pages({ pin_set: false, pin_length: null, can_set: false }) }) }));
   page();
-  expect(await screen.findByRole("heading", { name: "M-Pesa has no PIN yet" })).toBeInTheDocument();
-  expect(screen.getByText(/Ask the business owner to set it/)).toBeInTheDocument();
+  expect(await screen.findByText(/Ask the business owner to reset your PIN/)).toBeInTheDocument();
 });
 
 it("locks an open private page after five minutes untouched", async () => {

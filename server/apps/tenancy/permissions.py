@@ -21,6 +21,35 @@ PAGES = {
 }
 
 
+# An employee's account: only the work pages the owner ticks (Membership.open_pages), each with what it needs to work.
+# The owner's side of the business (money, profit and costs, money spent and lent, chama, investments, subscription,
+# business settings, commission, staff) is never an employee's, whatever is ticked.
+WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa")
+CUSTOMERS = {"accounts.view_customerprofile", "accounts.add_customerprofile", "accounts.change_customerprofile"}
+WORK_NEEDS = {
+    "sales": lambda app, code: f"{app}.{code}" in CUSTOMERS or app in {"catalog", "inventory"} and code.startswith("view_"),
+    "services": lambda app, code: f"{app}.{code}" in CUSTOMERS,
+    "rooms": lambda app, code: f"{app}.{code}" in CUSTOMERS,
+}
+# The agency's commission, its shift reconciliations (expected against counted) and outlet set-up are the owner's.
+OWNERS_AGENCY = ("mpesacommissionentry", "mpesareconciliation", "add_mpesaoutlet", "change_mpesaoutlet", "delete_mpesaoutlet")
+
+
+def employee_permission(key, pages):
+    app, _, code = key.partition(".")
+    if key == "mpesa.add_mpesareconciliation":
+        return "mpesa" in pages  # closing their own shift: they count, the owner sees what was expected
+    # Deleting records (sales, products, outlets, ...) is the owner's: an employee cancels or corrects through the page.
+    if app in {"accounting", "chama"} or code.startswith("delete_") or app == "mpesa" and any(part in code for part in OWNERS_AGENCY):
+        return False
+    return any(PAGES[page][2](app, code) or page in WORK_NEEDS and WORK_NEEDS[page](app, code) for page in pages if page in WORK_PAGES)
+
+
+def is_employee(user):
+    membership = membership_for(user)
+    return bool(membership and membership.role == "EMPLOYEE")
+
+
 def hidden(key, pages):
     app, _, code = key.partition(".")
     return any(page in PAGES and PAGES[page][2](app, code) for page in pages)
@@ -43,6 +72,8 @@ def _business_permissions(user):
     available = {f"{app}.{code}" for app, code in Permission.objects.filter(content_type__app_label__in=DOMAIN_APPS).values_list("content_type__app_label", "codename")}
     if membership.role == "OWNER":
         return available
+    if membership.role == "EMPLOYEE":
+        return {key for key in available if not owner_only(key) and employee_permission(key, membership.open_pages or [])}
     keep_out = membership.hidden_pages or []
     available = {key for key in available if not owner_only(key) and not hidden(key, keep_out)}
     if membership.role == "ADMIN":

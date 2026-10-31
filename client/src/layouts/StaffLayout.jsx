@@ -239,7 +239,8 @@ export function StaffLayout() {
           <Outlet />
         </main>
       </div>
-      {organization && <BusinessAssistant key={organization.id} organization={organization} />}
+      {/* The assistant answers about the business's records and money, which are the owner's: not an employee's. */}
+      {organization && user?.roles?.[0] !== "EMPLOYEE" && <BusinessAssistant key={organization.id} organization={organization} />}
       <AppFooter />
     </>
   );

@@ -9,7 +9,7 @@ import { CommissionBalanceField } from "./commissionBalance";
 
 // Airtime (credit) for a customer. It is not a deposit or a withdrawal and not income: only the commission
 // Safaricom pays on it is, recorded on the Commission page.
-export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onPosted }) {
+export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onPosted, employee = false }) {
   const blank = { phone: "", amount: "", code: "", paidBy: "CASH", commission: "" };
   const [fields, setFields] = useState(blank);
   const [message, setMessage] = useState("");
@@ -61,7 +61,7 @@ export function MpesaAirtimeForm({ sessionId, availableCash, availableFloat, onP
       </fieldset>
       <FormField label={fields.paidBy === "CASH" ? "Transaction ID (optional)" : "Customer's M-Pesa code (optional)"} name="provider_reference" autoComplete="off"
         value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
-      <CommissionBalanceField sessionId={sessionId} type="AIRTIME_SALE" amount={fields.amount} value={fields.commission} onChange={(value) => set("commission", value)} />
+      {!employee && <CommissionBalanceField sessionId={sessionId} type="AIRTIME_SALE" amount={fields.amount} value={fields.commission} onChange={(value) => set("commission", value)} />}
       {availableCash != null && availableFloat != null && <div className="balancePreview" aria-live="polite">
         <table>
           <caption>Balances ({businessCurrency()})</caption>

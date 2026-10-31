@@ -61,6 +61,9 @@ def identity(user, request=None):
         "phone": account.phone if account else "",
         "authenticated": True, "session": access_state(request) if request else None, "is_staff": bool(membership), "is_superuser": False,
         "platform_admin": user.is_superuser, "roles": [membership.role] if membership else [], "permissions": granted,
+        # The owner sees the whole business; an employee only the work pages the owner gave them (open_pages).
+        "is_owner": bool(membership and membership.role == "OWNER"), "open_pages": (membership.open_pages or []) if membership and membership.role == "EMPLOYEE" else None,
+        "setup_required": Membership.objects.filter(user=user, setup_pending=True).exists(),
         "organization": organization_data(organization) if organization else None,
         "branch": current_branch, "branches": branches,
         "memberships": [{"organization": organization_data(m.organization), "role": m.role} for m in memberships],

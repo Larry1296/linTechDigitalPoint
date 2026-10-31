@@ -128,8 +128,50 @@ def transfer(request):
 @api_view(["GET"])
 @permission_classes([IsInternalStaff])
 def dashboard(request):
+    from apps.tenancy.permissions import is_employee
+    if is_employee(request.user):
+        # The business's dashboard (sales, profit, money) is the owner's; an employee has their own (work_dashboard).
+        return Response({"detail": "The business dashboard is the owner's. Yours is on your dashboard.", "code": "owner_only"}, status=403)
     from .dashboard import dashboard_snapshot
     return Response(dashboard_snapshot(request))
+
+
+@api_view(["GET"])
+@permission_classes([IsInternalStaff])
+def work_dashboard(request):
+    """An employee's dashboard: what needs doing on the pages the owner gave them, never the business's money. Counts and
+    names only: no sales totals, prices paid, profit, cash, float or commission."""
+    from django.db.models.functions import Coalesce
+    from apps.tenancy.api import work_pages
+    from apps.tenancy.middleware import effective_modules
+    from apps.tenancy.permissions import membership_for
+    user, today = request.user, timezone.localdate()
+    can = lambda permission: has_business_permission(user, permission)
+    enabled = effective_modules(request.organization)
+    membership = membership_for(user)
+    given = set(membership.open_pages or []) if membership and membership.role == "EMPLOYEE" else None
+    data = {"name": user.get_full_name() or user.username, "business": request.organization.name,
+            "pages": [page for page in work_pages(request.organization) if given is None or page["key"] in given]}
+    if "pos" in enabled and can("commerce.add_sale"):
+        data["sales"] = {"mine_today": Sale.objects.filter(created_by=user, status="COMPLETED", created_at__date=today).count()}
+    if "inventory" in enabled and can("catalog.view_product"):
+        zero = Decimal("0")
+        variants = (ProductVariant.objects.filter(active=True, product__active=True, product__product_type="STOCK_ITEM", minimum_stock__gt=0)
+                    .annotate(available=Coalesce(Sum(F("lots__balances__quantity") - F("lots__balances__reserved"), filter=Q(lots__balances__in=StockBalance.objects.all())), zero, output_field=DecimalField()))
+                    .filter(available__lte=F("minimum_stock")).select_related("product").order_by("available", "product__name"))
+        data["low_stock"] = {"count": variants.count(), "items": [{"name": str(v.product) if v.name == "Standard" else str(v), "available": v.available,
+                                                                   "minimum": v.minimum_stock} for v in variants[:8]]}
+    if "services" in enabled and can("cyber.view_cyberjob"):
+        jobs = CyberJob.objects.filter(status__in=["QUEUED", "IN_PROGRESS", "WAITING_CUSTOMER", "READY"])
+        data["services"] = {"waiting": jobs.exclude(status="READY").count(), "ready": jobs.filter(status="READY").count()}
+    if "rooms" in enabled and can("hotel.view_stay"):
+        from apps.hotel.models import Stay
+        data["rooms"] = {"in_house": Stay.objects.filter(status=Stay.IN).count(), "arriving": Stay.objects.filter(status=Stay.BOOKED, arrival=today).count(),
+                         "leaving": Stay.objects.filter(status=Stay.IN, departure=today).count()}
+    if "mpesa" in enabled and can("mpesa.view_mpesasession"):
+        shift = MpesaSession.objects.filter(status="OPEN", operator=user).first()
+        data["mpesa"] = {"shift_open": bool(shift), "transactions": shift.transactions.exclude(transaction_type="REVERSAL").filter(reversal__isnull=True).count() if shift else 0}
+    return Response(data)
 
 
 @api_view(["GET"])

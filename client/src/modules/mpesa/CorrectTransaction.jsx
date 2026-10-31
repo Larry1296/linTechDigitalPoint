@@ -12,7 +12,7 @@ const LABELS = { CUSTOMER_DEPOSIT: "deposit", CUSTOMER_WITHDRAWAL: "withdrawal",
 
 // Fix a wrong amount, number, ID or transaction ID. The wrong entry is reversed and the right one recorded,
 // linked together with the reason, so nothing is lost and cash, float and the monthly report stay correct.
-export function CorrectTransaction({ entry, onDone }) {
+export function CorrectTransaction({ entry, onDone, employee = false }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +49,7 @@ export function CorrectTransaction({ entry, onDone }) {
         {airtime && <label>Paid by<select name="paid_by" defaultValue={entry.paid_by}>{AIRTIME_PAID_BY.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
         {topUp && <label>Money from<select name="paid_by" defaultValue={entry.paid_by || "DRAWER"}>{[...TOPUP_SOURCES, ...(entry.paid_by && !TOPUP_SOURCES.some(([id]) => id === entry.paid_by)
           ? [[entry.paid_by, `Same as before: ${entry.paid_by.replace(":", "'s money, ").toLowerCase()}`]] : [])].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>}
-        {(deposit || airtime || entry.transaction_type === "CUSTOMER_WITHDRAWAL") && <label>Commission balance after (optional)
+        {!employee && (deposit || airtime || entry.transaction_type === "CUSTOMER_WITHDRAWAL") && <label>Commission balance after (optional)
           <input name="commission_balance" type="number" inputMode="decimal" min="0" step="0.01" defaultValue={entry.commission_balance ?? ""} /></label>}
         <label>Transaction ID<TextBox name="provider_reference" defaultValue={entry.provider_reference || ""} placeholder="If known" /></label>
         <label className="correctReason">What was wrong?<TextBox name="reason" required maxLength={240} placeholder="e.g. typed 700, customer deposited 500" /></label>

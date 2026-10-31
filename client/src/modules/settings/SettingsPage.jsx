@@ -4,7 +4,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormField } from "../../components/forms/FormField";
 import { ErrorState, Loading } from "../../components/States";
-import { confirmAction } from "../../core/ui/alerts";
+import { askForm, confirmAction } from "../../core/ui/alerts";
 import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
@@ -14,6 +14,7 @@ import { TextBox } from "../../components/forms/TextBox";
 
 const roleLabels = {
   OWNER: "Owner",
+  EMPLOYEE: "Employee — only the work pages you tick",
   ADMIN: "Administrator — full access",
   MANAGER: "Manager — all daily operations",
   CASHIER: "Cashier — counter sales and payments",
@@ -313,29 +314,49 @@ function BranchSettings() {
   </section>;
 }
 
+// Ticked pages, as a checkbox list: which work pages an employee opens, or (older roles) which pages someone cannot open.
+function PageChoice({ pages, chosen, onChange, describe }) {
+  return pages.map((page) => <label key={page.key}><input type="checkbox" checked={chosen.includes(page.key)} aria-label={describe(page)}
+    onChange={(event) => onChange(event.target.checked ? [...chosen, page.key] : chosen.filter((key) => key !== page.key))} /> {page.label}</label>);
+}
+
+const pinPages = { mpesa: "M-Pesa" };
+// Where someone's sign-in stands: whether they have chosen their own password and lock PIN, and their page PINs.
+function accessText(member) {
+  if (member.role === "OWNER") return "The owner";
+  if (member.setup_pending) return "Not signed in yet: they choose their password and lock PIN at their first sign-in";
+  return [member.lock_pin_set ? "Lock PIN set" : "No lock PIN yet", ...(member.page_pins || []).map((page) => `${pinPages[page] || page} PIN set`)].join(" · ");
+}
+
 function StaffSettings({ isOwner }) {
   const [data, setData] = useState();
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [role, setRole] = useState("EMPLOYEE");
+  const [pages, setPages] = useState([]);
   const load = useCallback(() => {
     api("/api/v1/tenancy/staff/").then(setData).catch((e) => setLoadError(e.message));
   }, []);
   useEffect(load, [load]);
   if (loadError && !data) return <ErrorState message={loadError} retry={load} />;
   if (!data) return <Loading />;
-  const assignable = data.roles.filter((role) => isOwner || role !== "ADMIN");
+  const assignable = data.roles.filter((option) => isOwner || !["ADMIN", "EMPLOYEE"].includes(option));
+  const chosenRole = assignable.includes(role) ? role : assignable[0];
+  const workPages = data.work_pages || [];
   const add = async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     setBusy(true); setNotice(null);
     try {
-      const member = await api("/api/v1/tenancy/staff/", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+      const body = { ...Object.fromEntries(new FormData(form)), role: chosenRole, ...(chosenRole === "EMPLOYEE" ? { open_pages: pages } : {}) };
+      const member = await api("/api/v1/tenancy/staff/", { method: "POST", body: JSON.stringify(body) });
       form.reset();
-      setNotice({ place: "add", kind: "success", text: `Added ${member.username}. Share their username and password with them; they can change the password in Settings.` });
+      setPages([]);
+      setNotice({ place: "add", kind: "success", text: `Added ${member.username}. Give them their username and the temporary password: they sign in on the usual sign-in page, then choose their own password and lock PIN.` });
       load();
     } catch (e) {
-      setNotice({ place: "add", kind: "error", title: "Could not add the staff member.", text: e.message });
+      setNotice({ place: "add", kind: "error", title: "Could not add them.", text: e.message });
     } finally {
       setBusy(false);
     }
@@ -349,26 +370,57 @@ function StaffSettings({ isOwner }) {
       setNotice({ place: "list", kind: "error", title: `Could not update ${member.username}.`, text: e.message });
     }
   };
+  const reset = async (member, what) => {
+    setNotice(null);
+    let body = { what };
+    if (what === "sign_in") {
+      const values = await askForm({ title: `Reset ${member.name || member.username}'s sign-in?`,
+        text: "Give them a new temporary password. Every device they are signed in on is signed out, and at their next sign-in they choose their own password and lock PIN again.",
+        confirmButtonText: "Reset sign-in",
+        fields: [{ name: "password", label: "Temporary password", type: "password", required: true }] });
+      if (!values) return;
+      body = { ...body, password: values.password };
+    } else if (!(await confirmAction({ title: `Reset ${member.name || member.username}'s PINs?`,
+      text: "Their private page PINs stop working. They set new ones the next time they open those pages.", confirmButtonText: "Reset PINs" }))) return;
+    try {
+      await api(`/api/v1/tenancy/staff/${member.id}/reset/`, { method: "POST", body: JSON.stringify(body) });
+      setNotice({ place: "list", kind: "success", text: what === "sign_in" ? `Reset ${member.username}'s sign-in. Give them the temporary password.` : `Reset ${member.username}'s PINs.` });
+      load();
+    } catch (e) {
+      setNotice({ place: "list", kind: "error", title: `Could not reset ${member.username}.`, text: e.message });
+    }
+  };
   return <section className="formCard">
     <h2>Staff</h2>
-    <p>Give each person their own sign-in. Their role decides what they can see and do.
-      {isOwner && " You can also keep anyone out of the pages you choose: they leave that person's menu and stay closed to them. You always see every page, and Investments is yours alone."}</p>
+    <p>Give each person who works here their own employee account. They sign in on the same sign-in page, with their own password and lock PIN.
+      {isOwner && " An employee sees only the work pages you tick, and their own dashboard: never the business's takings, profit, buying prices, money spent or lent, chama, investments, subscription or settings. On M-Pesa they record transactions and count the cash and float when they close; the commission and money in operation stay yours."}</p>
     <div className="tableWrap"><table>
-      <thead><tr><th>Name</th><th>Role</th><th>Status</th>{isOwner && <th>Pages they cannot open</th>}<th /></tr></thead>
+      <thead><tr><th>Name</th><th>Account</th><th>Pages</th><th>Sign-in and PINs</th><th>Status</th><th /></tr></thead>
       <tbody>{data.staff.map((member) => {
         const locked = member.role === "OWNER" || (member.role === "ADMIN" && !isOwner);
+        const employee = member.role === "EMPLOYEE";
+        const open = member.open_pages || [];
+        const named = (keys) => keys.map((key) => data.pages.find((page) => page.key === key)?.label || key).join(", ");
         return <tr key={member.id}>
           <td>{member.name || member.username}<br /><small>{member.username}{member.email ? ` · ${member.email}` : ""}</small></td>
-          <td>{locked ? shortRole(member.role) : <select aria-label={`Role for ${member.username}`} value={member.role} onChange={(event) => void change(member, { role: event.target.value })}>
-            {[...new Set([member.role, ...assignable])].map((role) => <option key={role} value={role}>{shortRole(role)}</option>)}
+          <td>{locked || !isOwner && employee ? shortRole(member.role) : <select aria-label={`Account for ${member.username}`} value={member.role} onChange={(event) => void change(member, { role: event.target.value })}>
+            {[...new Set([member.role, ...assignable])].map((option) => <option key={option} value={option}>{shortRole(option)}</option>)}
           </select>}</td>
+          <td>{member.role === "OWNER" ? "Every page" : !isOwner ? (employee ? named(open) || "None yet" : "As their role allows")
+            : employee ? <details className="staffPages">
+              <summary>{open.length ? named(open) : "None yet: tick their pages"}</summary>
+              <PageChoice pages={workPages} chosen={open} describe={(page) => `${member.username} can open ${page.label}`}
+                onChange={(open_pages) => void change(member, { open_pages })} />
+            </details> : <details className="staffPages">
+              <summary>{member.hidden_pages?.length ? `Cannot open: ${named(member.hidden_pages)}` : "Cannot open: none"}</summary>
+              <PageChoice pages={data.pages} chosen={member.hidden_pages || []} describe={(page) => `${member.username} cannot open ${page.label}`}
+                onChange={(hidden_pages) => void change(member, { hidden_pages })} />
+            </details>}</td>
+          <td>{accessText(member)}{isOwner && member.role !== "OWNER" && <div className="actionRow">
+            <button type="button" className="secondary" onClick={() => void reset(member, "sign_in")}>Reset sign-in</button>
+            {member.page_pins?.length > 0 && <button type="button" className="secondary" onClick={() => void reset(member, "pins")}>Reset PINs</button>}
+          </div>}</td>
           <td>{member.status === "ACTIVE" ? "Active" : "Suspended"}</td>
-          {isOwner && <td>{member.role === "OWNER" ? "None: the owner sees every page" : <details className="staffPages">
-            <summary>{member.hidden_pages?.length ? member.hidden_pages.map((key) => data.pages.find((page) => page.key === key)?.label || key).join(", ") : "None"}</summary>
-            {data.pages.map((page) => <label key={page.key}><input type="checkbox" checked={(member.hidden_pages || []).includes(page.key)}
-              aria-label={`${member.username} cannot open ${page.label}`}
-              onChange={(event) => void change(member, { hidden_pages: event.target.checked ? [...(member.hidden_pages || []), page.key] : (member.hidden_pages || []).filter((key) => key !== page.key) })} /> {page.label}</label>)}
-          </details>}</td>}
           <td>{!locked && <button type="button" className="secondary" onClick={() => void change(member, { status: member.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE" })}>
             {member.status === "ACTIVE" ? "Suspend" : "Reactivate"}
           </button>}</td>
@@ -377,23 +429,26 @@ function StaffSettings({ isOwner }) {
     </table></div>
     <Notice notice={notice} place="list" />
     <form onSubmit={(event) => void add(event)}>
-      <h3>Add a staff member</h3>
+      <h3>{isOwner ? "Add an employee" : "Add a staff member"}</h3>
       <FormField label="First name" name="first_name" maxLength={150} />
       <FormField label="Last name" name="last_name" maxLength={150} />
-      <FormField label="Username" name="username" required maxLength={150} autoComplete="off" />
-      <FormField label="Email" name="email" type="email" required />
-      <FormField label="Temporary password" name="password" type="password" required minLength={8} autoComplete="new-password" />
-      <label>Role<select name="role" defaultValue="CASHIER" required>
-        {assignable.map((role) => <option key={role} value={role}>{roleLabels[role] || role}</option>)}
-      </select></label>
-      <button disabled={busy}>{busy ? "Adding…" : "Add staff member"}</button>
+      <FormField label="Username (what they sign in with)" name="username" required maxLength={150} autoComplete="off" />
+      <FormField label="Email (optional)" name="email" type="email" />
+      <FormField label="Temporary password (they choose their own at their first sign-in)" name="password" type="password" required minLength={8} autoComplete="new-password" />
+      {assignable.length > 1 && <label>Account<select value={chosenRole} onChange={(event) => setRole(event.target.value)}>
+        {assignable.map((option) => <option key={option} value={option}>{roleLabels[option] || option}</option>)}
+      </select></label>}
+      {chosenRole === "EMPLOYEE" && <fieldset className="staffPages">
+        <legend>Pages they can open</legend>
+        {workPages.length ? <PageChoice pages={workPages} chosen={pages} describe={(page) => `They can open ${page.label}`} onChange={setPages} />
+          : <p className="muted">Switch on a part of the business (Business settings) to give them its pages.</p>}
+      </fieldset>}
+      <button disabled={busy}>{busy ? "Adding…" : chosenRole === "EMPLOYEE" ? "Add employee" : "Add staff member"}</button>
       <Notice notice={notice} place="add" />
     </form>
   </section>;
 }
 
-// Each person's lock PIN opens the workspace after they lock it. The private pages (M-Pesa, investments) each open only
-// with their own PIN, the business's: the owner sets and resets those, each different. Every change needs the sign-in password.
 function PinSettings() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -403,7 +458,7 @@ function PinSettings() {
   const load = useCallback(() => api("/api/v1/auth/lock-pin/").then(setData).catch((e) => setError(e.message)), []);
   useEffect(() => { void load(); }, [load]);
   if (!data) return error ? <ErrorState message={error} retry={load} /> : <Loading />;
-  const name = (page) => (page ? `the ${data.pages[page].label} PIN` : "your lock PIN");
+  const name = (page) => (page ? `your ${data.pages[page].label} PIN` : "your lock PIN");
   const save = async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -421,18 +476,18 @@ function PinSettings() {
     <h2 id="pin-heading">Lock PIN and private pages</h2>
     <p>The workspace locks only when you press Lock, and opens with your own lock PIN. M-Pesa and investments are private pages: each
       opens only with its own PIN, never with a sign-in password, and locks after 5 minutes untouched.
-      {data.is_owner ? " You set and reset their PINs, each different. Give the M-Pesa PIN to the people who run the agency; Investments is yours alone."
-        : " The business owner sets their PINs; ask them if you forget one."}</p>
+      {data.is_owner ? " Each person has their own PINs: these are yours, each different. An employee you give M-Pesa sets their own the first time they open it; if they forget it, reset it in Staff. Investments is yours alone."
+        : " You set your own PIN for each private page the business owner gave you, the first time you open it. If you forget one, ask the business owner to reset it, then set a new one."}</p>
     <div className="pinRow"><strong>Your lock PIN</strong><span>{data.pin.set ? `Set · ${data.pin.length} digits` : "Not set yet"}</span></div>
     {Object.entries(data.pages).map(([page, info]) => <div className="pinRow" key={page}>
       <strong>{info.label} PIN</strong>
-      <span>{!info.set ? "Not set yet" : data.is_owner ? `Set · ${info.length} digits` : "Set by the business owner"}</span>
+      <span>{info.set ? `Set · ${info.length} digits` : "Not set yet"}</span>
     </div>)}
     <form onSubmit={(event) => void save(event)}>
       <label>PIN to set
         <select value={which} onChange={(event) => setWhich(event.target.value)}>
           <option value="">{data.pin.set ? "Change my lock PIN" : "My lock PIN"}</option>
-          {data.is_owner && Object.entries(data.pages).map(([page, info]) => <option key={page} value={page}>{info.set ? `Change or reset the ${info.label} PIN` : `Set the ${info.label} PIN`}</option>)}
+          {Object.entries(data.pages).filter(([, info]) => info.can_set).map(([page, info]) => <option key={page} value={page}>{info.set ? `Change or reset my ${info.label} PIN` : `Set my ${info.label} PIN`}</option>)}
         </select>
       </label>
       <FormField label="New PIN (4 to 6 numbers)" name="pin" type="password" inputMode="numeric" maxLength={6} required autoComplete="off" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} />

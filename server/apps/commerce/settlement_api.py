@@ -22,6 +22,9 @@ class SalesView(APIView):
         page = serializers.IntegerField(min_value=1).run_validation(request.query_params.get('page', 1))
         # A deleted sale (recorded by mistake) is out of the books and out of this list.
         rows = Sale.objects.exclude(status='CANCELLED').select_related('customer').prefetch_related('payments', 'items__variant__product').order_by('-created_at')
+        from apps.tenancy.permissions import is_employee
+        if is_employee(request.user):
+            rows = rows.filter(created_by=request.user)  # an employee sees the sales they made, never the business's takings
         # Find a sale by its number, the customer's name or phone, or what was sold.
         query = str(request.query_params.get('q') or '').strip()[:80]
         if query:

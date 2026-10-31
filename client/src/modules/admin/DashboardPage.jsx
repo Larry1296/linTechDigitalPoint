@@ -14,6 +14,7 @@ import { ChamaDashboardCard } from "../chama/ChamaDashboardCard";
 import { BusinessAnalysis } from "./BusinessAnalysis";
 import { StockQuickSearch } from "./StockQuickSearch";
 import { SalesProfits } from "./SalesProfits";
+import { WorkDashboard } from "./WorkDashboard";
 
 // On phones tables stack row by row; each figure is labelled with its column heading so it still says what it is.
 function useColumnLabels(root) {
@@ -45,7 +46,13 @@ function Restocking({ paid, money }) {
   </div>;
 }
 
+// The business's dashboard is the owner's; an employee gets their own, without the business's money.
 export function DashboardPage() {
+  const { user } = useAuth();
+  return user?.roles?.[0] === "EMPLOYEE" ? <WorkDashboard /> : <BusinessDashboard />;
+}
+
+function BusinessDashboard() {
   const { user } = useAuth();
   const organizationId = user?.organization?.id;
   const [snapshot, setSnapshot] = useState(null);

@@ -121,6 +121,13 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
         raise ValidationError(f"The float is {max(electronic_float - carried_float, Decimal('0')):,.2f} more than the last shift closed with "
                               f"({carried_float:,.2f}), so at most that much of it can be Safaricom's commission.")
     difference_reason = str(difference_reason or "").strip()
+    from apps.tenancy.permissions import is_employee
+    if is_employee(operator):
+        # An employee counts blind: they never see what the last shift closed with, so a difference is recorded for the
+        # owner to check instead of being asked about.
+        commission = None
+        if last and (cash != carried_cash or electronic_float != carried_float):
+            difference_reason = difference_reason or f"Counted by {operator.get_full_name() or operator.username}: differs from the last close, for the owner to check."
     if last and (cash != carried_cash or electronic_float - earned != carried_float) and not difference_reason:
         raise ValidationError(f"The last shift closed with cash {carried_cash:,.2f} and float {carried_float:,.2f}, but you counted cash "
                               f"{cash:,.2f} and float {electronic_float:,.2f}. Say why they differ (for example money taken out or "
@@ -274,6 +281,9 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         available = _source_available(paid_by)
         if value > available:
             label = next((row["label"] for row in agency_sources() if row["value"] == paid_by), paid_by)
+            from apps.tenancy.permissions import is_employee
+            if is_employee(user):  # the other parts' money is the owner's to see
+                raise ValidationError(f"{label} does not have that much. Choose another source, or ask the business owner.")
             raise ValidationError(f"{label} is only {available:,.2f}, less than {value:,.2f}. Choose another source, or record the money that came in first.")
     cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged, paid_by=paid_by)
     current_cash, current_float = session_balances(session)
@@ -434,6 +444,10 @@ def reconcile_session(*, session, user, actual_cash, actual_float, reason="", no
     if actual_cash < 0 or actual_float < 0:
         raise ValidationError("Actual cash and float cannot be negative.")
     cash_variance, float_variance = actual_cash - expected_cash, actual_float - expected_float
+    from apps.tenancy.permissions import is_employee
+    if (cash_variance or float_variance) and not reason.strip() and is_employee(user):
+        # A blind count: the employee never sees what was expected, so the owner sees the difference and follows it up.
+        reason = f"Counted by {user.get_full_name() or user.username}: differs from what was expected, for the owner to check."
     if (cash_variance or float_variance) and not reason.strip():
         raise ValidationError("A reason is required when reconciliation has a variance.")
     reconciliation = MpesaReconciliation.objects.create(

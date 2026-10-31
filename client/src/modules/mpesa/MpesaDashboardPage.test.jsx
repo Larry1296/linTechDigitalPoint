@@ -189,3 +189,22 @@ it("shows the worked-out commission balance in the top figures, added up over th
   const card = screen.getByText("Commission balance", { selector: ".metrics *" }).closest("article");
   expect(card).toHaveTextContent("1,550.5");
 });
+
+it("shows an employee the shift to record on, never the agency's money or commission, and closes with a blind count", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ employee: true, session: { id: 8, opened_at: new Date().toISOString() }, transaction_count: 3,
+    sources: [{ value: "SHOP:CASH", label: "Shop's money: cash" }] });
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { updated_on: "2026-09-26", due: false, open_session: 8 })]);
+  api.reconcileMpesaSession.mockResolvedValue({ closed: true });
+  render(<MpesaDashboardPage />);
+  expect(await screen.findByText("Transactions this shift")).toBeInTheDocument();
+  for (const hidden of ["Money in operation", "Current cash", "Current float", "Commission balance", "Commission this shift"]) expect(screen.queryByText(hidden)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Correct money in operation" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Record commission balance" })).toBeNull();
+  expect(api.getPastMpesaShifts).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Close & reconcile shift" }));
+  expect(screen.queryByText(/counted vs expected/)).toBeNull();
+  expect(screen.getByText(/the business owner checks your count/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("The agency's float on the M-Pesa line"), { target: { value: "7000" } });
+  fireEvent.click(screen.getByRole("button", { name: "Close shift" }));
+  await waitFor(() => expect(api.reconcileMpesaSession).toHaveBeenCalledWith(8, expect.objectContaining({ actual_float: "7000", reason: "" })));
+});

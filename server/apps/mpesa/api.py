@@ -1,7 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, time, timedelta
 from decimal import Decimal
-from apps.tenancy.permissions import has_business_permission, is_business_manager
+from apps.tenancy.permissions import has_business_permission, is_business_manager, is_employee
 from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
@@ -41,11 +41,26 @@ def money_in_operation(outlet):
             "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
 
 
+def _sees_money(serializer):
+    """Whether the person asking sees the agency's money: everyone but an employee, who records transactions only."""
+    request = serializer.context.get("request")
+    return not (request and is_employee(request.user))
+
+
+# What an employee sees of a shift: never its money, the commission or what was expected.
+SHIFT_MONEY = ("current_cash", "current_float", "opening_cash", "opening_float", "carried_cash", "carried_float", "closing_cash_actual",
+               "closing_float_actual", "closing_cash_expected", "closing_float_expected", "opening_commission_balance", "commission_readings",
+               "opening_cash_count", "opening_difference_reason")
+
+
 class OutletSerializer(serializers.ModelSerializer):
     money_in_operation = serializers.SerializerMethodField()
 
     def get_money_in_operation(self, outlet):
-        return money_in_operation(outlet)
+        money = money_in_operation(outlet)
+        if not _sees_money(self):
+            return {key: money[key] for key in ("updated_on", "due", "open_session")}
+        return money
 
     def validate(self, data):
         if self.instance and data.get("active") is False and self.instance.sessions.filter(status=MpesaSession.OPEN).exists():
@@ -74,6 +89,12 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ["internal_reference", "outlet", "cash_delta", "float_delta", "status", "reversal_of", "performed_by", "occurred_at", "created_at"]
 
+    def to_representation(self, entry):
+        data = super().to_representation(entry)
+        if not _sees_money(self):
+            data = {key: value for key, value in data.items() if "commission" not in key}
+        return data
+
 
 class SessionSerializer(serializers.ModelSerializer):
     current_cash = serializers.SerializerMethodField()
@@ -83,6 +104,12 @@ class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = MpesaSession
         fields = "__all__"
+
+    def to_representation(self, session):
+        data = super().to_representation(session)
+        if not _sees_money(self):
+            data = {key: value for key, value in data.items() if key not in SHIFT_MONEY}
+        return data
 
     def get_current_cash(self, obj):
         return session_balances(obj)[0]
@@ -152,6 +179,8 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_business_permission(request.user, "mpesa.add_mpesareconciliation"):
             return Response({"detail": "M-Pesa reconciliation permission required."}, status=403)
         result = reconcile_session(session=self.get_object(), user=request.user, actual_cash=request.data.get("actual_cash"), actual_float=request.data.get("actual_float"), reason=request.data.get("reason", ""), notes=request.data.get("notes", ""), cash_count=request.data.get("cash_count"))
+        if is_employee(request.user):
+            return Response({"id": result.pk, "session": result.session_id, "closed": True}, status=201)
         return Response(ReconciliationSerializer(result).data, status=201)
 
     @action(detail=False)
@@ -159,6 +188,8 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         # Closed shifts that hold records, newest first, each named by when it ran, so a cleared desk's records can be opened again.
         rows = (self.get_queryset().filter(status=MpesaSession.CLOSED).annotate(records=Count("transactions")).filter(records__gt=0)
                 .prefetch_related(None).select_related("reconciliation").order_by("-opened_at", "-pk"))
+        if is_employee(request.user):
+            return Response({"detail": "Past shifts' money and commission are the business owner's to see."}, status=403)
         from .commission_learning import earned, forecast, learn, summary
         learned = learn() if rows else None
         # Each shift's own commission: what its deposits, withdrawals and airtime earned, worked out like the open shift's.
@@ -222,6 +253,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     def commission_advice(self, request):
         """Whether the form should ask for the commission balance after this transaction, or already knows its commission."""
         from .commission_learning import advice
+        if is_employee(request.user):
+            return Response({"detail": "The commission is the business owner's to see."}, status=403)
         session = MpesaSession.objects.filter(pk=request.query_params.get("session") or 0).first()
         try:
             value = Decimal(str(request.query_params.get("amount") or "")).quantize(Decimal("0.01"))
@@ -417,6 +450,12 @@ def dashboard(request):
     in_operation = {"total": cash + electronic_float, "opening": (session.opening_cash + session.opening_float) if session else 0}
     from .commission_learning import for_shift, forecast
     from .services import agency_sources
+    if is_employee(request.user):
+        # An employee records the shift's transactions; the agency's money, its commission and the other parts' money
+        # are the owner's. Where float or cash can come from is listed without what each place holds.
+        return Response({"employee": True, "sources": [{"value": row["value"], "label": row["label"]} for row in agency_sources()],
+                         "session": SessionSerializer(session, context={"request": request}).data if session else None,
+                         "transaction_count": entries.count()})
     return Response({"sources": agency_sources(), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
@@ -429,7 +468,7 @@ def _can_report(request):
 @permission_classes([HasLinTechPermission])
 def agency_analysis(request):
     """The agency's last working days, busiest hours, transaction sizes and commission by kind (analysis.py)."""
-    if not has_business_permission(request.user, "mpesa.view_mpesasession"):
+    if not has_business_permission(request.user, "mpesa.view_mpesasession") or is_employee(request.user):
         return Response({"detail": "M-Pesa agency access required."}, status=403)
     from .analysis import analysis
     days = request.query_params.get("days", "30")
