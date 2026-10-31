@@ -121,9 +121,10 @@
   .customerSidebar { display: none; }
 }
 
-/* Desktop: the sidebar runs from under the top bar to the bottom of the window,
-   and the footer starts at its right edge instead of running underneath it. */
+/* Desktop: the sidebar runs from under the top bar to the bottom of the window, and the page and footer start at its
+   right edge instead of running underneath it. It starts hidden: the menu button slides it in and the page makes room. */
 @media (min-width: 1024px) {
+  .workspaceTopbar ~ .admin { display: block; }
   .workspaceTopbar ~ .admin > aside {
     position: fixed;
     top: var(--workspace-topbar-height);
@@ -133,9 +134,21 @@
     height: auto;
     /* stretch: base.css's align-self:start would otherwise shrink a fixed box to its content. */
     align-self: stretch;
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
   }
-  .workspaceTopbar ~ .admin > main { grid-column: 2; }
-  .workspaceTopbar ~ .appFooter { margin-left: var(--workspace-sidebar-width); }
+  .workspaceTopbar ~ .admin > main { width: auto; margin-left: var(--workspace-sidebar-width); transition: margin-left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .workspaceTopbar ~ .appFooter { margin-left: var(--workspace-sidebar-width); transition: margin-left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .workspaceTopbar ~ .admin.sidebarCollapsed > aside {
+    transform: translateX(-100%);
+    visibility: hidden;
+    box-shadow: none;
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 240ms;
+  }
+  .workspaceTopbar ~ .admin.sidebarCollapsed > main,
+  .workspaceTopbar ~ .admin.sidebarCollapsed ~ .appFooter { margin-left: 0; }
+}
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .workspaceTopbar ~ .admin > aside, .workspaceTopbar ~ .admin > main, .workspaceTopbar ~ .appFooter { transition: none; }
 }
 
 /* Phones and tablets: the sidebar is a drawer that slides in over the page from the left,
