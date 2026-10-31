@@ -344,6 +344,14 @@ def undo(*, movement, user, reason):
         raise ValidationError("Say why this is being undone.")
     if movement.reversed_at:
         return movement
+    partner = _partner(movement)
+    if partner and not partner.reversed_at:
+        # One half of "the business's money is in here": both halves go together, the owner's half first.
+        own, business = (movement, partner) if movement.whose == OWNER else (partner, movement)
+        InvestmentMovement.objects.filter(pk=own.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
+        undo(movement=business, user=user, reason=reason)
+        movement.refresh_from_db()
+        return movement
     if SIGN[movement.kind] > 0 and value(movement.investment) - movement.amount < 0:
         raise ValidationError("Money has since been taken out of this investment. Undo that first.")
     mine = movement.business_amount or Decimal("0")
@@ -402,6 +410,51 @@ def claim(*, movement, user, place, amount=None, note=""):
     audit(movement, user, f"{words}: {amount} (first recorded as own money)")
     movement.refresh_from_db()
     return movement
+
+
+SWITCH = "business-money-in"
+
+
+@transaction.atomic
+def business_money_in(*, investment, user, amounts, key, occurred_on=None):
+    """The business's money already in the investment, recorded as the owner's own: ``amounts`` {place: amount} of what
+    the app expects in the cash drawer, till, bank or other money is really in the fund. Each is recorded as the
+    business's money put in from that place and, on the same day, as that much of the owner's own taken out, so the
+    fund's value stays the same, the place no longer expects the money, and the business's money in the investment is
+    right. Sales and profit do not change. Undoing either half undoes both."""
+    from .money_check import expected
+    lock_business()
+    if InvestmentMovement.objects.filter(idempotency_key__startswith=f"{SWITCH}:{key}:").exists():
+        return investment
+    rows = [(str(place).upper(), _amount(amount)) for place, amount in (amounts or {}).items() if amount not in (None, "", 0, "0")]
+    if not rows:
+        raise ValidationError("Enter how much of the business's money from each place is in the investment.")
+    for place, amount in rows:
+        if place not in BUSINESS:
+            raise ValidationError("Choose the cash drawer, Lipa na M-Pesa till, bank or other money.")
+        has = expected(place)[0]
+        if amount > has:
+            raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows.")
+    total = sum((amount for _, amount in rows), Decimal("0"))
+    if total > own_value(investment):
+        raise ValidationError(f"{investment.name} holds {own_value(investment):,.2f} recorded as your own money, so no more than that "
+                              "can be the business's. Record any money put in that is missing first.")
+    note = "The business's money already in the fund, first recorded as your own"
+    for place, amount in rows:
+        move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place,
+             key=f"{SWITCH}:{key}:business:{place}", occurred_on=occurred_on, note=note)
+        move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=amount, source=OWNER,
+             key=f"{SWITCH}:{key}:own:{place}", occurred_on=occurred_on, note=note)
+    return investment
+
+
+def _partner(movement):
+    """The other half of a business_money_in() pair, if this movement is one half."""
+    head, _, place = movement.idempotency_key.rpartition(":")
+    base, _, half = head.rpartition(":")
+    if not movement.idempotency_key.startswith(f"{SWITCH}:") or half not in ("business", "own"):
+        return None
+    return InvestmentMovement.objects.filter(idempotency_key=f"{base}:{'own' if half == 'business' else 'business'}:{place}").first()
 
 
 @transaction.atomic

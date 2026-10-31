@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -91,10 +91,12 @@ class InvestmentsView(APIView):
         settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
         from .money_check import PLACES, expected
-        in_places = sum((expected(method)[0] for method, _ in PLACES), Decimal("0"))
+        each = [{"method": method, "label": label, "expected": expected(method)[0]} for method, label in PLACES]
+        in_places = sum((row["expected"] for row in each), Decimal("0"))
         return Response({"investments": rows,
                          # The business's money the app expects in its drawer, till, bank and other money, not in investments.
                          "business_in_places": in_places,
+                         "business_places": [row for row in each if row["expected"] > 0],
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),
@@ -202,6 +204,27 @@ class InvestmentClaimView(APIView):
         movement = claim(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, place=request.data.get("place"),
                          amount=request.data.get("amount"), note=str(request.data.get("note") or ""))
         return Response(investment_row(movement.investment))
+
+
+class InvestmentBusinessMoneyView(APIView):
+    """The business's money already in the investment, recorded as the owner's own: how much from each place."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investmentmovement"
+
+    def post(self, request, pk):
+        amounts = request.data.get("amounts")
+        key = str(request.data.get("idempotency_key") or "")[:60]
+        if not isinstance(amounts, dict) or not key:
+            return Response({"detail": "Enter how much of the business's money from each place is in the investment."}, status=400)
+        occurred = request.data.get("occurred_on") or None
+        from datetime import date
+        try:
+            occurred = date.fromisoformat(occurred) if occurred else None
+        except ValueError:
+            return Response({"detail": "Enter the date as YYYY-MM-DD."}, status=400)
+        investment = get_object_or_404(Investment, pk=pk)
+        business_money_in(investment=investment, user=request.user, amounts=amounts, key=key, occurred_on=occurred)
+        return Response(investment_row(Investment.objects.get(pk=pk)), status=201)
 
 
 class InvestmentRemoveView(APIView):

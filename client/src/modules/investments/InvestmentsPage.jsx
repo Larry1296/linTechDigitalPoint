@@ -440,7 +440,54 @@ function RateSource({ investment, funds, canMove, onChanged }) {
   );
 }
 
-function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect, canRemove, onChanged }) {
+// What each place expects, taken in turn until the owner's own money in the fund is used up: {method: "amount"}.
+const fill = (places, room) => places.reduce(([left, chosen], p) => {
+  const take = Math.min(Number(p.expected), Math.max(left, 0));
+  return [left - take, { ...chosen, [p.method]: take ? String(take) : "" }];
+}, [room, {}])[1];
+
+// The business's money already in the fund but recorded as the owner's own: how much from each place. Each place starts
+// at what the app expects there, up to what the fund holds as the owner's own.
+function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
+  const [amounts, setAmounts] = useState(() => fill(places, Number(investment.owner_value) || 0));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const total = Object.values(amounts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const key = useRef(crypto.randomUUID());
+  const submit = async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (!(await confirmAction({ title: `Record ${money(total)} of ${investment.name} as the business's money?`,
+      text: `The till, drawer or bank no longer expects it, the business's money in ${investment.name} goes up by ${money(total)} and your own money in it goes down by the same. The fund's total, sales and profit stay as they are.`,
+      confirmButtonText: "Record the business's money" }))) return;
+    setBusy(true); setError("");
+    try {
+      await api(`/api/v1/accounting/investments/${investment.id}/business-money/`, { method: "POST", body: JSON.stringify({
+        amounts: Object.fromEntries(Object.entries(amounts).filter(([, value]) => Number(value) > 0)), occurred_on: values.occurred_on, idempotency_key: key.current }) });
+      await onSaved();
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="The business's money is in here">
+      <h4 className="investFormTitle">The business's money is in here</h4>
+      <p className="muted">The business's money (what it sold and earned, less what it spent) that you put into {investment.name}. Each place shows
+        what the app expects there; keep it, or enter how much of it is in the fund.</p>
+      <fieldset disabled={busy} className="loanFields">
+        {places.map((p) => <FormField key={p.method} label={`From ${p.label.toLowerCase()} (expects ${money(p.expected)})`} type="number" min="0" step="0.01"
+          max={Number(p.expected)} value={amounts[p.method]} onChange={(event) => setAmounts({ ...amounts, [p.method]: event.target.value })} />)}
+        <FormField label="Date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+      </fieldset>
+      <p className="muted">Together {money(total)}, out of {money(investment.owner_value)} recorded as your own money in it.</p>
+      <div className="actionRow">
+        <button disabled={busy || total <= 0}>Record the business's money</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      <FormError title="Could not record it." message={error} />
+    </form>
+  );
+}
+
+function InvestmentCard({ investment, funds, places = [], preset, month, canMove, canCorrect, canRemove, onChanged }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const card = useRef(null);
@@ -571,11 +618,14 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
           preset={form === "DEPOSIT" ? preset : null} onCancel={() => setForm(null)} onSaved={done} />
         : form === "STATEMENT"
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
+        : form === "BUSINESS"
+          ? <BusinessMoneyForm investment={investment} places={places} onCancel={() => setForm(null)} onSaved={done} />
           : canMove && <div className="actionRow">
             {!automatic && <button type="button" className={investment.check_due ? undefined : "secondary"} onClick={() => setForm("MONTHLY")}>Monthly check</button>}
             <button type="button" onClick={() => setForm("DEPOSIT")}>Add money</button>
             <button type="button" className="secondary" disabled={Number(investment.value) <= 0} onClick={() => setForm("WITHDRAWAL")}>Take money out</button>
             <button type="button" className="secondary" onClick={() => setForm("STATEMENT")}>Update from statement</button>
+            {places.length > 0 && Number(investment.owner_value) > 0 && <button type="button" className="secondary" onClick={() => setForm("BUSINESS")}>The business's money is in here</button>}
           </div>}
       {!form && canRemove && <div className="actionRow">
         <button type="button" className="linkButton" onClick={() => void removeAll()}>Remove this investment</button>
@@ -648,9 +698,9 @@ export function InvestmentsPage() {
       {Number(data.business_in_places) > 0 && Number(data.owner_value) > 0 && <section className="investReminder" role="status" aria-label="Business money not marked">
         <div>
           <b>The app expects {money(data.business_in_places)} of the business's money in its till, drawer or bank</b>
-          <p>If that money is really in an investment, find the money you put in for it in the account's history and press
-            “It was the business's money”, choosing where it came from. Then the business's money here is right and the till, drawer and bank
-            are not expected to hold it. Money check shows what each place should hold.</p>
+          <p>If that money is really in an investment, press “The business's money is in here” on its card: it fills in what each place
+            expects, and records it as the business's money in the fund in one step. Then the business's money here is right and the till,
+            drawer and bank are not expected to hold it.</p>
         </div>
       </section>}
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
@@ -673,7 +723,7 @@ export function InvestmentsPage() {
           if (deposit && row?.id) setPreset({ id: row.id, kind: "DEPOSIT", nonce: Date.now() });
         }} />}
       {data.investments.length
-        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds}
+        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} places={data.business_places || []}
           preset={preset?.id === i.id ? preset : null} month={data.this_month}
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
           canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>

@@ -588,3 +588,32 @@ def test_money_first_recorded_as_the_owners_own_is_marked_as_the_businesss_from_
     # Undone: the whole deposit comes out, and the till holds its money again.
     assert client.post(f"/api/v1/accounting/investments/movements/{deposit}/undo/", {"reason": "Wrong"}, format="json").status_code == 200
     assert money()["MPESA"] == D("20000")
+
+
+def test_the_businesss_money_already_in_the_fund_is_recorded_in_one_step_and_undone_together(shop):
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("30000"), kind="INCOME", reference="Sales", key="sales", user=owner)
+        post(unit="CYBER", method="CASH", amount=D("8000"), kind="INCOME", reference="Services", key="services", user=owner)
+    _move(client, mmf, "DEPOSIT", "50000", "OWNER", "everything")
+    listed = client.get("/api/v1/accounting/investments/").json()
+    assert {row["method"]: D(str(row["expected"])) for row in listed["business_places"]} == {"MPESA": D("30000"), "CASH": D("8000")}
+    sweep = lambda amounts, key="k1": client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": amounts, "idempotency_key": key}, format="json")
+    assert sweep({"MPESA": "31000"}).status_code == 400  # more than the till has
+    row = sweep({"MPESA": "30000", "CASH": "8000"}).json()
+    # The fund's value is the same; 38,000 of it is the business's, the rest the owner's.
+    assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("50000"), D("38000"), D("12000"))
+    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert money["MPESA"] == 0 and money["CASH"] == 0
+    accounts, _, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("38000") and pl["net_profit_before_tax"] == 0
+    assert sweep({"MPESA": "30000", "CASH": "8000"}).status_code == 201  # the same click again records nothing more
+    assert D(str(client.get("/api/v1/accounting/investments/").json()["shop_value"])) == D("38000")
+    # Undoing either half undoes both.
+    own_half = next(m for m in row["movements"] if m["kind"] == "WITHDRAWAL" and m["source"] == "OWNER" and D(str(m["amount"])) == D("8000"))
+    back = client.post(f"/api/v1/accounting/investments/movements/{own_half['id']}/undo/", {"reason": "test"}, format="json").json()
+    assert (D(str(back["value"])), D(str(back["shop_value"])), D(str(back["owner_value"]))) == (D("50000"), D("30000"), D("20000"))
+    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert money["CASH"] == D("8000")
