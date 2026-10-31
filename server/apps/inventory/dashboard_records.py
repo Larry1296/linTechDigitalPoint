@@ -125,5 +125,5 @@ def records_summary(*, enabled, visible_units, channels, profit_visible, permits
         'services': _services() if 'CYBER' in visible_units else None,
         'mpesa': _mpesa(accrual_totals(rows, ['MPESA'])['revenue']) if 'MPESA' in visible_units else None,
         'money': _money(everything['expenses']) if money_allowed else None,
-        'profit': {key: everything[key] for key in ('revenue', 'cogs', 'expenses', 'stock_corrections', 'interest', 'profit')} if profit_visible and visible_units else None,
+        'profit': {key: everything[key] for key in ('revenue', 'cogs', 'expenses', 'stock_corrections', 'interest', 'owed_profit', 'profit')} if profit_visible and visible_units else None,
     }

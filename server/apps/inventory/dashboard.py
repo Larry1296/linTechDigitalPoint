@@ -85,6 +85,9 @@ def pnl_rows(start, end):
             unit, field, amount = unit or 'SHOP', field, line['d'] - line['c']
         rows.append({'date': line['entry__posting_date'], 'unit': unit, 'field': field, 'amount': amount,
                      'account': line['account__name'], 'code': code})
+    # A sale's profit counts as it is paid: the profit in what customers still owe is taken off until they pay.
+    from apps.accounting.credit_profit import owed_profit_rows
+    rows += [{**row, 'field': 'owed_profit', 'account': 'Profit still owed by customers', 'code': ''} for row in owed_profit_rows(start, end)]
     return rows
 
 
@@ -96,11 +99,13 @@ def shared(amount, shares):
 
 
 def accrual_totals(rows, units):
-    result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO, interest=ZERO)
+    result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO, interest=ZERO, owed_profit=ZERO)
     for row in rows:
         if row['unit'] in units and row['field'] in result:
             result[row['field']] += row['amount']
-    result['profit'] = result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections'] + result['interest']
+    # Profit received: what was sold less its cost and the running costs, less the profit customers still owe.
+    result['profit'] = (result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections'] + result['interest']
+                        - result['owed_profit'])
     return result
 
 
@@ -209,11 +214,11 @@ def dashboard_snapshot(request):
         unit = accrual_totals(daily, [key])
         ever = accrual_totals(ever_rows, [key]) if allowed else None
         if ever is not None and not profit_visible:
-            ever.update(cogs=None, expenses=None, stock_corrections=None, interest=None, profit=None)
+            ever.update(cogs=None, expenses=None, stock_corrections=None, interest=None, owed_profit=None, profit=None)
         if not allowed:
             unit = {field: None for field in unit}
         elif not profit_visible:
-            unit.update(cogs=None, expenses=None, stock_corrections=None, interest=None, profit=None)
+            unit.update(cogs=None, expenses=None, stock_corrections=None, interest=None, owed_profit=None, profit=None)
         data['business_units'].append({'key': key, 'name': name, 'enabled': any(module in enabled for module, _ in runs), 'restricted': not allowed, **unit, 'all_time': ever})
         if key == 'SHOP':
             data['retail'] = {**unit, 'sales': sales.exclude(channel=Sale.CYBER).count() if allowed else None, 'restricted': not allowed}
@@ -243,7 +248,7 @@ def dashboard_snapshot(request):
         data['today'] = {key: None for key in data['today']}
         data['today']['restricted'] = True
     elif not profit_visible:
-        data['today'].update(cogs=None, profit=None, expenses=None, stock_corrections=None, interest=None)
+        data['today'].update(cogs=None, profit=None, expenses=None, stock_corrections=None, interest=None, owed_profit=None)
 
     inventory_allowed = 'inventory' in enabled and permits('catalog.view_product')
     data['inventory'] = {'restricted': not inventory_allowed, **dict.fromkeys(['physical', 'available', 'cost', 'retail', 'potential_margin', 'low_stock', 'total_skus'])}
@@ -282,7 +287,7 @@ def dashboard_snapshot(request):
     if not visible_units:
         period = dict.fromkeys(period)
     elif not profit_visible:
-        period.update(cogs=None, expenses=None, stock_corrections=None, interest=None, gross_profit=None, profit=None)
+        period.update(cogs=None, expenses=None, stock_corrections=None, interest=None, owed_profit=None, gross_profit=None, profit=None)
     period.update(start=start, end=end,
                   purchases=stock_total(purchase_lots) if stock_allowed else None,
                   opening_stock=stock_total(opening_lots) if stock_allowed else None)
@@ -334,6 +339,7 @@ def dashboard_snapshot(request):
                 'expenses': values['expenses'] if profit_visible else None, 'cogs': values['cogs'] if profit_visible else None,
                 'stock_corrections': values['stock_corrections'] if profit_visible else None,
                 'interest': values['interest'] if profit_visible else None,
+                'owed_profit': values['owed_profit'] if profit_visible else None,
                 'profit': values['profit'] if profit_visible else None, 'verdict': verdict if profit_visible else 'RESTRICTED'})
     data['unit_trend'], data['unit_days'] = unit_series(trend_rows if visible_units else [], period_rows, visible_units, profit_visible,
                                                         month_start if visible_units else today, start, end)

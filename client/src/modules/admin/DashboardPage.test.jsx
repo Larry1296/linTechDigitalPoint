@@ -81,3 +81,14 @@ it("brings together only each part's profit and sends each part's own figures an
   for (const link of screen.getAllByRole("link", { name: "M-Pesa agency" })) expect(link).toHaveAttribute("href", "/admin/mpesa");
   for (const link of screen.getAllByRole("link", { name: "Services" })) expect(link).toHaveAttribute("href", "/admin/cyber");
 });
+
+it("always shows investment interest in the profit when the business invests, KES 0 before any is recorded, and takes off what customers still owe", async () => {
+  api.mockResolvedValue({ ...snapshot(), enabled_modules: ["investments", "pos"],
+    period_summary: { start: "2026-10-01", end: "2026-10-09", purchases: "0", opening_stock: "0", revenue: "2000", cogs: "1200", gross_profit: "800",
+      expenses: "100", interest: "0", owed_profit: "300", profit: "400" },
+  });
+  render(<DashboardPage />);
+  const sum = (await screen.findAllByText(/^Sales KES 2,000.00/))[0];
+  expect(sum).toHaveTextContent("+ interest on investments KES 0.00");
+  expect(sum).toHaveTextContent("− profit still owed by customers KES 300.00 = KES 400.00 profit");
+});

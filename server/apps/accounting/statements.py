@@ -242,6 +242,8 @@ def owner_summary(start, end):
     customer_journals = JournalEntry.objects.filter(lines__account__code="1100")
     received = entries.filter(entry__in=customer_journals).aggregate(v=Sum(F("debit") - F("credit")))["v"] or ZERO
     position = balances(end=end)
+    from .credit_profit import owed_profit_rows
+    owed = sum((row["amount"] for row in owed_profit_rows(start, end)), ZERO)
     return {
         "sales": {"amount": pl["revenue"], "explain": "Everything sold or earned in the period after discounts and excluding tax, whether paid or not."},
         "money_received": {"amount": received, "explain": "Money customers actually paid in the period (including for older sales), less refunds. This is cash, not profit."},
@@ -251,7 +253,13 @@ def owner_summary(start, end):
         "stock_corrections": {"amount": pl["stock_corrections"],
                               "explain": "Stock found or missing when you counted the shelves. Found stock adds to profit; missing stock takes away from it."},
         "net_profit": {"amount": pl["net_profit_before_tax"], "loss": pl["loss"],
-                       "explain": "What you made after the cost of what you sold, your running costs and any stock found or missing. Before income tax."},
+                       "explain": "What you made after the cost of what you sold, your running costs and any stock found or missing, "
+                                  "including sales customers have not paid for yet. Before income tax."},
+        "owed_profit": {"amount": owed, "explain": "The profit in sales customers have not paid for yet (more owed in the period: above zero; "
+                                                   "paid off: below zero). It counts when they pay."},
+        "profit_received": {"amount": pl["net_profit_before_tax"] - owed, "loss": pl["net_profit_before_tax"] - owed < 0,
+                            "explain": "The profit you really have: the profit above less what customers still owe of it. "
+                                       "This is what you can restock or invest with."},
         "position": {"cash_and_bank": _debit(position, sorted(CASH_ACCOUNTS - {"1300", "1310"})), "customers_owe_you": _debit(position, ["1100"]),
                      "you_owe_suppliers": -_debit(position, ["2000"]), "unpaid_bills": -_debit(position, ["2150"]),
                      "tax_owed": -_debit(position, ["2200"]), "stock_value": _debit(position, ["1200"]),

@@ -90,7 +90,11 @@ class InvestmentsView(APIView):
     def get(self, request):
         settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
+        from .money_check import PLACES, expected
+        in_places = sum((expected(method)[0] for method, _ in PLACES), Decimal("0"))
         return Response({"investments": rows,
+                         # The business's money the app expects in its drawer, till, bank and other money, not in investments.
+                         "business_in_places": in_places,
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),
@@ -190,12 +194,13 @@ class InvestmentUndoView(APIView):
 
 
 class InvestmentClaimView(APIView):
-    """Money recorded as the owner's own that was really the business's."""
+    """Money recorded as the owner's own that was really the business's: from which place, and how much of it."""
     permission_classes = [HasLinTechPermission]
     permission_required = "accounting.reverse_cashentry"
 
     def post(self, request, pk):
-        movement = claim(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, note=str(request.data.get("note") or ""))
+        movement = claim(movement=get_object_or_404(InvestmentMovement, pk=pk), user=request.user, place=request.data.get("place"),
+                         amount=request.data.get("amount"), note=str(request.data.get("note") or ""))
         return Response(investment_row(movement.investment))
 
 

@@ -31,14 +31,28 @@ export function labelTableCells(root) {
   }
 }
 
-// Labels the tables under ``ref`` (the whole app when none is given), and keeps them labelled as they change.
+// Table text stays on one line, so a table can be wider than the space it is in: such a table scrolls sideways on its
+// own (class tableScrolls), and one that fits keeps its full width. Measured again as tables and the window change.
+export function fitTables(root) {
+  for (const table of root.querySelectorAll("table")) {
+    const scrolls = table.classList.contains("tableScrolls");
+    const wide = scrolls ? table.scrollWidth > table.clientWidth + 1 : table.offsetWidth > (table.parentElement?.clientWidth ?? Infinity) + 1;
+    if (wide !== scrolls) table.classList.toggle("tableScrolls", wide);
+  }
+}
+
+// Labels the tables under ``ref`` (the whole app when none is given), and keeps them labelled and fitted as they change.
 export function useTableLabels(ref) {
   useEffect(() => {
     const root = ref ? ref.current : document.getElementById("root") || document.body;
     if (!root) return undefined;
+    let frame = 0;
+    const fit = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => fitTables(root)); };
     labelTableCells(root);
-    const observer = new MutationObserver(() => labelTableCells(root));
+    fit();
+    const observer = new MutationObserver(() => { labelTableCells(root); fit(); });
     observer.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
+    window.addEventListener("resize", fit);
+    return () => { observer.disconnect(); window.removeEventListener("resize", fit); cancelAnimationFrame(frame); };
   }, [ref]);
 }

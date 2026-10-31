@@ -23,10 +23,21 @@ export function interestText(value, money) {
   return number > 0 ? `+ ${money(number)} (interest on investments)` : `− ${money(-number)} (investment fees)`;
 }
 
-// "Sales 1,150 − cost of what you sold 700 − running costs 0 + stock found 120 + interest on investments 60 = 630 profit"
-export function profitSum({ sales, cost, expenses, stock, interest, profit }, money) {
+// The profit in sales customers have not paid for yet: taken off until they pay. Below zero when more was paid off
+// in the dates than newly owed, which adds profit from earlier sales.
+export function owedText(value, money) {
+  const number = Number(value || 0);
+  if (!number) return money(0);
+  return number > 0 ? `− ${money(number)} (still owed by customers)` : `+ ${money(-number)} (paid for earlier sales)`;
+}
+
+// "Sales 1,150 − cost of what you sold 700 − running costs 0 + stock found 120 + interest on investments 60
+//  − profit still owed by customers 100 = 530 profit"
+// ``investing``: the business uses investments, so their interest is always shown, even before any is recorded.
+export function profitSum({ sales, cost, expenses, stock, interest, owed, profit, investing = false }, money) {
   const parts = [`Sales ${money(sales)}`, `− what the sold items cost you ${money(cost)}`, `− running costs ${money(expenses)}`];
   if (Number(stock || 0)) parts.push(Number(stock) < 0 ? `+ stock found ${money(-Number(stock))}` : `− stock missing ${money(stock)}`);
-  if (Number(interest || 0)) parts.push(Number(interest) > 0 ? `+ interest on investments ${money(interest)}` : `− investment fees ${money(-Number(interest))}`);
+  if (investing || Number(interest || 0)) parts.push(Number(interest || 0) >= 0 ? `+ interest on investments ${money(interest)}` : `− investment fees ${money(-Number(interest))}`);
+  if (Number(owed || 0)) parts.push(Number(owed) > 0 ? `− profit still owed by customers ${money(owed)}` : `+ profit paid for earlier sales ${money(-Number(owed))}`);
   return `${parts.join(" ")} = ${profitText(profit, money)}`;
 }

@@ -1,5 +1,5 @@
 import { BestSellers, CollectionsPanel, InShort, OwedPanels, PeriodComparison, RecentEntries } from "./AccountingPanels";
-import { interestText, profitSum, profitText, stockText } from "./plainMoney";
+import { interestText, owedText, profitSum, profitText, stockText } from "./plainMoney";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -92,7 +92,10 @@ export function DashboardPage() {
   const trend = data.financial_trend;
   // Only when a month had stock found or missing, so every row still adds up to its profit.
   const stockColumn = trend.some(row => Number(row.stock_corrections || 0) !== 0);
-  const interestColumn = trend.some(row => Number(row.interest || 0) !== 0);
+  // The business uses investments and may see profit: their interest always shows, KSh 0 until a statement records some.
+  const investing = (data.enabled_modules || []).includes("investments") && period?.profit != null;
+  const interestColumn = investing || trend.some(row => Number(row.interest || 0) !== 0);
+  const owedColumn = trend.some(row => Number(row.owed_profit || 0) !== 0);
   const monthName = (month) => new Date(`${month}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" });
   const cards = (rows) => <div className="metrics">{rows.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>;
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
@@ -105,7 +108,8 @@ export function DashboardPage() {
     // The dashboard brings together only each part's profit since the start; each part's money is on its own page.
     ever?.profit != null && ["Profit so far, every part together", profitText(ever.profit, money),
       [units.filter(unit => !unit.restricted && unit.all_time?.profit != null).map(unit => `${unit.name} ${profitText(unit.all_time.profit, money)}`).join(" · "),
-        Number(ever.interest || 0) && `interest on investments ${money(ever.interest)}`, "money spent lowers it"].filter(Boolean).join(" · "), "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
+        (investing || Number(ever.interest || 0)) && `interest on investments ${money(ever.interest || 0)}`,
+        Number(ever.owed_profit || 0) > 0 && `${money(ever.owed_profit)} more when customers pay`, "money spent lowers it"].filter(Boolean).join(" · "), "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
     owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
   ].filter(Boolean);
@@ -168,20 +172,20 @@ export function DashboardPage() {
 
     <div className="dashColumns">
       <div className="dashMain">
-        <PartsProfit units={units} total={ever?.profit} interest={ever?.interest} money={money} />
+        <PartsProfit units={units} total={ever?.profit} interest={ever?.interest} investing={investing} money={money} />
         {period && <section className="financialTrend" aria-labelledby="profit-loss-title">
           <h2 id="profit-loss-title">How the business is doing</h2>
           <p className="muted">Pick the dates to look at. A sale counts on the day you make it, even if the customer pays later.</p>
           {periodForm}
           <p className="muted">Showing {period.start} to {period.end}. {data.financial_scope === "permitted_operations" ? "Only the parts of the business you have access to are included." : ""}</p>
-          {period.profit != null && <p className="profitSum"><b>{profitSum({ sales: period.revenue, cost: period.cogs, expenses: period.expenses, stock: period.stock_corrections, interest: period.interest, profit: period.profit }, money)}</b></p>}
+          {period.profit != null && <p className="profitSum"><b>{profitSum({ sales: period.revenue, cost: period.cogs, expenses: period.expenses, stock: period.stock_corrections, interest: period.interest, owed: period.owed_profit, profit: period.profit, investing }, money)}</b></p>}
           {period.restocking && <Restocking paid={period.restocking} money={money} />}
           {data.mpesa_unpaid && <div className="mpesaUnpaid" role="note">
             <p><b>M-Pesa commission not paid yet: about {money(data.mpesa_unpaid.amount)}</b> earned in {data.mpesa_unpaid.months.join(" and ")}, worked out from the
               commission balance readings. Safaricom pays it early the next month; it is added to the books when you record the payment on the Commission page.</p>
             <p>Profit or loss with it: <b>{profitText(data.mpesa_unpaid.profit_with, money)}</b></p>
           </div>}
-          {!data.comparison && cards([["Stock bought from suppliers", money(period.purchases)], ["Stock you already had, entered at its cost", money(period.opening_stock)], ["Sales", money(period.revenue)], ["What the sold items cost you", money(period.cogs)], ["Profit before running costs", profitText(period.gross_profit, money)], ["Running costs (expenses)", money(period.expenses)], ...(Number(period.stock_corrections || 0) ? [["Stock found or missing in counts", stockText(period.stock_corrections, money)]] : []), ...(Number(period.interest || 0) ? [["Interest on investments, after fees", interestText(period.interest, money)]] : []), ["Profit or loss", profitText(period.profit, money)]])}
+          {!data.comparison && cards([["Stock bought from suppliers", money(period.purchases)], ["Stock you already had, entered at its cost", money(period.opening_stock)], ["Sales", money(period.revenue)], ["What the sold items cost you", money(period.cogs)], ["Profit before running costs", profitText(period.gross_profit, money)], ["Running costs (expenses)", money(period.expenses)], ...(Number(period.stock_corrections || 0) ? [["Stock found or missing in counts", stockText(period.stock_corrections, money)]] : []), ...(investing || Number(period.interest || 0) ? [["Interest on investments, after fees", interestText(period.interest, money)]] : []), ...(Number(period.owed_profit || 0) ? [["Profit in sales not paid for yet", owedText(period.owed_profit, money)]] : []), ["Profit received", profitText(period.profit, money)]])}
           <h3>Running costs</h3>
           {period.expenses == null ? <p>You don't have access to running costs.</p> : data.expense_breakdown?.length
             ? <div className="trendTable"><table><caption>Running costs by type</caption><thead><tr><th scope="col">Type</th><th scope="col">Part of the business</th><th scope="col">Amount</th></tr></thead><tbody>{data.expense_breakdown.map(row => <tr key={`${row.category}-${row.business_unit}`}><th scope="row">{row.category}</th><td>{data.business_units.find(unit => unit.key === row.business_unit)?.name || row.business_unit}</td><td>{money(row.amount)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan="2">Total</th><td>{money(period.expenses)}</td></tr></tfoot></table></div>
@@ -225,7 +229,7 @@ export function DashboardPage() {
       <details><summary>Month by month</summary>
         <section className="financialTrend"><p className="muted">The last 12 months, with this month so far. Corrections count in the month they were made.</p>
           {!trend.length ? <p>No financial reporting operations are available to your account.</p> :
-            <div className="trendTable"><table><caption>Each month ({organization.currency})</caption><thead><tr>{["Month", "Sales", "Stock bought", "What the sold items cost you", "Running costs", ...(stockColumn ? ["Stock found or missing"] : []), ...(interestColumn ? ["Interest on investments"] : []), "Profit or loss"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{trend.map(row => <tr key={row.month}><th scope="row">{monthName(row.month)}</th>{[money(row.sales), money(row.purchases), money(row.cogs), money(row.expenses), ...(stockColumn ? [stockText(row.stock_corrections, money)] : []), ...(interestColumn ? [interestText(row.interest, money)] : []), profitText(row.profit, money)].map((value, index) => <td key={index}>{value}</td>)}</tr>)}</tbody></table></div>}
+            <div className="trendTable"><table><caption>Each month ({organization.currency})</caption><thead><tr>{["Month", "Sales", "Stock bought", "What the sold items cost you", "Running costs", ...(stockColumn ? ["Stock found or missing"] : []), ...(interestColumn ? ["Interest on investments"] : []), ...(owedColumn ? ["Profit still owed by customers"] : []), "Profit received"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{trend.map(row => <tr key={row.month}><th scope="row">{monthName(row.month)}</th>{[money(row.sales), money(row.purchases), money(row.cogs), money(row.expenses), ...(stockColumn ? [stockText(row.stock_corrections, money)] : []), ...(interestColumn ? [interestText(row.interest, money)] : []), ...(owedColumn ? [owedText(row.owed_profit, money)] : []), profitText(row.profit, money)].map((value, index) => <td key={index}>{value}</td>)}</tr>)}</tbody></table></div>}
         </section>
       </details>
       {data.records && <details><summary>Everything recorded so far</summary><RecordsSummary records={data.records} money={money} /></details>}

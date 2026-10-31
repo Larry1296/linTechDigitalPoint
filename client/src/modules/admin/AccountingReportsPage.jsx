@@ -32,12 +32,14 @@ function Warnings({ items, money }) {
 
 function OwnerView({ summary, money }) {
   const cards = [["sales", "Sales"], ["money_received", "Money received"], ["stock_cost", "What the sold items cost you"], ["gross_profit", "Profit before running costs"],
-    ["expenses", "Running costs"], ...(Number(summary.stock_corrections?.amount || 0) ? [["stock_corrections", "Stock found or missing"]] : []), ["net_profit", "Profit or loss"]];
+    ["expenses", "Running costs"], ...(Number(summary.stock_corrections?.amount || 0) ? [["stock_corrections", "Stock found or missing"]] : []), ["net_profit", "Profit earned"],
+    ...(summary.profit_received ? [["owed_profit", "Profit still owed by customers"], ["profit_received", "Profit received"]] : [])];
+  const strong = (key) => key === (summary.profit_received ? "profit_received" : "net_profit");
   const p = summary.position;
   return <>
-    <div className="reportCards">{cards.map(([key, label]) => <article key={key} className={key === "net_profit" ? "reportCard emphasis" : "reportCard"}>
+    <div className="reportCards">{cards.map(([key, label]) => <article key={key} className={strong(key) ? "reportCard emphasis" : "reportCard"}>
       <span>{label}</span><strong>{key === "stock_corrections" ? stockText(summary[key].amount, money)
-        : <Amount value={summary[key].amount} money={money} loss={key === "net_profit" || key === "gross_profit" ? Number(summary[key].amount) < 0 : false} />}</strong>
+        : <Amount value={summary[key].amount} money={money} loss={["net_profit", "gross_profit", "profit_received"].includes(key) ? Number(summary[key].amount) < 0 : false} />}</strong>
       <p className="muted">{summary[key].explain}</p>
     </article>)}</div>
     <section className="accountingPanel"><h2>Where the business stands today</h2>

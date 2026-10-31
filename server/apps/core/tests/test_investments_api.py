@@ -559,3 +559,32 @@ def test_stock_paid_from_the_mmf_uses_the_businesss_money_in_it_first(shop):
     assert (paid["business"], paid["investment"]) == (D("3000"), D("2000"))
     money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
     assert money["MPESA"] == 0 and money.get("OTHER", D("0")) == 0
+
+
+def test_money_first_recorded_as_the_owners_own_is_marked_as_the_businesss_from_where_it_came(shop):
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    week_ago = timezone.localdate() - timedelta(days=7)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("20000"), kind="INCOME", reference="Sales", key="sales", user=owner)
+    deposit = _move(client, mmf, "DEPOSIT", "25000", "OWNER", "old", occurred_on=str(week_ago)).json()["movements"][0]["id"]
+    money = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    listed = client.get("/api/v1/accounting/investments/").json()
+    assert (D(str(listed["shop_value"])), D(str(listed["business_in_places"]))) == (D("0"), D("20000"))
+    mark = lambda **body: client.post(f"/api/v1/accounting/investments/movements/{deposit}/business/", body, format="json")
+    assert mark().status_code == 400  # where it came from must be said
+    too_much = mark(place="MPESA")  # 25,000 cannot have come from a till holding 20,000
+    assert too_much.status_code == 400 and "only has 20,000.00" in str(too_much.json())
+    row = mark(place="MPESA", amount="20000").json()
+    assert (D(str(row["shop_value"])), D(str(row["owner_value"])), D(str(row["value"]))) == (D("20000"), D("5000"), D("25000"))
+    assert money()["MPESA"] == 0
+    accounts, *_ = _books(org)
+    assert accounts["1400"]["balance"] == D("20000")
+    with organization_context(org):
+        from apps.accounting.models import JournalEntry
+        assert JournalEntry.objects.get(source_key=f"investment-business:{deposit}").posting_date == week_ago  # on the day it went in
+    assert mark(place="MPESA").status_code == 400  # once only
+    # Undone: the whole deposit comes out, and the till holds its money again.
+    assert client.post(f"/api/v1/accounting/investments/movements/{deposit}/undo/", {"reason": "Wrong"}, format="json").status_code == 200
+    assert money()["MPESA"] == D("20000")

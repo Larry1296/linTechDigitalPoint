@@ -359,9 +359,49 @@ def undo(*, movement, user, reason):
     return movement
 
 
-def claim(*, movement, user, note=""):
-    """Whose money it is is chosen when it is recorded; a wrong choice is undone and recorded again."""
-    raise ValidationError(APART)
+@transaction.atomic
+def claim(*, movement, user, place, amount=None, note=""):
+    """Money first recorded as the owner's own that was really the business's (all of it, or ``amount`` of it): it
+    left ``place`` (the cash drawer, till, bank or other money) on the day it was put in, so that place goes down and
+    the business's money in the investment goes up by it, on that day (today when that day is closed). Undone like
+    any business money put in."""
+    from .ledger import cash_code
+    from .models import DailyClosing, FinancialPeriod
+    from .money_check import expected
+    from .services import post as post_cash
+    lock_business()
+    movement = InvestmentMovement.objects.select_for_update(of=("self",)).select_related("investment").get(pk=movement.pk)
+    place = str(place or "").upper()
+    if place not in BUSINESS:
+        raise ValidationError("Choose where the business's money came from: the cash drawer, Lipa na M-Pesa till, bank or other money.")
+    if movement.kind != InvestmentMovement.DEPOSIT or movement.reversed_at or movement.whose == BUSINESS_MONEY or movement.purchase_id:
+        raise ValidationError("Only money put in as your own, and not undone, can be marked as the business's.")
+    amount = movement.amount if amount in (None, "") else _amount(amount)
+    if amount > movement.amount:
+        raise ValidationError(f"That is more than the {movement.amount:,.2f} put in.")
+    if amount > own_value(movement.investment):
+        raise ValidationError(f"Only {own_value(movement.investment):,.2f} of your own money is still in {movement.investment.name}: "
+                              "money taken out since came from it. Mark less, or undo that first.")
+    has = expected(place)[0]
+    if amount > has:
+        raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows, "
+                              "so no more of it can be in the investment.")
+    day = movement.occurred_on
+    account_closed = DailyClosing.objects.filter(account__payment_method=place, date__gte=day).exists()
+    if account_closed or FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
+        day = timezone.localdate()
+    words = f"Put into {movement.investment.name}: the business's money, from {PLACE_WORDS[place]}"
+    entry = post_cash(unit="SHOP", method=place, amount=-amount, kind="INVESTMENT", reference=f"{words} (first recorded as own money)"[:160],
+                      key=f"investment-claim:{movement.pk}", user=user, occurred_at=_moment(day), branch=movement.branch, journal=False)
+    note = str(note or "").strip()
+    InvestmentMovement.objects.filter(pk=movement.pk).update(
+        whose=BUSINESS_MONEY, business_amount=amount, source=place, entry=entry,
+        note=f"{movement.note} · the business's money{'' if amount == movement.amount else f' ({amount:,.2f} of it)'}{f': {note}' if note else ''}".lstrip(" ·")[:1000])
+    post_journal(key=f"{MOVED}:{movement.pk}", description=words[:255], lines=paired("1400", cash_code(place), amount),
+                 branch=movement.branch, date=day, user=user)
+    audit(movement, user, f"{words}: {amount} (first recorded as own money)")
+    movement.refresh_from_db()
+    return movement
 
 
 @transaction.atomic

@@ -1755,7 +1755,7 @@ form a:not(.button, .pageBackLink),
 .admin > main :is(img, video, canvas, svg) {
   max-width: 100%;
 }
-.admin > main :is(h1, h2, h3, p, strong, span, td, th, dd, a) {
+.admin > main :is(h1, h2, h3, p, strong, span, dd, a) {
   overflow-wrap: anywhere;
 }
 .tableWrap,
@@ -3037,3 +3037,35 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 }
 .pinSettings { display:grid; gap:14px; }
 .pinSettings .pinRow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between; }
+
+/* Table text stays on one line everywhere, in every table: nothing in a cell wraps. A table wider than its space
+   scrolls sideways on its own (tableScrolls, set by useTableLabels) and one that fits keeps its full width; the page
+   itself never scrolls sideways. On small screens, where each row is a labelled card, each label and figure stays on
+   one line too and a card with a very long one scrolls sideways. */
+#root table :is(th, td),
+#root table :is(th, td) :is(span, strong, small, a, b) {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+#root .trendTable table {
+  table-layout: auto;
+}
+#root :is(.tableWrap, .trendTable, .receiptComparison) {
+  overflow-x: auto;
+}
+@media (min-width: 901px) {
+  #root table.tableScrolls {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+@media (max-width: 900px) {
+  #root table tr {
+    overflow-x: auto;
+  }
+  #root table :is(td, th)[data-label]::before {
+    max-width: none;
+    white-space: nowrap;
+  }
+}

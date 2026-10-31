@@ -739,3 +739,37 @@ def test_each_sale_adds_its_profit_to_where_profit_had_reached(shop):
     reached = statements.running_sale_profits()
     assert (reached[first.pk]["profit"], reached[first.pk]["profit_so_far"]) == (D("600.00"), D("600.00"))
     assert (reached[second.pk]["profit"], reached[second.pk]["profit_so_far"]) == (D("300.00"), D("900.00"))
+
+
+def test_profit_counts_as_customers_pay_so_it_is_money_the_business_has(shop):
+    from apps.accounting.credit_profit import owed_profit
+    from apps.inventory.dashboard import accrual_totals, pnl_rows
+    receive(shop, 5, 600)
+    today = timezone.localdate()
+    profit = lambda: accrual_totals(pnl_rows(today, today), ["SHOP"])
+    sell(shop, 1, price=1000)  # paid in full: its 400 profit counts at once
+    assert (profit()["owed_profit"], profit()["profit"]) == (0, D("400.00"))
+    credit = sell(shop, 1, price=1000, paid_amount=0)  # on credit: none of its 400 profit yet
+    assert (owed_profit(), profit()["profit"], profit()["revenue"]) == (D("400.00"), D("400.00"), D("2000.00"))
+    collect(sale=credit, amount=D("250"), method="CASH", key="quarter")  # a quarter paid: a quarter of its profit
+    assert (owed_profit(), profit()["profit"]) == (D("300.00"), D("500.00"))
+    owner = statements.owner_summary(today, today)
+    assert (owner["net_profit"]["amount"], owner["owed_profit"]["amount"], owner["profit_received"]["amount"]) == (D("800.00"), D("300.00"), D("500.00"))
+    collect(sale=credit, amount=D("750"), method="CASH", key="rest")
+    assert (owed_profit(), profit()["profit"]) == (0, D("800.00"))
+
+
+def test_a_credit_sale_returned_owes_no_profit_and_one_paid_later_counts_on_the_day_it_is_paid(shop):
+    from apps.accounting.credit_profit import owed_profit, owed_profit_rows
+    receive(shop, 5, 600, days_ago=5)
+    returned = sell(shop, 1, price=1000, paid_amount=0)
+    return_items(sale=returned, lines=[{"item_id": returned.items.get().pk, "quantity": 1, "restock": True}], reason="Changed mind", user=shop["owner"])
+    assert owed_profit() == 0
+    later = sell(shop, 1, price=1000, paid_amount=0)
+    week_ago = timezone.now() - timedelta(days=3)
+    Sale.objects.filter(pk=later.pk).update(created_at=week_ago)
+    collect(sale=Sale.objects.get(pk=later.pk), amount=D("1000"), method="CASH", key="paid")
+    today = timezone.localdate()
+    rows = [row for row in owed_profit_rows() if row["amount"] > 0 and row["date"] == timezone.localtime(week_ago).date()]
+    assert [r["amount"] for r in rows] == [D("400.00")]  # owed from the sale's day...
+    assert sum((r["amount"] for r in owed_profit_rows(today, today)), D(0)) == D("-400.00")  # ...and counted the day it was paid

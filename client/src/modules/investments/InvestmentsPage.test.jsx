@@ -62,7 +62,20 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(rows[2]).toHaveTextContent("Me");
   expect(rows[3]).toHaveTextContent("Put in");
   expect(rows[3]).toHaveTextContent("My own money");
-  expect(within(card).queryByRole("button", { name: "It was the business's money" })).toBeNull();
+  // Only money put in as the owner's own can be marked as the business's.
+  expect(within(rows[3]).getByRole("button", { name: "It was the business's money" })).toBeInTheDocument();
+  expect(within(rows[2]).queryByRole("button", { name: "It was the business's money" })).toBeNull();
+});
+
+it("marks money first recorded as the owner's own as the business's, from the place it came from", async () => {
+  const { askForm } = await import("../../core/ui/alerts");
+  askForm.mockResolvedValueOnce({ place: "MPESA", amount: "15000" });
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  await act(async () => { fireEvent.click(within(card).getByRole("button", { name: "It was the business's money" })); });
+  const [path, options] = api.mock.calls.find(([p]) => p.endsWith("/business/"));
+  expect(path).toMatch(/\/api\/v1\/accounting\/investments\/movements\/\d+\/business\//);
+  expect(JSON.parse(options.body)).toEqual({ place: "MPESA", amount: "15000" });
 });
 
 it("puts in the business's money from the place chosen, or the owner's own money", async () => {

@@ -470,6 +470,23 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
       setError(err.message);
     }
   };
+  // Money first recorded as your own that was really the business's: from which place, and how much of it.
+  const markBusiness = async (m) => {
+    const values = await askForm({ title: `Was this ${money(m.amount)} the business's money?`,
+      text: `It came out of the business's place on ${date(m.occurred_on)}: that place goes down by it and the business's money in ${investment.name} goes up. Sales and profit stay as they are.`,
+      confirmButtonText: "It was the business's money", fields: [
+        { name: "place", label: "It came from", type: "select", value: "MPESA", options: PLACES },
+        { name: "amount", label: `How much of it was the business's (${businessCurrency()})`, type: "number", value: String(Number(m.amount)), max: String(Number(m.amount)), required: true },
+      ] });
+    if (!values) return;
+    setError("");
+    try {
+      await api(`/api/v1/accounting/investments/movements/${m.id}/business/`, { method: "POST", body: JSON.stringify(values) });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
       text: `The investment's value goes back to what it was${m.kind === "INTEREST" || m.kind === "FEE" ? ", and the business's profit with it" : ""}. ${APART}`,
@@ -531,6 +548,7 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
                 : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
               <td>{m.reference || m.note || "—"}</td>
               <td>{!m.reversed_at && canCorrect && <div className="actionRow">
+                {m.kind === "DEPOSIT" && m.whose !== BUSINESS && !m.purchase && <button type="button" className="secondary" onClick={() => void markBusiness(m)}>It was the business's money</button>}
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
             </tr>
           ))}</tbody>
@@ -627,6 +645,14 @@ export function InvestmentsPage() {
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
           <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}
       </div>
+      {Number(data.business_in_places) > 0 && Number(data.owner_value) > 0 && <section className="investReminder" role="status" aria-label="Business money not marked">
+        <div>
+          <b>The app expects {money(data.business_in_places)} of the business's money in its till, drawer or bank</b>
+          <p>If that money is really in an investment, find the money you put in for it in the account's history and press
+            “It was the business's money”, choosing where it came from. Then the business's money here is right and the till, drawer and bank
+            are not expected to hold it. Money check shows what each place should hold.</p>
+        </div>
+      </section>}
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
         <div>
           <b>Monthly check due for {data.this_month}</b>

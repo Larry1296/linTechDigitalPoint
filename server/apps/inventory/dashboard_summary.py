@@ -23,9 +23,10 @@ def _figures(rows, units, profit_visible):
               'commission': accrual_totals(rows, ['MPESA'])['revenue'] if 'MPESA' in units else None,
               'sales': total['revenue']}
     if profit_visible:
-        result.update(cost=total['cogs'], expenses=total['expenses'], stock_corrections=total['stock_corrections'], interest=total['interest'], profit=total['profit'])
+        result.update(cost=total['cogs'], expenses=total['expenses'], stock_corrections=total['stock_corrections'], interest=total['interest'],
+                      owed_profit=total['owed_profit'], profit=total['profit'])
     else:
-        result.update(dict.fromkeys(['cost', 'expenses', 'stock_corrections', 'interest', 'profit']))
+        result.update(dict.fromkeys(['cost', 'expenses', 'stock_corrections', 'interest', 'owed_profit', 'profit']))
     return result
 
 

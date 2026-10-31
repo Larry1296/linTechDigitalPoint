@@ -62,7 +62,8 @@ def summary(user, params):
         from .investments import book_earnings
         book_earnings()
     start, end = filters.get('start') or date(1900, 1, 1), filters.get('end') or timezone.localdate()
-    units = {unit: {'business_unit': unit, 'revenue': Decimal('0'), 'expenses': Decimal('0'), 'stock_corrections': Decimal('0'), 'cogs': Decimal('0'), 'money_received': Decimal('0')}
+    units = {unit: {'business_unit': unit, 'revenue': Decimal('0'), 'expenses': Decimal('0'), 'stock_corrections': Decimal('0'), 'cogs': Decimal('0'),
+                    'owed_profit': Decimal('0'), 'money_received': Decimal('0')}
              for unit in BusinessUnit.values}
     daily = defaultdict(lambda: Decimal('0'))
     monthly = defaultdict(lambda: Decimal('0'))
@@ -77,16 +78,18 @@ def summary(user, params):
                 monthly[row['date'].strftime('%Y-%m')] += row['amount']
     for entry in entries.filter(kind='INCOME'):
         units[entry.business_unit]['money_received'] += entry.amount
-    totals = {key: sum((u[key] for u in units.values()), Decimal('0')) for key in ['revenue', 'expenses', 'stock_corrections', 'cogs', 'money_received']}
+    totals = {key: sum((u[key] for u in units.values()), Decimal('0')) for key in ['revenue', 'expenses', 'stock_corrections', 'cogs', 'owed_profit', 'money_received']}
     if profit:
         totals['interest'] = interest
     for row in [*units.values(), totals]:
         if profit:
             row['gross_profit'] = row['revenue'] - row['cogs']
-            row['net_profit'] = row['gross_profit'] - row['expenses'] - row['stock_corrections'] + row.get('interest', Decimal('0'))
+            # Profit received: less the profit in what customers still owe, which counts when they pay.
+            row['net_profit'] = row['gross_profit'] - row['expenses'] - row['stock_corrections'] + row.get('interest', Decimal('0')) - row['owed_profit']
         else:
             row.pop('cogs')
             row.pop('stock_corrections')
+            row.pop('owed_profit')
     return {'basis': 'accrual', 'units': list(units.values()), 'totals': totals, 'daily_sales': dict(sorted(daily.items())),
             'monthly_sales': dict(sorted(monthly.items())), 'filters': filters}
 
