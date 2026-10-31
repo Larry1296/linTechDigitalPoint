@@ -27,9 +27,16 @@ UNITS = [('SHOP', 'Products / sales', [('pos', 'commerce.view_sale')]),
 # belongs to the unit it was recorded for, or is shared between the parts it names; stock losses belong to the shop.
 REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4030': 'SHOP', '4020': 'CYBER', '4040': 'CYBER', '4010': 'MPESA'}
 COST_UNIT = {'5000': 'SHOP', '5020': 'SHOP', '5010': 'CYBER'}
-# Interest earned on investments (e.g. a CIC money market fund) is not a sale of anything: it is kept apart from
-# sales and from the trading profit, and investment figures stay on the protected Investments page.
+# Interest earned on investments (e.g. a CIC money market fund), less their fees or losses, is not a sale of anything
+# and belongs to no part of the business: it is its own line (unit INVEST), added only to the whole business's profit.
 INVESTMENT_INCOME = {'4910'}
+INVESTMENT_COSTS = {'6200'}
+INVEST = 'INVEST'
+
+
+def whole(units, profit_visible):
+    """The units whose rows make up the whole business: the visible parts, and investment interest with the profit."""
+    return [*units, INVEST] if profit_visible and units else list(units)
 
 
 def pnl_rows(start, end):
@@ -52,8 +59,8 @@ def pnl_rows(start, end):
     for line in lines:
         code, kind = line['account__code'], line['account__kind']
         prefix, _, ident = line['entry__source_key'].partition(':')
-        if kind == 'REVENUE' and code in INVESTMENT_INCOME:
-            unit, field, amount = 'SHOP', 'interest', line['c'] - line['d']
+        if code in INVESTMENT_INCOME | INVESTMENT_COSTS:
+            unit, field, amount = INVEST, 'interest', line['c'] - line['d']
         elif kind == 'REVENUE':
             unit, field, amount = REVENUE_UNIT.get(code, 'SHOP'), 'revenue', line['c'] - line['d']
         elif kind == 'COGS':
@@ -89,11 +96,11 @@ def shared(amount, shares):
 
 
 def accrual_totals(rows, units):
-    result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO)
+    result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO, interest=ZERO)
     for row in rows:
         if row['unit'] in units and row['field'] in result:
             result[row['field']] += row['amount']
-    result['profit'] = result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections']
+    result['profit'] = result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections'] + result['interest']
     return result
 
 
@@ -109,7 +116,7 @@ def unit_series(trend_rows, period_rows, units, profit_visible, first_month, sta
 
     def point(rows, **label):
         values = {}
-        for key, part in [*((key, [key]) for key in keys), ('TOTAL', keys)]:
+        for key, part in [*((key, [key]) for key in keys), ('TOTAL', whole(keys, profit_visible))]:
             totals = accrual_totals(rows, part)
             values[f'{key}_sales'] = totals['revenue']
             values[f'{key}_costs'] = totals['expenses'] if profit_visible else None
@@ -173,10 +180,13 @@ def dashboard_snapshot(request):
     enabled = effective_modules(request.organization)
     permits = lambda permission: has_business_permission(request.user, permission)
     profit_visible = permits('accounting.view_profit')
+    if profit_visible:
+        from apps.accounting.investments import book_earnings
+        book_earnings()  # interest recorded before it counted in profit is counted once
     visible_units = [key for key, _, runs in UNITS if any(module in enabled and permits(permission) for module, permission in runs)]
     books = CashEntry.objects.filter(business_unit__in=visible_units, occurred_at__lte=now)
     daily = pnl_rows(today, today)
-    totals = accrual_totals(daily, visible_units)
+    totals = accrual_totals(daily, whole(visible_units, profit_visible))
     channels = []
     if 'SHOP' in visible_units:
         channels += [Sale.POS, Sale.ONLINE]
@@ -199,11 +209,11 @@ def dashboard_snapshot(request):
         unit = accrual_totals(daily, [key])
         ever = accrual_totals(ever_rows, [key]) if allowed else None
         if ever is not None and not profit_visible:
-            ever.update(cogs=None, expenses=None, stock_corrections=None, profit=None)
+            ever.update(cogs=None, expenses=None, stock_corrections=None, interest=None, profit=None)
         if not allowed:
             unit = {field: None for field in unit}
         elif not profit_visible:
-            unit.update(cogs=None, expenses=None, stock_corrections=None, profit=None)
+            unit.update(cogs=None, expenses=None, stock_corrections=None, interest=None, profit=None)
         data['business_units'].append({'key': key, 'name': name, 'enabled': any(module in enabled for module, _ in runs), 'restricted': not allowed, **unit, 'all_time': ever})
         if key == 'SHOP':
             data['retail'] = {**unit, 'sales': sales.exclude(channel=Sale.CYBER).count() if allowed else None, 'restricted': not allowed}
@@ -233,7 +243,7 @@ def dashboard_snapshot(request):
         data['today'] = {key: None for key in data['today']}
         data['today']['restricted'] = True
     elif not profit_visible:
-        data['today'].update(cogs=None, profit=None, expenses=None, stock_corrections=None)
+        data['today'].update(cogs=None, profit=None, expenses=None, stock_corrections=None, interest=None)
 
     inventory_allowed = 'inventory' in enabled and permits('catalog.view_product')
     data['inventory'] = {'restricted': not inventory_allowed, **dict.fromkeys(['physical', 'available', 'cost', 'retail', 'potential_margin', 'low_stock', 'total_skus'])}
@@ -267,12 +277,12 @@ def dashboard_snapshot(request):
         return lots.filter(received_at__date__range=(start, end)).aggregate(value=Sum(stock_value))['value'] or ZERO
 
     period_rows = pnl_rows(start, end)
-    period = accrual_totals(period_rows, visible_units)
+    period = accrual_totals(period_rows, whole(visible_units, profit_visible))
     period['gross_profit'] = period['revenue'] - period['cogs']
     if not visible_units:
         period = dict.fromkeys(period)
     elif not profit_visible:
-        period.update(cogs=None, expenses=None, stock_corrections=None, gross_profit=None, profit=None)
+        period.update(cogs=None, expenses=None, stock_corrections=None, interest=None, gross_profit=None, profit=None)
     period.update(start=start, end=end,
                   purchases=stock_total(purchase_lots) if stock_allowed else None,
                   opening_stock=stock_total(opening_lots) if stock_allowed else None)
@@ -317,12 +327,13 @@ def dashboard_snapshot(request):
         purchases = {row['month'].strftime('%Y-%m'): row['amount'] for row in purchase_lots.filter(received_at__date__gte=month_start).annotate(month=TruncMonth('received_at')).values('month').annotate(amount=Sum(stock_value))} if stock_allowed else {}
         for offset in range(12):
             month = shift_month(month_start, offset).strftime('%Y-%m')
-            values = accrual_totals([row for row in trend_rows if row['date'].strftime('%Y-%m') == month], visible_units)
+            values = accrual_totals([row for row in trend_rows if row['date'].strftime('%Y-%m') == month], whole(visible_units, profit_visible))
             verdict = 'PROFIT' if values['profit'] > 0 else 'LOSS' if values['profit'] < 0 else 'BREAK_EVEN'
             data['financial_trend'].append({'month': month, 'sales': values['revenue'],
                 'purchases': purchases.get(month, ZERO) if stock_allowed else None,
                 'expenses': values['expenses'] if profit_visible else None, 'cogs': values['cogs'] if profit_visible else None,
                 'stock_corrections': values['stock_corrections'] if profit_visible else None,
+                'interest': values['interest'] if profit_visible else None,
                 'profit': values['profit'] if profit_visible else None, 'verdict': verdict if profit_visible else 'RESTRICTED'})
     data['unit_trend'], data['unit_days'] = unit_series(trend_rows if visible_units else [], period_rows, visible_units, profit_visible,
                                                         month_start if visible_units else today, start, end)

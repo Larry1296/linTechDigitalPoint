@@ -16,16 +16,16 @@ UNITS = ('SHOP', 'CYBER', 'MPESA')  # the agency counts by its commission and co
 
 
 def _figures(rows, units, profit_visible):
-    from .dashboard import accrual_totals
-    total = accrual_totals(rows, units)
+    from .dashboard import accrual_totals, whole
+    total = accrual_totals(rows, whole(units, profit_visible))  # the whole business: with investment interest
     result = {'products': accrual_totals(rows, ['SHOP'])['revenue'] if 'SHOP' in units else None,
               'services': accrual_totals(rows, ['CYBER'])['revenue'] if 'CYBER' in units else None,
               'commission': accrual_totals(rows, ['MPESA'])['revenue'] if 'MPESA' in units else None,
               'sales': total['revenue']}
     if profit_visible:
-        result.update(cost=total['cogs'], expenses=total['expenses'], stock_corrections=total['stock_corrections'], profit=total['profit'])
+        result.update(cost=total['cogs'], expenses=total['expenses'], stock_corrections=total['stock_corrections'], interest=total['interest'], profit=total['profit'])
     else:
-        result.update(dict.fromkeys(['cost', 'expenses', 'stock_corrections', 'profit']))
+        result.update(dict.fromkeys(['cost', 'expenses', 'stock_corrections', 'interest', 'profit']))
     return result
 
 
@@ -89,7 +89,7 @@ def _customers_owe():
 
 
 def owner_summary(*, visible_units, profit_visible, permits):
-    from .dashboard import pnl_rows
+    from .dashboard import pnl_rows, whole
     units = [unit for unit in UNITS if unit in visible_units]
     if not units:
         return None
@@ -97,7 +97,7 @@ def owner_summary(*, visible_units, profit_visible, permits):
     # Everything ever recorded, records dated ahead included (commission is counted on its month's last day), so the
     # running total always shows where sales and profit have reached.
     rows = pnl_rows(date(1900, 1, 1), date(9999, 12, 31))
-    rows = [row for row in rows if row['unit'] in units]
+    rows = [row for row in rows if row['unit'] in whole(units, profit_visible)]
     money_allowed = permits('accounting.view_moneycheck')
     from apps.commerce.models import Sale, SaleItem
     channels = ([Sale.POS, Sale.ONLINE] if 'SHOP' in units else []) + ([Sale.CYBER] if 'CYBER' in units else [])

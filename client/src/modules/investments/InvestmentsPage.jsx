@@ -11,7 +11,8 @@ import { InterestCalculator } from "./InterestCalculator";
 import { TextArea } from "../../components/forms/TextBox";
 
 // Investment money is the owner's own, kept completely apart from the business: it never comes from or goes into the
-// till, cash drawer, bank or M-Pesa agency, and it is never in the business's money, profit or net worth.
+// till, cash drawer, bank or M-Pesa agency, and it is never in the business's money or net worth. Only the interest
+// its statements show, after fees, is the business's profit.
 const OWNER = "OWNER";
 const APART = "Nothing is taken from or put into the business's cash, till, bank or M-Pesa agency.";
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
@@ -193,7 +194,8 @@ function StatementForm({ investment, onSaved, onCancel }) {
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const difference = Number(values.balance) - Number(investment.value);
     if (!(await confirmAction({ title: `Statement shows ${money(values.balance)}?`,
-      text: difference > 0 ? `${money(difference)} will be recorded as interest earned.` : difference < 0 ? `${money(-difference)} will be recorded as fees or a loss.` : "This matches the app; nothing will be recorded.",
+      text: difference > 0 ? `${money(difference)} will be recorded as interest earned and added to the business's profit.`
+        : difference < 0 ? `${money(-difference)} will be recorded as fees or a loss and taken off the business's profit.` : "This matches the app; nothing will be recorded.",
       confirmButtonText: "Record statement" }))) return;
     setBusy(true);
     setError("");
@@ -211,7 +213,7 @@ function StatementForm({ investment, onSaved, onCancel }) {
         <FormField label={`Balance on the statement or app (${businessCurrency()})`} name="balance" type="number" min="0" step="0.01" required />
         <FormField label="Statement date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
       </fieldset>
-      <p className="muted">The app expects {money(investment.value)}. The difference is recorded as interest (or fees if lower).</p>
+      <p className="muted">The app expects {money(investment.value)}. The difference is the interest (or fees if lower), and it goes into the business's profit.</p>
       <div className="actionRow">
         <button disabled={busy}>Record statement</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
@@ -435,7 +437,7 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
   };
   const undo = async (m) => {
     const values = await askForm({ title: `Undo this ${KIND[m.kind].toLowerCase()} of ${money(m.amount)}?`,
-      text: `The investment's value goes back to what it was. ${APART}`,
+      text: `The investment's value goes back to what it was${m.kind === "INTEREST" || m.kind === "FEE" ? ", and the business's profit with it" : ""}. ${APART}`,
       confirmButtonText: "Undo", fields: [{ name: "reason", label: "Reason", required: true, placeholder: "e.g. entered twice" }] });
     if (!values) return;
     setError("");
@@ -463,6 +465,8 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
+        {investment.business_part != null && Number(investment.value) > 0 && <div><dt>Whose it is</dt>
+          <dd>Business {money(investment.business_part)} · Your own {money(investment.own_part)}</dd></div>}
         <div><dt>Total invested</dt><dd><strong>{money(investment.invested)}</strong> <small>interest is earned on this</small></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
@@ -554,6 +558,7 @@ export function InvestmentsPage() {
   const ratedFrom = rated ? (rated.fund?.annual_rate != null ? `${rated.fund.short}'s published rate as of ${date(rated.fund.as_of)}` : `${rated.name}, ${rated.current_rate?.label}`) : "";
   const funds = data.funds || [];
   const earning = data.earning;
+  const whose = data.whose;
   return (
     <>
       <div className="loanSummary">
@@ -563,10 +568,18 @@ export function InvestmentsPage() {
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
-      <p className="muted">Your own money kept in a money market fund (MMF) or similar. It is kept completely apart from the business:
-        nothing is taken from or put into the till, cash drawer, bank or M-Pesa agency, and the money and its interest are never in the
-        business's money, profit or net worth.</p>
+      <p className="muted">Money kept in a money market fund (MMF) or similar so it keeps earning until it is needed for stock. The
+        business's money you received (not what customers still owe) is counted as kept here, and the rest is your own. Sales, costs and
+        each part's figures stay as they are; only the interest counts: each statement's balance, less what the app expects (what you put
+        in, less what you took out, plus interest and less fees already recorded), is added to the business's profit.</p>
       <div className="metrics investMetrics">
+        {whose && Number(whose.total) > 0 && <>
+          <article><span>The business's money</span><strong>{money(whose.business)}</strong>
+            <small>{Number(whose.not_invested) > 0 ? `Kept here until it buys stock; ${money(whose.not_invested)} more is still in the till, drawer or bank`
+              : "Received from sales and still the business's, kept here until it buys stock"}</small></article>
+          <article><span>Your own money</span><strong>{money(whose.own)}</strong>
+            <small>The rest of what the investments hold</small></article>
+        </>}
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
             <small>Goes up every day as interest builds</small></article>}
@@ -574,7 +587,7 @@ export function InvestmentsPage() {
           <small>Your own money; interest is earned on this</small></article>
         <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
-          <small>Yours, not the business's profit</small></article>
+          <small>Added to the business's profit</small></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
           <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}

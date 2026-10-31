@@ -61,9 +61,10 @@ def test_interest_earned_on_an_investment_is_not_products_sold():
         move(investment=fund, user=owner, kind="DEPOSIT", amount="1000", source="OWNER", key="dep")
         record_statement(investment=fund, user=owner, balance="1250", key="stmt")
     summary = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["all_time"]
-    assert (D(str(summary["products"])), D(str(summary["sales"])), D(str(summary["profit"]))) == (D("0"), D("0"), D("0"))
+    # Not a sale of anything, but the business's profit, on its own line.
+    assert (D(str(summary["products"])), D(str(summary["sales"])), D(str(summary["interest"])), D(str(summary["profit"]))) == (D("0"), D("0"), D("250"), D("250"))
     report = client.get("/api/v1/accounting/reports/").json()
-    assert D(str(report["totals"]["revenue"])) == 0
+    assert (D(str(report["totals"]["revenue"])), D(str(report["totals"]["interest"])), D(str(report["totals"]["net_profit"]))) == (0, D("250"), D("250"))
 
 
 def test_m_pesa_card_shows_the_last_shift_closed_with_between_shifts():

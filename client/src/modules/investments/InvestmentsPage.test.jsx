@@ -29,7 +29,8 @@ const mmf = { id: 3, name: "Sanlam MMF", account_number: "MMF-0042", notes: "", 
 const KINDS = [LOW, { code: "SACCO", label: "Sacco deposits", risk: 2, risk_label: "Low to medium", risk_note: "Depends on how the Sacco is managed." }];
 const FUNDS = [{ code: "CIC_MMF_KES", name: "CIC Money Market Fund (KES)", short: "CIC", kind: LOW, annual_rate: "8.120" },
   { code: "KCB_MMF_KES", name: "KCB Money Market Fund (KES)", short: "KCB", kind: LOW, annual_rate: null }];
-const listing = (investment) => ({ investments: [investment], from_shop: "0.00", from_owner: "20000.00", invested: "20000.00",
+const listing = (investment) => ({ investments: [{ business_part: "12000.00", own_part: "8150.00", ...investment }],
+  whose: { business_money: "12000.00", business: "12000.00", own: "8150.00", total: "20150.00", not_invested: "0.00" }, from_shop: "0.00", from_owner: "20000.00", invested: "20000.00",
     shop_value: "0.00", shop_interest: "0.00", owner_interest: "150.00", total_value: "20150.00", worth_today: investment.estimate?.value ?? "20150.00", interest_earned: "150.00", estimated_interest: "11.26", this_month: "October 2026",
     funds: FUNDS, kinds: KINDS, earning: { day: investment.earning?.day.net ?? "0", month: investment.earning?.month.net ?? "0", year: investment.earning?.year.net ?? "0" } });
 beforeEach(() => {
@@ -40,17 +41,21 @@ beforeEach(() => {
 it("shows what the MMF holds, what went in and the interest, with dated history", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  expect(screen.getByText(/kept completely apart from the business/)).toBeInTheDocument();
+  expect(screen.getByText(/business's money you received \(not what customers still owe\) is counted as kept here/)).toBeInTheDocument();
+  // Whose the money is: the business's money received from sales, kept here until it buys stock, and the owner's own.
+  expect(screen.getByText("The business's money").nextSibling).toHaveTextContent("KSh 12,000");
+  expect(screen.getByText("Your own money").nextSibling).toHaveTextContent("KSh 8,150");
   expect(screen.getByText("Recorded value, with interest").nextSibling).toHaveTextContent("KSh 20,150");
   const metrics = screen.getByText("Total invested", { selector: ".investMetrics span" }).closest("div");
   expect(within(metrics).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
-  // Nothing about the business: no business share, no money from the shop, no business share of interest.
+  // No business share of interest: all of it is the business's profit.
   expect(screen.queryByText("From the shop")).toBeNull();
   expect(screen.queryByText(/Business's share of interest|Business's money in/)).toBeNull();
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
-  expect(screen.getByText("Yours, not the business's profit")).toBeInTheDocument();
+  expect(screen.getByText("Added to the business's profit")).toBeInTheDocument();
   expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
   expect(within(card).getByText("Recorded value").nextSibling).toHaveTextContent("KSh 20,150");
+  expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business KSh 12,000 · Your own KSh 8,150");
   expect(within(card).getByText("Interest earned").nextSibling).toHaveTextContent("KSh 150");
   const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row");
   expect(rows[1]).toHaveTextContent("Interest");

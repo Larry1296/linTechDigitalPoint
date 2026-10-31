@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
+from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value, whose
 from .models import Investment, InvestmentMovement
 
 
@@ -90,7 +90,8 @@ class InvestmentsView(APIView):
     def get(self, request):
         settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
-        return Response({"investments": rows,
+        split = whose(rows)
+        return Response({"investments": rows, "whose": split,
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),

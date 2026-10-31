@@ -730,8 +730,9 @@ def investments(ctx, args):
             row["estimated_value_today"] = _money(guess["value"])
         rows.append(row)
     return {"investments": rows, "total_value": _money(sum((Decimal(str(row["value_now"] or 0)) for row in rows), ZERO)),
-            "explained": "The owner's own money put in from outside the business earns interest with the rest but is not the "
-                         "business's: only the business's money and its share of the interest are in the books and profit. "
+            "explained": "The money put in is the owner's own, kept apart from the business: never in its money or net worth. "
+                         "Only the interest each statement shows (its balance less put in, less taken out, plus interest and less fees "
+                         "recorded before), after fees, is the business's profit, as 'Interest on investments'. "
                          "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted. "
                          "earns_after_tax is what the money earns now at the current yearly rate after withholding tax: a day, an "
                          "average month, and a year with each month's interest earning interest after it is added."}
@@ -885,7 +886,7 @@ TOOLS = {
                    _schema({"sale_number": {"type": "string"}, "customer": {"type": "string"}, **LIMIT}), "commerce.view_sale", None),
     "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
                       _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
-    "investments": (investments, "Investments such as money market funds, the owner's own money kept apart from the business (never in its money, profit or net worth): value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
+    "investments": (investments, "Investments such as money market funds, the owner's own money kept apart from the business (never in its money or net worth; only the interest from statements, after fees, is the business's profit): value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
                     _schema(), "accounting.view_investment", "investments"),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),

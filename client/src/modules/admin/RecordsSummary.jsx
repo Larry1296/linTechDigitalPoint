@@ -1,4 +1,4 @@
-import { profitText, stockText } from "./plainMoney";
+import { interestText, profitText, stockText } from "./plainMoney";
 
 const CHANNELS = { POS: "at the counter", CYBER: "services", ONLINE: "online" };
 const METHODS = { CASH: "Cash", MPESA: "M-Pesa", BANK: "Bank", OTHER: "Other", CASH_ON_PICKUP: "Cash on pickup", DEPOSIT: "Paid in advance (guests)" };
@@ -21,7 +21,8 @@ export function RecordsSummary({ records, money }) {
     <h2 id="records-summary-title">Everything recorded so far</h2>
     <p>All of the business's records{records.since ? ` since ${records.since}` : ""}, not just the dates picked above.</p>
     {profit && <p className="profitSum"><b>Sales {money(profit.revenue)} − what the sold items cost you {money(profit.cogs)} − running costs {money(profit.expenses)}
-      {Number(profit.stock_corrections || 0) ? ` ${stockText(profit.stock_corrections, money)}` : ""} = {profitText(profit.profit, money)}</b></p>}
+      {Number(profit.stock_corrections || 0) ? ` ${stockText(profit.stock_corrections, money)}` : ""}
+      {Number(profit.interest || 0) ? ` ${interestText(profit.interest, money)}` : ""} = {profitText(profit.profit, money)}</b></p>}
     <div className="recordsGrid">
       {catalogue && <Group title="What you sell" rows={[
         ["Products", count(catalogue.products)],

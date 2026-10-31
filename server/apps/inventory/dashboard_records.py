@@ -109,12 +109,12 @@ def _money(expenses):
 
 
 def records_summary(*, enabled, visible_units, channels, profit_visible, permits):
-    from .dashboard import accrual_totals, pnl_rows
+    from .dashboard import accrual_totals, pnl_rows, whole
     today = timezone.localdate()
     rows = pnl_rows(date(1900, 1, 1), today)
     sales_units = [unit for unit in ('SHOP', 'CYBER') if unit in visible_units]
     books = accrual_totals(rows, sales_units)
-    everything = accrual_totals(rows, visible_units)
+    everything = accrual_totals(rows, whole(visible_units, profit_visible))
     inventory_allowed = 'inventory' in enabled and permits('catalog.view_product')
     money_allowed = profit_visible and permits('accounting.view_cashentry')
     return {
@@ -125,5 +125,5 @@ def records_summary(*, enabled, visible_units, channels, profit_visible, permits
         'services': _services() if 'CYBER' in visible_units else None,
         'mpesa': _mpesa(accrual_totals(rows, ['MPESA'])['revenue']) if 'MPESA' in visible_units else None,
         'money': _money(everything['expenses']) if money_allowed else None,
-        'profit': {key: everything[key] for key in ('revenue', 'cogs', 'expenses', 'stock_corrections', 'profit')} if profit_visible and visible_units else None,
+        'profit': {key: everything[key] for key in ('revenue', 'cogs', 'expenses', 'stock_corrections', 'interest', 'profit')} if profit_visible and visible_units else None,
     }

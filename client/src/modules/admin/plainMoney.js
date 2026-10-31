@@ -16,9 +16,17 @@ export function stockText(value, money) {
   return number < 0 ? `+ ${money(-number)} (stock found)` : `− ${money(number)} (stock missing)`;
 }
 
-// "Sales 1,150 − cost of what you sold 700 − running costs 0 + stock found 120 = 570 profit"
-export function profitSum({ sales, cost, expenses, stock, profit }, money) {
+// Interest from investments less their fees: "+ KSh 120 (interest on investments)", or a loss when fees were more.
+export function interestText(value, money) {
+  const number = Number(value || 0);
+  if (!number) return money(0);
+  return number > 0 ? `+ ${money(number)} (interest on investments)` : `− ${money(-number)} (investment fees)`;
+}
+
+// "Sales 1,150 − cost of what you sold 700 − running costs 0 + stock found 120 + interest on investments 60 = 630 profit"
+export function profitSum({ sales, cost, expenses, stock, interest, profit }, money) {
   const parts = [`Sales ${money(sales)}`, `− what the sold items cost you ${money(cost)}`, `− running costs ${money(expenses)}`];
   if (Number(stock || 0)) parts.push(Number(stock) < 0 ? `+ stock found ${money(-Number(stock))}` : `− stock missing ${money(stock)}`);
+  if (Number(interest || 0)) parts.push(Number(interest) > 0 ? `+ interest on investments ${money(interest)}` : `− investment fees ${money(-Number(interest))}`);
   return `${parts.join(" ")} = ${profitText(profit, money)}`;
 }

@@ -58,12 +58,18 @@ def summary(user, params):
     from apps.inventory.dashboard import pnl_rows
     entries, filters = filtered_entries(params)
     profit = has_business_permission(user, 'accounting.view_profit')
+    if profit:
+        from .investments import book_earnings
+        book_earnings()
     start, end = filters.get('start') or date(1900, 1, 1), filters.get('end') or timezone.localdate()
     units = {unit: {'business_unit': unit, 'revenue': Decimal('0'), 'expenses': Decimal('0'), 'stock_corrections': Decimal('0'), 'cogs': Decimal('0'), 'money_received': Decimal('0')}
              for unit in BusinessUnit.values}
     daily = defaultdict(lambda: Decimal('0'))
     monthly = defaultdict(lambda: Decimal('0'))
+    interest = Decimal('0')  # investment interest less fees: in the whole business's profit, never a part's
     for row in pnl_rows(start, end):
+        if row['field'] == 'interest' and not filters.get('business_unit'):
+            interest += row['amount']
         if row['unit'] in units and row['field'] in units[row['unit']] and (not filters.get('business_unit') or row['unit'] == filters['business_unit']):
             units[row['unit']][row['field']] += row['amount']
             if row['field'] == 'revenue':
@@ -72,10 +78,12 @@ def summary(user, params):
     for entry in entries.filter(kind='INCOME'):
         units[entry.business_unit]['money_received'] += entry.amount
     totals = {key: sum((u[key] for u in units.values()), Decimal('0')) for key in ['revenue', 'expenses', 'stock_corrections', 'cogs', 'money_received']}
+    if profit:
+        totals['interest'] = interest
     for row in [*units.values(), totals]:
         if profit:
             row['gross_profit'] = row['revenue'] - row['cogs']
-            row['net_profit'] = row['gross_profit'] - row['expenses'] - row['stock_corrections']
+            row['net_profit'] = row['gross_profit'] - row['expenses'] - row['stock_corrections'] + row.get('interest', Decimal('0'))
         else:
             row.pop('cogs')
             row.pop('stock_corrections')

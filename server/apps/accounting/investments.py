@@ -1,10 +1,15 @@
 """Money kept in an investment such as a money market fund (MMF), and taken back out.
 
-Investment money is the owner's own and is kept completely apart from the business: it is put in from the owner's own
-money and taken out back to the owner, never from or into the till, cash drawer, bank, "other" money or the M-Pesa
-agency. It never enters the books: not the business's money, its profit (interest and fees) or its net worth. The
-Investments page keeps the accounts, what was put in and taken out, the interest from statements and the rates, so
-the owner still sees what the money earns. Mistakes are undone, never edited or deleted.
+Investment money is kept apart from the business's books: the owner puts it in and takes it out, never recorded as
+moving from or into the till, cash drawer, bank, "other" money or the M-Pesa
+agency, and what is put in or taken out never enters the books. The owner keeps the business's money (what it received
+and still has) in the investments until it buys stock, so the Investments page shows that much of them as the
+business's and the rest as the owner's own (whose()), without moving anything in the books. Only what they earn is:
+the interest a statement shows (its balance less what the app expects: put in, less taken out, plus interest and less
+fees recorded before) is the business's profit ("Interest earned on investments", 4910), and fees or a loss lower it
+(6200). The money itself stays in the fund as the owner's, so the interest is posted against the owner's money (3000)
+and the till, drawer, bank and net worth do not change. The Investments page keeps the accounts, what was put in and
+taken out, the interest from statements and the rates. Mistakes are undone, never edited or deleted.
 
 Records from before the money was kept apart (money moved from or into the business's places, a business share in
 the books) are separated once by settle_books(): what reached the books is taken back out with a correction, and the
@@ -18,7 +23,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from apps.tenancy.transactions import lock_business
-from .ledger import money, resolve_branch, reverse_journal
+from .ledger import money, paired, post_journal, resolve_branch, reverse_journal
 from .models import Investment, InvestmentMovement, JournalEntry
 from .services import audit, post, reverse as reverse_cash
 
@@ -104,6 +109,28 @@ def shares(investment):
     principal = {side: min(max(put[side], Decimal("0")), max(held[side], Decimal("0"))) for side in put}
     return {"shop": principal["shop"], "owner": principal["owner"], "shop_interest": earned["shop"], "owner_interest": earned["owner"],
             "shop_value": held["shop"], "owner_value": held["owner"]}
+
+
+def whose(rows):
+    """How the money in the investments splits between the business and the owner. The owner keeps the business's
+    money (what it received and still has: cash, till, bank and other, never what customers still owe) in the
+    investments until it is needed for stock, so that much of what they hold is the business's and the rest is the
+    owner's own. Nothing is moved in the books: sales, costs, each part's figures and net worth stay as they are, and
+    the business's money is only shown as kept here. ``rows`` are investment rows with a "value"; each gets
+    "business_part" and "own_part", shared by value. Returns {business_money, business, own, total}."""
+    from .money_check import PLACES, expected
+    business_money = sum((expected(method)[0] for method, _ in PLACES), Decimal("0"))
+    total = sum((Decimal(str(row["value"])) for row in rows), Decimal("0"))
+    business = min(max(business_money, Decimal("0")), max(total, Decimal("0")))
+    left = business
+    for index, row in enumerate(rows):
+        value = max(Decimal(str(row["value"])), Decimal("0"))
+        part = left if index == len(rows) - 1 else min(left, (business * value / total).quantize(Decimal("0.01")) if total else Decimal("0"))
+        row["business_part"], row["own_part"] = part, Decimal(str(row["value"])) - part
+        left -= part
+    return {"business_money": business_money, "business": business, "own": total - business, "total": total,
+            # More business money than the investments hold: the rest is still in the till, drawer or bank.
+            "not_invested": max(business_money - business, Decimal("0"))}
 
 
 def _amount(raw):
@@ -211,7 +238,7 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
     # The app's own prediction for the same date is kept beside it, so each statement shows how close the estimate was.
     from .investment_interest import estimate
     guess = estimate(investment, today=day)
-    # Earned on the owner's own money: none of it is the business's income.
+    # business_amount stays 0: none of the money is the business's; only what it earned is counted, by book_earned().
     movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=Decimal("0"), occurred_on=day,
                                                  note=str(note or "").strip(), statement_balance=balance, branch=resolve_branch(),
                                                  predicted_interest=guess["net"] if guess else None,
@@ -219,12 +246,46 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
                                                  idempotency_key=key, created_by=user)
     words = f"{'Interest earned on' if kind == InvestmentMovement.INTEREST else 'Fees or loss on'} {investment.name}"
     audit(movement, user, f"{words}: {amount} (statement {balance})")
+    book_earned(movement, user)
     return movement
+
+
+EARNED = "investment-earned"
+
+
+def book_earned(movement, user=None):
+    """Interest a statement showed goes into profit, fees or a loss come out of it. The money stays in the fund as the
+    owner's, so the other side is the owner's money: the business's places and net worth do not change. Counted on
+    the statement's date, or today when that month's books are closed."""
+    from .models import FinancialPeriod
+    day = movement.occurred_on
+    if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
+        day = timezone.localdate()
+    name = movement.investment.name
+    if movement.kind == InvestmentMovement.INTEREST:
+        lines, words = paired("3000", "4910", movement.amount), f"Interest earned on {name}, kept in the fund as the owner's money"
+    else:
+        lines, words = paired("6200", "3000", movement.amount), f"Fees or loss on {name}, taken from the owner's money in the fund"
+    return post_journal(key=f"{EARNED}:{movement.pk}", description=words[:255], lines=lines, branch=movement.branch, date=day, user=user)
+
+
+@transaction.atomic
+def book_earnings():
+    """Interest and fees recorded before they counted in profit are counted once; afterwards there is nothing to do."""
+    live = InvestmentMovement.objects.filter(kind__in=[InvestmentMovement.INTEREST, InvestmentMovement.FEE], reversed_at__isnull=True)
+    booked = {int(key.rpartition(":")[2]) for key in JournalEntry.objects.filter(source_key__startswith=f"{EARNED}:").values_list("source_key", flat=True)
+              if key.rpartition(":")[2].isdigit()}
+    missing = [pk for pk in live.values_list("pk", flat=True) if pk not in booked]
+    if not missing:
+        return
+    lock_business()
+    for movement in live.filter(pk__in=missing).select_related("investment").order_by("occurred_on", "pk"):
+        book_earned(movement)
 
 
 @transaction.atomic
 def undo(*, movement, user, reason):
-    """A movement recorded by mistake: the investment's value follows. The business's books are not touched."""
+    """A movement recorded by mistake: the investment's value follows, and interest or fees it put into profit come out."""
     lock_business()
     settle_books()
     movement = InvestmentMovement.objects.select_for_update(of=("self",)).select_related("investment").get(pk=movement.pk)
@@ -236,6 +297,14 @@ def undo(*, movement, user, reason):
     if SIGN[movement.kind] > 0 and value(movement.investment) - movement.amount < 0:
         raise ValidationError("Money has since been taken out of this investment. Undo that first.")
     InvestmentMovement.objects.filter(pk=movement.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
+    earned = JournalEntry.objects.filter(source_key=f"{EARNED}:{movement.pk}").first()
+    if earned and not JournalEntry.objects.filter(reversal_of=earned).exists():
+        # Its interest leaves profit too, in the month it was counted in (today when that month's books are closed).
+        from .models import FinancialPeriod
+        day = earned.posting_date
+        if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
+            day = timezone.localdate()
+        reverse_journal(earned, user=user, reason=reason, date=day, key=f"{EARNED}-undo:{movement.pk}")
     movement.refresh_from_db()
     return movement
 
@@ -280,6 +349,11 @@ def settle_books():
     out to pay a supplier becomes the owner's own money paying that supplier, so the supplier stays paid. Money moved
     through the M-Pesa agency stays as the agency recorded it: on the agency side it was already the owner's money
     coming in or going out. Afterwards there is nothing left to do."""
+    _separate()
+    book_earnings()  # then interest and fees count in profit
+
+
+def _separate():
     from django.db.models import Q
     from .models import CashEntry
     pending = InvestmentMovement.objects.filter(Q(business_amount__isnull=True) | ~Q(business_amount=0)

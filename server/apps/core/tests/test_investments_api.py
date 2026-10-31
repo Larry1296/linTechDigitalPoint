@@ -1,5 +1,6 @@
 """Investments page: the owner's own money put into an MMF and taken out, interest from the statement, corrections.
-Investment money is kept completely apart from the business: never in its places, books, profit or net worth."""
+Investment money is kept completely apart from the business: never in its places or net worth. Only what it earns
+(interest less fees, from the statements) is in the books, as the business's profit."""
 from datetime import timedelta
 from decimal import Decimal
 import pytest
@@ -46,14 +47,17 @@ def _books(org):
         return statements.balances(), statements.reconciliation(), statements.profit_and_loss(None, None)
 
 
-def _untouched(org):
-    """Nothing about the investment is in the business's books or profit."""
+def _untouched(org, earned=D("0")):
+    """None of the investment's money is in the business's books; only what it earned (interest less fees) is, as
+    profit, held by the owner in the fund (3000), so no place and nothing the business owns changes."""
     accounts, checks, pl = _books(org)
-    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1000", "1010", "1020", "1030", "1400", "3000", "4910", "6200"))
-    assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == 0
+    balance = lambda code: accounts.get(code, {"balance": D("0")})["balance"]
+    assert all(balance(code) == 0 for code in ("1000", "1010", "1020", "1030", "1400"))
+    assert (-balance("4910") - balance("6200"), balance("3000")) == (earned, earned)
+    assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == earned
 
 
-def test_money_in_interest_and_money_out_stay_on_the_investments_page_and_out_of_the_books(shop):
+def test_money_in_and_out_stay_out_of_the_books_and_only_the_interest_is_profit(shop):
     client, org, *_ = shop
     mmf = _mmf(client)
     week_ago = timezone.localdate() - timedelta(days=7)
@@ -73,8 +77,8 @@ def test_money_in_interest_and_money_out_stay_on_the_investments_page_and_out_of
     assert too_much.status_code == 400 and "only holds 20,150.00" in str(too_much.json())
     out = _move(client, mmf, "WITHDRAWAL", "5000", "OWNER", "out-1")
     assert out.status_code == 201 and D(out.json()["value"]) == D("15150")
-    # The interest is the owner's, not the business's profit; no money moved through the business's places.
-    _untouched(org)
+    # Only the interest is the business's profit; no money moved through the business's places.
+    _untouched(org, earned=D("150"))
     with organization_context(org):
         from apps.accounting.models import CashEntry
         assert not CashEntry.objects.exists()
@@ -174,9 +178,10 @@ def test_records_from_before_are_kept_apart_from_the_business_once(shop):
     owner_money = [s for s in money["starting"] if not s["can_undo"]]
     assert [D(s["amount"]) for s in owner_money] == [D("2000")] and "Owner's own money from Sanlam MMF" in owner_money[0]["note"]
     accounts, checks, pl = _books(org)
-    # Only the owner's 2,000 that paid the supplier is in the books, as the owner's money put in (3000).
-    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1020", "1030", "1400", "4910"))
-    assert accounts["3000"]["balance"] == D("-2000") and pl["net_profit_before_tax"] == 0
+    # The owner's 2,000 that paid the supplier is in the books as the owner's money put in (3000), and the 400 interest
+    # as profit, held by the owner in the fund.
+    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1020", "1030", "1400"))
+    assert (accounts["4910"]["balance"], accounts["3000"]["balance"], pl["net_profit_before_tax"]) == (D("-400"), D("-1600"), D("400"))
     assert next(c for c in checks if c["key"] == "investments")["reconciled"]
     row = client.get("/api/v1/accounting/investments/").json()["investments"][0]
     assert D(row["value"]) == D("12700") and all(m["source"] in ("OWNER", "") for m in row["movements"])
@@ -413,7 +418,7 @@ def test_monthly_check_records_the_rate_and_the_statement_interest_and_reminds_u
     assert [D(str(r["annual_rate"])) for r in fixed["rates"]] == [D("12.75")] and D(str(fixed["rates"][0]["statement_balance"])) == D("50410")
     assert client.get("/api/v1/accounting/investments/reminder/").json()["due"] == []
     assert client.post(f"/api/v1/accounting/investments/{mmf}/monthly/", {"annual_rate": "130", "idempotency_key": "m-3"}, format="json").status_code == 400
-    _untouched(org)  # the interest is the owner's, not the business's profit
+    _untouched(org, earned=D("410"))  # the interest is the business's profit
     client.force_login(cashier)
     assert client.post(f"/api/v1/accounting/investments/{mmf}/monthly/", {"annual_rate": "1", "idempotency_key": "m-4"}, format="json").status_code == 403
     assert client.get("/api/v1/accounting/investments/reminder/").status_code == 403
@@ -439,3 +444,65 @@ def test_own_money_dated_earlier_earns_from_that_day_and_each_statement_keeps_th
     from apps.accounting.models import CashEntry
     with organization_context(org):
         assert not CashEntry.objects.exists()
+
+
+def test_interest_is_in_the_dashboard_profit_on_its_statement_date_and_undo_takes_it_out(shop):
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    _move(client, mmf, "DEPOSIT", "10000", "OWNER", "in", occurred_on=str(timezone.localdate() - timedelta(days=40)))
+    day = timezone.localdate().replace(day=1)
+    earned = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "10120", "occurred_on": str(day), "idempotency_key": "st"},
+                         format="json").json()
+    period = client.get(f"/api/v1/inventory/dashboard/?start={day}&end={timezone.localdate()}").json()["period_summary"]
+    assert (D(str(period["interest"])), D(str(period["profit"])), D(str(period["revenue"]))) == (D("120"), D("120"), D("0"))
+    _untouched(org, earned=D("120"))
+    with organization_context(org):
+        from apps.accounting.models import JournalEntry
+        assert JournalEntry.objects.get(source_key=f"investment-earned:{earned['movements'][0]['id']}").posting_date == day
+    lower = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "10100", "idempotency_key": "st-2"}, format="json").json()
+    _untouched(org, earned=D("100"))  # fees come out of the interest
+    for movement in [m for m in lower["movements"] if m["kind"] in ("INTEREST", "FEE")]:
+        assert client.post(f"/api/v1/accounting/investments/movements/{movement['id']}/undo/", {"reason": "test"}, format="json").status_code == 200
+    _untouched(org)
+    period = client.get(f"/api/v1/inventory/dashboard/?start={day}&end={timezone.localdate()}").json()["period_summary"]
+    assert D(str(period["interest"])) == 0 and D(str(period["profit"])) == 0
+
+
+def test_interest_recorded_before_it_counted_is_brought_into_profit_once(shop):
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    _move(client, mmf, "DEPOSIT", "5000", "OWNER", "in")
+    with organization_context(org):  # interest as it was recorded before: on the Investments page, not in the books
+        from apps.accounting.models import InvestmentMovement
+        InvestmentMovement.objects.create(investment_id=mmf, kind="INTEREST", amount=D("60"), business_amount=D("0"), statement_balance=D("5060"),
+                                          occurred_on=timezone.localdate(), idempotency_key="old-interest", created_by=owner)
+        from apps.accounting.models import JournalEntry
+        assert not JournalEntry.objects.filter(source_key__startswith="investment-earned:").exists()
+    client.get("/api/v1/inventory/dashboard/")
+    _untouched(org, earned=D("60"))
+    client.get("/api/v1/inventory/dashboard/")
+    _untouched(org, earned=D("60"))
+
+
+def test_the_business_money_received_is_shown_as_kept_in_the_investments_and_the_rest_is_the_owners(shop):
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("12000"), kind="INCOME", reference="Sales", key="sales-1", user=owner)
+    _move(client, mmf, "DEPOSIT", "20000", "OWNER", "in")
+    client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "20150", "idempotency_key": "st"}, format="json")
+    listed = client.get("/api/v1/accounting/investments/").json()
+    whose = {key: D(str(value)) for key, value in listed["whose"].items()}
+    assert whose == {"business_money": D("12000"), "business": D("12000"), "own": D("8150"), "total": D("20150"), "not_invested": D("0")}
+    row = listed["investments"][0]
+    assert (D(str(row["business_part"])), D(str(row["own_part"]))) == (D("12000"), D("8150"))
+    # Nothing moved in the books: the till keeps the business's money, and the investment is still out of them.
+    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    accounts, *_ = _books(org)
+    assert money["MPESA"] == D("12000") and accounts.get("1400", {"balance": D("0")})["balance"] == 0
+    # More business money than the investments hold: the rest is still in the till, drawer or bank.
+    with organization_context(org):
+        post(unit="SHOP", method="CASH", amount=D("10000"), kind="INCOME", reference="Sales", key="sales-2", user=owner)
+    whose = client.get("/api/v1/accounting/investments/").json()["whose"]
+    assert (D(str(whose["business"])), D(str(whose["own"])), D(str(whose["not_invested"]))) == (D("20150"), D("0"), D("1850"))
