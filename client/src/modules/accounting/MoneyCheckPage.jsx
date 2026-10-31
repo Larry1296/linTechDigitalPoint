@@ -205,7 +205,8 @@ export function MoneyCheckPage() {
       <p className="formNotice formNoticeInfo">{data.mode === "SEPARATE_CASH"
         ? "Each part of the business keeps its own cash drawer, counted on its own. The Lipa na M-Pesa till and the bank are shared; each shows how much of it belongs to each part."
         : "All your cash is in one drawer. Each place shows how much of it each part of the business brought in."}{" "}
-        M-Pesa commission paid out to you is your money and is counted here. The M-Pesa agency's cash and float are your business's stock for the agency, like goods on the shelves: they are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
+        M-Pesa commission paid out to you is your money and is counted here. The business's money moved into an investment comes off the place it
+        left and shows under Kept in investments. The M-Pesa agency's cash and float are your business's stock for the agency, like goods on the shelves: they are counted on the <Link to="/admin/mpesa">M-Pesa desk</Link> when you close a shift.</p>
       {result && <p className={Math.abs(Number(result.difference)) < 0.005 ? "formNotice formNoticeSuccess" : "formNotice formNoticeInfo"} role="status">
         Saved. You have {money(result.actual)}; the app expected {money(result.expected)}. {differenceText(result.difference)}</p>}
       <div className="moneyPlaces">{data.places.map((place) => (
@@ -213,7 +214,7 @@ export function MoneyCheckPage() {
           <h2 id={`place-${place.key}`}>{place.label}</h2>
           <p className="moneyExpected"><span>The app expects</span><strong>{money(place.expected)}</strong></p>
           <table className="moneyParts"><caption>How it is worked out</caption><tbody>
-            {place.parts.map((part) => <tr key={part.key}><th scope="row">{part.label}</th><td>{Number(part.amount) < 0 ? `− ${money(-Number(part.amount))}` : `+ ${money(part.amount)}`}</td></tr>)}
+            {place.parts.filter((part) => part.key !== "invested" || Number(part.amount)).map((part) => <tr key={part.key}><th scope="row">{part.label}</th><td>{Number(part.amount) < 0 ? `− ${money(-Number(part.amount))}` : `+ ${money(part.amount)}`}</td></tr>)}
             <tr className="reportTotal"><th scope="row">Expected</th><td>{money(place.expected)}</td></tr>
           </tbody></table>
           <WhoseMoney place={place} />
@@ -222,6 +223,16 @@ export function MoneyCheckPage() {
             canAddStarting={can("accounting.add_cashentry")} onStartingAdded={load} />}
         </section>
       ))}</div>
+      {data.investments && Number(data.investments.total) !== 0 && <section className="moneyPlace moneyInvested" aria-labelledby="invested-heading">
+        <h2 id="invested-heading">Kept in investments</h2>
+        <p className="moneyExpected"><span>The business's money there</span><strong>{money(data.investments.total)}</strong></p>
+        <table className="moneyParts"><caption>In each investment</caption><tbody>
+          {data.investments.accounts.map((row) => <tr key={row.id}><th scope="row">{row.name}</th><td>{money(row.amount)}</td></tr>)}
+        </tbody></table>
+        <p className="muted">Still the business's money, only kept in the investment: what it put in from the places above, less what it
+          took back, plus all the interest. It is not in the drawer, till or bank, so do not count it there. Your own money in
+          investments is not the business's and is not shown. <Link to="/admin/investments">Investments</Link></p>
+      </section>}
       {can("accounting.add_cashentry") && <StartingMoney places={data.places} onSaved={load} />}
       {can("accounting.reverse_cashentry") && data.starting?.length > 0 && <StartingEntries rows={data.starting} onChanged={load} />}
       {data.history.length > 0 && <section aria-labelledby="history-heading">

@@ -78,6 +78,16 @@ def places():
     return result
 
 
+def kept_in_investments():
+    """The business's money kept in investments, which is in none of the places to count: what it put in less what it
+    took back, plus all the interest less fees. {"total", "accounts": [{"id", "name", "amount"}]}, accounts with any."""
+    from .investments import business_value
+    from .models import Investment
+    accounts = [{"id": i.pk, "name": i.name, "amount": business_value(i)} for i in Investment.objects.filter(removed_at__isnull=True)]
+    accounts = [row for row in accounts if row["amount"]]
+    return {"total": sum((row["amount"] for row in accounts), ZERO), "accounts": accounts}
+
+
 def check_row(check):
     return {"id": check.pk, "method": check.method, "unit": check.business_unit or None, "expected": check.expected, "actual": check.actual, "difference": check.difference,
             "note": check.note, "cash_count": check.cash_count, "created_at": check.created_at,

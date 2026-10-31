@@ -512,6 +512,8 @@ def test_the_business_money_moves_from_its_place_into_the_investment_and_stays_t
     row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "15300", "idempotency_key": "st"}, format="json").json()
     # The till went down; the business's money in the investment is what it put in plus all the interest.
     assert money()["MPESA"] == D("2000")
+    kept = client.get("/api/v1/accounting/money-check/").json()["investments"]
+    assert D(str(kept["total"])) == D("10300") and [row["name"] for row in kept["accounts"]] == ["Sanlam MMF"]
     assert (D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("10300"), D("5000"))
     listed = client.get("/api/v1/accounting/investments/").json()
     assert (D(str(listed["shop_value"])), D(str(listed["owner_value"]))) == (D("10300"), D("5000"))

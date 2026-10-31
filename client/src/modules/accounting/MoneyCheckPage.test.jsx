@@ -58,3 +58,17 @@ it("lists starting money and undoes all of it so only sales are expected", async
   expect(api).toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/7/undo/", expect.objectContaining({ method: "POST" }));
   expect(api).not.toHaveBeenCalledWith("/api/v1/accounting/money-check/starting/8/undo/", expect.anything());
 });
+
+it("shows the business's money kept in investments, apart from what is counted in each place", async () => {
+  const till = { ...cash, method: "MPESA", key: "MPESA", label: "Lipa na M-Pesa till", expected: "2000.00",
+    parts: [...cash.parts, { key: "invested", label: "Kept in investments, less taken back", amount: "-10000.00" }] };
+  api.mockImplementation(async () => ({ places: [cash, till], history: [],
+    investments: { total: "10300.00", accounts: [{ id: 3, name: "Sanlam MMF", amount: "10300.00" }] } }));
+  render(<MemoryRouter><MoneyCheckPage /></MemoryRouter>);
+  const kept = await screen.findByRole("region", { name: "Kept in investments" });
+  expect(within(kept).getByText("The business's money there").nextSibling).toHaveTextContent("KSh 10,300.00");
+  expect(within(kept).getByText("Sanlam MMF").nextSibling).toHaveTextContent("KSh 10,300.00");
+  expect(within(screen.getByRole("region", { name: "Lipa na M-Pesa till" })).getByText("Kept in investments, less taken back").nextSibling).toHaveTextContent("− KSh 10,000.00");
+  // A place that never moved money into an investment does not list it.
+  expect(within(screen.getByRole("region", { name: "Cash in the drawer" })).queryByText(/Kept in investments/)).toBeNull();
+});
