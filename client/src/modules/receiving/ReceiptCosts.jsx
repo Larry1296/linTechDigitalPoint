@@ -121,7 +121,7 @@ export function ReceiptCostFields({ details, onChange, goodsTotal }) {
         {investment.name} holds {money(investment.value)}.{" "}
         {Number(details.payment_amount) > Number(investment.value)
           ? "That is less than the amount paid: record interest from its statement first, or pay part from elsewhere."
-          : "It is taken out to you and paid straight to the supplier as your own money, so the business's till and bank are not touched."}
+          : `The business's money in it (${money(investment.shop_value)}) pays first, then your own money for any rest. It is paid straight to the supplier, so the till and bank are not touched.`}
       </p>}
     </div>}
     {details.payment_method && <label>Amount paid now ({businessCurrency()})

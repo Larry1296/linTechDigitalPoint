@@ -98,7 +98,7 @@ function PayForm({ receipt, onCancel, onSaved }) {
   const key = useRef(crypto.randomUUID());
   const { investments } = usePayableInvestments();
   const investment = investments.find((i) => String(i.id) === String(investmentId)) || (investments.length === 1 ? investments[0] : null);
-  const from = source === "INVESTMENT" ? `${investment?.name || "your investment"} (your own money)`
+  const from = source === "INVESTMENT" ? `${investment?.name || "your investment"}`
     : SOURCES.find(([value]) => value === source)[1].toLowerCase();
   const valid = Number(amount) > 0 && Number(amount) <= Number(supplier.owed) && paidOn && paidOn >= received && paidOn <= today
     && (source !== "INVESTMENT" || investment);
@@ -106,7 +106,7 @@ function PayForm({ receipt, onCancel, onSaved }) {
     event.preventDefault();
     if (!valid || busy) return;
     if (!(await confirmAction({ title: `Record ${money(amount)} paid to ${supplier.supplier}?`,
-      text: `Paid on ${shown(paidOn)} from ${from}. ${source === "OWNER" || source === "INVESTMENT" ? "Your shop drawer, till and bank stay as they are; it counts as your own money paying the supplier." : "It comes off that money on that day."} What is owed for ${receipt.receipt_number} goes down to ${money(Number(supplier.owed) - Number(amount))}.`,
+      text: `Paid on ${shown(paidOn)} from ${from}. ${source === "INVESTMENT" ? "The business's money in it pays first, then your own money for any rest; your shop drawer, till and bank stay as they are." : source === "OWNER" ? "Your shop drawer, till and bank stay as they are; it counts as your own money paying the supplier." : "It comes off that money on that day."} What is owed for ${receipt.receipt_number} goes down to ${money(Number(supplier.owed) - Number(amount))}.`,
       confirmButtonText: "Record payment" }))) return;
     setBusy(true); setError("");
     try {

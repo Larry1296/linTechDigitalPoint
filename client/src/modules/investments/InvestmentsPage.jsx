@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
+import { businessParts } from "../../core/organization/MoneyModeChoice";
 import { askForm, confirmAction } from "../../core/ui/alerts";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { FormField } from "../../components/forms/FormField";
@@ -10,11 +11,14 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InterestCalculator } from "./InterestCalculator";
 import { TextArea } from "../../components/forms/TextBox";
 
-// Investment money is the owner's own, kept completely apart from the business: it never comes from or goes into the
-// till, cash drawer, bank or M-Pesa agency, and it is never in the business's money or net worth. Only the interest
-// its statements show, after fees, is the business's profit.
+// Each time money goes in or comes out, the owner says whose it is. The business's money comes from (or goes back to)
+// one of its places and is still the business's while it is in the investment, so its money and figures stay as they
+// are. The owner's own money never touches the business. All the interest is the business's profit.
 const OWNER = "OWNER";
-const APART = "Nothing is taken from or put into the business's cash, till, bank or M-Pesa agency.";
+const BUSINESS = "BUSINESS";
+const PLACES = [["MPESA", "Lipa na M-Pesa till"], ["CASH", "Cash drawer"], ["BANK", "Bank"], ["OTHER", "Other money"]];
+const placeName = (key) => (PLACES.find(([value]) => value === key)?.[1] || key).toLowerCase();
+const APART = "The M-Pesa agency's cash and float are never used.";
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -139,24 +143,38 @@ function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
   );
 }
 
-// Money put in or taken out: always the owner's own money, never the business's.
+// Money put in or taken out, and whose it is: the business's (from or back to one of its places) or the owner's own.
 function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
+  const { user } = useAuth();
+  const parts = businessParts(user?.organization);
   const putIn = kind === "DEPOSIT";
-  const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Number(investment.value))));
+  const [whose, setWhose] = useState(preset?.whose ?? (putIn || Number(investment.shop_value) > 0 ? BUSINESS : OWNER));
+  const business = whose === BUSINESS;
+  const holds = business ? investment.shop_value : investment.owner_value;
+  const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Math.max(Number(holds) || 0, 0))));
+  const [place, setPlace] = useState("MPESA");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const choose = (next) => {
+    setWhose(next);
+    if (!putIn) setAmount(String(Math.max(Number(next === BUSINESS ? investment.shop_value : investment.owner_value) || 0, 0)));
+  };
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    const added = Number(investment.value) > 0 ? ` It is added to the ${money(investment.value)} already in it.` : "";
-    if (!(await confirmAction({ title: putIn ? `Add ${money(values.amount)} of your own money to ${investment.name}?` : `Take ${money(values.amount)} out of ${investment.name} to you?`,
-      text: `${APART}${putIn ? added : ""}`,
-      confirmButtonText: putIn ? "Record money added" : "Record money taken out" }))) return;
+    const sum = money(values.amount);
+    const title = business
+      ? (putIn ? `Move ${sum} of the business's money from the ${placeName(place)} into ${investment.name}?` : `Take ${sum} of the business's money out of ${investment.name} back to the ${placeName(place)}?`)
+      : (putIn ? `Add ${sum} of your own money to ${investment.name}?` : `Take ${sum} of your own money out of ${investment.name} to you?`);
+    const text = business
+      ? `It stays the business's money${putIn ? ", kept in the investment" : ""}: the ${placeName(place)} ${putIn ? "goes down" : "goes up"} by ${sum}, and the business's money, sales and profit stay as they are.`
+      : "It is not the business's money, so nothing in the business changes.";
+    if (!(await confirmAction({ title, text, confirmButtonText: putIn ? "Record money added" : "Record money taken out" }))) return;
     setBusy(true);
     setError("");
     try {
       await api(`/api/v1/accounting/investments/${investment.id}/move/`, { method: "POST",
-        body: JSON.stringify({ ...values, kind, source: OWNER, idempotency_key: crypto.randomUUID() }) });
+        body: JSON.stringify({ ...values, kind, source: whose, ...(business ? { place } : {}), idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -166,16 +184,33 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
   return (
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label={putIn ? "Add money" : "Take money out"}>
       <fieldset disabled={busy} className="loanFields">
+        <fieldset className="investWhose">
+          <legend>Whose money {putIn ? "is it" : "is coming out"}?</legend>
+          <label><input type="radio" name="whose" checked={business} onChange={() => choose(BUSINESS)} /> The business's money
+            {!putIn && <small> · {money(investment.shop_value)} in it</small>}</label>
+          <label><input type="radio" name="whose" checked={!business} onChange={() => choose(OWNER)} /> My own money
+            {!putIn && <small> · {money(investment.owner_value)} in it</small>}</label>
+        </fieldset>
+        {business && <FormField label={putIn ? "Taken from" : "Put back into"}>
+          <select value={place} onChange={(event) => setPlace(event.target.value)}>
+            {PLACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </FormField>}
+        {business && parts.length > 1 && <FormField label="Which part's money">
+          <select name="unit" defaultValue={parts[0].key}>{parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select>
+        </FormField>}
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
-          max={putIn ? undefined : investment.value} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        <p className="muted">{putIn ? "From your own money." : "Back to you."} {APART}</p>
+          max={putIn ? undefined : Math.max(Number(holds) || 0, 0)} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+        <p className="muted">{business
+          ? `Still the business's money while it is in the investment, so its money and each part's figures stay the same. ${APART}`
+          : `Not the business's money: nothing in the business changes. ${APART}`}</p>
         <FormField label={putIn ? "Date the money went in" : "Date the money came out"} name="occurred_on" type="date" max={today()} defaultValue={today()} required />
         {putIn && <p className="muted">Already invested earlier? Choose the day it really went in: interest is worked out from that day.</p>}
         <FormField label="Transaction code or reference (optional)" name="reference" maxLength={120} autoComplete="off" />
         <FormField label="Note (optional)" name="note" maxLength={500} autoComplete="off" />
       </fieldset>
       {!putIn && <p className="muted">Paying a supplier for stock? Record it when you receive the stock: choose
-        “Paid the supplier now → from my investment”, so the withdrawal and the stock it paid for are linked.</p>}
+        “Paid the supplier now → from my investment”. The business's money in it pays first, so the withdrawal and the stock it paid for are linked.</p>}
       <div className="actionRow">
         <button disabled={busy}>{putIn ? "Record money added" : "Record money taken out"}</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
@@ -465,8 +500,8 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
         <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
-        {investment.business_part != null && Number(investment.value) > 0 && <div><dt>Whose it is</dt>
-          <dd>Business {money(investment.business_part)} · Your own {money(investment.own_part)}</dd></div>}
+        {Number(investment.value) > 0 && <div><dt>Whose it is</dt>
+          <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}</dd></div>}
         <div><dt>Total invested</dt><dd><strong>{money(investment.invested)}</strong> <small>interest is earned on this</small></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
@@ -492,7 +527,8 @@ function InvestmentCard({ investment, funds, preset, month, canMove, canCorrect,
               <td>{KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
               <td>{money(m.amount)}{m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
-              <td>{m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
+              <td>{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? `Business · ${placeName(m.source)}` : "Business")
+                : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
               <td>{m.reference || m.note || "—"}</td>
               <td>{!m.reversed_at && canCorrect && <div className="actionRow">
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
@@ -558,7 +594,6 @@ export function InvestmentsPage() {
   const ratedFrom = rated ? (rated.fund?.annual_rate != null ? `${rated.fund.short}'s published rate as of ${date(rated.fund.as_of)}` : `${rated.name}, ${rated.current_rate?.label}`) : "";
   const funds = data.funds || [];
   const earning = data.earning;
-  const whose = data.whose;
   return (
     <>
       <div className="loanSummary">
@@ -568,23 +603,23 @@ export function InvestmentsPage() {
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
-      <p className="muted">Money kept in a money market fund (MMF) or similar so it keeps earning until it is needed for stock. The
-        business's money you received (not what customers still owe) is counted as kept here, and the rest is your own. Sales, costs and
-        each part's figures stay as they are; only the interest counts: each statement's balance, less what the app expects (what you put
-        in, less what you took out, plus interest and less fees already recorded), is added to the business's profit.</p>
+      <p className="muted">Money kept in a money market fund (MMF) or similar so it keeps earning until it is needed, e.g. for stock.
+        Each time you put money in or take it out, say whose it is. The business's money stays the business's while it is here, so its
+        money, sales and each part's figures do not change; your own money never touches the business. All the interest is the
+        business's profit: each statement's balance, less what the app expects (what was put in, less what was taken out, plus
+        interest and less fees already recorded).</p>
       <div className="metrics investMetrics">
-        {whose && Number(whose.total) > 0 && <>
-          <article><span>The business's money</span><strong>{money(whose.business)}</strong>
-            <small>{Number(whose.not_invested) > 0 ? `Kept here until it buys stock; ${money(whose.not_invested)} more is still in the till, drawer or bank`
-              : "Received from sales and still the business's, kept here until it buys stock"}</small></article>
-          <article><span>Your own money</span><strong>{money(whose.own)}</strong>
-            <small>The rest of what the investments hold</small></article>
+        {Number(data.total_value) > 0 && <>
+          <article><span>The business's money</span><strong>{money(data.shop_value)}</strong>
+            <small>Put in from its till, drawer or bank, plus all the interest: still the business's</small></article>
+          <article><span>Your own money</span><strong>{money(data.owner_value)}</strong>
+            <small>Not the business's: never in its money or figures</small></article>
         </>}
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
             <small>Goes up every day as interest builds</small></article>}
         <article><span>Total invested</span><strong>{money(data.invested)}</strong>
-          <small>Your own money; interest is earned on this</small></article>
+          <small>The business's and yours together; interest is earned on this</small></article>
         <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
           <small>Added to the business's profit</small></article>

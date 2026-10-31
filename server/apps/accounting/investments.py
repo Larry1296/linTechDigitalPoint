@@ -1,20 +1,18 @@
 """Money kept in an investment such as a money market fund (MMF), and taken back out.
 
-Investment money is kept apart from the business's books: the owner puts it in and takes it out, never recorded as
-moving from or into the till, cash drawer, bank, "other" money or the M-Pesa
-agency, and what is put in or taken out never enters the books. The owner keeps the business's money (what it received
-and still has) in the investments until it buys stock, so the Investments page shows that much of them as the
-business's and the rest as the owner's own (whose()), without moving anything in the books. Only what they earn is:
-the interest a statement shows (its balance less what the app expects: put in, less taken out, plus interest and less
-fees recorded before) is the business's profit ("Interest earned on investments", 4910), and fees or a loss lower it
-(6200). The money itself stays in the fund as the owner's, so the interest is posted against the owner's money (3000)
-and the till, drawer, bank and net worth do not change. The Investments page keeps the accounts, what was put in and
-taken out, the interest from statements and the rates. Mistakes are undone, never edited or deleted.
+Each time money is put in or taken out the owner says whose it is:
+- The business's money (BUSINESS): taken from one of its places (cash drawer, Lipa na M-Pesa till, bank, other) and
+  kept in the investment until it is needed, e.g. for stock, then taken back to a place or paid to a supplier. It is
+  still the business's money, only kept somewhere else: the place goes down and "Investments" (1400) goes up by the same
+  amount, so its money, net worth, sales, costs and each part's figures stay as they are.
+- The owner's own money (OWNER): never in the books, and never from or into the business's places.
+The interest each statement shows (its balance less what the app expects: put in, less taken out, plus interest and
+less fees recorded before) is all the business's profit ("Interest earned on investments", 4910) and adds to the
+business's money in the investment; fees or a loss lower both (6200). The Investments page shows how much of each
+investment is the business's and how much the owner's own. Mistakes are undone, never edited or deleted.
 
-Records from before the money was kept apart (money moved from or into the business's places, a business share in
-the books) are separated once by settle_books(): what reached the books is taken back out with a correction, and the
-record stays on the Investments page as the owner's own. Stock paid with investment money is the owner's own money
-paying the supplier, as with "Owner's own money" on a stock receipt.
+Records from before (money moved through the business's places with a business share, from before 2026-10-25) were
+separated once by settle_books() and stay as the owner's own. The M-Pesa agency's cash and float are never used.
 """
 from datetime import datetime, time
 from decimal import Decimal
@@ -24,7 +22,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from apps.tenancy.transactions import lock_business
 from .ledger import money, paired, post_journal, resolve_branch, reverse_journal
-from .models import Investment, InvestmentMovement, JournalEntry
+from .models import CashEntry, Investment, InvestmentMovement, JournalEntry
 from .services import audit, post, reverse as reverse_cash
 
 BUSINESS = {"CASH", "MPESA", "BANK", "OTHER"}
@@ -34,9 +32,11 @@ EARLIER = "EARLIER"
 # Where money once came from or went before investments were kept apart from the business; only OWNER is used now.
 WORDS = {"CASH": "the cash drawer", "MPESA": "the Lipa na M-Pesa till", "BANK": "the bank", "OTHER": "other money",
          "AGENCY_CASH": "the agency's cash", "AGENCY_FLOAT": "the agency's float", EARLIER: "business money put in earlier"}
-SOURCES = {OWNER}
-APART = ("Investment money is kept apart from the business: it is put in from your own money and taken out back to you, "
-         "never from or into the till, cash drawer, bank or M-Pesa agency.")
+BUSINESS_MONEY = "BUSINESS"
+SOURCES = {OWNER, BUSINESS_MONEY}
+PLACE_WORDS = {"CASH": "the cash drawer", "MPESA": "the Lipa na M-Pesa till", "BANK": "the bank", "OTHER": "other money"}
+APART = ("Say whose money it is: the business's, from or back to its cash drawer, till, bank or other money, or your own. "
+         "The M-Pesa agency's cash and float are never used.")
 # Kinds of investment and how risky each is, from 1 (safest) to 5. A money market fund lends short term to the
 # government and banks, so its value rarely falls; shares can fall a lot. It is the kind's risk, not a rating of the
 # fund manager: a fund's own fact sheet gives its risk profile.
@@ -111,28 +111,6 @@ def shares(investment):
             "shop_value": held["shop"], "owner_value": held["owner"]}
 
 
-def whose(rows):
-    """How the money in the investments splits between the business and the owner. The owner keeps the business's
-    money (what it received and still has: cash, till, bank and other, never what customers still owe) in the
-    investments until it is needed for stock, so that much of what they hold is the business's and the rest is the
-    owner's own. Nothing is moved in the books: sales, costs, each part's figures and net worth stay as they are, and
-    the business's money is only shown as kept here. ``rows`` are investment rows with a "value"; each gets
-    "business_part" and "own_part", shared by value. Returns {business_money, business, own, total}."""
-    from .money_check import PLACES, expected
-    business_money = sum((expected(method)[0] for method, _ in PLACES), Decimal("0"))
-    total = sum((Decimal(str(row["value"])) for row in rows), Decimal("0"))
-    business = min(max(business_money, Decimal("0")), max(total, Decimal("0")))
-    left = business
-    for index, row in enumerate(rows):
-        value = max(Decimal(str(row["value"])), Decimal("0"))
-        part = left if index == len(rows) - 1 else min(left, (business * value / total).quantize(Decimal("0.01")) if total else Decimal("0"))
-        row["business_part"], row["own_part"] = part, Decimal(str(row["value"])) - part
-        left -= part
-    return {"business_money": business_money, "business": business, "own": total - business, "total": total,
-            # More business money than the investments hold: the rest is still in the till, drawer or bank.
-            "not_invested": max(business_money - business, Decimal("0"))}
-
-
 def _amount(raw):
     amount = money(raw)
     if amount <= 0:
@@ -170,10 +148,19 @@ def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal
     return investment
 
 
+def own_value(investment):
+    """What the investment holds of the owner's own money."""
+    return value(investment) - business_value(investment)
+
+
 @transaction.atomic
-def move(*, investment, user, kind, amount, source=OWNER, key, occurred_on=None, reference="", note="", session_id=None, purchase=None):
-    """Money put in (DEPOSIT) from the owner's own money, or taken out (WITHDRAWAL) back to the owner; a withdrawal may
-    name the stock purchase it paid for. Nothing reaches the business's books."""
+def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None, key, occurred_on=None, reference="", note="",
+         session_id=None, purchase=None):
+    """Money put in (DEPOSIT) or taken out (WITHDRAWAL). source BUSINESS: the business's money, from or back to ``place``
+    (CASH, MPESA, BANK or OTHER), moved in the books between that place and Investments (1400). source OWNER: the
+    owner's own money, which never reaches the books. A withdrawal may name the stock purchase it paid for."""
+    from .ledger import cash_code
+    from .money_check import _drawer, expected
     lock_business()
     existing = InvestmentMovement.objects.filter(idempotency_key=key).first()
     if existing:
@@ -183,26 +170,54 @@ def move(*, investment, user, kind, amount, source=OWNER, key, occurred_on=None,
         raise ValidationError(f"{investment.name} was removed. Add it again to record money in it.")
     if kind not in {InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL}:
         raise ValidationError("Choose money put in or money taken out.")
-    if str(source or OWNER).upper() != OWNER:
+    source = str(source or OWNER).upper()
+    if source not in SOURCES:
         raise ValidationError(APART)
+    business = source == BUSINESS_MONEY
+    place = str(place or "").upper()
+    if business and place not in BUSINESS:
+        raise ValidationError("Choose where the business's money " + ("comes from" if kind == InvestmentMovement.DEPOSIT else "goes")
+                              + ": the cash drawer, Lipa na M-Pesa till, bank or other money.")
     amount, day = _amount(amount), _day(occurred_on)
     putting_in = kind == InvestmentMovement.DEPOSIT
-    if not putting_in and amount > value(investment):
-        raise ValidationError(f"{investment.name} only holds {value(investment):,.2f} as far as the app knows. "
-                              "If the statement shows more, record the interest first.")
+    unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
+    if business and putting_in:
+        has = expected(place, unit if place == "CASH" and _drawer(place, unit) else None)[0]
+        if amount > has:
+            raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows. "
+                                  "Put in what is there, or record the rest as your own money.")
+    if not putting_in:
+        holds = business_value(investment) if business else own_value(investment)
+        if amount > holds:
+            whose_words = "of the business's money" if business else "of your own money"
+            raise ValidationError(f"{investment.name} only holds {holds:,.2f} {whose_words} as far as the app knows. "
+                                  "If the statement shows more, record the interest first.")
     words = f"{'Put into' if putting_in else 'Taken out of'} {investment.name}"
-    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=Decimal("0"), occurred_on=day,
-                                                 source=OWNER, reference=str(reference or "").strip().upper()[:120], note=str(note or "").strip(),
+    entry = None
+    if business:
+        from .services import post as post_cash
+        entry = post_cash(unit=unit, method=place, amount=-amount if putting_in else amount, kind="INVESTMENT",
+                          reference=f"{words}{' from' if putting_in else ' to'} {PLACE_WORDS[place]}"[:160], key=f"investment:{key}",
+                          user=user, occurred_at=_moment(day), branch=resolve_branch(), journal=False)
+    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=amount if business else Decimal("0"),
+                                                 whose=source, occurred_on=day, source=place if business else OWNER, entry=entry,
+                                                 reference=str(reference or "").strip().upper()[:120], note=str(note or "").strip(),
                                                  purchase=purchase, branch=resolve_branch(), idempotency_key=key, created_by=user)
-    audit(movement, user, f"{words}: {amount}")
+    if business:
+        lines = paired("1400", cash_code(place), amount) if putting_in else paired(cash_code(place), "1400", amount)
+        post_journal(key=f"{MOVED}:{movement.pk}", description=f"{words}: the business's money, {'from' if putting_in else 'back to'} {PLACE_WORDS[place]}"[:255],
+                     lines=lines, branch=movement.branch, date=day, user=user)
+    audit(movement, user, f"{words}: {amount} ({'the business' + chr(39) + 's money' if business else 'own money'})")
     return movement
 
 
 @transaction.atomic
 def pay_supplier(*, investment_id, purchase, amount, key, user, reference="", via=None, occurred_at=None):
-    """Stock paid for with investment money: it is taken out to the owner and paid on to the supplier as the owner's
-    own money ("other" money in, straight out to the supplier), so the till, drawer and bank are untouched."""
+    """Stock paid for with investment money. The business's money in it pays first: taken out as the business's and
+    paid on to the supplier, so it is the business's money put back into stock. Any rest is the owner's own money,
+    taken out to the owner and paid on as the owner's own ("Owner's own money"). The till, drawer and bank are untouched."""
     from apps.tenancy.permissions import has_business_permission
+    from .services import pay_purchase, purchase_outstanding
     from .supplier_settlement import owner_pays
     lock_business()
     if not user or not has_business_permission(user, "accounting.add_investmentmovement"):
@@ -210,13 +225,31 @@ def pay_supplier(*, investment_id, purchase, amount, key, user, reference="", vi
     investment = Investment.objects.filter(pk=investment_id).first()
     if not investment:
         raise ValidationError("Choose which investment the money comes out of.")
+    amount = _amount(amount)
+    if amount > purchase_outstanding(purchase):
+        raise ValidationError("Payment exceeds what is still owed to the supplier for this receipt.")
     receipt = purchase.receipt.receipt_number
     supplier = purchase.supplier.name if purchase.supplier_id else "the supplier"
-    move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=amount, key=f"{key}:investment",
-         occurred_on=timezone.localtime(occurred_at).date() if occurred_at else None,
-         reference=reference or receipt, note=f"To pay {supplier} for stock {receipt}", purchase=purchase)
-    return owner_pays(purchase=purchase, amount=amount, key=key, user=user, reference=reference or receipt, occurred_at=occurred_at,
-                      words=f"Owner's own money from {investment.name} to pay {supplier} for {receipt}")
+    day = timezone.localtime(occurred_at).date() if occurred_at else None
+    note = f"To pay {supplier} for stock {receipt}"
+    business = min(amount, max(business_value(investment), Decimal("0")))
+    own = amount - business
+    if own > own_value(investment):
+        raise ValidationError(f"{investment.name} only holds {value(investment):,.2f} as far as the app knows. "
+                              "If the statement shows more, record the interest first.")
+    paid = None
+    if business:
+        # Taken out to "other money" and paid straight on, so no place changes: only the investment and the debt go down.
+        move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=business, source=BUSINESS_MONEY, place="OTHER",
+             key=f"{key}:investment", occurred_on=day, reference=reference or receipt, note=note, purchase=purchase)
+        paid = pay_purchase(purchase=purchase, amount=business, method="OTHER", key=key, user=user, reference=reference or receipt, occurred_at=occurred_at)
+    if own:
+        own_key = f"{key}-own" if business else key
+        move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=own, key=f"{own_key}:investment",
+             occurred_on=day, reference=reference or receipt, note=note, purchase=purchase)
+        paid = owner_pays(purchase=purchase, amount=own, key=own_key, user=user, reference=reference or receipt, occurred_at=occurred_at,
+                          words=f"Owner's own money from {investment.name} to pay {supplier} for {receipt}")
+    return paid
 
 
 @transaction.atomic
@@ -238,8 +271,8 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
     # The app's own prediction for the same date is kept beside it, so each statement shows how close the estimate was.
     from .investment_interest import estimate
     guess = estimate(investment, today=day)
-    # business_amount stays 0: none of the money is the business's; only what it earned is counted, by book_earned().
-    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=Decimal("0"), occurred_on=day,
+    # All of what it earned (or lost) is the business's: its profit, kept in the investment as the business's money.
+    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=amount, whose=BUSINESS_MONEY, occurred_on=day,
                                                  note=str(note or "").strip(), statement_balance=balance, branch=resolve_branch(),
                                                  predicted_interest=guess["net"] if guess else None,
                                                  predicted_since=guess["since"] if guess else None,
@@ -250,28 +283,42 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
     return movement
 
 
-EARNED = "investment-earned"
+MOVED = "investment-business"  # the business's money moved between a place and the investment
+EARNED = "investment-interest"  # interest or fees: the business's profit, in the business's money in the investment
+OWNER_HELD = "investment-earned"  # 2026-10-31 only: interest counted as profit but held as the owner's money (3000)
 
 
 def book_earned(movement, user=None):
-    """Interest a statement showed goes into profit, fees or a loss come out of it. The money stays in the fund as the
-    owner's, so the other side is the owner's money: the business's places and net worth do not change. Counted on
-    the statement's date, or today when that month's books are closed."""
+    """Interest a statement showed goes into profit and into the business's money in the investment; fees or a loss come
+    out of both. Counted on the statement's date, or today when that month's books are closed."""
     from .models import FinancialPeriod
     day = movement.occurred_on
     if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
         day = timezone.localdate()
     name = movement.investment.name
     if movement.kind == InvestmentMovement.INTEREST:
-        lines, words = paired("3000", "4910", movement.amount), f"Interest earned on {name}, kept in the fund as the owner's money"
+        lines, words = paired("1400", "4910", movement.amount), f"Interest earned on {name}, kept in it as the business's money"
     else:
-        lines, words = paired("6200", "3000", movement.amount), f"Fees or loss on {name}, taken from the owner's money in the fund"
+        lines, words = paired("6200", "1400", movement.amount), f"Fees or loss on {name}, from the business's money in it"
     return post_journal(key=f"{EARNED}:{movement.pk}", description=words[:255], lines=lines, branch=movement.branch, date=day, user=user)
+
+
+def _reverse(key, user, reason, undo_key):
+    """Reverses the journal posted under ``key`` (if any, and not reversed yet), in its own month unless that month is closed."""
+    from .models import FinancialPeriod
+    journal = JournalEntry.objects.filter(source_key=key).first()
+    if not journal or JournalEntry.objects.filter(reversal_of=journal).exists():
+        return
+    day = journal.posting_date
+    if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
+        day = timezone.localdate()
+    reverse_journal(journal, user=user, reason=reason, date=day, key=undo_key)
 
 
 @transaction.atomic
 def book_earnings():
-    """Interest and fees recorded before they counted in profit are counted once; afterwards there is nothing to do."""
+    """Interest and fees recorded before they counted as the business's are counted once: profit, and the business's
+    money in the investment. Those counted on 2026-10-31 as held by the owner (3000) are moved to the investment."""
     live = InvestmentMovement.objects.filter(kind__in=[InvestmentMovement.INTEREST, InvestmentMovement.FEE], reversed_at__isnull=True)
     booked = {int(key.rpartition(":")[2]) for key in JournalEntry.objects.filter(source_key__startswith=f"{EARNED}:").values_list("source_key", flat=True)
               if key.rpartition(":")[2].isdigit()}
@@ -280,12 +327,15 @@ def book_earnings():
         return
     lock_business()
     for movement in live.filter(pk__in=missing).select_related("investment").order_by("occurred_on", "pk"):
+        _reverse(f"{OWNER_HELD}:{movement.pk}", None, "Interest is the business's money in the investment", f"{OWNER_HELD}-moved:{movement.pk}")
+        InvestmentMovement.objects.filter(pk=movement.pk).update(business_amount=movement.amount, whose=BUSINESS_MONEY)
         book_earned(movement)
 
 
 @transaction.atomic
 def undo(*, movement, user, reason):
-    """A movement recorded by mistake: the investment's value follows, and interest or fees it put into profit come out."""
+    """A movement recorded by mistake: the investment's value follows, the business's money goes back to its place, and
+    interest or fees it put into profit come out."""
     lock_business()
     settle_books()
     movement = InvestmentMovement.objects.select_for_update(of=("self",)).select_related("investment").get(pk=movement.pk)
@@ -296,21 +346,21 @@ def undo(*, movement, user, reason):
         return movement
     if SIGN[movement.kind] > 0 and value(movement.investment) - movement.amount < 0:
         raise ValidationError("Money has since been taken out of this investment. Undo that first.")
+    mine = movement.business_amount or Decimal("0")
+    if SIGN[movement.kind] > 0 and mine and business_value(movement.investment) - mine < 0:
+        raise ValidationError("The business's money has since been taken out of this investment. Undo that first.")
     InvestmentMovement.objects.filter(pk=movement.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
-    earned = JournalEntry.objects.filter(source_key=f"{EARNED}:{movement.pk}").first()
-    if earned and not JournalEntry.objects.filter(reversal_of=earned).exists():
-        # Its interest leaves profit too, in the month it was counted in (today when that month's books are closed).
-        from .models import FinancialPeriod
-        day = earned.posting_date
-        if FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
-            day = timezone.localdate()
-        reverse_journal(earned, user=user, reason=reason, date=day, key=f"{EARNED}-undo:{movement.pk}")
+    # The business's money goes back where it was, and interest or fees leave profit, in the month they were counted.
+    if movement.whose == BUSINESS_MONEY and movement.entry_id and not CashEntry.objects.filter(reversal_of=movement.entry).exists():
+        reverse_cash(entry=movement.entry, user=user, reason=reason, allow_investment=True)
+    for prefix in (MOVED, EARNED, OWNER_HELD):
+        _reverse(f"{prefix}:{movement.pk}", user, reason, f"{prefix}-undo:{movement.pk}")
     movement.refresh_from_db()
     return movement
 
 
 def claim(*, movement, user, note=""):
-    """Investment money is never the business's, so it cannot be marked as the business's."""
+    """Whose money it is is chosen when it is recorded; a wrong choice is undone and recorded again."""
     raise ValidationError(APART)
 
 
@@ -356,7 +406,7 @@ def settle_books():
 def _separate():
     from django.db.models import Q
     from .models import CashEntry
-    pending = InvestmentMovement.objects.filter(Q(business_amount__isnull=True) | ~Q(business_amount=0)
+    pending = InvestmentMovement.objects.filter(whose="").filter(Q(business_amount__isnull=True) | ~Q(business_amount=0)
                                                 | (Q(kind__in=[InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL]) & ~Q(source=OWNER)))
     if not pending.exists():
         return

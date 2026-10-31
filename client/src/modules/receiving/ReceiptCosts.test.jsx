@@ -30,7 +30,7 @@ it("pays the supplier from the MMF as the owner's own money, never through the t
   expect(screen.queryByLabelText("Take it out of")).toBeNull();  // the only fund holding money is chosen for you
   expect(screen.getByText(/Sanlam MMF holds KSh 30,000/)).toBeInTheDocument();
   expect(screen.queryByLabelText("Withdrawn to")).toBeNull();
-  expect(screen.getByText(/paid straight to the supplier as your own money/)).toBeInTheDocument();
+  expect(screen.getByText(/The business's money in it .* pays first, then your own money for any rest/)).toBeInTheDocument();
   expect(receiptCostsProblem(latest())).toBe("");
   expect(receiptCostsPayload(latest()).payment).toEqual({ method: "INVESTMENT", amount: "20000", investment_id: 3 });
   expect(receiptCostsPayload(latest())).not.toHaveProperty("investment_name");

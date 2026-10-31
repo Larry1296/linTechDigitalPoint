@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value, whose
+from .investments import KINDS, SOURCES, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -48,15 +48,15 @@ def investment_row(investment):
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"],
-            # The owner's own money, kept apart from the business: none of it is in the books. The shop_* figures stay
-            # for older clients and are always 0.
+            # Whose the money is: shop_* the business's (put in less taken back, and all the interest less fees: in the books
+            # as its money in investments), owner_* the owner's own (never in the books).
             "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"],
             "shop_interest": share["shop_interest"], "owner_interest": share["owner_interest"],
             "shop_value": share["shop_value"], "owner_value": share["owner_value"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
             "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment), "statements": statement_checks(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
-            "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "business_amount": m.business_amount, "occurred_on": m.occurred_on, "source": m.source,
+            "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "business_amount": m.business_amount, "whose": m.whose, "occurred_on": m.occurred_on, "source": m.source,
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
                            "recorded_by": _name(m.created_by), "reversed_at": m.reversed_at, "reverse_reason": m.reverse_reason,
                            "purchase": _purchase(m.purchase) if m.purchase_id else None}
@@ -90,12 +90,12 @@ class InvestmentsView(APIView):
     def get(self, request):
         settle_books()
         rows = [investment_row(i) for i in Investment.objects.filter(removed_at__isnull=True).prefetch_related("movements")]
-        split = whose(rows)
-        return Response({"investments": rows, "whose": split,
+        return Response({"investments": rows,
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),
                          "shop_value": sum((r["shop_value"] for r in rows), Decimal("0")),
+                         "owner_value": sum((r["owner_value"] for r in rows), Decimal("0")),
                          "shop_interest": sum((r["shop_interest"] for r in rows), Decimal("0")),
                          "owner_interest": sum((r["owner_interest"] for r in rows), Decimal("0")),
                          "total_value": sum((r["value"] for r in rows), Decimal("0")),
@@ -134,7 +134,9 @@ class InvestmentsView(APIView):
 class MoveInput(serializers.Serializer):
     kind = serializers.ChoiceField(choices=["DEPOSIT", "WITHDRAWAL"])
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
-    source = serializers.ChoiceField(choices=sorted(SOURCES), required=False, default="OWNER")
+    source = serializers.ChoiceField(choices=sorted(SOURCES), required=False, default="OWNER")  # whose money: BUSINESS or OWNER
+    place = serializers.ChoiceField(choices=["CASH", "MPESA", "BANK", "OTHER"], required=False, allow_null=True)
+    unit = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
     occurred_on = serializers.DateField(required=False, allow_null=True)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     note = serializers.CharField(required=False, allow_blank=True, default="")
@@ -151,7 +153,8 @@ class InvestmentMoveView(APIView):
         form.is_valid(raise_exception=True)
         d = form.validated_data
         investment = get_object_or_404(Investment, pk=pk)
-        move(investment=investment, user=request.user, kind=d["kind"], amount=d["amount"], source=d["source"], key=d["idempotency_key"],
+        move(investment=investment, user=request.user, kind=d["kind"], amount=d["amount"], source=d["source"], place=d.get("place"),
+             unit=d["unit"] or None, key=d["idempotency_key"],
              occurred_on=d.get("occurred_on"), reference=d["reference"], note=d["note"], session_id=d.get("session_id"))
         return Response(investment_row(Investment.objects.get(pk=pk)), status=201)
 

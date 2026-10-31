@@ -307,6 +307,10 @@ class InvestmentMovement(TenantModel):
     # The part of the amount that is the business's money; the rest is the owner's own money from outside the business,
     # which is kept out of the books. Empty only on records from before the split, until settle_books() works it out.
     business_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    # Whose money it is, chosen when it is recorded: BUSINESS (taken from or back to one of the business's places, and
+    # in the books as the business's money in investments, 1400) or OWNER (the owner's own, never in the books).
+    # Empty on records from before the choice, which settle_books() keeps as the owner's own.
+    whose = models.CharField(max_length=10, blank=True, default='')
     entry = models.OneToOneField(CashEntry, null=True, blank=True, related_name='investment_movement', on_delete=models.PROTECT)
     agency_transaction = models.OneToOneField('mpesa.MpesaTransaction', null=True, blank=True, related_name='investment_movement', on_delete=models.PROTECT)
     # The stock purchase a withdrawal paid for, when money was taken out to pay a supplier.

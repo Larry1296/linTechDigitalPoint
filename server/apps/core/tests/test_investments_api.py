@@ -1,6 +1,6 @@
-"""Investments page: the owner's own money put into an MMF and taken out, interest from the statement, corrections.
-Investment money is kept completely apart from the business: never in its places or net worth. Only what it earns
-(interest less fees, from the statements) is in the books, as the business's profit."""
+"""Investments page: money put into an MMF and taken out, whose it is, interest from the statement, corrections.
+The business's money moves between its places and the investment and stays the business's; the owner's own money is
+never in the books. All the interest (less fees, from the statements) is the business's profit, kept in the investment."""
 from datetime import timedelta
 from decimal import Decimal
 import pytest
@@ -48,12 +48,12 @@ def _books(org):
 
 
 def _untouched(org, earned=D("0")):
-    """None of the investment's money is in the business's books; only what it earned (interest less fees) is, as
-    profit, held by the owner in the fund (3000), so no place and nothing the business owns changes."""
+    """None of the owner's own money is in the business's books; what it earned (interest less fees) is the business's
+    profit, kept in the investment as the business's money (1400). No place and no owner money changes."""
     accounts, checks, pl = _books(org)
     balance = lambda code: accounts.get(code, {"balance": D("0")})["balance"]
-    assert all(balance(code) == 0 for code in ("1000", "1010", "1020", "1030", "1400"))
-    assert (-balance("4910") - balance("6200"), balance("3000")) == (earned, earned)
+    assert all(balance(code) == 0 for code in ("1000", "1010", "1020", "1030", "3000"))
+    assert (-balance("4910") - balance("6200"), balance("1400")) == (earned, earned)
     assert next(c for c in checks if c["key"] == "investments")["reconciled"] and pl["net_profit_before_tax"] == earned
 
 
@@ -74,7 +74,8 @@ def test_money_in_and_out_stay_out_of_the_books_and_only_the_interest_is_profit(
     assert client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "20150", "idempotency_key": "st-2"},
                        format="json").status_code == 400  # nothing changed
     too_much = _move(client, mmf, "WITHDRAWAL", "30000", "OWNER", "out-big")
-    assert too_much.status_code == 400 and "only holds 20,150.00" in str(too_much.json())
+    # The interest is the business's, so only the 20,000 put in is the owner's own to take out.
+    assert too_much.status_code == 400 and "only holds 20,000.00 of your own money" in str(too_much.json())
     out = _move(client, mmf, "WITHDRAWAL", "5000", "OWNER", "out-1")
     assert out.status_code == 201 and D(out.json()["value"]) == D("15150")
     # Only the interest is the business's profit; no money moved through the business's places.
@@ -101,8 +102,11 @@ def test_the_till_drawer_bank_agency_and_business_money_are_never_used(shop):
         from apps.accounting import investments
         from rest_framework.exceptions import ValidationError
         from apps.accounting.models import Investment
-        with pytest.raises(ValidationError, match="kept apart from the business"):
+        with pytest.raises(ValidationError, match="Say whose money it is"):
             investments.move(investment=Investment.objects.get(pk=mmf), user=owner, kind="DEPOSIT", amount="100", source="MPESA", key="direct")
+        with pytest.raises(ValidationError, match="Choose where the business's money comes from"):
+            investments.move(investment=Investment.objects.get(pk=mmf), user=owner, kind="DEPOSIT", amount="100", source="BUSINESS",
+                             place="AGENCY_FLOAT", key="agency")
     # The desk cannot move agency money into an investment either.
     assert client.post("/api/v1/mpesa/transactions/", {"session": session.pk, "transaction_type": "INVESTMENT", "amount": "1",
                        "cash_delta": "-1", "float_delta": "0", "idempotency_key": "sneak"}, format="json").status_code == 400
@@ -174,14 +178,15 @@ def test_records_from_before_are_kept_apart_from_the_business_once(shop):
     expected = {p["method"]: D(p["expected"]) for p in money["places"]}
     # The till and "other" hold only the business's own money; the supplier stays paid, with the owner's own money.
     assert expected["MPESA"] == 0 and expected.get("OTHER", D("0")) == 0
-    assert all(part["key"] != "invested" for place in money["places"] for part in place["parts"])
+    # Their investment entries were taken back out, so nothing is kept in investments from the business's places.
+    assert all(D(str(part["amount"])) == 0 for place in money["places"] for part in place["parts"] if part["key"] == "invested")
     owner_money = [s for s in money["starting"] if not s["can_undo"]]
     assert [D(s["amount"]) for s in owner_money] == [D("2000")] and "Owner's own money from Sanlam MMF" in owner_money[0]["note"]
     accounts, checks, pl = _books(org)
     # The owner's 2,000 that paid the supplier is in the books as the owner's money put in (3000), and the 400 interest
-    # as profit, held by the owner in the fund.
-    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1020", "1030", "1400"))
-    assert (accounts["4910"]["balance"], accounts["3000"]["balance"], pl["net_profit_before_tax"]) == (D("-400"), D("-1600"), D("400"))
+    # as profit, kept in the investment as the business's money.
+    assert all(accounts.get(code, {"balance": D("0")})["balance"] == 0 for code in ("1020", "1030"))
+    assert (accounts["4910"]["balance"], accounts["1400"]["balance"], accounts["3000"]["balance"], pl["net_profit_before_tax"]) == (D("-400"), D("400"), D("-2000"), D("400"))
     assert next(c for c in checks if c["key"] == "investments")["reconciled"]
     row = client.get("/api/v1/accounting/investments/").json()["investments"][0]
     assert D(row["value"]) == D("12700") and all(m["source"] in ("OWNER", "") for m in row["movements"])
@@ -189,7 +194,7 @@ def test_records_from_before_are_kept_apart_from_the_business_once(shop):
     assert "first recorded into the Lipa na M-Pesa till" in till["note"]
     with organization_context(org):
         assert purchase_outstanding(purchase) == D("18000")  # the 2,000 paid stays paid
-        assert not InvestmentMovement.objects.exclude(business_amount=0).exists()
+        assert not InvestmentMovement.objects.exclude(business_amount=0).exclude(whose="BUSINESS").exists()
         counts = (CashEntry.objects.count(), JournalEntry.objects.count())
     client.get("/api/v1/accounting/money-check/")  # done once: nothing more happens
     with organization_context(org):
@@ -254,7 +259,7 @@ def test_cashiers_cannot_see_or_move_investments(shop):
     assert client.post("/api/v1/accounting/investments/", {"name": "sanlam mmf"}, format="json").status_code == 400
 
 
-def test_money_check_is_the_same_whatever_is_put_into_or_taken_out_of_an_investment(shop):
+def test_money_check_follows_only_the_businesss_money_put_into_or_taken_out_of_an_investment(shop):
     client, org, *_ = shop
     mmf = _mmf(client)
     client.post("/api/v1/accounting/money-check/starting/", {"method": "MPESA", "amount": "80000", "idempotency_key": "start"}, format="json")
@@ -263,7 +268,11 @@ def test_money_check_is_the_same_whatever_is_put_into_or_taken_out_of_an_investm
     with organization_context(org):
         from apps.accounting.money_check import expected
         total, parts = expected("MPESA")
-    assert total == D("80000") and "invested" not in parts
+    assert total == D("80000") and parts["invested"] == 0  # the owner's own money: the till is untouched
+    assert _move(client, mmf, "DEPOSIT", "30000", "BUSINESS", "biz", place="MPESA").status_code == 201
+    with organization_context(org):
+        total, parts = expected("MPESA")
+    assert (total, parts["invested"]) == (D("50000"), D("-30000"))
 
 
 def _stock(org, store):
@@ -458,7 +467,7 @@ def test_interest_is_in_the_dashboard_profit_on_its_statement_date_and_undo_take
     _untouched(org, earned=D("120"))
     with organization_context(org):
         from apps.accounting.models import JournalEntry
-        assert JournalEntry.objects.get(source_key=f"investment-earned:{earned['movements'][0]['id']}").posting_date == day
+        assert JournalEntry.objects.get(source_key=f"investment-interest:{earned['movements'][0]['id']}").posting_date == day
     lower = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "10100", "idempotency_key": "st-2"}, format="json").json()
     _untouched(org, earned=D("100"))  # fees come out of the interest
     for movement in [m for m in lower["movements"] if m["kind"] in ("INTEREST", "FEE")]:
@@ -484,25 +493,67 @@ def test_interest_recorded_before_it_counted_is_brought_into_profit_once(shop):
     _untouched(org, earned=D("60"))
 
 
-def test_the_business_money_received_is_shown_as_kept_in_the_investments_and_the_rest_is_the_owners(shop):
+def test_the_business_money_moves_from_its_place_into_the_investment_and_stays_the_businesss(shop):
     client, org, owner, *_ = shop
     mmf = _mmf(client)
     with organization_context(org):
         from apps.accounting.services import post
         post(unit="SHOP", method="MPESA", amount=D("12000"), kind="INCOME", reference="Sales", key="sales-1", user=owner)
-    _move(client, mmf, "DEPOSIT", "20000", "OWNER", "in")
-    client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "20150", "idempotency_key": "st"}, format="json")
+    money = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    shop_money = lambda: D(str(client.get("/api/v1/inventory/parts/SHOP/").json()["money"]["amount"]))
+    before = shop_money()
+    # More than the till has is refused; whose money it is must be said, with the place for the business's.
+    too_much = _move(client, mmf, "DEPOSIT", "15000", "BUSINESS", "too-much", place="MPESA")
+    assert too_much.status_code == 400 and "only has 12,000.00" in str(too_much.json())
+    assert _move(client, mmf, "DEPOSIT", "100", "BUSINESS", "no-place").status_code == 400
+    put = _move(client, mmf, "DEPOSIT", "10000", "BUSINESS", "biz-in", place="MPESA")
+    assert put.status_code == 201, put.content
+    _move(client, mmf, "DEPOSIT", "5000", "OWNER", "own-in")
+    row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "15300", "idempotency_key": "st"}, format="json").json()
+    # The till went down; the business's money in the investment is what it put in plus all the interest.
+    assert money()["MPESA"] == D("2000")
+    assert (D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("10300"), D("5000"))
     listed = client.get("/api/v1/accounting/investments/").json()
-    whose = {key: D(str(value)) for key, value in listed["whose"].items()}
-    assert whose == {"business_money": D("12000"), "business": D("12000"), "own": D("8150"), "total": D("20150"), "not_invested": D("0")}
-    row = listed["investments"][0]
-    assert (D(str(row["business_part"])), D(str(row["own_part"]))) == (D("12000"), D("8150"))
-    # Nothing moved in the books: the till keeps the business's money, and the investment is still out of them.
-    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
-    accounts, *_ = _books(org)
-    assert money["MPESA"] == D("12000") and accounts.get("1400", {"balance": D("0")})["balance"] == 0
-    # More business money than the investments hold: the rest is still in the till, drawer or bank.
+    assert (D(str(listed["shop_value"])), D(str(listed["owner_value"]))) == (D("10300"), D("5000"))
+    assert row["movements"][-1]["whose"] == "BUSINESS"
+    accounts, _, pl = _books(org)
+    assert (accounts["1400"]["balance"], pl["net_profit_before_tax"]) == (D("10300"), D("300"))
+    # The shop's own money is the same: it is only kept somewhere else.
+    assert shop_money() == before
+    # Taking out: no more than each one holds.
+    assert _move(client, mmf, "WITHDRAWAL", "6000", "OWNER", "own-too-much").status_code == 400
+    assert _move(client, mmf, "WITHDRAWAL", "11000", "BUSINESS", "biz-too-much", place="CASH").status_code == 400
+    back = _move(client, mmf, "WITHDRAWAL", "3000", "BUSINESS", "biz-out", place="CASH").json()
+    assert money()["CASH"] == D("3000") and D(str(back["shop_value"])) == D("7300")
+    # Undone: the money goes back where it was.
+    biz_in = next(m for m in back["movements"] if m["kind"] == "DEPOSIT" and m["whose"] == "BUSINESS")["id"]
+    blocked = client.post(f"/api/v1/accounting/investments/movements/{biz_in}/undo/", {"reason": "x"}, format="json")
+    assert blocked.status_code == 400 and "Undo that first" in str(blocked.json())
+    biz_out = next(m for m in back["movements"] if m["kind"] == "WITHDRAWAL")["id"]
+    assert client.post(f"/api/v1/accounting/investments/movements/{biz_out}/undo/", {"reason": "Wrong"}, format="json").status_code == 200
+    assert money()["CASH"] == 0
+
+
+def test_stock_paid_from_the_mmf_uses_the_businesss_money_in_it_first(shop):
+    client, org, owner, _, store = shop
+    mmf = _mmf(client)
     with organization_context(org):
-        post(unit="SHOP", method="CASH", amount=D("10000"), kind="INCOME", reference="Sales", key="sales-2", user=owner)
-    whose = client.get("/api/v1/accounting/investments/").json()["whose"]
-    assert (D(str(whose["business"])), D(str(whose["own"])), D(str(whose["not_invested"]))) == (D("20150"), D("0"), D("1850"))
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("3000"), kind="INCOME", reference="Sales", key="sales", user=owner)
+    _move(client, mmf, "DEPOSIT", "3000", "BUSINESS", "biz", place="MPESA")
+    _move(client, mmf, "DEPOSIT", "10000", "OWNER", "own")
+    with organization_context(org):
+        from apps.accounting.investments import pay_supplier
+        from apps.accounting.services import link_receipt, purchase_outstanding
+        from apps.accounting.supplier_settlement import restocking
+        receipt = _receive(org, owner, _stock(org, store), None, "INV-5")
+        purchase = link_receipt(receipt)
+        pay_supplier(investment_id=mmf, purchase=purchase, amount=D("5000"), key="receipt:INV-5", user=owner)
+        assert purchase_outstanding(purchase) == D("15000")
+        paid = restocking(timezone.localdate(), timezone.localdate())
+    row = client.get("/api/v1/accounting/investments/").json()["investments"][0]
+    assert (D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("0"), D("8000"))
+    # The business's 3,000 is its money put back into stock; the owner's 2,000 is the owner's own.
+    assert (paid["business"], paid["investment"]) == (D("3000"), D("2000"))
+    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert money["MPESA"] == 0 and money.get("OTHER", D("0")) == 0

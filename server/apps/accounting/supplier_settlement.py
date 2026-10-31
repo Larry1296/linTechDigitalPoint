@@ -22,7 +22,7 @@ from .models import CashEntry, PurchasePayment, SupplierPurchase
 
 ZERO = Decimal("0")
 SOURCES = {"CASH": "Shop cash drawer", "MPESA": "M-Pesa (Lipa na M-Pesa till)", "BANK": "Bank",
-           "OWNER": "Owner's own money", "INVESTMENT": "Investment (MMF)"}
+           "OWNER": "Owner's own money", "INVESTMENT": "Investment (MMF)", "INVESTMENT_BUSINESS": "The business's money in an investment"}
 
 
 def _opening(receipt):
@@ -38,8 +38,10 @@ def _source(entry):
     """Where a supplier payment's money came from, from the entries recorded beside it."""
     key = entry.source_key.partition(":")[2] or entry.source_key  # older payments were saved without a "kind:" prefix
     from .models import InvestmentMovement
-    if InvestmentMovement.objects.filter(idempotency_key=f"{key}:investment").exists():
-        return "INVESTMENT"
+    movement = InvestmentMovement.objects.filter(idempotency_key=f"{key}:investment").first()
+    if movement:
+        # The business's money kept in an investment is still the business's: its money put back into stock.
+        return "INVESTMENT_BUSINESS" if movement.whose == "BUSINESS" else "INVESTMENT"
     if CashEntry.objects.filter(source_key=f"owner-pays:{key}").exists():
         return "OWNER"
     return entry.account.payment_method
@@ -223,6 +225,6 @@ def restocking(start, end):
         models.Q(pk__in=sources.keys()) | models.Q(reversal_of_id__in=sources.keys()))
     for entry in rows.only("pk", "amount", "reversal_of_id"):
         source = sources.get(entry.reversal_of_id or entry.pk)
-        part = "business" if source in BUSINESS_MONEY else "own_money" if source in {"OWNER", "OTHER"} else "investment"
+        part = "business" if source in BUSINESS_MONEY or source == "INVESTMENT_BUSINESS" else "own_money" if source in {"OWNER", "OTHER"} else "investment"
         totals[part] -= entry.amount
     return totals

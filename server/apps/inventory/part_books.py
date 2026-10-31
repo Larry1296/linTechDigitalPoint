@@ -19,8 +19,14 @@ def part_money(key):
     """{"amount", "places"}: the part's own money now, and where it is ([{"label", "amount"}])."""
     from apps.accounting.money_check import places
     from .dashboard_summary import agency_money
+    from django.db.models import Sum
+    from apps.accounting.models import CashEntry
     where = [{"label": place["label"], "amount": row["amount"]} for place in places() for row in place["by_part"]
              if row["unit"] == key and row["amount"]]
+    # Its money kept in investments is still its own: put in less taken back (records from before net to nothing).
+    invested = -(CashEntry.objects.filter(business_unit=key, kind="INVESTMENT").aggregate(v=Sum("amount"))["v"] or ZERO)
+    if invested:
+        where.append({"label": "Kept in investments", "amount": invested})
     if key == "MPESA" and (agency := agency_money()):
         where = [{"label": "Agency cash", "amount": agency["cash"]}, {"label": "Agency float", "amount": agency["float"]}, *where]
     return {"amount": sum((row["amount"] for row in where), ZERO), "places": where}
@@ -34,7 +40,8 @@ def money_after(moments):
     from apps.accounting.money_check import PLACES
     series = {}
     for unit in {unit for unit, _ in moments.values()}:
-        entries = CashEntry.objects.filter(business_unit=unit, account__payment_method__in=[method for method, _ in PLACES])
+        # Money moved into or out of investments stays the part's own, so it does not change what it has.
+        entries = CashEntry.objects.filter(business_unit=unit, account__payment_method__in=[method for method, _ in PLACES]).exclude(kind="INVESTMENT")
         times, running, total = [], [], ZERO
         for at, value in entries.order_by("occurred_at", "pk").values_list("occurred_at", "amount"):
             total += value
