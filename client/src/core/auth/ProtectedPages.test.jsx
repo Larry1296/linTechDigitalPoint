@@ -72,18 +72,21 @@ it("sets the lock PIN the first time, then opens the page with it", async () => 
 });
 
 it("locks an open private page after five minutes untouched", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
+  // Time moves only when the test moves it, and nothing waits on the real clock, so a busy machine cannot make it fail.
+  vi.useFakeTimers();
   let open = true;
   api.mockImplementation(async (path) => {
     if (path.endsWith("protected/lock/")) open = false;
     return { protected: status({ pages: pages({ unlocked: open }) }) };
   });
   page();
-  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
+  await act(async () => {});
+  expect(screen.getByText("M-Pesa records")).toBeInTheDocument();
   await act(async () => { vi.advanceTimersByTime(PRIVATE_IDLE_MS - 10000); });
   fireEvent.keyDown(window, { key: "a" });  // synthetic: not a person
   expect(screen.getByText("M-Pesa records")).toBeInTheDocument();
   await act(async () => { vi.advanceTimersByTime(15000); });
-  expect(await screen.findByLabelText("PIN")).toBeInTheDocument();
+  await act(async () => {});
+  expect(screen.getByLabelText("PIN")).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith("/api/v1/auth/protected/lock/", { method: "POST" });
 });
