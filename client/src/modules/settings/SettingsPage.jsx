@@ -393,7 +393,7 @@ function StaffSettings({ isOwner }) {
   return <section className="formCard">
     <h2>Staff</h2>
     <p>Give each person who works here their own employee account. They sign in on the same sign-in page, with their own password and lock PIN.
-      {isOwner && " An employee sees only the work pages you tick, and their own dashboard: never the business's takings, profit, buying prices, money spent or lent, chama, investments, subscription or settings. On M-Pesa they record transactions and count the cash and float when they close; the commission and money in operation stay yours."}</p>
+      {isOwner && " An employee sees only the pages you tick, and their own dashboard: never the business's takings, profit, buying prices, money spent or lent, chama, subscription or settings. Investments only if you tick them. On M-Pesa you open the shift; they record transactions and close it at the end of the day, counting the cash and float without seeing what was expected. The commission and money in operation stay yours."}</p>
     <div className="tableWrap"><table>
       <thead><tr><th>Name</th><th>Account</th><th>Pages</th><th>Sign-in and PINs</th><th>Status</th><th /></tr></thead>
       <tbody>{data.staff.map((member) => {
@@ -476,7 +476,7 @@ function PinSettings() {
     <h2 id="pin-heading">Lock PIN and private pages</h2>
     <p>The workspace locks only when you press Lock, and opens with your own lock PIN. M-Pesa and investments are private pages: each
       opens only with its own PIN, never with a sign-in password, and locks after 5 minutes untouched.
-      {data.is_owner ? " Each person has their own PINs: these are yours, each different. An employee you give M-Pesa sets their own the first time they open it; if they forget it, reset it in Staff. Investments is yours alone."
+      {data.is_owner ? " Each person has their own PINs: these are yours, each different. An employee you give M-Pesa or Investments sets their own the first time they open it; if they forget it, reset it in Staff."
         : " You set your own PIN for each private page the business owner gave you, the first time you open it. If you forget one, ask the business owner to reset it, then set a new one."}</p>
     <div className="pinRow"><strong>Your lock PIN</strong><span>{data.pin.set ? `Set · ${data.pin.length} digits` : "Not set yet"}</span></div>
     {Object.entries(data.pages).map(([page, info]) => <div className="pinRow" key={page}>

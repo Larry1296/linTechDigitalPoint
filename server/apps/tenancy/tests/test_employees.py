@@ -103,26 +103,56 @@ def test_on_the_agent_desk_an_employee_records_and_counts_blind_without_seeing_m
     rows = outlets['results'] if isinstance(outlets, dict) else outlets
     assert set(rows[0]['money_in_operation']) == {'updated_on', 'due', 'open_session'}
     assert jane.post('/api/v1/mpesa/outlets/', {'display_name': 'Mine'}, format='json').status_code == 403
-    opened = jane.post('/api/v1/mpesa/sessions/', {'outlet': rows[0]['id'], 'opening_cash': '5000', 'opening_float': '20000'}, format='json')
+    # The owner opens the shift; the employee cannot open one.
+    assert jane.get('/api/v1/mpesa/dashboard/').json()['session'] is None
+    assert jane.post('/api/v1/mpesa/sessions/', {'outlet': rows[0]['id'], 'opening_cash': '5000', 'opening_float': '20000'}, format='json').status_code == 403
+    opened = boss.post('/api/v1/mpesa/sessions/', {'outlet': rows[0]['id'], 'opening_cash': '5000', 'opening_float': '20000'}, format='json')
     assert opened.status_code == 201, opened.content
-    assert 'opening_cash' not in opened.json() and 'current_float' not in opened.json()
+    shift = opened.json()['id']
+    # One shift for the whole business: no second one, even on another outlet.
+    other = boss.post('/api/v1/mpesa/outlets/', {'display_name': 'Second line', 'agent_reference': '654321'}, format='json').json()
+    second = boss.post('/api/v1/mpesa/sessions/', {'outlet': other['id'], 'opening_cash': '0', 'opening_float': '0'}, format='json')
+    assert second.status_code == 400 and 'already open' in str(second.json())
+    # The employee carries on with exactly that shift, without seeing its money.
     desk = jane.get('/api/v1/mpesa/dashboard/').json()
-    assert desk['employee'] is True and desk['session']['id'] == opened.json()['id']
+    assert desk['employee'] is True and desk['session']['id'] == shift and 'opening_cash' not in desk['session']
     assert not {'cash', 'float', 'in_operation', 'commission', 'commission_month', 'deposits'} & set(desk)
     assert all(set(source) == {'value', 'label'} for source in desk['sources'])
+    deposit = jane.post('/api/v1/mpesa/transactions/', {'session': shift, 'transaction_type': 'CUSTOMER_DEPOSIT', 'amount': '500',
+                                                      'customer_phone': '0712345678', 'idempotency_key': 'jane-1'}, format='json')
+    assert deposit.status_code == 201, deposit.content
+    listed = jane.get('/api/v1/mpesa/transactions/').json()
+    assert [row['id'] for row in listed] == [deposit.json()['id']] and not any('commission' in key for key in listed[0])
+    assert jane.get('/api/v1/inventory/dashboard/work/').json()['mpesa'] == {'shift_open': True, 'transactions': 1}
     for path in ['/api/v1/mpesa/analysis/', '/api/v1/mpesa/commission/', '/api/v1/mpesa/sessions/past/', '/api/v1/mpesa/reconciliation/',
-                 f"/api/v1/mpesa/transactions/commission-advice/?session={opened.json()['id']}&type=CUSTOMER_DEPOSIT&amount=500"]:
+                 f"/api/v1/mpesa/transactions/commission-advice/?session={shift}&type=CUSTOMER_DEPOSIT&amount=500"]:
         assert jane.get(path).status_code == 403, path
-    # A blind count: a difference needs no reason from them; the owner sees it with what was expected.
-    closed = jane.post(f"/api/v1/mpesa/sessions/{opened.json()['id']}/reconcile/", {'actual_cash': '4900', 'actual_float': '20000'}, format='json')
+    # They close it at the end of the day with a blind count; the owner sees any difference with what was expected.
+    closed = jane.post(f"/api/v1/mpesa/sessions/{shift}/reconcile/", {'actual_cash': '5400', 'actual_float': '19500'}, format='json')
     assert closed.status_code == 201 and closed.json()['closed'] is True and 'cash_variance' not in closed.json()
     from apps.tenancy.context import organization_context
     with organization_context(Organization.objects.get()):
         record = MpesaReconciliation.objects.get()
-    assert record.cash_variance == -100 and 'for the owner to check' in record.reason
-    # Opening again, the difference from the last close is recorded, not asked about.
-    again = jane.post('/api/v1/mpesa/sessions/', {'outlet': rows[0]['id'], 'opening_cash': '4000', 'opening_float': '20000'}, format='json')
-    assert again.status_code == 201, again.content
+    assert record.cash_variance == -100 and record.float_variance == 0 and 'for the owner to check' in record.reason
+    assert jane.get('/api/v1/mpesa/dashboard/').json()['session'] is None
+
+
+def test_the_owner_can_give_an_employee_investments_too(boss):
+    boss.post('/api/v1/auth/lock-pin/', {'password': OWNER_PASSWORD, 'pin': '573910', 'page': 'investments'}, format='json')
+    pages = [page['key'] for page in boss.get('/api/v1/tenancy/staff/').json()['work_pages']]
+    assert 'investments' in pages
+    member = add_employee(boss, ['sales']).json()
+    jane = signed_in('jane', GIVEN)
+    set_up(jane)
+    assert jane.post('/api/v1/auth/protected/unlock/', {'page': 'investments', 'pin': '573910'}, format='json').json()['code'] == 'owner_only'
+    assert not any('investment' in key for key in jane.get('/api/v1/auth/me/').json()['permissions'])
+    boss.patch(f"/api/v1/tenancy/staff/{member['id']}/", {'open_pages': ['sales', 'investments']}, format='json')
+    assert {'accounting.view_investment', 'accounting.add_investmentmovement'} <= set(jane.get('/api/v1/auth/me/').json()['permissions'])
+    # Their own Investments PIN, not the owner's.
+    assert jane.post('/api/v1/auth/protected/unlock/', {'page': 'investments', 'pin': '573910'}, format='json').json()['code'] == 'pin_unset'
+    jane.post('/api/v1/auth/lock-pin/', {'password': OWN, 'pin': '6183', 'page': 'investments'}, format='json')
+    assert jane.post('/api/v1/auth/protected/unlock/', {'page': 'investments', 'pin': '6183'}, format='json').status_code == 200
+    assert jane.get('/api/v1/accounting/investments/').status_code == 200
 
 
 def test_the_owner_resets_a_forgotten_sign_in_and_the_employee_sets_it_up_again(boss):

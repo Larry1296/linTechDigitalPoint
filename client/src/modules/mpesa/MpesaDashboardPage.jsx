@@ -419,8 +419,8 @@ export function MpesaDashboardPage() {
       <span className="eyebrow">{employee ? "Your shift" : "The agency's own money only"}</span>
       <h1>M-Pesa Agent</h1>
       {employee ? <p className="privacyNotice">
-        Record each deposit, withdrawal and airtime sale as you do it. Open the shift by counting the cash and entering the float;
-        close it the same way at the end. The business owner checks the counts.
+        The business owner opens the shift. Record each deposit, withdrawal and airtime sale as you do it, and close the shift at
+        the end of the day by counting the cash and entering the float. The business owner checks the count.
       </p> : <p className="privacyNotice">
         Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
         business's stock for the agency, like goods on the shelves, and the amounts customers deposit or withdraw are
@@ -475,7 +475,9 @@ export function MpesaDashboardPage() {
         <OutletCards outlets={outlets} canChange={canChangeOutlet} canDelete={canDeleteOutlet} canRead={canPost} onChanged={load} employee={employee} />
         {canAddOutlet && addingOutlet && <OutletForm onSave={addOutlet} onCancel={() => setAddingOutlet(false)} />}
       </section>
-      {!dashboard.session ? (
+      {!dashboard.session && employee ? (
+        <p className="formNotice" role="status">No shift is open. The business owner opens the day's shift; then record each transaction here and close the shift at the end of the day.</p>
+      ) : !dashboard.session ? (
         <>
         <form
           className="formCard shiftForm"

@@ -1,5 +1,5 @@
 from apps.tenancy.transactions import lock_business
-from apps.tenancy.permissions import has_business_permission, is_business_manager
+from apps.tenancy.permissions import has_business_permission, is_business_manager, is_employee
 from decimal import Decimal
 from uuid import uuid4
 
@@ -11,6 +11,12 @@ from rest_framework.exceptions import ValidationError
 from apps.core.models import AuditLog
 
 from .models import MpesaCommissionEntry, MpesaReconciliation, MpesaSession, MpesaTransaction
+
+
+def on_shift(user, session):
+    """Whether ``user`` works on ``session``: its operator, an owner or manager, or an employee, who records on the
+    shift the owner opened and closes it at the end of the day."""
+    return session.operator_id == user.id or is_business_manager(user) or is_employee(user)
 
 
 def amount(value):
@@ -103,9 +109,15 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     """A new shift, opened with the cash and float counted now. They should match what the previous shift closed with;
     any difference needs a reason, except commission Safaricom paid into the float in between, which is recorded as
     commission (``commission``: {"period": month, "amount": ...}) so it counts as income. ``commission_balance`` is
-    the commission balance on the agent line now, the reading the shift's first transaction is measured from."""
-    if MpesaSession.objects.select_for_update().filter(outlet=outlet, status=MpesaSession.OPEN).exists():
-        raise ValidationError("This outlet already has an open M-Pesa session.")
+    the commission balance on the agent line now, the reading the shift's first transaction is measured from.
+
+    The business has one shift open at a time: everyone on the agent desk, the owner and the employee, carries on with
+    it until it is closed."""
+    lock_business()  # two people pressing Open at once still open one shift
+    current = MpesaSession.objects.select_for_update().select_related("operator").filter(status=MpesaSession.OPEN).first()
+    if current:
+        raise ValidationError(f"A shift is already open (opened by {current.operator.get_full_name() or current.operator.username} on "
+                              f"{timezone.localtime(current.opened_at):%d %b at %H:%M}). Carry on with it, or close it before opening another.")
     cash, count = counted_cash(opening_cash, cash_count)
     electronic_float = Decimal(str(opening_float))
     reading = parse_reading(commission_balance)
@@ -121,7 +133,6 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
         raise ValidationError(f"The float is {max(electronic_float - carried_float, Decimal('0')):,.2f} more than the last shift closed with "
                               f"({carried_float:,.2f}), so at most that much of it can be Safaricom's commission.")
     difference_reason = str(difference_reason or "").strip()
-    from apps.tenancy.permissions import is_employee
     if is_employee(operator):
         # An employee counts blind: they never see what the last shift closed with, so a difference is recorded for the
         # owner to check instead of being asked about.
@@ -261,7 +272,7 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
     if session.status != MpesaSession.OPEN:
         raise ValidationError("This M-Pesa session is closed.")
     privileged = is_business_manager(user)
-    if session.operator_id != user.id and not privileged:
+    if not on_shift(user, session):
         raise ValidationError("You can only post to your assigned M-Pesa session.")
     value = amount(transaction_amount)
     customer = customer_details(transaction_type, customer_name, customer_phone, customer_id_number)
@@ -281,7 +292,6 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         available = _source_available(paid_by)
         if value > available:
             label = next((row["label"] for row in agency_sources() if row["value"] == paid_by), paid_by)
-            from apps.tenancy.permissions import is_employee
             if is_employee(user):  # the other parts' money is the owner's to see
                 raise ValidationError(f"{label} does not have that much. Choose another source, or ask the business owner.")
             raise ValidationError(f"{label} is only {available:,.2f}, less than {value:,.2f}. Choose another source, or record the money that came in first.")
@@ -344,7 +354,7 @@ def add_provider_reference(*, entry, reference, user):
         if entry.provider_reference == reference:
             return entry
         raise ValidationError("This transaction already has a confirmation code.")
-    if entry.session.operator_id != user.id and not is_business_manager(user):
+    if not on_shift(user, entry.session):
         raise ValidationError("You can only update transactions from your own M-Pesa session.")
     if MpesaTransaction.objects.filter(provider_reference=reference).exists():
         raise ValidationError("That M-Pesa confirmation code is already recorded on another transaction.")
@@ -371,7 +381,8 @@ def reverse_transaction(*, original, user, idempotency_key, reason, allow_invest
     session = MpesaSession.objects.select_for_update().get(pk=original.session_id)
     if session.status != MpesaSession.OPEN:
         raise ValidationError("Reversals must be posted before the session closes.")
-    if not (is_business_manager(user)):
+    # An employee cancels only what they recorded themselves, while the shift is open.
+    if not (is_business_manager(user) or is_employee(user) and original.performed_by_id == user.id):
         raise ValidationError("Manager or Owner permission is required to reverse an M-Pesa agency transaction.")
     current_cash, current_float = session_balances(session)
     if current_cash - original.cash_delta < 0 or current_float - original.float_delta < 0:
@@ -436,7 +447,7 @@ def reconcile_session(*, session, user, actual_cash, actual_float, reason="", no
     session = MpesaSession.objects.select_for_update().get(pk=session.pk)
     if session.status != MpesaSession.OPEN:
         raise ValidationError("This M-Pesa session is already closed.")
-    if session.operator_id != user.id and not (is_business_manager(user)):
+    if not on_shift(user, session):
         raise ValidationError("You can only reconcile your assigned M-Pesa session.")
     expected_cash, expected_float = session_balances(session)
     actual_cash, count = counted_cash(actual_cash, cash_count)
@@ -444,7 +455,6 @@ def reconcile_session(*, session, user, actual_cash, actual_float, reason="", no
     if actual_cash < 0 or actual_float < 0:
         raise ValidationError("Actual cash and float cannot be negative.")
     cash_variance, float_variance = actual_cash - expected_cash, actual_float - expected_float
-    from apps.tenancy.permissions import is_employee
     if (cash_variance or float_variance) and not reason.strip() and is_employee(user):
         # A blind count: the employee never sees what was expected, so the owner sees the difference and follows it up.
         reason = f"Counted by {user.get_full_name() or user.username}: differs from what was expected, for the owner to check."

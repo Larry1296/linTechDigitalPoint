@@ -4,7 +4,7 @@ Each private page opens only with a PIN (PagePin), and each person has their own
 an employee the owner lets into a page sets their own the first time they open it. A person's pages have different
 PINs. The sign-in password never opens a private page. Only the owner resets a PIN: their own with their sign-in
 password, an employee's from Settings → Staff, after which the employee sets a new one. The investments are the
-owner's alone: nobody else can open them, with or without a PIN. After five wrong PINs a device waits a few minutes before trying again. Signing in opens the dashboard, never
+owner's, unless the owner gives them to an employee: nobody else can open them, with or without a PIN. After five wrong PINs a device waits a few minutes before trying again. Signing in opens the dashboard, never
 a private page: once its PIN is entered a page stays open on that device until it is left untouched for a while (the
 browser locks it), the person locks it, the workspace locks or they sign out.
 
@@ -27,6 +27,7 @@ PAGES = {
     'mpesa': ('M-Pesa', ('/api/v1/mpesa/',)),
     'investments': ('Investments', ('/api/v1/accounting/investments/',)),
 }
+# Nobody but the owner opens these, unless the owner gives them to an employee.
 OWNER_ONLY = {'investments'}
 TRIES = 5
 BLOCK = timedelta(minutes=5)
@@ -60,9 +61,12 @@ def kept_out(user, page):
     from apps.tenancy.permissions import membership_for
     if is_business_owner(user):
         return None
+    membership = membership_for(user)
+    if membership and membership.role == 'EMPLOYEE':
+        # An employee opens only the pages the owner ticked for them, investments included.
+        return None if page in (membership.open_pages or []) else 'owner_only' if page in OWNER_ONLY else 'hidden'
     if page in OWNER_ONLY:
         return 'owner_only'
-    membership = membership_for(user)
     return 'hidden' if membership and page in (membership.hidden_pages or []) else None
 
 

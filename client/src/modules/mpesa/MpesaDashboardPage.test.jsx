@@ -208,3 +208,12 @@ it("shows an employee the shift to record on, never the agency's money or commis
   fireEvent.click(screen.getByRole("button", { name: "Close shift" }));
   await waitFor(() => expect(api.reconcileMpesaSession).toHaveBeenCalledWith(8, expect.objectContaining({ actual_float: "7000", reason: "" })));
 });
+
+it("never offers an employee the opening form: the owner opens the business's one shift", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ employee: true, session: null, transaction_count: 0, sources: [] });
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { updated_on: "2026-09-26", due: false, open_session: null })]);
+  render(<MpesaDashboardPage />);
+  expect(await screen.findByText(/The business owner opens the day's shift/)).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Open M-Pesa shift" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open shift" })).toBeNull();
+});

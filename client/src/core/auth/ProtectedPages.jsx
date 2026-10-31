@@ -97,14 +97,14 @@ function PrivatePageLock({ page, state, onOpen }) {
   if (!info.allowed) return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
     <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
     <h1 id="protected-title">{info.kept_out === "hidden" ? `${info.label} is not open to you` : `${info.label} is for the business owner only`}</h1>
-    <p>{info.kept_out === "hidden" ? "The business owner has not given you this page. Ask them if you need it." : "Only the owner of the business can open it."}</p>
+    <p>{info.kept_out === "hidden" ? "The business owner has not given you this page. Ask them if you need it." : "Only the owner of the business can open it, or someone they give it to."}</p>
   </section>;
   if (!info.pin_set) return <section className="sessionLockCard protectedCard" aria-labelledby="protected-title">
     <span className="sessionLockIcon"><ShieldCheck size={28} /></span>
     <h1 id="protected-title">{owner ? `Set the ${info.label} PIN` : `Set your ${info.label} PIN`}</h1>
     {info.can_set !== false ? <>
       <p>{info.label} is a private page: it opens only with your own PIN for it, 4 to 6 numbers, different from your lock PIN and any other page's.
-        {owner ? (page === "investments" ? " It is yours alone: nobody else can open it." : " Each employee you give it to sets their own.") + " You can change or reset it in Settings."
+        {owner ? " Each employee you give it to sets their own. You can change or reset yours in Settings."
           : " Keep it to yourself. If you forget it, the business owner resets it and you set a new one."}</p>
       <form onSubmit={setPin}>
         <PasswordField label="Your sign-in password" autoComplete="current-password" autoFocus {...field("password")} />

@@ -19,7 +19,7 @@ it("gives an employee their own dashboard: their pages and today's work, never t
   expect(screen.getByRole("link", { name: "Record a sale" })).toHaveAttribute("href", "/admin/pos");
   expect(screen.getByRole("link", { name: "M-Pesa agent desk" })).toHaveAttribute("href", "/admin/mpesa");
   expect(screen.getByText("4 sales")).toBeInTheDocument();
-  expect(screen.getByText("12 transactions recorded")).toBeInTheDocument();
+  expect(screen.getByText("12 transactions recorded by you")).toBeInTheDocument();
   expect(screen.getByText("Phone charger")).toBeInTheDocument();
   expect(screen.queryByText(/profit|KES|KSh/i)).toBeNull();
 });

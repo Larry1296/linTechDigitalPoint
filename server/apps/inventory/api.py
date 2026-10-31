@@ -169,8 +169,9 @@ def work_dashboard(request):
         data["rooms"] = {"in_house": Stay.objects.filter(status=Stay.IN).count(), "arriving": Stay.objects.filter(status=Stay.BOOKED, arrival=today).count(),
                          "leaving": Stay.objects.filter(status=Stay.IN, departure=today).count()}
     if "mpesa" in enabled and can("mpesa.view_mpesasession"):
-        shift = MpesaSession.objects.filter(status="OPEN", operator=user).first()
-        data["mpesa"] = {"shift_open": bool(shift), "transactions": shift.transactions.exclude(transaction_type="REVERSAL").filter(reversal__isnull=True).count() if shift else 0}
+        # The owner opens the shift; the employee records on it and closes it at the end of the day.
+        shift = MpesaSession.objects.filter(status="OPEN").first()
+        data["mpesa"] = {"shift_open": bool(shift), "transactions": shift.transactions.exclude(transaction_type="REVERSAL").filter(reversal__isnull=True, performed_by=user).count() if shift else 0}
     return Response(data)
 
 

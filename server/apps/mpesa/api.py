@@ -153,6 +153,8 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         rows = super().get_queryset()
         if is_business_manager(self.request.user):
             return rows
+        if is_employee(self.request.user):
+            return rows.filter(status=MpesaSession.OPEN)  # the shift the owner opened, never past shifts' money
         return rows.filter(operator=self.request.user)
 
     def create(self, request):
@@ -222,6 +224,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             rows = rows.filter(session_id=self.request.query_params["session"])
         if is_business_manager(self.request.user):
             return rows
+        if is_employee(self.request.user):
+            return rows.filter(session__status=MpesaSession.OPEN)
         return rows.filter(session__operator=self.request.user)
 
     def list(self, request):
@@ -229,6 +233,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         from .commission_learning import earned, learn
         rows = list(self.filter_queryset(self.get_queryset()))
         data = self.get_serializer(rows, many=True).data
+        if is_employee(request.user):
+            return Response(data)  # what each transaction earned is the owner's to see
         outlet_ids = {row.outlet_id for row in rows if row.transaction_type in ("CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE")}
         results = earned(*learn(outlet_ids)) if outlet_ids else {}
         for item in data:
@@ -431,7 +437,7 @@ def dashboard(request):
         return Response({"detail": "M-Pesa agency access required."}, status=403)
     today = timezone.localdate()
     sessions = MpesaSession.objects.filter(status="OPEN")
-    if not (is_business_manager(request.user)):
+    if not (is_business_manager(request.user) or is_employee(request.user)):
         sessions = sessions.filter(operator=request.user)
     session = sessions.select_related("outlet", "operator").prefetch_related("transactions").first()
     cash, electronic_float = session_balances(session) if session else (0, 0)

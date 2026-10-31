@@ -448,13 +448,15 @@ def hideable_pages(organization):
     from .middleware import effective_modules
     from .permissions import PAGES
     enabled = effective_modules(organization)
-    return [{"key": key, "label": label} for key, (label, module, _) in PAGES.items() if module is None or module in enabled]
+    return [{"key": key, "label": label} for key, (label, module, _) in PAGES.items() if (module is None or module in enabled) and key != "investments"]
 
 
 def work_pages(organization):
-    """The pages the owner can give an employee: the work pages of the parts this business runs."""
-    from .permissions import WORK_PAGES
-    return [page for page in hideable_pages(organization) if page["key"] in WORK_PAGES]
+    """The pages the owner can give an employee: the work pages of the parts this business runs, investments included."""
+    from .middleware import effective_modules
+    from .permissions import PAGES, WORK_PAGES
+    enabled = effective_modules(organization)
+    return [{"key": key, "label": PAGES[key][0]} for key in WORK_PAGES if PAGES[key][1] in enabled]
 
 
 def _work_pages_value(value):

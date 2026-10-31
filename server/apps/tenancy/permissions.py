@@ -18,21 +18,24 @@ PAGES = {
     "loans": ("Money lent", None, lambda app, code: app == "accounting" and "loan" in code),
     "money": ("Money check and cash book", None, lambda app, code: app == "accounting" and ("moneycheck" in code or "cashentry" in code or "dailyclosing" in code)),
     "profit": ("Profit, costs and reports", None, lambda app, code: (app, code) == ("accounting", "view_profit") or (app == "accounting" and "journal" in code)),
+    # Only ever given to an employee the owner ticks it for; anyone else never has it (owner_only).
+    "investments": ("Investments", "investments", lambda app, code: app == "accounting" and "investment" in code),
 }
 
 
-# An employee's account: only the work pages the owner ticks (Membership.open_pages), each with what it needs to work.
-# The owner's side of the business (money, profit and costs, money spent and lent, chama, investments, subscription,
-# business settings, commission, staff) is never an employee's, whatever is ticked.
-WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa")
+# An employee's account: only the pages the owner ticks (Membership.open_pages), each with what it needs to work.
+# The owner's side of the business (money, profit and costs, money spent and lent, chama, subscription, business
+# settings, commission, staff) is never an employee's, whatever is ticked. Investments only if the owner ticks them.
+WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa", "investments")
 CUSTOMERS = {"accounts.view_customerprofile", "accounts.add_customerprofile", "accounts.change_customerprofile"}
 WORK_NEEDS = {
     "sales": lambda app, code: f"{app}.{code}" in CUSTOMERS or app in {"catalog", "inventory"} and code.startswith("view_"),
     "services": lambda app, code: f"{app}.{code}" in CUSTOMERS,
     "rooms": lambda app, code: f"{app}.{code}" in CUSTOMERS,
 }
-# The agency's commission, its shift reconciliations (expected against counted) and outlet set-up are the owner's.
-OWNERS_AGENCY = ("mpesacommissionentry", "mpesareconciliation", "add_mpesaoutlet", "change_mpesaoutlet", "delete_mpesaoutlet")
+# The agency's commission, its shift reconciliations (expected against counted), outlet set-up and opening the shift
+# are the owner's: the owner opens the day's shift, the employee records on it and closes it.
+OWNERS_AGENCY = ("mpesacommissionentry", "mpesareconciliation", "add_mpesaoutlet", "change_mpesaoutlet", "delete_mpesaoutlet", "add_mpesasession")
 
 
 def employee_permission(key, pages):
@@ -40,6 +43,8 @@ def employee_permission(key, pages):
     if key == "mpesa.add_mpesareconciliation":
         return "mpesa" in pages  # closing their own shift: they count, the owner sees what was expected
     # Deleting records (sales, products, outlets, ...) is the owner's: an employee cancels or corrects through the page.
+    if app == "accounting" and "investment" in code:
+        return "investments" in pages
     if app in {"accounting", "chama"} or code.startswith("delete_") or app == "mpesa" and any(part in code for part in OWNERS_AGENCY):
         return False
     return any(PAGES[page][2](app, code) or page in WORK_NEEDS and WORK_NEEDS[page](app, code) for page in pages if page in WORK_PAGES)
@@ -73,7 +78,7 @@ def _business_permissions(user):
     if membership.role == "OWNER":
         return available
     if membership.role == "EMPLOYEE":
-        return {key for key in available if not owner_only(key) and employee_permission(key, membership.open_pages or [])}
+        return {key for key in available if employee_permission(key, membership.open_pages or [])}
     keep_out = membership.hidden_pages or []
     available = {key for key in available if not owner_only(key) and not hidden(key, keep_out)}
     if membership.role == "ADMIN":

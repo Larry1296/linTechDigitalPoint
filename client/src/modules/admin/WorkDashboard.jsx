@@ -13,6 +13,7 @@ const START = {
   services: ["/admin/cyber", "Service desk"],
   rooms: ["/admin/rooms", "Front desk"],
   mpesa: ["/admin/mpesa", "M-Pesa agent desk"],
+  investments: ["/admin/investments", "Investments"],
 };
 const plural = (count, one, many = `${one}s`) => `${Number(count).toLocaleString()} ${count === 1 ? one : many}`;
 
@@ -29,7 +30,7 @@ export function WorkDashboard() {
   if (!data) return error ? <ErrorState message={error} retry={load} /> : <Loading />;
   const cards = [
     data.sales && ["Your sales today", plural(data.sales.mine_today, "sale"), "Recorded by you", "/admin/sales-history"],
-    data.mpesa && ["M-Pesa shift", data.mpesa.shift_open ? "Open" : "Not open", data.mpesa.shift_open ? `${plural(data.mpesa.transactions, "transaction")} recorded` : "Open it on the agent desk", "/admin/mpesa"],
+    data.mpesa && ["M-Pesa shift", data.mpesa.shift_open ? "Open" : "Not open", data.mpesa.shift_open ? `${plural(data.mpesa.transactions, "transaction")} recorded by you` : "The business owner opens it", "/admin/mpesa"],
     data.services && ["Service jobs", plural(data.services.waiting, "job") + " waiting", `${plural(data.services.ready, "job")} ready to hand over`, "/admin/cyber"],
     data.rooms && ["Guests", plural(data.rooms.in_house, "guest") + " staying", `${data.rooms.arriving} arriving · ${data.rooms.leaving} leaving today`, "/admin/rooms"],
     data.low_stock && ["Products running low", plural(data.low_stock.count, "product"), data.low_stock.count ? "Tell the business owner" : "Nothing low", null, data.low_stock.count ? "warn" : null],
