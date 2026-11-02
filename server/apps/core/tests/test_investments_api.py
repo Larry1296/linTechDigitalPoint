@@ -644,3 +644,36 @@ def test_with_a_cash_drawer_for_each_part_the_businesss_money_in_the_fund_comes_
     marked = client.post(f"/api/v1/accounting/investments/movements/{own}/business/", {"place": "CASH-CYBER", "amount": "500"}, format="json")
     assert marked.status_code == 200, marked.content
     assert client.post(f"/api/v1/accounting/investments/movements/{own}/business/", {"place": "CASH", "amount": "1"}, format="json").status_code == 400
+
+
+def test_a_statement_got_late_ignores_money_moved_after_its_date_or_takes_the_months_interest(shop):
+    """The statement is dated the 30th but arrives days later, after money was put in and taken out: only what was held
+    on its date counts, so the interest is right. Or the owner types the month's interest straight from the statement."""
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    today = timezone.localdate()
+    dated = today - timedelta(days=3)
+    _move(client, mmf, "DEPOSIT", "50000", "OWNER", "in", occurred_on=str(today - timedelta(days=60)))
+    _move(client, mmf, "DEPOSIT", "8000", "OWNER", "in-late", occurred_on=str(today - timedelta(days=1)))
+    _move(client, mmf, "WITHDRAWAL", "3000", "OWNER", "out-late", occurred_on=str(today))
+    row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "50450", "occurred_on": str(dated),
+                      "idempotency_key": "st"}, format="json")
+    assert row.status_code == 201, row.content
+    row = row.json()
+    assert D(str(row["statements"][0]["actual"])) == D("450") and D(row["value"]) == D("55450")
+    _untouched(org, earned=D("450"))
+
+    # The same month's interest typed in a second time is refused; a month with none recorded takes it on its last day.
+    again = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"interest": "10", "occurred_on": str(dated),
+                        "idempotency_key": "st-2"}, format="json")
+    assert again.status_code == 400 and "already recorded" in str(again.content)
+    earlier = (today.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)  # the month before last ended
+    if earlier < today - timedelta(days=60):
+        return
+    typed = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"interest": "300", "occurred_on": str(earlier.replace(day=5)),
+                        "idempotency_key": "st-3"}, format="json")
+    assert typed.status_code == 201, typed.content
+    interest = next(m for m in typed.json()["movements"] if m["kind"] == "INTEREST" and m["occurred_on"] == str(earlier))
+    assert D(interest["amount"]) == D("300") and D(interest["statement_balance"]) == D("50300")
+    both = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "1", "interest": "1", "idempotency_key": "st-4"}, format="json")
+    assert both.status_code == 400

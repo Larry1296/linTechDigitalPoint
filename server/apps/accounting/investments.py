@@ -252,20 +252,53 @@ def pay_supplier(*, investment_id, purchase, amount, key, user, reference="", vi
     return paid
 
 
+def value_on(investment, day):
+    """What the app expects the investment held at the end of a day: everything recorded on or before it. A statement
+    dated earlier than today is compared with this, so money put in or taken out after its date does not count."""
+    return sum((SIGN[m.kind] * m.amount for m in _live(investment).filter(occurred_on__lte=day)), Decimal("0"))
+
+
+def month_end(day):
+    import calendar
+    return day.replace(day=calendar.monthrange(day.year, day.month)[1])
+
+
 @transaction.atomic
-def record_statement(*, investment, user, balance, key, occurred_on=None, note=""):
-    """The balance on the fund's statement: the difference from what the app expects is interest (or fees, if lower)."""
+def record_statement(*, investment, user, key, balance=None, interest=None, occurred_on=None, note=""):
+    """What a statement shows, given either way:
+    - balance: the balance on the statement's date. Compared with what the app expects held that day (money put in or
+      taken out after the date does not count), the difference is interest (or fees, if lower).
+    - interest: the interest the statement says was earned for a month (below zero for fees or a loss), counted on the
+      month's last day (or the given date, or today while the month is still running).
+    """
     lock_business()
     existing = InvestmentMovement.objects.filter(idempotency_key=key).first()
     if existing:
         return existing
     investment = Investment.objects.select_for_update().get(pk=investment.pk)
-    balance, day = money(balance), _day(occurred_on)
-    if balance < 0:
-        raise ValidationError("A statement balance cannot be below zero.")
-    difference = balance - value(investment)
+    if (balance in (None, "")) == (interest in (None, "")):
+        raise ValidationError("Enter either the balance on the statement or the interest it shows, not both.")
+    if interest not in (None, ""):
+        earned = money(interest)
+        if not earned:
+            raise ValidationError("Enter the interest the statement shows, above zero (or below zero for fees).")
+        day = min(month_end(occurred_on or timezone.localdate()), timezone.localdate())
+        taken = _live(investment).filter(kind__in=[InvestmentMovement.INTEREST, InvestmentMovement.FEE],
+                                         occurred_on__year=day.year, occurred_on__month=day.month).first()
+        if taken:
+            raise ValidationError(f"Interest for {day:%B %Y} is already recorded ({taken.amount:,.2f} on {taken.occurred_on:%d %b}). "
+                                  "Undo it first if it was wrong.")
+        balance = value_on(investment, day) + earned
+        if balance < 0:
+            raise ValidationError(f"{investment.name} held {value_on(investment, day):,.2f} then; fees cannot be more than that.")
+    else:
+        balance, day = money(balance), _day(occurred_on)
+        if balance < 0:
+            raise ValidationError("A statement balance cannot be below zero.")
+    expected = value_on(investment, day)
+    difference = balance - expected
     if not difference:
-        raise ValidationError(f"The statement agrees with the app: {investment.name} holds {balance:,.2f}. Nothing to record.")
+        raise ValidationError(f"The statement agrees with the app: {investment.name} held {balance:,.2f} on {day:%d %b %Y}. Nothing to record.")
     kind = InvestmentMovement.INTEREST if difference > 0 else InvestmentMovement.FEE
     amount = abs(difference)
     # The app's own prediction for the same date is kept beside it, so each statement shows how close the estimate was.
@@ -278,7 +311,7 @@ def record_statement(*, investment, user, balance, key, occurred_on=None, note="
                                                  predicted_since=guess["since"] if guess else None,
                                                  idempotency_key=key, created_by=user)
     words = f"{'Interest earned on' if kind == InvestmentMovement.INTEREST else 'Fees or loss on'} {investment.name}"
-    audit(movement, user, f"{words}: {amount} (statement {balance})")
+    audit(movement, user, f"{words}: {amount} (statement {balance} on {day})")
     book_earned(movement, user)
     return movement
 

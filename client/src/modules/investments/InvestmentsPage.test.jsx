@@ -136,6 +136,23 @@ it("records a statement balance and can undo a mistake", async () => {
   expect(JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/movements/8/undo/")[1].body)).toEqual({ reason: "Entered twice" });
 });
 
+it("compares a statement with what was held on its date, or takes the interest for a month", async () => {
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  fireEvent.click(within(card).getByRole("button", { name: "Update from statement" }));
+  const form = within(card).getByRole("form", { name: "Record statement balance" });
+  // On 25 Sep the account held 20,000 put in, less 5,000 taken out on the 20th; later interest is left out.
+  fireEvent.change(within(form).getByLabelText(/Statement date/), { target: { value: "2026-09-25" } });
+  expect(form.textContent).toMatch(/the app expects \S+ 15,000\./);
+  fireEvent.click(within(form).getByLabelText(/interest earned for a month/));
+  fireEvent.change(within(form).getByLabelText(/Interest earned/), { target: { value: "412.50" } });
+  fireEvent.change(within(form).getByLabelText(/For the month/), { target: { value: "2026-09" } });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record statement" })); });
+  const body = JSON.parse(api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/statement/")[1].body);
+  expect(body).toEqual(expect.objectContaining({ interest: "412.50", occurred_on: "2026-09-30" }));
+  expect(body.balance).toBeUndefined();
+});
+
 it("removes an investment recorded by mistake, undoing everything in it", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");

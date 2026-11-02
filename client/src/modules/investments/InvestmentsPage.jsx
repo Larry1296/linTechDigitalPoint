@@ -220,22 +220,43 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
   );
 }
 
-// The fund's statement balance: anything above what the app expects is interest earned; below it, fees or a loss.
+// What the app expects the investment held at the end of a day: everything recorded on or before it, not undone.
+export const valueOn = (investment, day) => (investment.movements || [])
+  .filter((m) => !m.reversed_at && String(m.occurred_on).slice(0, 10) <= day)
+  .reduce((sum, m) => sum + (m.kind === "DEPOSIT" || m.kind === "INTEREST" ? 1 : -1) * Number(m.amount), 0);
+const monthEnd = (month) => {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return last < today() ? last : today();
+};
+const thisMonth = () => today().slice(0, 7);
+const monthName = (month) => new Date(`${month}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+// A statement, given either way: the balance it shows on its date (compared with what the app expects that day, so
+// money put in or taken out after the date does not count), or the interest it says was earned for a month.
 function StatementForm({ investment, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("BALANCE");
+  const [day, setDay] = useState(today());
+  const [month, setMonth] = useState(thisMonth());
+  const expected = valueOn(investment, mode === "BALANCE" ? day : monthEnd(month));
+  const later = mode === "BALANCE" && Math.abs(expected - Number(investment.value)) > 0.004;
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    const difference = Number(values.balance) - Number(investment.value);
-    if (!(await confirmAction({ title: `Statement shows ${money(values.balance)}?`,
-      text: difference > 0 ? `${money(difference)} will be recorded as interest earned and added to the business's profit.`
+    const body = mode === "BALANCE" ? { balance: values.balance, occurred_on: day }
+      : { interest: values.interest, occurred_on: monthEnd(month) };
+    const difference = mode === "BALANCE" ? Number(values.balance) - expected : Number(values.interest);
+    if (!(await confirmAction({ title: mode === "BALANCE" ? `Statement shows ${money(values.balance)} on ${date(day)}?` : `${monthName(month)}: interest ${money(values.interest)}?`,
+      text: difference > 0 ? `${money(difference)} will be recorded as interest earned${mode === "BALANCE" ? "" : ` on ${date(monthEnd(month))}`} and added to the business's profit.`
         : difference < 0 ? `${money(-difference)} will be recorded as fees or a loss and taken off the business's profit.` : "This matches the app; nothing will be recorded.",
       confirmButtonText: "Record statement" }))) return;
     setBusy(true);
     setError("");
     try {
-      await api(`/api/v1/accounting/investments/${investment.id}/statement/`, { method: "POST", body: JSON.stringify({ ...values, idempotency_key: crypto.randomUUID() }) });
+      await api(`/api/v1/accounting/investments/${investment.id}/statement/`, { method: "POST",
+        body: JSON.stringify({ ...body, note: values.note || "", idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -245,10 +266,27 @@ function StatementForm({ investment, onSaved, onCancel }) {
   return (
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="Record statement balance">
       <fieldset disabled={busy} className="loanFields">
-        <FormField label={`Balance on the statement or app (${businessCurrency()})`} name="balance" type="number" min="0" step="0.01" required />
-        <FormField label="Statement date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+        <fieldset className="investWhose">
+          <legend>What does the statement give?</legend>
+          <label><input type="radio" name="mode" checked={mode === "BALANCE"} onChange={() => setMode("BALANCE")} /> The balance on its date</label>
+          <label><input type="radio" name="mode" checked={mode === "INTEREST"} onChange={() => setMode("INTEREST")} /> The interest earned for a month</label>
+        </fieldset>
+        {mode === "BALANCE" ? <>
+          <FormField key="balance" label={`Balance on the statement or app (${businessCurrency()})`} name="balance" type="number" min="0" step="0.01" required />
+          <FormField label="Statement date (the date printed on it)" name="occurred_on" type="date" max={today()} value={day}
+            onChange={(event) => setDay(event.target.value || today())} required />
+        </> : <>
+          <FormField key="interest" label={`Interest earned (${businessCurrency()}, after tax; below zero for fees)`} name="interest" type="number" step="0.01" required />
+          <FormField label="For the month" name="month" type="month" max={thisMonth()} value={month}
+            onChange={(event) => setMonth(event.target.value || thisMonth())} required />
+        </>}
+        <FormField label="Note (optional)" name="note" maxLength={500} autoComplete="off" />
       </fieldset>
-      <p className="muted">The app expects {money(investment.value)}. The difference is the interest (or fees if lower), and it goes into the business's profit.</p>
+      {mode === "BALANCE"
+        ? <p className="muted">On {date(day)} the app expects {money(expected)}. The difference is the interest (or fees if lower), and it goes into the business's profit.
+          {later && ` Money put in or taken out after ${date(day)} is left out, since the statement does not include it.`}</p>
+        : <p className="muted">Recorded on {date(monthEnd(month))}: {investment.name} then holds {money(expected)} plus this interest. Use this when the
+          statement lists the interest, or the balance already includes money moved since.</p>}
       <div className="actionRow">
         <button disabled={busy}>Record statement</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>

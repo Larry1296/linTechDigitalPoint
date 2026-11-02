@@ -165,7 +165,8 @@ class InvestmentMoveView(APIView):
 
 
 class StatementInput(serializers.Serializer):
-    balance = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"))
+    balance = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    interest = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, allow_null=True)
     occurred_on = serializers.DateField(required=False, allow_null=True)
     note = serializers.CharField(required=False, allow_blank=True, default="")
     idempotency_key = serializers.CharField(max_length=100)
@@ -180,7 +181,7 @@ class InvestmentStatementView(APIView):
         form.is_valid(raise_exception=True)
         d = form.validated_data
         investment = get_object_or_404(Investment, pk=pk)
-        record_statement(investment=investment, user=request.user, balance=d["balance"], key=d["idempotency_key"],
+        record_statement(investment=investment, user=request.user, balance=d.get("balance"), interest=d.get("interest"), key=d["idempotency_key"],
                          occurred_on=d.get("occurred_on"), note=d["note"])
         return Response(investment_row(Investment.objects.get(pk=pk)), status=201)
 
