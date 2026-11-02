@@ -530,7 +530,9 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
   // Entries undone by mistake stay on record but are folded away, so the history reads like the fund's statement.
   const [showUndone, setShowUndone] = useState(false);
   const undoneCount = investment.movements.filter((m) => m.reversed_at).length;
-  const history = showUndone ? investment.movements : investment.movements.filter((m) => !m.reversed_at);
+  // Money already in the fund marked as the business's is kept as a pair (in as the business's, out as yours) that does
+  // not change the total: it shows as one line, so the history lists only what really went in or out of the fund.
+  const history = (showUndone ? investment.movements : investment.movements.filter((m) => !m.reversed_at)).filter((m) => m.switch !== "own");
   const [error, setError] = useState("");
   const card = useRef(null);
   useEffect(() => {
@@ -631,9 +633,10 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           <tbody>{history.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
               <td>{date(m.occurred_on)}</td>
-              <td>{KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
+              <td>{m.switch ? "Marked as the business's money" : KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
-              <td>{money(m.amount)}{m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
+              <td>{money(m.amount)}{m.switch && <small> · already in it, the total does not change</small>}
+                {m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
               <td>{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? `Business · ${placeName(m.source)}` : "Business")
                 : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
               <td>{m.reference || m.note || "—"}</td>

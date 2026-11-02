@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -59,7 +59,8 @@ def investment_row(investment):
             "movements": [{"id": m.pk, "kind": m.kind, "amount": m.amount, "business_amount": m.business_amount, "whose": m.whose, "occurred_on": m.occurred_on, "source": m.source,
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
                            "recorded_by": _name(m.created_by), "reversed_at": m.reversed_at, "reverse_reason": m.reverse_reason,
-                           "purchase": _purchase(m.purchase) if m.purchase_id else None}
+                           "purchase": _purchase(m.purchase) if m.purchase_id else None,
+                           "switch": switch_half(m)}
                           for m in investment.movements.select_related("created_by", "purchase__receipt", "purchase__supplier")
                           .order_by("-occurred_on", "-pk")]}
 

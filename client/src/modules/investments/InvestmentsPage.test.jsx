@@ -167,6 +167,20 @@ it("folds undone entries away so the history reads like the statement", async ()
   expect(within(table).queryByText(/Not on the statement/)).toBeNull();
 });
 
+it("shows money marked as the business's as one line that does not change the total", async () => {
+  const pair = [
+    { id: 51, kind: "DEPOSIT", amount: "1848.00", whose: "BUSINESS", occurred_on: "2026-10-02", source: "BANK", reference: "", note: "", statement_balance: null, reversed_at: null, switch: "business" },
+    { id: 52, kind: "WITHDRAWAL", amount: "1848.00", whose: "OWNER", occurred_on: "2026-10-02", source: "OWNER", reference: "", note: "", statement_balance: null, reversed_at: null, switch: "own" }];
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing({ ...mmf, movements: [...pair, ...mmf.movements] })));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row").slice(1);
+  expect(rows).toHaveLength(mmf.movements.length + 1);
+  expect(rows[0]).toHaveTextContent("Marked as the business's money");
+  expect(rows[0]).toHaveTextContent("already in it, the total does not change");
+  expect(rows[0]).toHaveTextContent("Business · bank");
+});
+
 it("removes an investment recorded by mistake, undoing everything in it", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");

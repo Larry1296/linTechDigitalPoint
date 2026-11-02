@@ -499,6 +499,14 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
     return investment
 
 
+def switch_half(movement):
+    """'business' or 'own' when the movement is one half of a business_money_in() pair (money already in the fund marked
+    as the business's: the total does not change), else None."""
+    head, _, _place = movement.idempotency_key.rpartition(":")
+    half = head.rpartition(":")[2]
+    return half if movement.idempotency_key.startswith(f"{SWITCH}:") and half in ("business", "own") else None
+
+
 def _partner(movement):
     """The other half of a business_money_in() pair, if this movement is one half."""
     head, _, place = movement.idempotency_key.rpartition(":")
