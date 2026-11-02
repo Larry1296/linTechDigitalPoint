@@ -373,16 +373,16 @@ function DayByDay({ investment }) {
   return (
     <details className="investDaily">
       <summary>Day by day since {date(days[days.length - 1].date)}: {money(days[0].invested)} invested, worth {money(days[0].value)} today</summary>
-      <table className="loanRepayments">
+      <table className="loanRepayments stackTable">
         <caption className="visuallyHidden">{investment.name} day by day</caption>
         <thead><tr><th>Date</th><th>Invested</th><th>Interest that day</th><th>Interest so far</th><th>Total</th></tr></thead>
         <tbody>{days.map((d) => (
           <tr key={d.date}>
-            <td>{date(d.date)}</td>
-            <td>{money(d.invested)}{moved(d)}</td>
-            <td>{Number(d.interest) < 0 ? `− ${money(-d.interest)}` : `+ ${money(d.interest)}`}{d.statement && <small> · from statement</small>}</td>
-            <td>{money(d.interest_so_far)}</td>
-            <td><strong>{money(d.value)}</strong></td>
+            <td data-label="Date">{date(d.date)}</td>
+            <td data-label="Invested">{money(d.invested)}{moved(d)}</td>
+            <td data-label="Interest that day">{Number(d.interest) < 0 ? `− ${money(-d.interest)}` : `+ ${money(d.interest)}`}{d.statement && <small> · from statement</small>}</td>
+            <td data-label="Interest so far">{money(d.interest_so_far)}</td>
+            <td data-label="Total"><strong>{money(d.value)}</strong></td>
           </tr>))}</tbody>
       </table>
       <p className="muted">Interest is worked out each day on what is in the fund that day, at the fund's rate for that day, and added
@@ -400,15 +400,15 @@ function StatementChecks({ investment }) {
   return (
     <details className="investRates" open>
       <summary>Predicted and actual interest ({rows.length})</summary>
-      <table className="loanRepayments">
+      <table className="loanRepayments stackTable">
         <caption>What the app predicted, next to what the statement showed</caption>
         <thead><tr><th scope="col">Statement</th><th scope="col">App predicted</th><th scope="col">Statement showed</th><th scope="col">Difference</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.id}>
-            <th scope="row">{date(r.date)}{r.since && <small className="muted"> · since {date(r.since)}</small>}</th>
-            <td>{r.predicted == null ? "Not predicted" : signed(r.predicted)}</td>
-            <td>{signed(r.actual)}<small className="muted"> · balance {money(r.statement_balance)}</small></td>
-            <td>{r.difference == null ? "—" : Math.abs(Number(r.difference)) < 0.5 ? "Same" : signed(r.difference)}</td>
+            <th scope="row" data-label="Statement">{date(r.date)}{r.since && <small className="muted"> · since {date(r.since)}</small>}</th>
+            <td data-label="App predicted">{r.predicted == null ? "Not predicted" : signed(r.predicted)}</td>
+            <td data-label="Statement showed">{signed(r.actual)}<small className="muted"> · balance {money(r.statement_balance)}</small></td>
+            <td data-label="Difference">{r.difference == null ? "—" : Math.abs(Number(r.difference)) < 0.5 ? "Same" : signed(r.difference)}</td>
           </tr>))}</tbody>
       </table>
       <p className="muted">Interest after {percent(investment.tax_rate)} tax. A big difference usually means a rate, a date or an amount
@@ -627,20 +627,20 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}
       {investment.notes && <p className="loanNote">{investment.notes}</p>}
       {history.length > 0 && (
-        <table className="loanRepayments">
+        <table className="loanRepayments stackTable">
           <caption>History</caption>
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>From / to</th><th>Reference</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
           <tbody>{history.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
-              <td>{date(m.occurred_on)}</td>
-              <td>{m.switch ? "Marked as the business's money" : KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
+              <td data-label="Date">{date(m.occurred_on)}</td>
+              <td data-label="What">{m.switch ? "Marked as the business's money" : KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
-              <td>{money(m.amount)}{m.switch && <small> · already in it, the total does not change</small>}
+              <td data-label="Amount">{money(m.amount)}{m.switch && <small> · already in it, the total does not change</small>}
                 {m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
-              <td>{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? `Business · ${placeName(m.source)}` : "Business")
+              <td data-label="From / to">{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? `Business · ${placeName(m.source)}` : "Business")
                 : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
-              <td>{m.reference || m.note || "—"}</td>
-              <td>{!m.reversed_at && canCorrect && <div className="actionRow">
+              <td data-label="Reference">{m.reference || m.note || "—"}</td>
+              <td className="stackActions">{!m.reversed_at && canCorrect && <div className="actionRow">
                 {m.kind === "DEPOSIT" && m.whose !== BUSINESS && !m.purchase && <button type="button" className="secondary" onClick={() => void markBusiness(m)}>It was the business's money</button>}
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
             </tr>
@@ -654,11 +654,11 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       {investment.rates.length > 0 && (
         <details className="investRates">
           <summary>Monthly rates ({investment.rates.length})</summary>
-          <table className="loanRepayments">
+          <table className="loanRepayments stackTable">
             <thead><tr><th>Month</th><th>Yearly rate</th><th>Balance seen</th><th>Recorded</th></tr></thead>
             <tbody>{investment.rates.map((r) => (
-              <tr key={r.month}><td>{r.label}</td><td>{percent(r.annual_rate)}{r.automatic && <small> · automatic</small>}</td><td>{r.statement_balance != null ? money(r.statement_balance) : "—"}</td>
-                <td>{date(r.recorded_on)}{r.recorded_by && ` · ${r.recorded_by}`}</td></tr>))}</tbody>
+              <tr key={r.month}><td data-label="Month">{r.label}</td><td data-label="Yearly rate">{percent(r.annual_rate)}{r.automatic && <small> · automatic</small>}</td><td data-label="Balance seen">{r.statement_balance != null ? money(r.statement_balance) : "—"}</td>
+                <td data-label="Recorded">{date(r.recorded_on)}{r.recorded_by && ` · ${r.recorded_by}`}</td></tr>))}</tbody>
           </table>
         </details>
       )}

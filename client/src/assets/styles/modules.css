@@ -2757,6 +2757,20 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .investCalculator h2 { margin: 0 0 4px; font-size: 18px; }
 .investCalculator > .muted { margin: 0 0 12px; }
 .investCalculator .trendTable { overflow-x: auto; }
+/* On a phone a wide table would be cut off (the page never scrolls sideways): each row becomes a small card, every value
+   on its own line with its column's name beside it. */
+@media (max-width: 640px) {
+  .stackTable, .stackTable tbody, .stackTable tr { display: block; width: 100%; }
+  .stackTable caption { display: block; }
+  .stackTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .stackTable tr { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .stackTable :is(td, th[scope="row"]) { display: block; padding: 3px 0; border: 0; text-align: right; overflow-wrap: anywhere; }
+  .stackTable :is(td, th[scope="row"])[data-label]::before { content: attr(data-label); float: left; margin-right: 12px;
+    color: var(--muted); font-size: 13px; font-weight: 700; text-align: left; }
+  .stackTable :is(td, th[scope="row"])::after { content: ""; display: block; clear: both; }
+  .stackTable td:empty { display: none; }
+  .stackTable .stackActions .actionRow { justify-content: flex-end; padding-top: 4px; }
+}
 /* Net worth: owns (blue) and owes (orange), validated for colour-blind separation in both themes. */
 .netWorth { --owns: #2563eb; --owes: #d97706; display: grid; gap: 14px; margin-top: 18px; }
 [data-theme="dark"] .netWorth { --owns: #3b82f6; --owes: #c2700a; }

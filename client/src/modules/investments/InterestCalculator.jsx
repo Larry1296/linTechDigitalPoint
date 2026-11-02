@@ -39,10 +39,10 @@ export function InterestCalculator({ defaultRate = "", defaultTax = 15, rateSour
           at the end of each month after tax, so it earns interest too.</p>
         <details className="investRates">
           <summary>Month by month</summary>
-          <div className="trendTable"><table className="loanRepayments">
+          <div className="trendTable"><table className="loanRepayments stackTable">
             <thead><tr><th>Month</th><th>Added</th><th>Interest (after tax)</th><th>Tax</th><th>Balance</th></tr></thead>
-            <tbody>{result.rows.map((row) => <tr key={row.month}><td>{row.month}</td><td>{row.added ? money(row.added) : "—"}</td>
-              <td>{money(row.interest)}</td><td>{money(row.tax)}</td><td>{money(row.balance)}</td></tr>)}</tbody>
+            <tbody>{result.rows.map((row) => <tr key={row.month}><td data-label="Month">{row.month}</td><td data-label="Added">{row.added ? money(row.added) : "—"}</td>
+              <td data-label="Interest (after tax)">{money(row.interest)}</td><td data-label="Tax">{money(row.tax)}</td><td data-label="Balance">{money(row.balance)}</td></tr>)}</tbody>
           </table></div>
         </details>
       </> : <p className="muted">Enter an amount, a yearly rate and how long to see what it could earn.</p>}
