@@ -527,6 +527,10 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
 
 function InvestmentCard({ investment, funds, places = [], preset, month, canMove, canCorrect, canRemove, onChanged }) {
   const [form, setForm] = useState(null);
+  // Entries undone by mistake stay on record but are folded away, so the history reads like the fund's statement.
+  const [showUndone, setShowUndone] = useState(false);
+  const undoneCount = investment.movements.filter((m) => m.reversed_at).length;
+  const history = showUndone ? investment.movements : investment.movements.filter((m) => !m.reversed_at);
   const [error, setError] = useState("");
   const card = useRef(null);
   useEffect(() => {
@@ -620,11 +624,11 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       {investment.check_due && <p className="investWarning">{month}'s check is due: record the rate {investment.name} pays now
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}
       {investment.notes && <p className="loanNote">{investment.notes}</p>}
-      {investment.movements.length > 0 && (
+      {history.length > 0 && (
         <table className="loanRepayments">
           <caption>History</caption>
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>From / to</th><th>Reference</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-          <tbody>{investment.movements.map((m) => (
+          <tbody>{history.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
               <td>{date(m.occurred_on)}</td>
               <td>{KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
@@ -640,6 +644,10 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           ))}</tbody>
         </table>
       )}
+      {undoneCount > 0 && <div className="actionRow">
+        <button type="button" className="linkButton" onClick={() => setShowUndone(!showUndone)}>
+          {showUndone ? "Hide undone entries" : `Show undone entries (${undoneCount})`}</button>
+      </div>}
       {investment.rates.length > 0 && (
         <details className="investRates">
           <summary>Monthly rates ({investment.rates.length})</summary>

@@ -153,6 +153,20 @@ it("compares a statement with what was held on its date, or takes the interest f
   expect(body.balance).toBeUndefined();
 });
 
+it("folds undone entries away so the history reads like the statement", async () => {
+  const undone = { id: 99, kind: "DEPOSIT", amount: "1000.00", occurred_on: "2026-09-30", source: "OWNER", reference: "", note: "", statement_balance: null,
+    reversed_at: "2026-10-01T09:00:00Z", reverse_reason: "Not on the statement" };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : listing({ ...mmf, movements: [undone, ...mmf.movements] })));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  const table = within(card).getByRole("table", { name: "History" });
+  expect(within(table).queryByText(/Not on the statement/)).toBeNull();
+  fireEvent.click(within(card).getByRole("button", { name: "Show undone entries (1)" }));
+  expect(within(table).getByText(/undone \(Not on the statement\)/)).toBeInTheDocument();
+  fireEvent.click(within(card).getByRole("button", { name: "Hide undone entries" }));
+  expect(within(table).queryByText(/Not on the statement/)).toBeNull();
+});
+
 it("removes an investment recorded by mistake, undoing everything in it", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
