@@ -135,11 +135,12 @@ export function StaffLayout() {
   const { locale } = useTranslation();
   const { pathname } = useLocation();
   const { user, lock } = useAuth();
-  // The sidebar is hidden on every screen until the topbar's menu button opens it over the page. It remembers the page
-  // it was opened on, so choosing a link (going to another page) hides it again, and the page always keeps its full width.
+  // Large screens: the sidebar is always open beside the page. Phones and tablets: it is hidden until the topbar's menu
+  // button opens it over the page; it remembers the page it was opened on, so choosing a link hides it again.
   const [openOn, setOpenOn] = useState(null);
   const compact = useMediaQuery("(max-width: 1023px)");
-  const drawerOpen = openOn === pathname;
+  const drawerOpen = compact && openOn === pathname;
+  const sidebarShown = !compact || drawerOpen;
   const [switchError, setSwitchError] = useState("");
   const topbarRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -182,10 +183,10 @@ export function StaffLayout() {
   return (
     <>
       <header ref={topbarRef} className="workspaceTopbar" aria-label="Business topbar">
-        <button ref={menuButtonRef} className="workspaceMenu" type="button" aria-label={drawerOpen ? "Close dashboard menu" : "Open dashboard menu"}
+        {compact && <button ref={menuButtonRef} className="workspaceMenu" type="button" aria-label={drawerOpen ? "Close dashboard menu" : "Open dashboard menu"}
           title={drawerOpen ? "Hide menu" : "Show menu"} aria-expanded={drawerOpen} aria-controls="business-sidebar" onClick={() => setOpenOn(drawerOpen ? null : pathname)}>
           {drawerOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
-        </button>
+        </button>}
         <Link className="workspaceBrand" to="/admin/dashboard">
           <BusinessBrand organization={organization} compact />
         </Link>
@@ -202,7 +203,7 @@ export function StaffLayout() {
       </header>
       <div className="admin">
         {drawerOpen && <button className="sidebarBackdrop" type="button" tabIndex={-1} aria-label="Close dashboard menu" onClick={closeDrawer} />}
-        <aside ref={sidebarRef} id="business-sidebar" className={drawerOpen ? "sidebarOpen" : undefined} aria-label="Dashboard menu" aria-hidden={drawerOpen ? undefined : true} inert={drawerOpen ? undefined : true}>
+        <aside ref={sidebarRef} id="business-sidebar" className={sidebarShown ? "sidebarOpen" : undefined} aria-label="Dashboard menu" aria-hidden={sidebarShown ? undefined : true} inert={sidebarShown ? undefined : true}>
           {compact && <div className="sidebarHeader">
             <Link className="sidebarBrand" to="/admin/dashboard"><BusinessBrand organization={organization} compact /></Link>
             <button className="sidebarClose" type="button" aria-label="Close dashboard menu" onClick={closeDrawer}><X size={22} aria-hidden="true" /></button>

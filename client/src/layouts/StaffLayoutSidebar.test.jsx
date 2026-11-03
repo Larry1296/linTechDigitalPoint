@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 vi.mock("../core/api/client", async (original) => ({ ...(await original()), api: vi.fn() }));
 vi.mock("../modules/assistant/BusinessAssistant", () => ({ BusinessAssistant: () => null }));
 vi.mock("../modules/billing/SubscriptionBanner", () => ({ SubscriptionBanner: () => null }));
@@ -21,12 +21,23 @@ beforeEach(() => {
 
 const renderAt = async (path) => {
   await act(async () => { render(<MemoryRouter initialEntries={[path]}><StaffLayout /></MemoryRouter>); });
-  fireEvent.click(screen.getByRole("button", { name: "Open dashboard menu" }));
   return screen.getByRole("complementary");
 };
 
-it("keeps the sidebar hidden until the menu button opens it, and choosing a link hides it again", async () => {
+it("keeps the sidebar always open beside the page on a large screen, with no menu button", async () => {
   auth.modules = ["pos", "inventory"];
+  render(<MemoryRouter initialEntries={["/admin/pos"]}><StaffLayout /></MemoryRouter>);
+  await act(async () => {});
+  const sidebar = screen.getByRole("complementary");
+  expect(screen.queryByRole("button", { name: "Open dashboard menu" })).toBeNull();
+  fireEvent.click(within(sidebar).getByRole("link", { name: "Sales History" }));
+  expect(screen.getByRole("complementary")).toBeInTheDocument();
+});
+
+it("on phones and tablets keeps the sidebar hidden until the menu button opens it, and choosing a link hides it again", async () => {
+  auth.modules = ["pos", "inventory"];
+  window.matchMedia = (query) => ({ matches: query === "(max-width: 1023px)", addEventListener() {}, removeEventListener() {} });
+  onTestFinished(() => { window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} }); });
   render(<MemoryRouter initialEntries={["/admin/pos"]}><StaffLayout /></MemoryRouter>);
   await act(async () => {});
   expect(screen.queryByRole("complementary")).toBeNull();
