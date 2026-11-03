@@ -25,9 +25,18 @@ export function ProtectedPages() {
   useEffect(() => {
     void check();
     const relock = () => void check();
+    // The workspace locking closes every private page at once, here as on the server, so unlocking the workspace shows
+    // the page's PIN form, never a glimpse of the page: only its own PIN opens it again.
+    const closeAll = () => setState((current) => current && { ...current,
+      pages: Object.fromEntries(Object.entries(current.pages).map(([key, info]) => [key, { ...info, unlocked: false }])) });
     window.addEventListener("protected-locked", relock);
     window.addEventListener("session-unlocked", relock);
-    return () => { window.removeEventListener("protected-locked", relock); window.removeEventListener("session-unlocked", relock); };
+    window.addEventListener("workspace-locked", closeAll);
+    return () => {
+      window.removeEventListener("protected-locked", relock);
+      window.removeEventListener("session-unlocked", relock);
+      window.removeEventListener("workspace-locked", closeAll);
+    };
   }, [check]);
   const open = Boolean(state?.pages[page]?.unlocked);
   useIdleLock(open, lockNow);

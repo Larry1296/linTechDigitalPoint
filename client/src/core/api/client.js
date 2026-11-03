@@ -73,12 +73,13 @@ export function setActiveOrganization(id) {
 export function setWorkspaceLocked(locked) {
   workspaceLocked = locked;
   if (locked) clearAccessToken();
-  if (!locked) window.dispatchEvent(new Event("session-unlocked"));
+  window.dispatchEvent(new Event(locked ? "workspace-locked" : "session-unlocked"));
 }
 function notifyLocked(session) {
   if (!workspaceLocked) {
     workspaceLocked = true;
     clearAccessToken();
+    window.dispatchEvent(new Event("workspace-locked"));
     window.dispatchEvent(new CustomEvent("session-locked", { detail: session }));
   }
 }

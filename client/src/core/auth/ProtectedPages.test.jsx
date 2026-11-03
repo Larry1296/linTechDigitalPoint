@@ -117,3 +117,18 @@ it("keeps letters out of a new PIN as it is typed", async () => {
   fireEvent.change(pin, { target: { value: "48ab26" } });
   expect(pin).toHaveValue("4826");
 });
+
+it("closes an open private page the moment the workspace locks, so unlocking shows its PIN form, not the page", async () => {
+  let unlocked = true;
+  api.mockImplementation(async () => ({ protected: status({ pages: pages({ unlocked }) }) }));
+  page();
+  expect(await screen.findByText("M-Pesa records")).toBeInTheDocument();
+  unlocked = false;
+  // The server's answer is held back: the page must already be closed without waiting for it.
+  api.mockImplementation(() => new Promise(() => {}));
+  act(() => { window.dispatchEvent(new Event("workspace-locked")); });
+  expect(screen.queryByText("M-Pesa records")).toBeNull();
+  act(() => { window.dispatchEvent(new Event("session-unlocked")); });
+  expect(screen.queryByText("M-Pesa records")).toBeNull();
+  expect(screen.getByRole("heading", { name: "Enter your M-Pesa PIN" })).toBeInTheDocument();
+});
