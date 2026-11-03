@@ -27,8 +27,19 @@ export function AuthProvider({ children }) {
   const lockGeneration = useRef(0);
   const lastRefreshAttempt = useRef(0);
 
-  const lock = useCallback(() => {
+  // The length of the person's own lock PIN, known while the workspace is open, so a lock they make shows the PIN entry
+  // from its first moment instead of the password while the server confirms it.
+  const lockPin = useRef(null);
+  // known: the PIN length that opens this lock (null: only the password does, as when the session's 12 hours ended).
+  // Called without it (the Lock button, another tab locking), it is the person's own lock and their lock PIN opens it.
+  useEffect(() => {
+    const set = (event) => { lockPin.current = event.detail ?? null; };
+    window.addEventListener("lock-pin-set", set);
+    return () => window.removeEventListener("lock-pin-set", set);
+  }, []);
+  const lock = useCallback((known) => {
     if (access.current.locked) return;
+    setPinLength(typeof known === "number" || known === null ? known : lockPin.current);
     lockGeneration.current += 1;
     access.current.locked = true;
     setWorkspaceLocked(true);
@@ -44,7 +55,8 @@ export function AuthProvider({ children }) {
     if (state.server_time < access.current.serverTime) return;
     access.current.serverTime = state.server_time;
     access.current.deadline = Date.now() + (state.expires_at - state.server_time) * 1000;
-    if (state.locked || access.current.deadline <= Date.now()) { setPinLength(state.pin_length ?? null); lock(); return; }
+    if (state.locked || access.current.deadline <= Date.now()) { setPinLength(state.pin_length ?? null); lock(state.locked ? state.pin_length ?? null : null); return; }
+    if ("lock_pin_length" in state) lockPin.current = state.lock_pin_length ?? null;
     access.current.locked = false;
     setAuthState("authenticated");
     setSessionExpired(false);
@@ -90,6 +102,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setAuthState("signed_out");
     setPinLength(null);
+    lockPin.current = null;
     setLockError("");
     resetCsrfToken();
     setBusinessPresentation(null);
@@ -103,7 +116,7 @@ export function AuthProvider({ children }) {
       if (data.authenticated && data.session && !data.session.locked) data = await api("/api/v1/auth/refresh/", { method: "POST" });
       if (generation !== lockGeneration.current) return;
       if (data.authenticated) applyIdentity(data, allowUnlock);
-      else if (userRef.current) lock();
+      else if (userRef.current) lock(null);
       else clearIdentity();
     } finally { setLoading(false); }
   }, [applyIdentity, clearIdentity, lock]);
@@ -123,7 +136,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const expired = () => {
       // In the workspace an ended session locks the screen: the page stays as it is and the password signs in again.
-      if (userRef.current && inWorkspace) { lock(); return; }
+      if (userRef.current && inWorkspace) { lock(null); return; }
       clearIdentity();
       setSessionExpired(true);
       setAuthState("expired");
@@ -146,7 +159,7 @@ export function AuthProvider({ children }) {
     // It locks only when the person locks it, or when those 12 hours end (then the password starts it afresh).
     const tick = () => {
       if (access.current.locked || access.current.deadline == null) return;
-      if (access.current.deadline <= Date.now()) lock();
+      if (access.current.deadline <= Date.now()) lock(null);
       else if (accessNeedsRefresh() && Date.now() - lastRefreshAttempt.current >= 15000) {
         lastRefreshAttempt.current = Date.now();
         void refreshAccess().catch(() => {});
@@ -156,7 +169,7 @@ export function AuthProvider({ children }) {
       tick();
       try {
         const data = await api("/api/v1/auth/session/");
-        if (!data.authenticated) { lock(); return; }
+        if (!data.authenticated) { lock(null); return; }
         if (data.id !== userRef.current?.id) { window.location.assign("/login"); return; }
         if (data.session?.locked) updateAccess(data.session);
         else if (access.current.locked && allowUnlock) { setWorkspaceLocked(false); await refresh(true); }

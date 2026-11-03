@@ -156,7 +156,10 @@ def test_a_lock_the_person_made_opens_with_their_pin(businesses):
     assert client.post('/api/v1/auth/lock-pin/',{'password':'wrong','pin':'4826'},format='json').status_code==400
     assert set_pin(client,'1111').status_code==400
     assert set_pin(client,'12a4').status_code==400
+    assert client.get('/api/v1/auth/session/').json()['session']['lock_pin_length'] is None
     assert set_pin(client).json()['pin']['length']==4
+    # While open, the session says which PIN its lock will take, so the lock screen asks for it at once.
+    assert client.get('/api/v1/auth/session/').json()['session']['lock_pin_length']==4
     session=DeviceSession.objects.get(pk=data['session']['id'])
     expires=session.expires_at
     locked=client.post('/api/v1/auth/lock/')

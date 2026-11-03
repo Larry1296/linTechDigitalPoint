@@ -9,7 +9,8 @@ let deadline;
 let lockedByHand;
 let pinLength;
 const session = () => ({ expires_at: deadline, server_time: Date.now() / 1000, locked: lockedByHand || Date.now() / 1000 >= deadline,
-  idle_timeout: 0, warning_seconds: 0, pin_length: lockedByHand && Date.now() / 1000 < deadline ? pinLength : null });
+  idle_timeout: 0, warning_seconds: 0, pin_length: lockedByHand && Date.now() / 1000 < deadline ? pinLength : null,
+  ...(lockedByHand || Date.now() / 1000 >= deadline ? {} : { lock_pin_length: pinLength }) });
 const identity = () => ({ authenticated: true, id: 5, username: "long-business-owner", organization: { id: 7, name: "Shop" }, permissions: [], memberships: [], session: session() });
 const wrong = (message) => Object.assign(new Error(message), { status: 400, data: { session: session() } });
 beforeEach(() => {
@@ -61,6 +62,24 @@ it("locks only when locked by hand, hides the page and opens with the PIN, keepi
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(api).toHaveBeenCalledWith("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ pin: "4826" }) });
   expect(screen.getByLabelText("Unsaved notes")).toHaveValue("Draft receipt");
+});
+it("shows the PIN entry the moment the workspace locks, without waiting for the server or showing the password first", async () => {
+  await mount();
+  let answer;
+  api.mockImplementation((path) => (path.endsWith("/auth/lock/") ? new Promise((resolve) => { answer = resolve; }) : Promise.resolve(identity())));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Lock workspace" })); });
+  expect(screen.getByLabelText("PIN")).toBeInTheDocument();
+  expect(screen.queryByLabelText(/password/i)).toBeNull();
+  lockedByHand = true;
+  await act(async () => { answer({ session: session() }); });
+  expect(screen.getByLabelText("PIN")).toBeInTheDocument();
+});
+it("with no lock PIN set, a lock asks for the password", async () => {
+  pinLength = null;
+  await mount();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Lock workspace" })); });
+  expect(screen.queryByLabelText("PIN")).toBeNull();
+  expect(screen.getByText(/Set a lock PIN in Settings/)).toBeInTheDocument();
 });
 it("after too many wrong PINs asks for the password, which clears a wrong try", async () => {
   await mount();

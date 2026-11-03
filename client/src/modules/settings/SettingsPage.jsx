@@ -468,6 +468,8 @@ function PinSettings() {
     setBusy(true); setError(""); setSaved("");
     try {
       setData(await api("/api/v1/auth/lock-pin/", { method: "POST", body: JSON.stringify({ page: which, pin: form.get("pin"), password: form.get("password") }) }));
+      // The next lock opens with this PIN: the lock screen asks for it straight away.
+      if (!which) window.dispatchEvent(new CustomEvent("lock-pin-set", { detail: form.get("pin").length }));
       setSaved(`Saved ${name(which)}.`);
       formElement.reset();
     } catch (e) { setError(e.message); } finally { setBusy(false); }

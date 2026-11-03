@@ -43,6 +43,9 @@ def state(device):
         'warning_seconds':0, 'locked':locked, 'pin_length':None}
     if locked:
         data['pin_length'] = pin_length(device, now < deadline)
+    else:
+        # The PIN that will open this device when the person locks it, so the lock screen asks for it from the first moment.
+        data['lock_pin_length'] = own_lock_pin_length(device)
     return data
 
 
@@ -50,6 +53,14 @@ def pin_length(device, in_time=True):
     """The length of the PIN that opens this lock, or None when only the password does: the person locked it themselves
     (not the session's end), has a PIN, and has not used up the tries."""
     if not (device.locked_at and in_time and device.failed_unlocks < PIN_TRIES):
+        return None
+    from .protected_pages import lock_pin_of
+    pin = lock_pin_of(device.user)
+    return pin.length if pin else None
+
+
+def own_lock_pin_length(device):
+    if device.failed_unlocks >= PIN_TRIES:
         return None
     from .protected_pages import lock_pin_of
     pin = lock_pin_of(device.user)
