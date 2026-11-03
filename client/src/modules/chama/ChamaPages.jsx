@@ -536,34 +536,55 @@ function Fines({ chama, setChama, can }) {
   </section>;
 }
 
+// A reversed payment or payout is undone as if it never happened, so the lists show only what stands; the reversed
+// ones stay on record behind "Show reversed".
+function ReversedToggle({ count, shown, setShown }) {
+  if (!count) return null;
+  return <div className="actionRow"><button type="button" className="linkButton" onClick={() => setShown(!shown)}>
+    {shown ? "Hide reversed" : `Show reversed (${count})`}</button></div>;
+}
+
 function Record({ chama, setChama, can }) {
   const [giving, setGiving] = useState(false);
+  const [showReversed, setShowReversed] = useState(false);
+  const [showReversedOut, setShowReversedOut] = useState(false);
   const part = (a) => `${a.part === "FINE" ? "fine of" : ""} ${date(a.period_date)} ${money(a.amount)}`.trim();
+  const payments = chama.payments.filter((p) => showReversed || !p.reversed_at);
+  const payouts = chama.payouts.filter((p) => showReversedOut || !p.reversed_at);
+  const latestRound = Math.max(0, ...chama.payouts.filter((p) => !p.reversed_at && p.round).map((p) => p.round));
   return <section aria-labelledby="record-heading">
     <h2 id="record-heading">Money paid in</h2>
-    {chama.payments.length ? <div className="trendTable"><table>
+    {payments.length ? <div className="trendTable"><table>
       <thead><tr><th>Date</th><th>Member</th><th>Amount</th><th>By</th><th>What it paid</th><th>Recorded by</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-      <tbody>{chama.payments.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
+      <tbody>{payments.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
         <td>{date(p.paid_on)}</td><th scope="row">{p.member}</th>
         <td>{money(p.amount)}{p.reversed_at && <small> · reversed ({p.reverse_reason})</small>}</td>
         <td>{methodName(p.method)}{p.reference && ` · ${p.reference}`}</td>
         <td>{p.allocations.map(part).join("; ")}</td><td>{p.recorded_by}</td>
         <td>{!p.reversed_at && can("chama.change_chama") && <ReverseButton path={`/api/v1/chama/payments/${p.id}/reverse/`}
-          title={`Reverse ${p.member}'s payment of ${money(p.amount)}?`} text="Use this only if the money never came in or was entered twice. They will owe it again." setChama={setChama} />}</td>
+          title={`Reverse ${p.member}'s payment of ${money(p.amount)}?`}
+          text={`Use this only if the money never came in or was entered twice. It is undone as if it never happened: the chama no longer holds it, ${p.member} owes what it paid again, and a fine for paying late comes back where the deadline has passed.`}
+          setChama={setChama} />}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>No payments recorded yet.</Empty>}
+    </table></div> : <Empty>{chama.payments.length ? "Every payment recorded has been reversed." : "No payments recorded yet."}</Empty>}
+    <ReversedToggle count={chama.payments.filter((p) => p.reversed_at).length} shown={showReversed} setShown={setShowReversed} />
     <h2>Money given out</h2>
     {chama.payout_mode === "SAVINGS" && can("chama.add_chamapayout") && (giving
       ? <PayoutForm chama={chama} setChama={setChama} onDone={() => setGiving(false)} />
       : <button type="button" onClick={() => setGiving(true)}>Give out money</button>)}
-    {chama.payouts.length ? <div className="trendTable"><table>
-      <thead><tr><th>Date</th><th>Given to</th><th>Amount</th><th>By</th><th>Turn</th><th>Recorded by</th></tr></thead>
-      <tbody>{chama.payouts.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
+    {payouts.length ? <div className="trendTable"><table>
+      <thead><tr><th>Date</th><th>Given to</th><th>Amount</th><th>By</th><th>Turn</th><th>Recorded by</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
+      <tbody>{payouts.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
         <td>{date(p.paid_on)}</td><th scope="row">{p.member}</th>
         <td>{money(p.amount)}{p.reversed_at && <small> · reversed ({p.reverse_reason})</small>}</td>
         <td>{methodName(p.method)}{p.reference && ` · ${p.reference}`}</td><td>{p.round || "—"}</td><td>{p.recorded_by}</td>
+        {/* Turns are reversed latest first, so only the latest turn given out can be. */}
+        <td>{!p.reversed_at && (!p.round || p.round === latestRound) && can("chama.change_chama") && <ReverseButton path={`/api/v1/chama/payouts/${p.id}/reverse/`}
+          title={`Reverse ${p.member}'s payout of ${money(p.amount)}?`}
+          text={`Use this only if the money was never given out. It is undone as if it never happened: the chama holds the money again${p.round ? ` and it becomes ${p.member}'s turn again` : ""}.`} setChama={setChama} />}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>Nothing given out yet.</Empty>}
+    </table></div> : <Empty>{chama.payouts.length ? "Every payout recorded has been reversed." : "Nothing given out yet."}</Empty>}
+    <ReversedToggle count={chama.payouts.filter((p) => p.reversed_at).length} shown={showReversedOut} setShown={setShowReversedOut} />
   </section>;
 }
 

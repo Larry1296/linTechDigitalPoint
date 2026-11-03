@@ -39,8 +39,12 @@ permissions by default. Managers, read-only staff and other roles get them only 
   turns can be chosen; each member receives once before anyone receives again. In listed order, an agreement lets
   a member go next out of order. When the members agree each turn, the money cannot be given out until the next
   receiver is recorded. The agreement is cleared once that turn is given out.
-- **Corrections.** Nothing is deleted. A payment or payout entered by mistake is reversed with a reason; reversing a
-  payment makes the member owe it again and re-applies the fine rule. Changes are written to the audit log.
+- **Corrections.** Nothing is deleted. A payment or payout entered by mistake is reversed with a reason, and is undone
+  as if it never happened. Reversing a payment takes its money out of what the chama holds, makes the member owe what
+  it paid again (contributions and fines), and re-applies the fine rule to each contribution it paid: one now unpaid
+  past its deadline is fined, and a fine it cancelled for being paid on time comes back. A payment whose money has
+  already been given out is reversed only after that payout. Reversed entries leave the money record's lists and
+  stay on record behind **Show reversed**. Changes are written to the audit log.
 
 ## API (`/api/v1/chama/`)
 

@@ -489,6 +489,9 @@ def _method(method, reference):
     return method, reference
 
 
+PAID_ON_TIME = "Paid on time; the payment was recorded after the deadline."
+
+
 @transaction.atomic
 def record_payment(*, chama, member_id, amount, paid_on, method, reference="", key, user):
     """Money from a member, shared out to their oldest unpaid contributions, then fines, then contributions ahead."""
@@ -539,26 +542,35 @@ def record_payment(*, chama, member_id, amount, paid_on, method, reference="", k
         due.refresh_from_db()
         if due.fine_amount > 0 and not due.fine_waived_at and not due.allocations.filter(part="FINE", payment__reversed_at__isnull=True).exists() \
                 and _paid_by_deadline(due) >= due.amount:
-            ChamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user,
-                                                      fine_waive_reason="Paid on time; the payment was recorded after the deadline.")
+            ChamaDue.objects.filter(pk=due.pk).update(fine_waived_at=timezone.now(), fine_waived_by=user, fine_waive_reason=PAID_ON_TIME)
     _log("CHAMA_PAYMENT", payment, user, chama=chama.name, member=member.full_name, amount=amount, method=method, reference=reference)
     return payment
 
 
 @transaction.atomic
 def reverse_payment(*, payment, user, reason):
-    """A payment recorded by mistake: the member owes it again, and the fine rule is applied again where late."""
-    sync(payment.chama)
+    """A payment recorded by mistake is undone as if it never happened: the chama no longer holds the money, the member
+    owes what it paid again (contributions and fines), and the fine rule is applied again to each contribution it paid,
+    so one now unpaid past its deadline is fined, and a fine it cancelled for being paid on time comes back. The record
+    stays, marked reversed with the reason."""
+    chama = sync(payment.chama)
     payment = ChamaPayment.objects.select_for_update().get(pk=payment.pk)
     if not str(reason or "").strip():
         raise ValidationError("Explain why the payment is being reversed.")
     if payment.reversed_at:
         return payment
+    left = held(chama) - payment.amount
+    if left < 0:
+        raise ValidationError(f"The chama holds only {held(chama):,.2f}: part of this payment has already been given out. "
+                              f"Reverse the payout that used it first, then this payment.")
     payment.reversed_at, payment.reverse_reason, payment.reversed_by = timezone.now(), str(reason).strip(), user
     payment.save(update_fields=["reversed_at", "reverse_reason", "reversed_by"])
-    due_ids = payment.allocations.filter(part="CONTRIBUTION").values_list("due_id", flat=True)
-    ChamaDue.objects.filter(pk__in=list(due_ids), fine_amount=0).update(fine_checked=False)
-    sync(payment.chama)
+    due_ids = list(payment.allocations.filter(part="CONTRIBUTION").values_list("due_id", flat=True))
+    for due in ChamaDue.objects.filter(pk__in=due_ids, fine_amount__gt=0, fine_waived_at__isnull=False, fine_waive_reason=PAID_ON_TIME):
+        if _paid_by_deadline(due) < due.amount:
+            ChamaDue.objects.filter(pk=due.pk).update(fine_waived_at=None, fine_waived_by=None, fine_waive_reason="")
+    ChamaDue.objects.filter(pk__in=due_ids, fine_amount=0).update(fine_checked=False)
+    sync(chama)
     _log("CHAMA_PAYMENT_REVERSED", payment, user, amount=payment.amount, reason=payment.reverse_reason)
     return payment
 

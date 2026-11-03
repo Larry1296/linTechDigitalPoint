@@ -205,3 +205,23 @@ it("removes a member who left or was added by mistake, and lets a member rejoin"
   await act(async () => { fireEvent.click(within(row("Peter Otieno")).getByRole("button", { name: "Rejoins" })); });
   expect(api).toHaveBeenCalledWith("/api/v1/chama/3/members/4/rejoin/", expect.objectContaining({ method: "POST" }));
 });
+
+it("reverses a payment as if it never happened: it leaves the money record, kept behind Show reversed", async () => {
+  const { ChamaDetailPage } = await import("./ChamaPages");
+  const { Route, Routes } = await import("react-router-dom");
+  user.permissions = ["chama.view_chama", "chama.change_chama"];
+  const reversed = { ...DETAIL, money: { ...DETAIL.money, held: "0", paid_in: "0" },
+    payments: [{ ...DETAIL.payments[0], reversed_at: "2026-10-09T10:00:00Z", reverse_reason: "Entered twice" }] };
+  api.mockImplementation(async (path) => (path === "/api/v1/chama/payments/7/reverse/" ? reversed : DETAIL));
+  render(<MemoryRouter initialEntries={["/admin/chama/3"]}><Routes><Route path="/admin/chama/:id" element={<ChamaDetailPage />} /></Routes></MemoryRouter>);
+  await screen.findByRole("heading", { name: "Umoja" });
+  fireEvent.click(screen.getByRole("button", { name: "Money record" }));
+  askForm.mockResolvedValueOnce({ reason: "Entered twice" });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Reverse" })); });
+  expect(askForm.mock.calls[0][0].text).toMatch(/as if it never happened/);
+  expect(api).toHaveBeenCalledWith("/api/v1/chama/payments/7/reverse/", expect.objectContaining({ body: JSON.stringify({ reason: "Entered twice" }) }));
+  expect(screen.queryByText("M-Pesa · SK1")).toBeNull();
+  expect(screen.getByText("Every payment recorded has been reversed.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show reversed (1)" }));
+  expect(screen.getByText(/reversed \(Entered twice\)/)).toBeInTheDocument();
+});

@@ -246,6 +246,47 @@ def test_fines_can_be_waived_with_a_reason_and_payments_reversed(on):
     assert undone.status_code == 200 and Decimal(undone.json()["money"]["held"]) == 0
 
 
+def test_reversing_a_payment_undoes_it_as_if_it_never_happened(on):
+    org, owner, client = business(modules=["chama"])
+    chama = make(org, owner)
+    with organization_context(org):
+        john = chama.members.get(full_name="John Kamau")
+    on(TODAY + timedelta(days=4))
+    board(org, chama)  # nothing recorded in time: John is fined
+    with organization_context(org):
+        # Paid within the grace days but recorded late: the fine is cancelled.
+        payment = services.record_payment(chama=chama, member_id=john.pk, amount="500", paid_on=TODAY + timedelta(days=1),
+                                          method="CASH", key="j1", user=owner)
+        assert ChamaDue.objects.get(member=john, period_date=TODAY).fine_waived_at is not None
+    undone = client.post(f"/api/v1/chama/payments/{payment.pk}/reverse/", {"reason": "Entered by mistake"}, format="json")
+    assert undone.status_code == 200, undone.content
+    data = undone.json()
+    row = next(m for m in data["members"] if m["full_name"] == "John Kamau")
+    # The money is gone from the chama and John owes this week again, with its fine back.
+    assert Decimal(data["money"]["held"]) == 0 and Decimal(data["money"]["paid_in"]) == 0 and Decimal(row["paid_in"]) == 0
+    assert Decimal(row["unpaid"]) == Decimal("500") and Decimal(row["fines_owed"]) == Decimal("50")
+    with organization_context(org):
+        due = ChamaDue.objects.get(member=john, period_date=TODAY)
+        assert due.fine_waived_at is None and due.fine_amount == Decimal("50")
+    # The record stays, marked reversed with the reason; reversing it again changes nothing.
+    assert data["payments"][0]["reversed_at"] and data["payments"][0]["reverse_reason"] == "Entered by mistake"
+    assert client.post(f"/api/v1/chama/payments/{payment.pk}/reverse/", {"reason": "again"}, format="json").status_code == 200
+
+
+def test_a_payment_already_given_out_is_reversed_only_after_its_payout(on):
+    org, owner, client = business(modules=["chama"])
+    chama = make(org, owner)
+    with organization_context(org):
+        larry, mary, john = chama.members.all()
+        paid = [services.record_payment(chama=chama, member_id=m.pk, amount="500", paid_on=None, method="CASH", key=f"g{m.pk}", user=owner)
+                for m in (larry, mary, john)]
+        payout = services.record_payout(chama=chama, amount="1500", method="CASH", key="out", user=owner)
+    blocked = client.post(f"/api/v1/chama/payments/{paid[1].pk}/reverse/", {"reason": "Mistake"}, format="json")
+    assert blocked.status_code == 400 and "given out" in blocked.content.decode()
+    assert client.post(f"/api/v1/chama/payouts/{payout.pk}/reverse/", {"reason": "Mistake"}, format="json").status_code == 200
+    assert client.post(f"/api/v1/chama/payments/{paid[1].pk}/reverse/", {"reason": "Mistake"}, format="json").status_code == 200
+
+
 # --- Turns and money given out ------------------------------------------------------------------------------------
 
 def test_members_receive_the_money_in_turn_order(on):
