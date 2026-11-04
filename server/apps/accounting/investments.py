@@ -464,20 +464,25 @@ def business_places():
              "label": row["label"], "expected": row["expected"]} for row in places() if row["expected"] > 0]
 
 
+PUT = "business-money-put"
+
+
 @transaction.atomic
 def business_money_in(*, investment, user, amounts, key, occurred_on=None):
-    """The business's money already in the investment, recorded as the owner's own: ``amounts`` {place: amount} of what
-    the app expects in the cash drawer, till, bank or other money is really in the fund. Each is recorded as the
-    business's money put in from that place and, on the same day, as that much of the owner's own taken out, so the
-    fund's value stays the same, the place no longer expects the money, and the business's money in the investment is
-    right. Sales and profit do not change. Undoing either half undoes both."""
+    """The business's money put into the investment from several places at once: ``amounts`` {place: amount}, each up
+    to what the app expects in that cash drawer, till, bank or other money. Each is a deposit of the business's money
+    from that place, like any other: the place goes down, the fund goes up by exactly that much and the business's money
+    in it with it. Nothing is taken off the owner's own money. Sales and profit do not change.
+
+    (Until 2026-11-04 this recorded money already in the fund as a pair, in as the business's and out as the owner's
+    own, which left the total unchanged; those pairs stay as they were and switch_half() still knows them.)"""
     from .money_check import _drawer, _place_label, expected
     lock_business()
-    if InvestmentMovement.objects.filter(idempotency_key__startswith=f"{SWITCH}:{key}:").exists():
+    if InvestmentMovement.objects.filter(idempotency_key__startswith=f"{PUT}:{key}:").exists():
         return investment
     rows = [(str(name).upper(), _amount(amount)) for name, amount in (amounts or {}).items() if amount not in (None, "", 0, "0")]
     if not rows:
-        raise ValidationError("Enter how much of the business's money from each place is in the investment.")
+        raise ValidationError("Enter how much of the business's money you put in from each place.")
     for name, amount in rows:
         place, unit = place_key(name)
         if place not in BUSINESS:
@@ -485,17 +490,10 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
         has = expected(place, _drawer(place, unit))[0]
         if amount > has:
             raise ValidationError(f"{_place_label(place, unit)} only has {has:,.2f} of the business's money as far as the app knows.")
-    total = sum((amount for _, amount in rows), Decimal("0"))
-    if total > own_value(investment):
-        raise ValidationError(f"{investment.name} holds {own_value(investment):,.2f} recorded as your own money, so no more than that "
-                              "can be the business's. Record any money put in that is missing first.")
-    note = "The business's money already in the fund, first recorded as your own"
     for place_name, amount in rows:
         place, unit = place_key(place_name)
         move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place, unit=unit,
-             key=f"{SWITCH}:{key}:business:{place_name}", occurred_on=occurred_on, note=note)
-        move(investment=investment, user=user, kind=InvestmentMovement.WITHDRAWAL, amount=amount, source=OWNER,
-             key=f"{SWITCH}:{key}:own:{place_name}", occurred_on=occurred_on, note=note)
+             key=f"{PUT}:{key}:{place_name}", occurred_on=occurred_on)
     return investment
 
 

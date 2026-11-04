@@ -590,7 +590,9 @@ def test_money_first_recorded_as_the_owners_own_is_marked_as_the_businesss_from_
     assert money()["MPESA"] == D("20000")
 
 
-def test_the_businesss_money_already_in_the_fund_is_recorded_in_one_step_and_undone_together(shop):
+def test_the_businesss_money_put_in_from_several_places_raises_the_fund_by_exactly_that_much(shop):
+    """Every amount put in is a real deposit: nothing takes it back off the owner's own money, so the fund's value is
+    exactly what was invested (2026-11-04: a 1,000 recorded this way once left the fund 1,000 short of the statement)."""
     client, org, owner, *_ = shop
     mmf = _mmf(client)
     with organization_context(org):
@@ -603,18 +605,19 @@ def test_the_businesss_money_already_in_the_fund_is_recorded_in_one_step_and_und
     sweep = lambda amounts, key="k1": client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": amounts, "idempotency_key": key}, format="json")
     assert sweep({"MPESA": "31000"}).status_code == 400  # more than the till has
     row = sweep({"MPESA": "30000", "CASH": "8000"}).json()
-    # The fund's value is the same; 38,000 of it is the business's, the rest the owner's.
-    assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("50000"), D("38000"), D("12000"))
+    # The fund goes up by the 38,000 put in, all of it the business's; the owner's own 50,000 is untouched.
+    assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("88000"), D("38000"), D("50000"))
+    assert not any(m["kind"] == "WITHDRAWAL" for m in row["movements"]) and not any(m["switch"] for m in row["movements"])
     money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
     assert money["MPESA"] == 0 and money["CASH"] == 0
     accounts, _, pl = _books(org)
     assert accounts["1400"]["balance"] == D("38000") and pl["net_profit_before_tax"] == 0
     assert sweep({"MPESA": "30000", "CASH": "8000"}).status_code == 201  # the same click again records nothing more
-    assert D(str(client.get("/api/v1/accounting/investments/").json()["shop_value"])) == D("38000")
-    # Undoing either half undoes both.
-    own_half = next(m for m in row["movements"] if m["kind"] == "WITHDRAWAL" and m["source"] == "OWNER" and D(str(m["amount"])) == D("8000"))
-    back = client.post(f"/api/v1/accounting/investments/movements/{own_half['id']}/undo/", {"reason": "test"}, format="json").json()
-    assert (D(str(back["value"])), D(str(back["shop_value"])), D(str(back["owner_value"]))) == (D("50000"), D("30000"), D("20000"))
+    assert D(str(client.get("/api/v1/accounting/investments/").json()["total_value"])) == D("88000")
+    # Undoing one deposit takes only that one back out, to its place.
+    cash = next(m for m in row["movements"] if m["kind"] == "DEPOSIT" and m["source"] == "CASH")
+    back = client.post(f"/api/v1/accounting/investments/movements/{cash['id']}/undo/", {"reason": "test"}, format="json").json()
+    assert (D(str(back["value"])), D(str(back["shop_value"])), D(str(back["owner_value"]))) == (D("80000"), D("30000"), D("50000"))
     money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
     assert money["CASH"] == D("8000")
 
@@ -636,7 +639,7 @@ def test_with_a_cash_drawer_for_each_part_the_businesss_money_in_the_fund_comes_
     row = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH-SHOP": "4471", "CASH-CYBER": "900", "MPESA": "309"},
                       "idempotency_key": "drawers"}, format="json")
     assert row.status_code == 201, row.content
-    assert (D(str(row.json()["shop_value"])), D(str(row.json()["owner_value"]))) == (D("5680"), D("4320"))
+    assert (D(str(row.json()["shop_value"])), D(str(row.json()["owner_value"]))) == (D("5680"), D("10000"))
     assert client.get("/api/v1/accounting/investments/").json()["business_places"] == []
     # Marking a deposit names the drawer too.
     with organization_context(org):

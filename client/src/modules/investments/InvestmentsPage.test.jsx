@@ -340,7 +340,7 @@ it("shows each statement next to the interest the app predicted for it", async (
   expect(row).toHaveTextContent("− KSh 17.67");
 });
 
-it("records the business's money already in the fund in one step, filled in from what each place expects", async () => {
+it("puts the business's money in from several places in one step, filled in from what each place expects", async () => {
   const listed = listing(mmf);
   api.mockImplementation(async (path, options) => {
     if (path === "/api/v1/accounting/investments/") return { ...listed, business_in_places: "9000.00",
@@ -349,11 +349,12 @@ it("records the business's money already in the fund in one step, filled in from
   });
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  fireEvent.click(within(card).getByRole("button", { name: "The business's money is in here" }));
-  const form = within(card).getByRole("form", { name: "The business's money is in here" });
+  expect(screen.queryByRole("status", { name: "Business money not marked" })).not.toBeInTheDocument();
+  fireEvent.click(within(card).getByRole("button", { name: "Put in the business's money" }));
+  const form = within(card).getByRole("form", { name: "Put in the business's money" });
   expect(within(form).getByLabelText(/From lipa na m-pesa till/)).toHaveValue(6000);
-  expect(within(form).getByLabelText(/From cash in the drawer/)).toHaveValue(2000);  // only 8,000 is recorded as the owner's own
-  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record the business's money" })); });
+  expect(within(form).getByLabelText(/From cash in the drawer/)).toHaveValue(3000);  // all of it, not limited by the owner's own money
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Put it in" })); });
   const [, options] = api.mock.calls.find(([p]) => p.endsWith("/business-money/"));
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ amounts: { MPESA: "6000", "CASH-SHOP": "2000" } }));
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ amounts: { MPESA: "6000", "CASH-SHOP": "3000" } }));
 });

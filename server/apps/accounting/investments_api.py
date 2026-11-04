@@ -208,7 +208,7 @@ class InvestmentClaimView(APIView):
 
 
 class InvestmentBusinessMoneyView(APIView):
-    """The business's money already in the investment, recorded as the owner's own: how much from each place."""
+    """The business's money put into the investment: how much from each place, each a real deposit."""
     permission_classes = [HasLinTechPermission]
     permission_required = "accounting.add_investmentmovement"
 
@@ -216,7 +216,7 @@ class InvestmentBusinessMoneyView(APIView):
         amounts = request.data.get("amounts")
         key = str(request.data.get("idempotency_key") or "")[:60]
         if not isinstance(amounts, dict) or not key:
-            return Response({"detail": "Enter how much of the business's money from each place is in the investment."}, status=400)
+            return Response({"detail": "Enter how much of the business's money you put in from each place."}, status=400)
         occurred = request.data.get("occurred_on") or None
         from datetime import date
         try:

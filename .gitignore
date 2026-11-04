@@ -37,3 +37,6 @@ client/test-results/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Live database link (holds the password)
+server/.external_db
