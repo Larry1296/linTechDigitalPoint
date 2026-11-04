@@ -605,10 +605,9 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       </header>
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
-        <div><dt>Recorded value</dt><dd><strong>{money(investment.value)}</strong></dd></div>
+        <div><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>everything in it, interest left in included; should match its statement</small></dd></div>
         {Number(investment.value) > 0 && <div><dt>Whose it is</dt>
           <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}</dd></div>}
-        <div><dt>Total invested</dt><dd><strong>{money(investment.invested)}</strong> <small>what you put in, less what you took out; interest comes on top</small></dd></div>
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
@@ -733,10 +732,8 @@ export function InvestmentsPage() {
         {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
           <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
             <small>Goes up every day as interest builds</small></article>}
-        <article><span>Total invested</span><strong>{money(data.invested)}</strong>
-          <small>Put in less taken out, the business's and yours together; interest comes on top</small></article>
-        <article><span>Recorded value, with interest</span><strong>{money(data.total_value)}</strong>
-          <small>What is in the fund: total invested plus interest, less fees; should match its statement</small></article>
+        <article><span>Total invested</span><strong>{money(data.total_value)}</strong>
+          <small>{money(data.invested)} put in (less taken out) + {money(data.interest_earned)} interest left in, the business's and yours together; should match the statement</small></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
           <small>Added to the business's profit</small></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>

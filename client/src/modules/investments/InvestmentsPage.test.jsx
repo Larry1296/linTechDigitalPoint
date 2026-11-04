@@ -44,16 +44,16 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   // Whose the money is: the business's (put in from its places, plus all the interest) and the owner's own.
   expect(screen.getByText("The business's money").nextSibling).toHaveTextContent("KSh 12,150");
   expect(screen.getByText("Your own money").nextSibling).toHaveTextContent("KSh 8,000");
-  expect(screen.getByText("Recorded value, with interest").nextSibling).toHaveTextContent("KSh 20,150");
   const metrics = screen.getByText("Total invested", { selector: ".investMetrics span" }).closest("div");
-  expect(within(metrics).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
+  expect(within(metrics).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,150");  // interest left in is invested too
+  expect(metrics).toHaveTextContent("KSh 20,000 put in (less taken out) + KSh 150 interest left in");
   // No business share of interest: all of it is the business's profit.
   expect(screen.queryByText("From the shop")).toBeNull();
   expect(screen.queryByText(/Business's share of interest|Business's money in/)).toBeNull();
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
   expect(screen.getByText("Added to the business's profit")).toBeInTheDocument();
-  expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,000");
-  expect(within(card).getByText("Recorded value").nextSibling).toHaveTextContent("KSh 20,150");
+  expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,150");
+  expect(within(card).queryByText("Recorded value")).not.toBeInTheDocument();
   expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business KSh 12,150 · Your own KSh 8,000");
   expect(within(card).getByText("Interest earned").nextSibling).toHaveTextContent("KSh 150");
   const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row");
