@@ -547,6 +547,10 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
   // Money already in the fund marked as the business's is kept as a pair (in as the business's, out as yours) that does
   // not change the total: it shows as one line, so the history lists only what really went in or out of the fund.
   const history = (showUndone ? investment.movements : investment.movements.filter((m) => !m.reversed_at)).filter((m) => m.switch !== "own");
+  // Only the latest few entries, so the card stays short; the rest open with one click.
+  const [showAll, setShowAll] = useState(false);
+  const RECENT = 5;
+  const shown = showAll ? history : history.slice(0, RECENT);
   const [error, setError] = useState("");
   const card = useRef(null);
   useEffect(() => {
@@ -643,7 +647,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
         <table className="loanRepayments stackTable">
           <caption>History</caption>
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>From / to</th><th>Reference</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-          <tbody>{history.map((m) => (
+          <tbody>{shown.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
               <td data-label="Date">{date(m.occurred_on)}</td>
               <td data-label="What">{m.switch ? "Marked as the business's money" : m.charge_of ? "Instant withdrawal charge" : KIND[m.kind]}
@@ -661,9 +665,11 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           ))}</tbody>
         </table>
       )}
-      {undoneCount > 0 && <div className="actionRow">
-        <button type="button" className="linkButton" onClick={() => setShowUndone(!showUndone)}>
-          {showUndone ? "Hide undone entries" : `Show undone entries (${undoneCount})`}</button>
+      {(history.length > RECENT || undoneCount > 0) && <div className="actionRow">
+        {history.length > RECENT && <button type="button" className="linkButton" onClick={() => setShowAll(!showAll)}>
+          {showAll ? "Show only the latest" : `Show all history (${history.length})`}</button>}
+        {undoneCount > 0 && <button type="button" className="linkButton" onClick={() => setShowUndone(!showUndone)}>
+          {showUndone ? "Hide undone entries" : `Show undone entries (${undoneCount})`}</button>}
       </div>}
       {investment.rates.length > 0 && (
         <details className="investRates">

@@ -398,3 +398,15 @@ it("puts the business's money in from several places in one step, filled in from
   const [, options] = api.mock.calls.find(([p]) => p.endsWith("/business-money/"));
   expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ amounts: { MPESA: "6000", "CASH-SHOP": "3000" } }));
 });
+
+it("keeps the card short: only the latest five entries until all the history is asked for", async () => {
+  const listed = listing(mmf);
+  const movements = Array.from({ length: 8 }, (_, i) => ({ id: 100 + i, kind: "DEPOSIT", amount: "1000", occurred_on: `2026-10-${String(20 - i).padStart(2, "0")}`, source: "OWNER", whose: "OWNER" }));
+  api.mockImplementation(async (path) => (path === "/api/v1/accounting/investments/" ? { ...listed, investments: [{ ...listed.investments[0], movements }] } : {}));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  const history = within(card).getByRole("table", { name: "History" });
+  expect(within(history).getAllByRole("row")).toHaveLength(6);  // the header and five entries
+  fireEvent.click(within(card).getByRole("button", { name: "Show all history (8)" }));
+  expect(within(history).getAllByRole("row")).toHaveLength(9);
+});
