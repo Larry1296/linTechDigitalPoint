@@ -735,7 +735,7 @@ export function InvestmentsPage() {
         <article><span>Total invested</span><strong>{money(data.total_value)}</strong>
           <small>{money(data.invested)} put in (less taken out) + {money(data.interest_earned)} interest left in, the business's and yours together; should match the statement</small></article>
         <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
-          <small>Added to the business's profit</small></article>
+          <small>Added to the business's profit, and invested with the rest until you take money out</small></article>
         <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
         {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
           <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}

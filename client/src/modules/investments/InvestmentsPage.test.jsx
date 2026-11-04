@@ -51,7 +51,7 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(screen.queryByText("From the shop")).toBeNull();
   expect(screen.queryByText(/Business's share of interest|Business's money in/)).toBeNull();
   expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
-  expect(screen.getByText("Added to the business's profit")).toBeInTheDocument();
+  expect(screen.getByText("Added to the business's profit, and invested with the rest until you take money out")).toBeInTheDocument();
   expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,150");
   expect(within(card).queryByText("Recorded value")).not.toBeInTheDocument();
   expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business KSh 12,150 · Your own KSh 8,000");
