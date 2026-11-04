@@ -644,7 +644,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
         {canMove ? " with “Monthly check” below." : ". Ask someone who manages investments to do it."}</p>}
       {investment.notes && <p className="loanNote">{investment.notes}</p>}
       {history.length > 0 && (
-        <table className="loanRepayments stackTable">
+        <table className="loanRepayments stackTable investHistory">
           <caption>History</caption>
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>From / to</th><th>Reference</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
           <tbody>{shown.map((m) => (
@@ -653,11 +653,11 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
               <td data-label="What">{m.switch ? "Marked as the business's money" : m.charge_of ? "Instant withdrawal charge" : KIND[m.kind]}
                 {m.speed && <small> · {m.speed === "INSTANT" ? "instant" : "standard, to the bank"}</small>}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
-              <td data-label="Amount">{money(m.amount)}{m.switch && <small> · already in it, the total does not change</small>}
+              <td data-label="Amount">{money(m.amount)}{m.switch && <small> · already in it</small>}
                 {m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
-              <td data-label="From / to">{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? `Business · ${placeName(m.source)}` : "Business")
+              <td data-label="From / to">{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? <>Business<small> · {placeName(m.source)}</small></> : "Business")
                 : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
-              <td data-label="Reference">{m.reference || m.note || "—"}</td>
+              <td data-label="Reference"><span className="investRef" title={m.reference || m.note || undefined}>{m.reference || m.note || "—"}</span></td>
               <td className="stackActions">{!m.reversed_at && canCorrect && <div className="actionRow">
                 {m.kind === "DEPOSIT" && m.whose !== BUSINESS && !m.purchase && <button type="button" className="secondary" onClick={() => void markBusiness(m)}>It was the business's money</button>}
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>

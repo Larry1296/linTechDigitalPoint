@@ -2401,8 +2401,26 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .loanSummary p { margin: 0; font-size: 17px; }
 .loanSummary button { margin: 0; }
 .loanFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; }
-.loanList { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.loanCard { padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+/* minmax(0, 1fr) and min-width: 0: a card is never wider than the page, whatever is in it; long references and
+   rows of buttons wrap inside it, so it keeps the same margin on both sides as every other card. */
+.loanList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.loanCard { min-width: 0; max-width: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+.loanCard .loanRepayments { width: 100%; }
+.loanCard .loanRepayments td { overflow-wrap: anywhere; }
+.loanCard .actionRow { flex-wrap: wrap; }
+/* Each note in a card's tables goes on a small line under its figure, and the history's buttons stack, so every line is short and the
+   table fits the card instead of scrolling. */
+#root .loanCard .loanRepayments td small { display: block; }
+@media (max-width: 900px) {
+  /* Each row is a labelled card here (label left, figure right): a note drops under the figure instead of beside it. */
+  #root .loanCard .loanRepayments td { flex-wrap: wrap; }
+  #root .loanCard .loanRepayments td small { flex-basis: 100%; text-align: right; }
+}
+@media (min-width: 901px) {
+  #root .investHistory .stackActions .actionRow { flex-direction: column; align-items: stretch; gap: 6px; }
+}
+/* A long reference or note is cut short with "…" (the whole text shows on hover or a long press), so the history fits the card. */
+#root .loanCard .investRef { display: inline-block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .loanCard.overdue { border-color: var(--danger, #b42318); border-left-width: 4px; }
 .loanCardHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 8px; }
 .loanCardHead h3 { margin: 0; font-size: 17px; }

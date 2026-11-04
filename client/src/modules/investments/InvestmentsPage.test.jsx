@@ -217,8 +217,8 @@ it("shows money marked as the business's as one line that does not change the to
   const rows = within(within(card).getByRole("table", { name: "History" })).getAllByRole("row").slice(1);
   expect(rows).toHaveLength(mmf.movements.length + 1);
   expect(rows[0]).toHaveTextContent("Marked as the business's money");
-  expect(rows[0]).toHaveTextContent("already in it, the total does not change");
-  expect(rows[0]).toHaveTextContent("Business · bank");
+  expect(rows[0]).toHaveTextContent("already in it");
+  expect(rows[0]).toHaveTextContent("Business · bank");  // the place on a small line under "Business"
 });
 
 it("removes an investment recorded by mistake, undoing everything in it", async () => {
