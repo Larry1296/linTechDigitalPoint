@@ -9,6 +9,7 @@ import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InterestCalculator } from "./InterestCalculator";
+import { InvestmentAnalysis } from "./InvestmentAnalysis";
 import { TextArea } from "../../components/forms/TextBox";
 
 // Each time money goes in or comes out, the owner says whose it is. The business's money comes from (or goes back to)
@@ -153,6 +154,10 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
   const holds = business ? investment.shop_value : investment.owner_value;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Math.max(Number(holds) || 0, 0))));
   const [place, setPlace] = useState("MPESA");
+  // Money taken out: standard (to the bank, free) or instant (straight away, for a charge that leaves the fund too).
+  const [speed, setSpeed] = useState("");
+  const [charge, setCharge] = useState("100");
+  const instant = !putIn && speed === "INSTANT";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const choose = (next) => {
@@ -166,15 +171,18 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
     const title = business
       ? (putIn ? `Move ${sum} of the business's money from the ${placeName(place)} into ${investment.name}?` : `Take ${sum} of the business's money out of ${investment.name} back to the ${placeName(place)}?`)
       : (putIn ? `Add ${sum} of your own money to ${investment.name}?` : `Take ${sum} of your own money out of ${investment.name} to you?`);
-    const text = business
+    const text = (business
       ? `It stays the business's money${putIn ? ", kept in the investment" : ""}: the ${placeName(place)} ${putIn ? "goes down" : "goes up"} by ${sum}, and the business's money, sales and profit stay as they are.`
-      : "It is not the business's money, so nothing in the business changes.";
+      : "It is not the business's money, so nothing in the business changes.")
+      + (instant ? ` Instant: the ${money(charge)} charge also leaves ${investment.name}, from your own money, so it goes down by ${money(Number(values.amount) + Number(charge))}.`
+        : !putIn ? " Standard, to the bank: no charge." : "");
     if (!(await confirmAction({ title, text, confirmButtonText: putIn ? "Record money added" : "Record money taken out" }))) return;
     setBusy(true);
     setError("");
     try {
       await api(`/api/v1/accounting/investments/${investment.id}/move/`, { method: "POST",
-        body: JSON.stringify({ ...values, kind, source: whose, ...(business ? { place } : {}), idempotency_key: crypto.randomUUID() }) });
+        body: JSON.stringify({ ...values, kind, source: whose, ...(business ? { place } : {}), ...(putIn ? {} : { speed, charge: instant ? charge : null }),
+          idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -204,6 +212,16 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
         <p className="muted">{business
           ? `Still the business's money while it is in the investment, so its money and each part's figures stay the same. ${APART}`
           : `Not the business's money: nothing in the business changes. ${APART}`}</p>
+        {!putIn && <fieldset className="investWhose">
+          <legend>How was it taken out?</legend>
+          <label><input type="radio" name="speed" value="STANDARD" checked={speed === "STANDARD"} onChange={() => setSpeed("STANDARD")} required /> Standard, to the bank
+            <small> · free, takes a day or two</small></label>
+          <label><input type="radio" name="speed" value="INSTANT" checked={instant} onChange={() => setSpeed("INSTANT")} /> Instant
+            <small> · straight away, for a charge</small></label>
+        </fieldset>}
+        {instant && <FormField label={`Instant charge (${businessCurrency()})`} name="charge" type="number" min="0" step="0.01" value={charge}
+          onChange={(event) => setCharge(event.target.value)} required />}
+        {instant && <p className="muted">The charge leaves {investment.name} too, paid from your own money in it: the fund goes down by the amount and the charge.</p>}
         <FormField label={putIn ? "Date the money went in" : "Date the money came out"} name="occurred_on" type="date" max={today()} defaultValue={today()} required />
         {putIn && <p className="muted">Already invested earlier? Choose the day it really went in: interest is worked out from that day.</p>}
         <FormField label="Transaction code or reference (optional)" name="reference" maxLength={120} autoComplete="off" />
@@ -373,9 +391,8 @@ function DayByDay({ investment }) {
   return (
     <details className="investDaily">
       <summary>Day by day since {date(days[days.length - 1].date)}: {money(days[0].invested)} invested, worth {money(days[0].value)} today</summary>
-      <table className="loanRepayments stackTable">
-        <caption className="visuallyHidden">{investment.name} day by day</caption>
-        <thead><tr><th>Date</th><th>Invested</th><th>Interest that day</th><th>Interest so far</th><th>Total</th></tr></thead>
+      <table className="loanRepayments stackTable" aria-label={`${investment.name} day by day`}>
+                <thead><tr><th>Date</th><th>Invested</th><th>Interest that day</th><th>Interest so far</th><th>Total</th></tr></thead>
         <tbody>{days.map((d) => (
           <tr key={d.date}>
             <td data-label="Date">{date(d.date)}</td>
@@ -605,8 +622,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       </header>
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
-        <div><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>everything in it, interest left in included; should match its statement</small></dd></div>
-        {Number(investment.value) > 0 && <div><dt>Whose it is</dt>
+        <div className="loanFigureWide"><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>interest left in included; should match its statement</small></dd></div>
+        {Number(investment.value) > 0 && <div className="loanFigureWide"><dt>Whose it is</dt>
           <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}</dd></div>}
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
@@ -629,7 +646,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           <tbody>{history.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
               <td data-label="Date">{date(m.occurred_on)}</td>
-              <td data-label="What">{m.switch ? "Marked as the business's money" : KIND[m.kind]}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
+              <td data-label="What">{m.switch ? "Marked as the business's money" : m.charge_of ? "Instant withdrawal charge" : KIND[m.kind]}
+                {m.speed && <small> · {m.speed === "INSTANT" ? "instant" : "standard, to the bank"}</small>}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
               <td data-label="Amount">{money(m.amount)}{m.switch && <small> · already in it, the total does not change</small>}
                 {m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
@@ -765,6 +783,7 @@ export function InvestmentsPage() {
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
           canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
         : <Empty>No investment accounts yet. Add your MMF to start tracking what you put in, take out and earn.</Empty>}
+      {data.investments.length > 0 && <InvestmentAnalysis investments={data.investments} earningYear={Number(earning?.year) || 0} />}
       <InterestCalculator defaultRate={ratedAt != null ? Number(ratedAt) : ""} defaultTax={rated ? Number(rated.tax_rate) : 15} rateSource={ratedFrom} />
     </>
   );

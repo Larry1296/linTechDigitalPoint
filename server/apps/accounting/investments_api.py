@@ -60,7 +60,7 @@ def investment_row(investment):
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
                            "recorded_by": _name(m.created_by), "reversed_at": m.reversed_at, "reverse_reason": m.reverse_reason,
                            "purchase": _purchase(m.purchase) if m.purchase_id else None,
-                           "switch": switch_half(m)}
+                           "switch": switch_half(m), "speed": m.speed, "charge_of": m.charge_of_id}
                           for m in investment.movements.select_related("created_by", "purchase__receipt", "purchase__supplier")
                           .order_by("-occurred_on", "-pk")]}
 
@@ -147,6 +147,9 @@ class MoveInput(serializers.Serializer):
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     note = serializers.CharField(required=False, allow_blank=True, default="")
     session_id = serializers.IntegerField(required=False, allow_null=True)
+    # Money taken out: STANDARD (to the bank, free) or INSTANT, with its charge (100 when not given).
+    speed = serializers.ChoiceField(choices=["", "STANDARD", "INSTANT"], required=False, default="")
+    charge = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
     idempotency_key = serializers.CharField(max_length=100)
 
 
@@ -161,7 +164,8 @@ class InvestmentMoveView(APIView):
         investment = get_object_or_404(Investment, pk=pk)
         move(investment=investment, user=request.user, kind=d["kind"], amount=d["amount"], source=d["source"], place=d.get("place"),
              unit=d["unit"] or None, key=d["idempotency_key"],
-             occurred_on=d.get("occurred_on"), reference=d["reference"], note=d["note"], session_id=d.get("session_id"))
+             occurred_on=d.get("occurred_on"), reference=d["reference"], note=d["note"], session_id=d.get("session_id"),
+             speed=d["speed"], charge=d.get("charge"))
         return Response(investment_row(Investment.objects.get(pk=pk)), status=201)
 
 

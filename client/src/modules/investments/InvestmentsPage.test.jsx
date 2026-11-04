@@ -119,9 +119,49 @@ it("takes out the business's money back to a place, or the owner's own back to t
   fireEvent.click(within(form).getByLabelText(/My own money/));
   expect(within(form).getByLabelText(/Amount/)).toHaveValue(8000);
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "1000" } });
+  // It must say how: nothing is sent until standard or instant is chosen.
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money taken out" })); });
+  expect(api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/")).toBeUndefined();
+  fireEvent.click(within(form).getByLabelText(/Instant/));
+  expect(within(form).getByLabelText(/Instant charge/)).toHaveValue(100);
   await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money taken out" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
-  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "WITHDRAWAL", amount: "1000", source: "OWNER" }));
+  expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ kind: "WITHDRAWAL", amount: "1000", source: "OWNER", speed: "INSTANT", charge: "100" }));
+});
+
+it("analyses the investments: interest each month with the money that earned it, and money taken out by how", async () => {
+  const listed = listing(mmf);
+  const fund = { ...listed.investments[0],
+    daily: [
+      { date: "2026-11-02", rate: "13", invested: "9900", moved: "-1100", interest: "3.53", statement: false, interest_so_far: "103.53", value: "10003.53" },
+      { date: "2026-11-01", rate: "13", invested: "11000", moved: "0", interest: "4", statement: false, interest_so_far: "100", value: "11100" },
+      { date: "2026-10-31", rate: "13", invested: "11000", moved: "0", interest: "96", statement: true, interest_so_far: "96", value: "11096" },
+      { date: "2026-10-30", rate: "13", invested: "11000", moved: "11000", interest: "0", statement: false, interest_so_far: "0", value: "11000" }],
+    movements: [
+      { id: 1, kind: "DEPOSIT", amount: "11000", occurred_on: "2026-10-30" },
+      { id: 2, kind: "INTEREST", amount: "96", occurred_on: "2026-10-31", statement_balance: "11096" },
+      { id: 3, kind: "WITHDRAWAL", amount: "1000", occurred_on: "2026-11-02", speed: "INSTANT" },
+      { id: 4, kind: "WITHDRAWAL", amount: "100", occurred_on: "2026-11-02", charge_of: 3 },
+      { id: 5, kind: "WITHDRAWAL", amount: "500", occurred_on: "2026-10-30", speed: "STANDARD", reversed_at: "2026-10-30T10:00:00Z" }] };
+  api.mockImplementation(async (path) => (path === "/api/v1/accounting/investments/" ? { ...listed, investments: [fund] } : {}));
+  render(<InvestmentsPage />);
+  const analysis = (await screen.findByRole("heading", { name: "Analysis" })).closest("section");
+  expect(within(analysis).getByRole("heading", { name: "Your money in the funds, day by day" })).toBeInTheDocument();
+  expect(within(analysis).getByRole("heading", { name: "Interest earned each month" })).toBeInTheDocument();
+  expect(within(analysis).getByRole("heading", { name: "Interest earned so far, day by day" })).toBeInTheDocument();
+  expect(within(analysis).getByText("Instant charges").nextSibling).toHaveTextContent("KSh 100");
+  expect(analysis).toHaveTextContent("Instant: 1 time, KSh 1,000, plus KSh 100 in charges");
+  expect(analysis).toHaveTextContent("Standard (to the bank): 0 times");  // the undone one does not count
+  const months = within(analysis).getByRole("table", { name: "Interest earned each month and the money that earned it" });
+  const [, november, october] = within(months).getAllByRole("row");
+  expect(october).toHaveTextContent("October 2026");
+  expect(october).toHaveTextContent("statement");
+  expect(within(october).getAllByRole("cell")[1]).toHaveTextContent("KSh 96");
+  expect(november).toHaveTextContent("estimate");
+  expect(within(november).getAllByRole("cell")[6]).toHaveTextContent("KSh 100");  // the charge
+  // A past month opens day by day.
+  fireEvent.click(within(october).getByRole("button", { name: "October 2026" }));
+  expect(within(analysis).getByRole("table", { name: "Interest each day in October 2026" })).toHaveTextContent("KSh 96");
 });
 
 it("records a statement balance and can undo a mistake", async () => {

@@ -680,3 +680,25 @@ def test_a_statement_got_late_ignores_money_moved_after_its_date_or_takes_the_mo
     assert D(interest["amount"]) == D("300") and D(interest["statement_balance"]) == D("50300")
     both = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "1", "interest": "1", "idempotency_key": "st-4"}, format="json")
     assert both.status_code == 400
+
+
+def test_an_instant_withdrawal_takes_its_charge_out_of_the_fund_too_and_a_standard_one_is_free(shop):
+    """CIC: standard to the bank is free; instant costs 100, which leaves the fund with it, paid from the owner's own
+    money. Undoing the withdrawal undoes its charge."""
+    client, org, *_ = shop
+    mmf = _mmf(client)
+    _move(client, mmf, "DEPOSIT", "20000", "OWNER", "in")
+    row = _move(client, mmf, "WITHDRAWAL", "5000", "OWNER", "fast", speed="INSTANT").json()
+    assert D(str(row["value"])) == D("14900")  # 5,000 and the 100 charge
+    charge = next(m for m in row["movements"] if m["charge_of"])
+    withdrawal = next(m for m in row["movements"] if m["speed"] == "INSTANT")
+    assert charge["charge_of"] == withdrawal["id"] and D(str(charge["amount"])) == D("100") and charge["whose"] == "OWNER"
+    row = _move(client, mmf, "WITHDRAWAL", "4000", "OWNER", "bank", speed="STANDARD").json()
+    assert D(str(row["value"])) == D("10900")  # free
+    row = _move(client, mmf, "WITHDRAWAL", "1000", "OWNER", "fast-2", speed="INSTANT", charge="150").json()
+    assert D(str(row["value"])) == D("9750")  # a different charge when the fund changes it
+    # Not enough of the owner's own money left for the charge.
+    assert _move(client, mmf, "WITHDRAWAL", "9750", "OWNER", "too-much", speed="INSTANT").status_code == 400
+    back = client.post(f"/api/v1/accounting/investments/movements/{withdrawal['id']}/undo/", {"reason": "Wrong"}, format="json").json()
+    assert D(str(back["value"])) == D("14850")
+    assert all(m["reversed_at"] for m in back["movements"] if m["charge_of"] == withdrawal["id"])

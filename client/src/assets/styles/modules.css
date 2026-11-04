@@ -3091,3 +3091,28 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .staffPages summary { cursor: pointer; }
 .staffPages label { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-weight: 400; }
 .staffPages input { width: auto; min-height: 0; margin: 0; }
+
+/* Investments analysis: the charts, money taken out by how, and interest month by month. */
+.investAnalysis { margin: 28px 0 8px; }
+.investAnalysis > h3, .investAnalysis > h4 { margin: 22px 0 8px; }
+.investWithdrawals h3 { margin: 0 0 8px; font-size: 16px; }
+.investAnalysis .chartGrid2 > .investWide { grid-column: 1 / -1; }
+/* Cards share each row evenly: as many as fit, each at least 210px, so none is left alone at a different width. */
+.admin .metrics.investMetrics { gap: 16px; margin: 16px 0; }
+/* The analysis has five short cards: narrow enough minimum that all five share one row on a laptop, three and two on a
+   tablet, one each on a phone; every row is filled and the gaps are the same everywhere. */
+.admin .investAnalysis .metrics.investMetrics > * { min-width: min(180px, 100%); }
+/* A figure with a long value or note takes two columns, so it is not squeezed into a tall narrow one. */
+.loanFigures > .loanFigureWide { grid-column: span 2; }
+@media (max-width: 400px) { .loanFigures > .loanFigureWide { grid-column: auto; } }
+.investAnalysis .chartGrid2 { margin-top: 16px; }
+/* A wide table scrolls inside its own box instead of running past the page's edge. */
+.investTableScroll { max-width: 100%; overflow-x: auto; }
+@media (max-width: 640px) {
+  /* A caption meant only for screen readers stays hidden when the table turns into cards. */
+  .stackTable caption.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.investWithdrawals ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+.investWithdrawals p { margin: 8px 0 0; }
+.investMonths td { font-variant-numeric: tabular-nums; }
+.investMonths tr.investMonthOpen td { background: color-mix(in srgb, var(--primary) 6%, transparent); }

@@ -315,6 +315,12 @@ class InvestmentMovement(TenantModel):
     agency_transaction = models.OneToOneField('mpesa.MpesaTransaction', null=True, blank=True, related_name='investment_movement', on_delete=models.PROTECT)
     # The stock purchase a withdrawal paid for, when money was taken out to pay a supplier.
     purchase = models.ForeignKey(SupplierPurchase, null=True, blank=True, related_name='investment_withdrawals', on_delete=models.PROTECT)
+    # How money taken out was paid: STANDARD (to the bank, free) or INSTANT (straight away, for a charge, e.g. CIC's 100).
+    # Empty on money put in and on withdrawals recorded before the choice.
+    speed = models.CharField(max_length=10, blank=True, default='')
+    # The withdrawal this record is the instant-withdrawal charge of: the charge leaves the fund too, paid from the
+    # owner's own money, and is undone with its withdrawal.
+    charge_of = models.ForeignKey('self', null=True, blank=True, related_name='charges', on_delete=models.PROTECT)
     branch = models.ForeignKey('core.Store', null=True, blank=True, on_delete=models.PROTECT, editable=False)
     idempotency_key = models.CharField(max_length=100)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)

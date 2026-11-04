@@ -155,10 +155,14 @@ def own_value(investment):
 
 @transaction.atomic
 def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None, key, occurred_on=None, reference="", note="",
-         session_id=None, purchase=None):
+         session_id=None, purchase=None, speed="", charge=None):
     """Money put in (DEPOSIT) or taken out (WITHDRAWAL). source BUSINESS: the business's money, from or back to ``place``
     (CASH, MPESA, BANK or OTHER), moved in the books between that place and Investments (1400). source OWNER: the
-    owner's own money, which never reaches the books. A withdrawal may name the stock purchase it paid for."""
+    owner's own money, which never reaches the books. A withdrawal may name the stock purchase it paid for.
+
+    A withdrawal says how it was paid (``speed``): STANDARD, to the bank for free, or INSTANT, for a ``charge`` (CIC's is
+    100) that leaves the fund too. The charge is recorded with it, linked, as the owner's own money taken out: it is the
+    owner's own cost, as the owner chose on 2026-11-02."""
     from .ledger import cash_code
     from .money_check import _drawer, expected
     lock_business()
@@ -180,6 +184,12 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
                               + ": the cash drawer, Lipa na M-Pesa till, bank or other money.")
     amount, day = _amount(amount), _day(occurred_on)
     putting_in = kind == InvestmentMovement.DEPOSIT
+    speed = "" if putting_in else str(speed or "").upper()
+    if speed not in SPEEDS:
+        raise ValidationError("Choose how the money was taken out: standard (to the bank, free) or instant (with a charge).")
+    charge = Decimal("0") if speed != INSTANT else INSTANT_CHARGE if charge in (None, "") else money(charge)
+    if charge < 0:
+        raise ValidationError("The instant withdrawal charge cannot be below zero.")
     unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
     if business and putting_in:
         has = expected(place, unit if place == "CASH" and _drawer(place, unit) else None)[0]
@@ -192,6 +202,10 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
             whose_words = "of the business's money" if business else "of your own money"
             raise ValidationError(f"{investment.name} only holds {holds:,.2f} {whose_words} as far as the app knows. "
                                   "If the statement shows more, record the interest first.")
+        own_left = own_value(investment) - (Decimal("0") if business else amount)
+        if charge > own_left:
+            raise ValidationError(f"The {charge:,.2f} instant charge is paid from your own money in {investment.name}, and only "
+                                  f"{max(own_left, Decimal('0')):,.2f} of it would be left. Take out less, or choose standard.")
     words = f"{'Put into' if putting_in else 'Taken out of'} {investment.name}"
     entry = None
     if business:
@@ -202,13 +216,32 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=amount if business else Decimal("0"),
                                                  whose=source, occurred_on=day, source=place if business else OWNER, entry=entry,
                                                  reference=str(reference or "").strip().upper()[:120], note=str(note or "").strip(),
-                                                 purchase=purchase, branch=resolve_branch(), idempotency_key=key, created_by=user)
+                                                 purchase=purchase, speed=speed, branch=resolve_branch(), idempotency_key=key, created_by=user)
     if business:
         lines = paired("1400", cash_code(place), amount) if putting_in else paired(cash_code(place), "1400", amount)
         post_journal(key=f"{MOVED}:{movement.pk}", description=f"{words}: the business's money, {'from' if putting_in else 'back to'} {PLACE_WORDS[place]}"[:255],
                      lines=lines, branch=movement.branch, date=day, user=user)
     audit(movement, user, f"{words}: {amount} ({'the business' + chr(39) + 's money' if business else 'own money'})")
+    if charge:
+        _charge(movement, charge, user)
     return movement
+
+
+SPEEDS = {"", "STANDARD", "INSTANT"}
+INSTANT = "INSTANT"
+INSTANT_CHARGE = Decimal("100")  # CIC's charge for an instant withdrawal
+
+
+def _charge(withdrawal, amount, user):
+    """The instant-withdrawal charge: it leaves the fund with its withdrawal, from the owner's own money."""
+    words = f"Instant withdrawal charge ({withdrawal.amount:,.2f} taken out)"
+    charge = InvestmentMovement.objects.create(investment=withdrawal.investment, kind=InvestmentMovement.WITHDRAWAL, amount=amount,
+                                               business_amount=Decimal("0"), whose=OWNER, source=OWNER, occurred_on=withdrawal.occurred_on,
+                                               charge_of=withdrawal, reference=withdrawal.reference, note=f"{words}, paid from my own money",
+                                               branch=withdrawal.branch, idempotency_key=f"{withdrawal.idempotency_key}:charge"[:100],
+                                               created_by=user)
+    audit(charge, user, f"{words}: {amount}")
+    return charge
 
 
 @transaction.atomic
@@ -385,6 +418,8 @@ def undo(*, movement, user, reason):
         undo(movement=business, user=user, reason=reason)
         movement.refresh_from_db()
         return movement
+    for charge in movement.charges.filter(reversed_at__isnull=True):
+        InvestmentMovement.objects.filter(pk=charge.pk).update(reversed_at=timezone.now(), reverse_reason=f"Its withdrawal was undone: {reason}")
     if SIGN[movement.kind] > 0 and value(movement.investment) - movement.amount < 0:
         raise ValidationError("Money has since been taken out of this investment. Undo that first.")
     mine = movement.business_amount or Decimal("0")
