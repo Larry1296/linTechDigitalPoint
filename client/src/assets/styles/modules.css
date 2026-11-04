@@ -3116,10 +3116,14 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .investWithdrawals h3 { margin: 0 0 8px; font-size: 16px; }
 .investAnalysis .chartGrid2 > .investWide { grid-column: 1 / -1; }
 /* Cards share each row evenly: as many as fit, each at least 210px, so none is left alone at a different width. */
-.admin .metrics.investMetrics { gap: 16px; margin: 16px 0; }
-/* The analysis has five short cards: narrow enough minimum that all five share one row on a laptop, three and two on a
-   tablet, one each on a phone; every row is filled and the gaps are the same everywhere. */
-.admin .investAnalysis .metrics.investMetrics > * { min-width: min(180px, 100%); }
+/* Investments: every card in a row is the same width, with the same gap. Four across (the top row and the calculator),
+   two on a tablet, one on a phone; the analysis's six cards go three across, then two, then one, so no row has a gap. */
+.admin .metrics.investMetrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+.admin .investAnalysis .metrics.investMetrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.admin .metrics.investMetrics > * { min-width: 0; }
+.admin .metrics.investMetrics > * > span { white-space: normal; }
+@media (max-width: 900px) { .admin .metrics.investMetrics, .admin .investAnalysis .metrics.investMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .admin .metrics.investMetrics, .admin .investAnalysis .metrics.investMetrics { grid-template-columns: minmax(0, 1fr); } }
 /* A figure with a long value or note takes two columns, so it is not squeezed into a tall narrow one. */
 .loanFigures > .loanFigureWide { grid-column: span 2; }
 @media (max-width: 400px) { .loanFigures > .loanFigureWide { grid-column: auto; } }

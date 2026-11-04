@@ -40,18 +40,19 @@ beforeEach(() => {
 it("shows what the MMF holds, what went in and the interest, with dated history", async () => {
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  expect(screen.getByText(/Each time you put money in or take it out, say whose it is/)).toBeInTheDocument();
+  expect(screen.getByText(/Say whose it is each time/)).toBeInTheDocument();
   // Whose the money is: the business's (put in from its places, plus all the interest) and the owner's own.
   expect(screen.getByText("The business's money").nextSibling).toHaveTextContent("KSh 12,150");
   expect(screen.getByText("Your own money").nextSibling).toHaveTextContent("KSh 8,000");
   const metrics = screen.getByText("Total invested", { selector: ".investMetrics span" }).closest("div");
   expect(within(metrics).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,150");  // interest left in is invested too
-  expect(metrics).toHaveTextContent("KSh 20,000 put in (less taken out) + KSh 150 interest left in");
+  expect(metrics).toHaveTextContent("KSh 20,000 put in + KSh 150 interest; matches the statement");
   // No business share of interest: all of it is the business's profit.
   expect(screen.queryByText("From the shop")).toBeNull();
   expect(screen.queryByText(/Business's share of interest|Business's money in/)).toBeNull();
-  expect(screen.getByText("Interest earned (after fees)").nextSibling).toHaveTextContent("KSh 150");
-  expect(screen.getByText("Added to the business's profit, and invested with the rest until you take money out")).toBeInTheDocument();
+  // The top row is only the four figures that matter; interest and earnings are in the card and the analysis.
+  expect(screen.queryByText("Interest earned (after fees)")).toBeNull();
+  expect(screen.queryByText("Earning now, after tax")).toBeNull();
   expect(within(card).getByText("Total invested").nextSibling).toHaveTextContent("KSh 20,150");
   expect(within(card).queryByText("Recorded value")).not.toBeInTheDocument();
   expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business KSh 12,150 · Your own KSh 8,000");
@@ -150,6 +151,10 @@ it("analyses the investments: interest each month with the money that earned it,
   expect(within(analysis).getByRole("heading", { name: "Interest earned each month" })).toBeInTheDocument();
   expect(within(analysis).getByRole("heading", { name: "Interest earned so far, day by day" })).toBeInTheDocument();
   expect(within(analysis).getByText("Instant charges").nextSibling).toHaveTextContent("KSh 100");
+  // This month: earned so far (3.53 + 4), plus each day left in November at today's balance and rate, after tax.
+  const daily = 10003.53 * 13 / 100 / 365 * 0.85;  // 3.03 a day
+  expect(within(analysis).getByText("Interest this month").nextSibling).toHaveTextContent(`KSh ${Math.round((7.53 + daily * 28) * 100) / 100}`);
+  expect(within(analysis).getByText("Interest this month").parentElement).toHaveTextContent("KSh 7.53 so far + KSh 3.03 a day for 28 more days, if the money stays");
   expect(analysis).toHaveTextContent("Instant: 1 time, KSh 1,000, plus KSh 100 in charges");
   expect(analysis).toHaveTextContent("Standard (to the bank): 0 times");  // the undone one does not count
   const months = within(analysis).getByRole("table", { name: "Interest earned each month and the money that earned it" });
@@ -233,21 +238,20 @@ it("shows the rate, the interest estimated since the statement and what the mone
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
   expect(within(card).getByText("12% a year · October 2026")).toBeInTheDocument();
-  expect(within(card).getByText(/Estimated since/).nextSibling).toHaveTextContent("+ KSh 11.26 after 15% tax");
-  expect(within(card).getByText("Estimated value today").nextSibling).toHaveTextContent("KSh 20,161.26");
+  expect(within(card).getByText("Since the statement").nextSibling).toHaveTextContent("+ KSh 11.26 estimated, after tax");
+  expect(within(card).getByText("Worth today", { selector: "dt" }).nextSibling).toHaveTextContent("KSh 20,161.26");
   const earns = within(card).getByRole("region", { name: "What Sanlam MMF earns" });
-  expect(earns).toHaveTextContent("At 12% a year, KSh 20,161.26 (estimated value today) earns after tax:");
-  expect(within(earns).getByText("A day").nextSibling).toHaveTextContent("KSh 5.64KSh 6.63 before 15% tax");
+  expect(earns).toHaveTextContent("At 12% a year it earns, after tax:");
+  expect(within(earns).getByText("A day").nextSibling).toHaveTextContent("KSh 5.64KSh 6.63 before tax");
   expect(within(earns).getByText("A month").nextSibling).toHaveTextContent("KSh 171.37");
   expect(within(earns).getByText("A year").nextSibling).toHaveTextContent("KSh 2,170.98");
-  expect(screen.getByText("Worth today, with interest").nextSibling).toHaveTextContent("KSh 20,161.26");
+  expect(screen.getByText("Worth today", { selector: ".investMetrics span" }).nextSibling).toHaveTextContent("KSh 20,161.26");
   const daily = within(card).getByText(/^Day by day/).closest("details");
   expect(daily).toHaveTextContent(/Day by day since .+: KSh 19,000 invested, worth KSh 20,161.26 today/);
   const rows = within(daily).getAllByRole("row");
   expect(rows[1]).toHaveTextContent(/KSh 19,000.*\+ KSh 5.63.*KSh 1,161.26.*KSh 20,161.26/);
   expect(rows[2]).toHaveTextContent("KSh 19,000 · − KSh 1,000 taken out");
   expect(rows[3]).toHaveTextContent("KSh 20,000 · + KSh 20,000 put in");
-  expect(screen.getByText("Earning now, after tax").nextSibling).toHaveTextContent("KSh 5.64 a day");
   expect(within(card).getByText(/entered by hand/)).toBeInTheDocument();
   expect(screen.queryByRole("status", { name: "Monthly check due" })).toBeNull();
 });

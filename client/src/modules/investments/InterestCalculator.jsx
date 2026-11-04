@@ -15,8 +15,7 @@ export function InterestCalculator({ defaultRate = "", defaultTax = 15, rateSour
   return (
     <section className="panel investCalculator" aria-labelledby="calculator-heading">
       <h2 id="calculator-heading">What could it earn?</h2>
-      <p className="muted">Try an amount before you invest it. Nothing here is saved.
-        {rateSource ? ` The rate starts at the latest one recorded (${rateSource}); funds change it from month to month.` : " Enter the rate the fund quotes now."}</p>
+      <p className="muted">Try an amount; nothing is saved.{rateSource ? ` Rate from ${rateSource}.` : " Enter the fund's rate."}</p>
       <div className="loanFields">
         <label>Amount to invest ({businessCurrency()})<input type="number" min="0" step="1" value={values.amount} onChange={set("amount")} /></label>
         <label>Yearly rate (%)<input type="number" min="0" max="100" step="0.01" value={values.rate} onChange={set("rate")} placeholder="e.g. 13.25" /></label>
@@ -35,8 +34,7 @@ export function InterestCalculator({ defaultRate = "", defaultTax = 15, rateSour
           <article><span>{money(values.amount)} earns a day</span><strong>{money(pace.day)}</strong></article>
           <article><span>Withholding tax</span><strong>{money(result.tax)}</strong></article>
         </div>
-        <p className="muted">You put in {money(result.putIn)}; interest before tax is {money(result.gross)}. Interest is worked out daily and added
-          at the end of each month after tax, so it earns interest too.</p>
+        <p className="muted">{money(result.gross)} before tax on {money(result.putIn)}. Worked out daily, added monthly after tax, so it compounds.</p>
         <details className="investRates">
           <summary>Month by month</summary>
           <div className="trendTable"><table className="loanRepayments stackTable">

@@ -42,7 +42,7 @@ APART = ("Say whose money it is: the business's, from or back to its cash drawer
 # fund manager: a fund's own fact sheet gives its risk profile.
 KINDS = {
     "MMF": {"label": "Money market fund", "risk": 1, "risk_label": "Low",
-            "risk_note": "Short-term loans to the government and banks. The value rarely falls and you can usually withdraw in a few days."},
+            "risk_note": "Short-term loans to government and banks; rarely falls, quick to withdraw."},
     "TBILL": {"label": "Treasury bills or bonds", "risk": 1, "risk_label": "Low",
               "risk_note": "Lent to the Government of Kenya. Bills are safe if held to the end; bonds sold early can lose value."},
     "FIXED_DEPOSIT": {"label": "Bank fixed deposit", "risk": 1, "risk_label": "Low",

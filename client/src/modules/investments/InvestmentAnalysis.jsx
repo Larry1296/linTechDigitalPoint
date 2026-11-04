@@ -91,6 +91,22 @@ export function withdrawals(investments) {
     months: [...byMonth.values()].sort((a, b) => (a.month < b.month ? -1 : 1)) };
 }
 
+// The interest the month will earn if the money in each fund stays as it is today: what it has earned so far, plus
+// each remaining day at today's balance and rate, after tax. Recomputed whenever money goes in or out.
+export function monthEnd(investments, days) {
+  if (!days.length) return null;
+  const last = days[days.length - 1].date;
+  const [y, m, d] = last.split("-").map(Number);
+  const left = new Date(Date.UTC(y, m, 0)).getUTCDate() - d;
+  const daily = investments.reduce((sum, i) => {
+    const today = (i.daily || [])[0];
+    if (!today || today.date !== last) return sum;
+    return sum + (Number(today.value) * Number(today.rate || 0) / 100 / 365) * (1 - Number(i.tax_rate ?? 15) / 100);
+  }, 0);
+  const soFar = days.filter((x) => x.date.startsWith(last.slice(0, 7))).reduce((sum, x) => sum + x.interest, 0);
+  return { soFar: round(soFar), daily: round(daily), left, expected: round(soFar + daily * left), month: last.slice(0, 7) };
+}
+
 function MonthDays({ days, month }) {
   const rows = days.filter((d) => d.date.startsWith(month)).reverse();
   return (
@@ -115,35 +131,41 @@ export function InvestmentAnalysis({ investments, earningYear }) {
   const returned = average > 0 ? (interest / average) * (365 / days.length) * 100 : 0;
   const best = months.filter((m) => m.days >= 20).reduce((a, b) => (!a || b.interest > a.interest ? b : a), null);
   const thisMonth = months[months.length - 1];
+  const expected = monthEnd(investments, days);
   const points = days.map((d) => ({ date: d.date, value: d.value, invested: d.invested, earned: round(d.value - d.invested) }));
   return (
     <section className="businessAnalysis investAnalysis" aria-labelledby="invest-analysis-title">
       <div className="sectionHeading"><h2 id="invest-analysis-title">Analysis</h2></div>
       <div className="metrics investMetrics">
         <article><span>Interest earned so far</span><strong>{money(interest)}</strong>
-          <small>Since {dayName(days[0].date)}, after tax and fees{thisMonth && !thisMonth.confirmed ? `; ${monthName(thisMonth.month)}'s is an estimate` : ""}</small></article>
+          <small>Since {dayName(days[0].date)}, after tax{thisMonth && !thisMonth.confirmed ? "; this month estimated" : ""}</small></article>
         <article><span>Your money earned</span><strong>{percent(returned)} a year</strong>
-          <small>After tax, on an average of {money(average)} in the funds</small></article>
-        {thisMonth && <article><span>Interest this month</span><strong>{money(thisMonth.interest)}</strong>
-          <small>{monthName(thisMonth.month)} so far: {thisMonth.confirmed ? "confirmed by the statement" : "an estimate until the statement comes"}</small></article>}
+          <small>After tax, on {money(Math.round(average))} on average</small></article>
+        {thisMonth && (expected && expected.left > 0 && !thisMonth.confirmed
+          ? <article><span>Interest this month</span><strong>{money(expected.expected)}</strong>
+            <small>{money(expected.soFar)} so far + {money(expected.daily)} a day for {expected.left} more day{expected.left === 1 ? "" : "s"}, if the money stays</small></article>
+          : <article><span>Interest this month</span><strong>{money(thisMonth.interest)}</strong>
+            <small>{thisMonth.confirmed ? "Confirmed by the statement" : "Estimate until the statement"}</small></article>)}
+        {best && <article><span>Best month</span><strong>{money(best.interest)}</strong>
+          <small>{monthName(best.month)}, on {money(Math.round(best.average))}</small></article>}
         <article><span>Instant charges</span><strong>{money(out.charges.amount)}</strong>
-          <small>{out.charges.count} charge{out.charges.count === 1 ? "" : "s"}, taken out of the fund; standard to the bank is free</small></article>
+          <small>{out.charges.count} instant withdrawal{out.charges.count === 1 ? "" : "s"}; standard is free</small></article>
         {earningYear > 0 && <article><span>In a year from now</span><strong>{money(now.value + earningYear)}</strong>
-          <small>If nothing moves: about {money(earningYear)} more interest at today's rate, after tax</small></article>}
+          <small>+ {money(Math.round(earningYear))} interest if nothing moves</small></article>}
       </div>
 
       <div className="chartGrid2">
         <LineChart title="Your money in the funds, day by day" points={points} label={dayLabel} format={money}
-          note="Everything in the funds, interest left in included, next to what was put in less taken out."
+          note="With interest, next to what you put in less took out."
           series={[{ key: "value", label: "Total invested", area: true }, { key: "invested", label: "Put in, less taken out", dashed: true, color: SERIES[1] }]} />
         <LineChart title="Interest earned so far, day by day" points={points} label={dayLabel} format={money}
-          note="All the interest earned and left in (after tax and fees): it grows every day and is invested with the rest."
+          note="After tax; it stays invested and grows daily."
           series={[{ key: "earned", label: "Interest earned", color: SERIES[2], area: true }]} />
         <ColumnChart title="Interest earned each month" points={months} label={monthLabel} format={money}
-          note={`After tax and fees.${thisMonth && !thisMonth.confirmed ? ` ${monthName(thisMonth.month)} is so far, an estimate until its statement.` : ""}`}
+          note={`After tax.${thisMonth && !thisMonth.confirmed ? " This month is an estimate so far." : ""}`}
           series={[{ key: "interest", label: "Interest", color: SERIES[2] }]} />
         {out.months.length > 0 && <ColumnChart title="Money taken out each month, by how" points={out.months} label={monthLabel} format={money}
-          note="Instant costs a charge each time; standard to the bank is free."
+          note="Instant costs a charge; standard is free."
           series={[{ key: "standard", label: "Standard (free)" }, { key: "instant", label: "Instant (charged)", color: SERIES[3] },
             ...(out.unknown.count ? [{ key: "unknown", label: "Not said", color: SERIES[4] }] : [])]} />}
       <div className="chartCard investWithdrawals investWide">
@@ -151,14 +173,13 @@ export function InvestmentAnalysis({ investments, earningYear }) {
           <ul>
             <li><b>Instant:</b> {out.instant.count} time{out.instant.count === 1 ? "" : "s"}, {money(out.instant.amount)}, plus {money(out.charges.amount)} in charges</li>
             <li><b>Standard (to the bank):</b> {out.standard.count} time{out.standard.count === 1 ? "" : "s"}, {money(out.standard.amount)}, no charges</li>
-            {out.unknown.count > 0 && <li><b>Not said:</b> {out.unknown.count} time{out.unknown.count === 1 ? "" : "s"}, {money(out.unknown.amount)} (recorded before the choice)</li>}
+            {out.unknown.count > 0 && <li><b>Not said:</b> {out.unknown.count} time{out.unknown.count === 1 ? "" : "s"}, {money(out.unknown.amount)} (before the choice)</li>}
           </ul>
-          {out.charges.amount > 0 && <p className="muted">Choosing standard when the money can wait a day or two would have saved {money(out.charges.amount)}.</p>}
+          {out.charges.amount > 0 && <p className="muted">Standard would have saved {money(out.charges.amount)}.</p>}
         </div>
       </div>
 
       <h3>Interest month by month</h3>
-      {best && <p className="muted">The best full month so far was {monthName(best.month)}: {money(best.interest)} on an average of {money(best.average)}.</p>}
       <div className="investTableScroll"><table className="loanRepayments stackTable investMonths" aria-label={`Interest earned each month and the money that earned it`}>
                 <thead><tr><th>Month</th><th>Interest</th><th>Earned on (average)</th><th>Yearly rate</th>
           <th>Put in</th><th>Taken out</th><th>Charges</th><th>At month end</th></tr></thead>
@@ -166,10 +187,10 @@ export function InvestmentAnalysis({ investments, earningYear }) {
           <tr key={m.month} className={open === m.month ? "investMonthOpen" : undefined}>
             <td data-label="Month"><button type="button" className="linkButton" aria-expanded={open === m.month}
               onClick={() => setOpen(open === m.month ? "" : m.month)}>{monthName(m.month)}</button>
-              <small> · {m.confirmed ? "statement" : "estimate"}{m.days < 28 ? `, ${m.days} days` : ""}</small></td>
+              <small> · {m.confirmed ? "statement" : "estimate"}{m.days < 28 ? `, ${m.days} day${m.days === 1 ? "" : "s"}` : ""}</small></td>
             <td data-label="Interest"><strong>{signed(m.interest)}</strong></td>
             <td data-label="Earned on (average)">{money(m.average)}</td>
-            <td data-label="Yearly rate">{percent(m.rate)}<small> · came to {percent(m.earnedRate)} after tax</small></td>
+            <td data-label="Yearly rate">{percent(m.rate)}{m.interest > 0 && <small> · {percent(m.earnedRate)} after tax</small>}</td>
             <td data-label="Put in">{money(m.putIn)}</td>
             <td data-label="Taken out">{money(m.takenOut)}</td>
             <td data-label="Charges">{money(m.charges)}</td>
@@ -179,7 +200,7 @@ export function InvestmentAnalysis({ investments, earningYear }) {
       {open && <>
         <h4>{monthName(open)} day by day</h4>
         <MonthDays days={days} month={open} />
-        <p className="muted">Interest is worked out each day on what is in the funds that day. A statement day shows the difference the statement made.</p>
+        <p className="muted">Each day's interest is on that day's balance; a statement day shows its correction.</p>
       </>}
     </section>
   );

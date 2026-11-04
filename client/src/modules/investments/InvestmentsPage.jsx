@@ -367,17 +367,17 @@ function Earning({ investment }) {
   if (!e) return null;
   const tile = (label, period) => (
     <div><dt>{label}</dt><dd><strong>{money(e[period].net)}</strong>
-      <small>{money(e[period].gross)} before {percent(investment.tax_rate)} tax</small></dd></div>
+      <small>{money(e[period].gross)} before tax</small></dd></div>
   );
   return (
     <section className="investEarning" aria-label={`What ${investment.name} earns`}>
-      <p>At {percent(e.annual_rate)} a year, {money(e.balance)}{e.estimated_balance ? " (estimated value today)" : ""} earns after tax:</p>
+      <p>At {percent(e.annual_rate)} a year it earns, after tax:</p>
       <dl className="investEarningTiles">
         {tile("A day", "day")}
         {tile("A month", "month")}
         {tile("A year", "year")}
       </dl>
-      <p className="muted">A year counts each month's interest earning interest once it is added. The fund's rate changes, so these are a guide.</p>
+      <p className="muted">A guide: the rate changes, and added interest earns interest too.</p>
     </section>
   );
 }
@@ -428,8 +428,7 @@ function StatementChecks({ investment }) {
             <td data-label="Difference">{r.difference == null ? "—" : Math.abs(Number(r.difference)) < 0.5 ? "Same" : signed(r.difference)}</td>
           </tr>))}</tbody>
       </table>
-      <p className="muted">Interest after {percent(investment.tax_rate)} tax. A big difference usually means a rate, a date or an amount
-        put in or taken out is not recorded as on the statement.</p>
+      <p className="muted">After {percent(investment.tax_rate)} tax. A big difference usually means a rate, date or amount differs from the statement.</p>
     </details>
   );
 }
@@ -626,15 +625,15 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       </header>
       <Risk kind={investment.kind} />
       <dl className="loanFigures">
-        <div className="loanFigureWide"><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>interest left in included; should match its statement</small></dd></div>
+        <div className="loanFigureWide"><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>with interest; matches the statement</small></dd></div>
         {Number(investment.value) > 0 && <div className="loanFigureWide"><dt>Whose it is</dt>
           <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}</dd></div>}
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
-        {investment.estimate && <div><dt>Estimated since {date(investment.estimate.since)}</dt>
-          <dd>+ {money(investment.estimate.net)} <small>after {percent(investment.tax_rate)} tax</small></dd></div>}
-        {investment.estimate && <div><dt>Estimated value today</dt><dd>{money(investment.estimate.value)}</dd></div>}
+        {investment.estimate && <div><dt>Since the statement</dt>
+          <dd>+ {money(investment.estimate.net)} <small>estimated, after tax</small></dd></div>}
+        {investment.estimate && <div><dt>Worth today</dt><dd>{money(investment.estimate.value)}</dd></div>}
       </dl>
       <Earning investment={investment} />
       <DayByDay investment={investment} />
@@ -741,28 +740,20 @@ export function InvestmentsPage() {
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
-      <p className="muted">Money kept in a money market fund (MMF) or similar so it keeps earning until it is needed, e.g. for stock.
-        Each time you put money in or take it out, say whose it is. The business's money stays the business's while it is here, so its
-        money, sales and each part's figures do not change; your own money never touches the business. All the interest is the
-        business's profit: each statement's balance, less what the app expects (what was put in, less what was taken out, plus
-        interest and less fees already recorded).</p>
+      <p className="muted">Money kept earning in a fund such as an MMF until it is needed. Say whose it is each time: the business's
+        stays the business's, yours stays out of its books. All interest is the business's profit.</p>
       <div className="metrics investMetrics">
+        <article><span>Total invested</span><strong>{money(data.total_value)}</strong>
+          <small>{money(data.invested)} put in + {money(data.interest_earned)} interest; matches the statement</small></article>
+        {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
+          <article><span>Worth today</span><strong>{money(data.worth_today)}</strong>
+            <small>+ {money(data.estimated_interest)} interest since the statement</small></article>}
         {Number(data.total_value) > 0 && <>
           <article><span>The business's money</span><strong>{money(data.shop_value)}</strong>
-            <small>Put in from its till, drawer or bank, plus all the interest: still the business's</small></article>
+            <small>From its till, drawer or bank, plus all interest</small></article>
           <article><span>Your own money</span><strong>{money(data.owner_value)}</strong>
-            <small>Not the business's: never in its money or figures</small></article>
+            <small>Kept out of the business's books</small></article>
         </>}
-        {data.worth_today != null && Number(data.worth_today) !== Number(data.total_value) &&
-          <article><span>Worth today, with interest</span><strong>{money(data.worth_today)}</strong>
-            <small>Goes up every day as interest builds</small></article>}
-        <article><span>Total invested</span><strong>{money(data.total_value)}</strong>
-          <small>{money(data.invested)} put in (less taken out) + {money(data.interest_earned)} interest left in, the business's and yours together; should match the statement</small></article>
-        <article><span>Interest earned (after fees)</span><strong>{money(data.interest_earned)}</strong>
-          <small>Added to the business's profit, and invested with the rest until you take money out</small></article>
-        <article><span>Estimated since last statement</span><strong>+ {money(data.estimated_interest)}</strong></article>
-        {earning && Number(earning.year) > 0 && <article><span>Earning now, after tax</span><strong>{money(earning.day)} a day</strong>
-          <small>{money(earning.month)} a month · {money(earning.year)} a year</small></article>}
       </div>
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
         <div>
