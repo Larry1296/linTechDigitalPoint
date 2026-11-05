@@ -128,3 +128,34 @@ it("deletes a product entered by mistake and explains why a used product can onl
   await waitFor(() => expect(saved).toHaveBeenCalledOnce());
   expect(api).toHaveBeenCalledWith("/api/v1/catalog/products/5/", { method: "DELETE" });
 });
+
+const earphones = {
+  id: 71, name: "ORAIMO ORIGINAL EARPHONES", category: 1, brand: 3, product_type: "STOCK_ITEM", description: "", active: true,
+  ecommerce_visible: false, online_orderable: false, images: [],
+  variants: [{ id: 71, name: "Standard", sku: "ORM", barcode: null, selling_price: "350", minimum_price: "300", minimum_stock: "1", target_stock: "5", active: false, physical: 3, images: [] }],
+};
+
+it("gives a one-type product a single Active box, and saving it brings back a type the till was hiding", async () => {
+  api.mockImplementation(lookups);
+  const saved = vi.fn();
+  render(<ProductEditor product={earphones} onSaved={saved} onClose={() => {}} />);
+  await screen.findByRole("option", { name: "Chargers" });
+  expect(screen.getAllByRole("checkbox", { name: /Active|Sell this type/ })).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(patches()[1]).toEqual(["/api/v1/catalog/variants/71/", expect.objectContaining({ active: true })]);
+});
+
+it("asks before taking a product that has stock off the till", async () => {
+  const { confirmAction } = await import("../../core/ui/alerts");
+  confirmAction.mockResolvedValue(false);
+  api.mockImplementation(lookups);
+  const saved = vi.fn();
+  render(<ProductEditor product={{ ...earphones, variants: [{ ...earphones.variants[0], active: true }] }} onSaved={saved} onClose={() => {}} />);
+  await screen.findByRole("option", { name: "Chargers" });
+  fireEvent.click(screen.getByLabelText(/Active/));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({ title: "Stop selling this at the till?", text: expect.stringContaining("3 in stock") })));
+  expect(patches()).toEqual([]);
+  expect(saved).not.toHaveBeenCalled();
+});

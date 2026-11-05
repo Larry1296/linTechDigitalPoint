@@ -20,6 +20,8 @@ import { FileSpreadsheet, Trash2 } from "lucide-react";
 import { DeleteProductsDialog, ProductSelection, useProductSelection } from "./DeleteProducts";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const count = (value) => Number(value || 0).toLocaleString();
+// The till sells a product only while it and at least one of its types are active; anything else is hidden from it.
+const sellable = (product) => product.active && (!product.variants?.length || product.variants.some((v) => v.active !== false));
 
 // All the stock held now: goes up when stock is received and down when it is sold, used or lost (the page refreshes
 // itself). What it cost shows only to those who may see buying prices; otherwise it is valued at selling price.
@@ -65,7 +67,7 @@ function ProductRow({ product }) {
         <span className="productRowStock">
           {service ? <span className="stockBadge">Service</span>
             : <span className={`stockBadge${restock ? " low" : ""}`}>{count(available)} in stock{restock ? " · restock" : ""}</span>}
-          {!product.active && <span className="stockBadge muted">Hidden</span>}
+          {!sellable(product) && <span className="stockBadge muted">Hidden</span>}
         </span>
         <span className="productRowChevron" aria-hidden="true">›</span>
       </Link>
@@ -225,7 +227,7 @@ function ProductDetail({ product, categories, selectedVariant, user, zones, onBa
         <ProductImage product={{ images: first?.images, product_name: product.name }} />
         <div className="productHeroText">
           <div className="productBadges">
-            <span className={`stockBadge${product.active ? "" : " muted"}`}>{product.active ? "Active" : "Hidden"}</span>
+            <span className={`stockBadge${sellable(product) ? "" : " muted"}`}>{sellable(product) ? "Active" : "Hidden"}</span>
             {service ? <span className="stockBadge muted">Service</span> : low && <span className="stockBadge low">Low stock</span>}
             {product.variants.length > 1 && <span className="stockBadge muted">{product.variants.length} variants</span>}
           </div>

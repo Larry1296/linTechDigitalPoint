@@ -14,7 +14,8 @@ const labels = {
   brand: "Brand",
   product_type: "Product type",
   description: "Description",
-  active: "Active",
+  active: "Active (sold at the till)",
+  variant_active: "Sell this type at the till",
   ecommerce_visible: "Show in the online shop",
   online_orderable: "Can be ordered online",
   variant_name: "Type (e.g. size or colour)",
@@ -36,6 +37,9 @@ const variantFields = (variant, isService) => [
   ...(isService ? [] : ["minimum_stock", "target_stock"]),
   "active",
 ];
+// A product with one type has one Active box: the product's. Its type follows it, so the till never hides a product
+// that looks active (a second box under the stock levels was easy to untick by mistake while changing the price).
+const shownFields = (variant, isService, multiple) => variantFields(variant, isService).filter((f) => multiple || f !== "active");
 const payload = (row, fields) =>
   Object.fromEntries(fields.map((f) => [f, f === "barcode" || f === "brand" ? row[f] || null : row[f]]));
 const changed = (row, original, fields) => fields.some((f) => row[f] !== original?.[f]);
@@ -151,7 +155,8 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
   };
   const save = async (e) => {
     e.preventDefault();
-    for (const variant of canVariant ? variants : []) {
+    const rows = multiple ? variants : variants.map((v) => ({ ...v, active: Boolean(data.active) }));
+    for (const variant of canVariant ? rows : []) {
       const fields = variantFields(variant, isService);
       const bad = changed(variant, original(variant.id), fields) && badNumber(variant, fields);
       if (bad) {
@@ -167,13 +172,19 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
       ];
       if (!(await confirmAction({ title: "Save these changes?", text: `${lines.join("; ")}.`, confirmButtonText: "Save changes" }))) return;
     }
+    const held = (v) => (stock[v.id] ? onHand(v.id) : count(v.physical));
+    const hiding = rows.filter((v) => !v.active && original(v.id)?.active && !isService && held(v) > 0);
+    if (hiding.length) {
+      const what = hiding.map((v) => `${multiple ? `${data.name} (${v.name || "Standard"})` : data.name}: ${held(v)} in stock`).join("; ");
+      if (!(await confirmAction({ title: "Stop selling this at the till?", text: `${what}. It will no longer show at the point of sale until Active is ticked again.`, confirmButtonText: "Stop selling" }))) return;
+    }
     setSaving(true);
     setError("");
     let step = data.name;
     try {
       if (canProduct) await api(`/api/v1/catalog/products/${data.id}/`, { method: "PATCH", body: JSON.stringify(payload(data, productFields)) });
       if (canVariant)
-        for (const variant of variants) {
+        for (const variant of rows) {
           const fields = variantFields(variant, isService);
           if (!changed(variant, original(variant.id), fields)) continue;
           step = `${data.name} (${variant.name || "Standard"})`;
@@ -234,9 +245,9 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
           <fieldset key={variant.id} id={`variant-${variant.id}`} disabled={!canVariant || saving}
             aria-label={multiple ? `Variant ${variant.name}` : "Price, codes and stock levels"}>
             <legend>{multiple ? `Variant: ${original(variant.id)?.name || variant.name}` : "Price, codes and stock levels"}</legend>
-            {variantFields(variant, isService).map((field) => (
+            {shownFields(variant, isService, multiple).map((field) => (
               <label key={field}>
-                {labels[field === "name" ? "variant_name" : field]}
+                {labels[field === "name" ? "variant_name" : field === "active" ? "variant_active" : field]}
                 {input(field, variant, (value) => setVariants((rows) => rows.map((r) => (r.id === variant.id ? { ...r, [field]: value } : r))))}
               </label>
             ))}
