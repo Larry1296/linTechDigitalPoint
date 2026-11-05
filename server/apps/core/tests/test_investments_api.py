@@ -502,9 +502,7 @@ def test_the_business_money_moves_from_its_place_into_the_investment_and_stays_t
     money = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
     shop_money = lambda: D(str(client.get("/api/v1/inventory/parts/SHOP/").json()["money"]["amount"]))
     before = shop_money()
-    # More than the till has is refused; whose money it is must be said, with the place for the business's.
-    too_much = _move(client, mmf, "DEPOSIT", "15000", "BUSINESS", "too-much", place="MPESA")
-    assert too_much.status_code == 400 and "only has 12,000.00" in str(too_much.json())
+    # Whose money it is must be said, with the place for the business's.
     assert _move(client, mmf, "DEPOSIT", "100", "BUSINESS", "no-place").status_code == 400
     put = _move(client, mmf, "DEPOSIT", "10000", "BUSINESS", "biz-in", place="MPESA")
     assert put.status_code == 201, put.content
@@ -574,8 +572,6 @@ def test_money_first_recorded_as_the_owners_own_is_marked_as_the_businesss_from_
     assert (D(str(listed["shop_value"])), D(str(listed["business_in_places"]))) == (D("0"), D("20000"))
     mark = lambda **body: client.post(f"/api/v1/accounting/investments/movements/{deposit}/business/", body, format="json")
     assert mark().status_code == 400  # where it came from must be said
-    too_much = mark(place="MPESA")  # 25,000 cannot have come from a till holding 20,000
-    assert too_much.status_code == 400 and "only has 20,000.00" in str(too_much.json())
     row = mark(place="MPESA", amount="20000").json()
     assert (D(str(row["shop_value"])), D(str(row["owner_value"])), D(str(row["value"]))) == (D("20000"), D("5000"), D("25000"))
     assert money()["MPESA"] == 0
@@ -603,7 +599,6 @@ def test_the_businesss_money_put_in_from_several_places_raises_the_fund_by_exact
     listed = client.get("/api/v1/accounting/investments/").json()
     assert {row["method"]: D(str(row["expected"])) for row in listed["business_places"]} == {"MPESA": D("30000"), "CASH": D("8000")}
     sweep = lambda amounts, key="k1": client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": amounts, "idempotency_key": key}, format="json")
-    assert sweep({"MPESA": "31000"}).status_code == 400  # more than the till has
     row = sweep({"MPESA": "30000", "CASH": "8000"}).json()
     # The fund goes up by the 38,000 put in, all of it the business's; the owner's own 50,000 is untouched.
     assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("88000"), D("38000"), D("50000"))
@@ -640,7 +635,7 @@ def test_with_a_cash_drawer_for_each_part_the_businesss_money_in_the_fund_comes_
                       "idempotency_key": "drawers"}, format="json")
     assert row.status_code == 201, row.content
     assert (D(str(row.json()["shop_value"])), D(str(row.json()["owner_value"]))) == (D("5680"), D("10000"))
-    assert client.get("/api/v1/accounting/investments/").json()["business_places"] == []
+    assert all(D(str(row["expected"])) == 0 for row in client.get("/api/v1/accounting/investments/").json()["business_places"])
     # Marking a deposit names the drawer too.
     with organization_context(org):
         post(unit="CYBER", method="CASH", amount=D("500"), kind="INCOME", reference="More services", key="cyber-2", user=owner)
@@ -702,3 +697,26 @@ def test_an_instant_withdrawal_takes_its_charge_out_of_the_fund_too_and_a_standa
     back = client.post(f"/api/v1/accounting/investments/movements/{withdrawal['id']}/undo/", {"reason": "Wrong"}, format="json").json()
     assert D(str(back["value"])) == D("14850")
     assert all(m["reversed_at"] for m in back["movements"] if m["charge_of"] == withdrawal["id"])
+
+
+def test_the_businesss_money_put_in_may_be_more_than_its_place_is_expected_to_hold(shop):
+    """2026-11-05, owner: 3,000 of the business's money invested while the app expected less in the place (business
+    money it had not seen yet). It is recorded; the place shows below zero until a count settles it."""
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("1000"), kind="INCOME", reference="Sales", key="sales", user=owner)
+    put = _move(client, mmf, "DEPOSIT", "3000", "BUSINESS", "beyond", place="MPESA")
+    assert put.status_code == 201, put.content
+    row = put.json()
+    assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("3000"), D("3000"), D("0"))
+    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert money["MPESA"] == D("-2000")
+    accounts, _, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("3000") and pl["net_profit_before_tax"] == 0
+    # A place expected to hold nothing is still offered, and money can be put in from it too.
+    keys = {row["key"] for row in client.get("/api/v1/accounting/investments/").json()["business_places"]}
+    assert {"MPESA", "CASH"} <= keys
+    swept = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH": "500"}, "idempotency_key": "cash"}, format="json")
+    assert swept.status_code == 201, swept.content

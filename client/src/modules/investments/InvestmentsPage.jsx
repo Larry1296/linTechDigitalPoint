@@ -24,6 +24,11 @@ const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest",
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 const today = () => new Date().toLocaleDateString("en-CA");
+// The business's money put in may be more than the app expects in its place (business money it has not seen yet):
+// it is allowed, and the confirmation says what that place will show after it.
+const beyond = (label, expected, amount) => (Number(amount) > Number(expected)
+  ? ` ${label} is expected to hold ${money(expected)}, so it will show ${money(Number(expected) - Number(amount))} until you count it and record the difference.`
+  : "");
 const percent = (value) => `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
 
 // The fund an account's name points to, as the server guesses it: "CIC MMF" follows CIC's shilling money market fund,
@@ -145,7 +150,7 @@ function AddMoneyChooser({ investments, onPick, onNew, onCancel }) {
 }
 
 // Money put in or taken out, and whose it is: the business's (from or back to one of its places) or the owner's own.
-function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
+function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) {
   const { user } = useAuth();
   const parts = businessParts(user?.organization);
   const putIn = kind === "DEPOSIT";
@@ -171,8 +176,11 @@ function MoveForm({ investment, kind, preset, onSaved, onCancel }) {
     const title = business
       ? (putIn ? `Move ${sum} of the business's money from the ${placeName(place)} into ${investment.name}?` : `Take ${sum} of the business's money out of ${investment.name} back to the ${placeName(place)}?`)
       : (putIn ? `Add ${sum} of your own money to ${investment.name}?` : `Take ${sum} of your own money out of ${investment.name} to you?`);
+    const part = values.unit || parts[0]?.key;
+    const from = business && putIn && places.find((p) => p.method === place && (!p.unit || p.unit === part));
     const text = (business
       ? `It stays the business's money${putIn ? ", kept in the investment" : ""}: the ${placeName(place)} ${putIn ? "goes down" : "goes up"} by ${sum}, and the business's money, sales and profit stay as they are.`
+        + (from ? beyond(from.label, from.expected, values.amount) : "")
       : "It is not the business's money, so nothing in the business changes.")
       + (instant ? ` Instant: the ${money(charge)} charge also leaves ${investment.name}, from your own money, so it goes down by ${money(Number(values.amount) + Number(charge))}.`
         : !putIn ? " Standard, to the bank: no charge." : "");
@@ -495,7 +503,7 @@ function RateSource({ investment, funds, canMove, onChanged }) {
 }
 
 // What each place expects: {key: "amount"}.
-const fill = (places) => Object.fromEntries(places.map((p) => [p.key, Number(p.expected) ? String(Number(p.expected)) : ""]));
+const fill = (places) => Object.fromEntries(places.map((p) => [p.key, Number(p.expected) > 0 ? String(Number(p.expected)) : ""]));
 
 // The business's money put into the fund from several places at once. Each place starts at what the app expects there;
 // each amount is a real deposit: the place goes down and the fund goes up by exactly that much. Nothing cancels it.
@@ -509,7 +517,8 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     if (!(await confirmAction({ title: `Put ${money(total)} of the business's money into ${investment.name}?`,
-      text: `The till, drawer or bank goes down by it, and ${investment.name} goes up by ${money(total)}, all of it the business's money. Your own money in it, sales and profit stay as they are.`,
+      text: `The till, drawer or bank goes down by it, and ${investment.name} goes up by ${money(total)}, all of it the business's money. Your own money in it, sales and profit stay as they are.`
+        + places.map((p) => beyond(p.label, p.expected, amounts[p.key])).join(""),
       confirmButtonText: "Put it in" }))) return;
     setBusy(true); setError("");
     try {
@@ -522,10 +531,10 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="Put in the business's money">
       <h4 className="investFormTitle">Put in the business's money</h4>
       <p className="muted">The business's money (what it sold and earned, less what it spent) you are sending to {investment.name}. Each place shows
-        what the app expects there; keep it, or enter how much you sent from it.</p>
+        what the app expects there; keep it, or enter how much you sent from it, even more than it expects.</p>
       <fieldset disabled={busy} className="loanFields">
         {places.map((p) => <FormField key={p.key} label={`From ${p.label.toLowerCase()} (expects ${money(p.expected)})`} type="number" min="0" step="0.01"
-          max={Number(p.expected)} value={amounts[p.key]} onChange={(event) => setAmounts({ ...amounts, [p.key]: event.target.value })} />)}
+          value={amounts[p.key]} onChange={(event) => setAmounts({ ...amounts, [p.key]: event.target.value })} />)}
         <FormField label="Date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
       </fieldset>
       <p className="muted">Together {money(total)}: {investment.name} goes up by that much.</p>
@@ -684,7 +693,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       {form === "MONTHLY" ? <MonthlyCheckForm investment={investment} month={month} onCancel={() => setForm(null)} onSaved={done} />
         : form === "DEPOSIT" || form === "WITHDRAWAL"
         ? <MoveForm key={preset?.nonce ?? form} investment={investment} kind={form}
-          preset={form === "DEPOSIT" ? preset : null} onCancel={() => setForm(null)} onSaved={done} />
+          preset={form === "DEPOSIT" ? preset : null} places={places} onCancel={() => setForm(null)} onSaved={done} />
         : form === "STATEMENT"
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
         : form === "BUSINESS"

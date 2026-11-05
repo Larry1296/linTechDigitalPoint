@@ -164,7 +164,7 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     100) that leaves the fund too. The charge is recorded with it, linked, as the owner's own money taken out: it is the
     owner's own cost, as the owner chose on 2026-11-02."""
     from .ledger import cash_code
-    from .money_check import _drawer, expected
+    from .money_check import _drawer
     lock_business()
     existing = InvestmentMovement.objects.filter(idempotency_key=key).first()
     if existing:
@@ -191,11 +191,8 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     if charge < 0:
         raise ValidationError("The instant withdrawal charge cannot be below zero.")
     unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
-    if business and putting_in:
-        has = expected(place, unit if place == "CASH" and _drawer(place, unit) else None)[0]
-        if amount > has:
-            raise ValidationError(f"{PLACE_WORDS[place].capitalize()} only has {has:,.2f} of the business's money as far as the app knows. "
-                                  "Put in what is there, or record the rest as your own money.")
+    # The business's money put in may be more than the app expects in its place (2026-11-05, owner: business money
+    # the app has not seen yet, e.g. collected elsewhere). The place then shows below zero until a count settles it.
     if not putting_in:
         holds = business_value(investment) if business else own_value(investment)
         if amount > holds:
@@ -443,9 +440,8 @@ def claim(*, movement, user, place, amount=None, note=""):
     any business money put in."""
     from .ledger import cash_code
     from .models import DailyClosing, FinancialPeriod
-    from .money_check import expected
     from .services import post as post_cash
-    from .money_check import _drawer, _place_label
+    from .money_check import _drawer
     lock_business()
     movement = InvestmentMovement.objects.select_for_update(of=("self",)).select_related("investment").get(pk=movement.pk)
     place, unit = place_key(place)
@@ -460,10 +456,6 @@ def claim(*, movement, user, place, amount=None, note=""):
         raise ValidationError(f"Only {own_value(movement.investment):,.2f} of your own money is still in {movement.investment.name}: "
                               "money taken out since came from it. Mark less, or undo that first.")
     drawer = _drawer(place, unit)
-    has = expected(place, drawer)[0]
-    if amount > has:
-        raise ValidationError(f"{_place_label(place, unit)} only has {has:,.2f} of the business's money as far as the app knows, "
-                              "so no more of it can be in the investment.")
     day = movement.occurred_on
     account_closed = DailyClosing.objects.filter(account__payment_method=place, date__gte=day).exists()
     if account_closed or FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
@@ -493,10 +485,11 @@ def place_key(key):
 
 def business_places():
     """Every place the business's money is expected in, with how much: one row per cash drawer when each part keeps
-    its own. [{"key", "method", "unit", "label", "expected"}], only places expecting money."""
+    its own. [{"key", "method", "unit", "label", "expected"}]. Every place the business uses is listed, even one the app
+    expects empty: the business's money put in may be more than a place is expected to hold."""
     from .money_check import places
     return [{"key": f"{row['method']}-{row['unit']}" if row["unit"] else row["method"], "method": row["method"], "unit": row["unit"],
-             "label": row["label"], "expected": row["expected"]} for row in places() if row["expected"] > 0]
+             "label": row["label"], "expected": row["expected"]} for row in places()]
 
 
 PUT = "business-money-put"
@@ -511,7 +504,6 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
 
     (Until 2026-11-04 this recorded money already in the fund as a pair, in as the business's and out as the owner's
     own, which left the total unchanged; those pairs stay as they were and switch_half() still knows them.)"""
-    from .money_check import _drawer, _place_label, expected
     lock_business()
     if InvestmentMovement.objects.filter(idempotency_key__startswith=f"{PUT}:{key}:").exists():
         return investment
@@ -522,9 +514,6 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
         place, unit = place_key(name)
         if place not in BUSINESS:
             raise ValidationError("Choose the cash drawer, Lipa na M-Pesa till, bank or other money.")
-        has = expected(place, _drawer(place, unit))[0]
-        if amount > has:
-            raise ValidationError(f"{_place_label(place, unit)} only has {has:,.2f} of the business's money as far as the app knows.")
     for place_name, amount in rows:
         place, unit = place_key(place_name)
         move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place, unit=unit,
