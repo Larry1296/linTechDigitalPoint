@@ -68,16 +68,21 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(within(rows[2]).queryByRole("button", { name: "It was the business's money" })).toBeNull();
 });
 
-it("splits the business's money into what it put in (capital) and what it earned (profit)", async () => {
-  const row = { ...mmf, from_shop: "12000.00" };
-  api.mockImplementation(async () => ({ ...listing(row), from_shop: "12000.00" }));
+it("shows where the business's money came from: each part, the shop's cost of goods and gross profit, and interest", async () => {
+  const breakdown = { parts: [{ unit: "SHOP", label: "Shop sales", amount: "10000.00" }, { unit: "CYBER", label: "Cyber and services", amount: "1500.00" },
+    { unit: "MPESA", label: "M-Pesa commission", amount: "500.00" }], interest: "150.00", shop_cost: "6000.00", shop_profit: "4000.00", shop_margin: "40.0" };
+  api.mockImplementation(async () => ({ ...listing(mmf), business_breakdown: breakdown }));
   render(<InvestmentsPage />);
-  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
-  const business = screen.getByText("The business's money").closest("article");
-  expect(business).toHaveTextContent("KSh 12,150");
-  expect(business).toHaveTextContent("Put in (capital) KSh 12,000");
-  expect(business).toHaveTextContent("Profit (interest) KSh 150");
-  expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business: KSh 12,000 put in · KSh 150 profit");
+  const panel = await screen.findByRole("region", { name: "Where the business's money came from" });
+  expect(panel).toHaveTextContent("KSh 12,150");
+  const line = (name) => within(panel).getByText(name, { exact: false }).nextSibling;
+  expect(line("Shop sales")).toHaveTextContent("KSh 10,000");
+  expect(line("Cost of goods sold")).toHaveTextContent("KSh 6,000");
+  expect(line("Gross profit")).toHaveTextContent("KSh 4,000");
+  expect(within(panel).getByText("40% of what the shop sells")).toBeInTheDocument();
+  expect(line("Cyber and services")).toHaveTextContent("KSh 1,500");
+  expect(line("M-Pesa commission")).toHaveTextContent("KSh 500");
+  expect(line("Interest earned")).toHaveTextContent("KSh 150");
 });
 
 it("marks money first recorded as the owner's own as the business's, from the place it came from", async () => {

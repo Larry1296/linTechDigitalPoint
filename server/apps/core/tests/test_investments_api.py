@@ -720,3 +720,37 @@ def test_the_businesss_money_put_in_may_be_more_than_its_place_is_expected_to_ho
     assert {"MPESA", "CASH"} <= keys
     swept = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH": "500"}, "idempotency_key": "cash"}, format="json")
     assert swept.status_code == 201, swept.content
+
+
+def test_the_businesss_money_shows_which_part_it_came_from_and_the_shops_cost_of_goods_and_profit(shop, monkeypatch):
+    """The business's money in its investments, line by line: each part's money put in (the shop's, the services',
+    the M-Pesa agency's commission) and the interest earned; the shop's split at its own figures into what the goods it
+    sold had cost and the gross profit on them. The lines add up to the business's money."""
+    client, org, owner, *_ = shop
+    org.enabled_modules = ["inventory", "pos", "services", "mpesa", "reports", "expenses", "investments"]
+    org.settings = {"money_mode": "SEPARATE_CASH"}
+    org.save(update_fields=["enabled_modules", "settings"])
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("10000"), kind="INCOME", reference="Sales", key="shop", user=owner)
+        post(unit="CYBER", method="CASH", amount=D("2000"), kind="INCOME", reference="Services", key="cyber", user=owner)
+        post(unit="MPESA", method="CASH", amount=D("1500"), kind="INCOME", reference="Commission", key="commission", user=owner)
+    assert _move(client, mmf, "DEPOSIT", "5000", "OWNER", "own").status_code == 201
+    assert client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH-SHOP": "10000", "CASH-CYBER": "2000",
+                       "CASH-MPESA": "1500"}, "idempotency_key": "drawers"}, format="json").status_code == 201
+    assert client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "18700", "idempotency_key": "st"}, format="json").status_code == 201
+    # The shop sold goods for 1,000 that had cost 600: 60% of its money buys the stock again, 40% is its gross profit.
+    from apps.inventory import dashboard
+    monkeypatch.setattr(dashboard, "pnl_rows", lambda start, end: [{"date": start, "unit": "SHOP", "field": "revenue", "amount": D("1000")},
+                                                                    {"date": start, "unit": "SHOP", "field": "cogs", "amount": D("600")}])
+    listed = client.get("/api/v1/accounting/investments/").json()
+    split = listed["business_breakdown"]
+    assert [(p["unit"], D(str(p["amount"]))) for p in split["parts"]] == [("SHOP", D("10000")), ("CYBER", D("2000")), ("MPESA", D("1500"))]
+    assert D(str(split["interest"])) == D("200")
+    assert (D(str(split["shop_cost"])), D(str(split["shop_profit"])), D(str(split["shop_margin"]))) == (D("6000"), D("4000"), D("40.0"))
+    assert sum(D(str(p["amount"])) for p in split["parts"]) + D(str(split["interest"])) == D(str(listed["shop_value"])) == D("13700")
+    # Money taken back to a part's drawer comes off that part.
+    assert _move(client, mmf, "WITHDRAWAL", "500", "BUSINESS", "back", place="CASH", unit="CYBER", speed="STANDARD").status_code == 201
+    parts = {p["unit"]: D(str(p["amount"])) for p in client.get("/api/v1/accounting/investments/").json()["business_breakdown"]["parts"]}
+    assert parts == {"SHOP": D("10000"), "CYBER": D("1500"), "MPESA": D("1500")}

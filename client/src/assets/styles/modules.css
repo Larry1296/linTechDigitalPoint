@@ -2767,10 +2767,18 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .investEarningTiles dd { margin: 2px 0 0; display: grid; gap: 2px; }
 .investEarningTiles strong { font-size: 18px; }
 .investEarningTiles small, .investMetrics small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.investMetrics .investSplit { display: grid; gap: 2px; margin-top: 4px; }
-.investMetrics .investSplit span { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.investMetrics .investSplit b { color: var(--text); font-weight: 700; }
-.investSplitLine { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.investSources { margin: 4px 0 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, transparent); }
+.investSources > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.investSources h2 { margin: 0; font-size: 16px; }
+.investSources > header strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.investSources dl { margin: 0; }
+.investSourceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+.investSourceRow dt { font-weight: 700; min-width: 0; }
+.investSourceRow dt small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.investSourceRow dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.investSourceRow .investSourceSub { padding-left: 14px; font-weight: 400; color: var(--muted); }
+.investSourceRow dd.investSourceSub { padding-left: 0; }
+.investSourceRow p.investSourceSub { grid-column: 1 / -1; margin: 0; font-size: 12px; }
 .investSource { margin: 0 0 10px; font-size: 14px; }
 .investSource > p { margin: 0; }
 .investFormTitle { margin: 0; font-size: 15px; }

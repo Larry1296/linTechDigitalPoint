@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -52,7 +52,7 @@ def investment_row(investment):
             # as its money in investments), owner_* the owner's own (never in the books).
             "from_shop": share["shop"], "from_owner": share["owner"], "invested": share["shop"] + share["owner"],
             "shop_interest": share["shop_interest"], "owner_interest": share["owner_interest"],
-            "shop_value": share["shop_value"], "owner_value": share["owner_value"], "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
+            "shop_value": share["shop_value"], "owner_value": share["owner_value"], "sources": business_sources(investment), "tax_rate": investment.tax_rate, "kind": kind_row(investment.kind),
             "current_rate": _rate(latest) if latest else None, "check_due": due(investment), "estimate": guess,
             "fund": fund_rates.summary(investment.fund), "earning": _earning(investment, guess), "daily": day_by_day(investment), "statements": statement_checks(investment),
             "rates": [_rate(r) for r in investment.rates.select_related("created_by").order_by("-month")[:12]],
@@ -78,6 +78,37 @@ class InvestmentInput(serializers.Serializer):
     # A fund whose published rate the app follows; left out, it is guessed from the name ("CIC MMF"); "" means typed in.
     fund = serializers.ChoiceField(choices=["", *fund_rates.FUNDS], required=False, allow_null=True, allow_blank=True)
     kind = serializers.ChoiceField(choices=sorted(KINDS), required=False, default="MMF")
+
+
+def business_breakdown(rows):
+    """Where the business's money in its investments came from, so the owner sees it at a glance: each part's money
+    put in (the M-Pesa agency's, the services', the shop's) and the interest the investments earned. The shop's money is
+    its sales money, so it is split at the shop's own figures since it started into what the goods sold had cost (the
+    money that buys the stock again) and the gross profit on them. The lines add up to the business's money."""
+    from apps.accounting.money_mode import money_names
+    from apps.inventory.dashboard import accrual_totals, pnl_rows
+    from datetime import date
+    parts = {}
+    for row in rows:
+        for unit, amount in row["sources"].items():
+            parts[unit] = parts.get(unit, Decimal("0")) + amount
+    names = money_names()
+    shop = parts.get("SHOP", Decimal("0"))
+    cost = profit = margin = None
+    if shop > 0:
+        sold = accrual_totals(pnl_rows(date(1900, 1, 1), date(9999, 12, 31)), ["SHOP"])
+        if sold["revenue"] > 0:
+            share = min(max(sold["cogs"] / sold["revenue"], Decimal("0")), Decimal("1"))
+            cost = (shop * share).quantize(Decimal("0.01"))
+            profit = shop - cost
+            margin = ((1 - share) * 100).quantize(Decimal("0.1"))
+    return {"parts": [{"unit": unit, "label": names.get(unit, unit), "amount": amount}
+                      for unit, amount in sorted(parts.items(), key=lambda item: ORDER.index(item[0]) if item[0] in ORDER else 9) if amount],
+            "interest": sum((r["shop_interest"] for r in rows), Decimal("0")),
+            "shop_cost": cost, "shop_profit": profit, "shop_margin": margin}
+
+
+ORDER = ["SHOP", "CYBER", "MPESA"]
 
 
 def _sum(rows, period):
@@ -115,6 +146,7 @@ class InvestmentsView(APIView):
                                     "annual_rate": (fund_rates.latest(code).annual_rate if fund_rates.latest(code) else None)}
                                    for code, fund in fund_rates.FUNDS.items()],
                          "kinds": [kind_row(code) for code in KINDS],
+                         "business_breakdown": business_breakdown(rows),
                          "this_month": month_label(timezone.localdate())})
 
     def post(self, request):

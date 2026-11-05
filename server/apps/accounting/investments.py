@@ -111,6 +111,20 @@ def shares(investment):
             "shop_value": held["shop"], "owner_value": held["owner"]}
 
 
+def business_sources(investment):
+    """{part: net amount} of the business's money put in and not taken back, by the part whose money it was (SHOP,
+    CYBER or MPESA, as its place's cash entry says). Interest is not in it: with business_interest it adds up to the
+    business's money in the investment (shares()["shop_value"])."""
+    result = {}
+    for m in _live(investment).filter(kind__in=(InvestmentMovement.DEPOSIT, InvestmentMovement.WITHDRAWAL)).select_related("entry"):
+        mine = _business(m)
+        if not mine:
+            continue
+        unit = (m.entry.business_unit if m.entry_id else "") or "SHOP"
+        result[unit] = result.get(unit, Decimal("0")) + SIGN[m.kind] * mine
+    return result
+
+
 def _amount(raw):
     amount = money(raw)
     if amount <= 0:
