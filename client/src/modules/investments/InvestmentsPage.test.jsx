@@ -68,6 +68,18 @@ it("shows what the MMF holds, what went in and the interest, with dated history"
   expect(within(rows[2]).queryByRole("button", { name: "It was the business's money" })).toBeNull();
 });
 
+it("splits the business's money into what it put in (capital) and what it earned (profit)", async () => {
+  const row = { ...mmf, from_shop: "12000.00" };
+  api.mockImplementation(async () => ({ ...listing(row), from_shop: "12000.00" }));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  const business = screen.getByText("The business's money").closest("article");
+  expect(business).toHaveTextContent("KSh 12,150");
+  expect(business).toHaveTextContent("Put in (capital) KSh 12,000");
+  expect(business).toHaveTextContent("Profit (interest) KSh 150");
+  expect(within(card).getByText("Whose it is").nextSibling).toHaveTextContent("Business: KSh 12,000 put in · KSh 150 profit");
+});
+
 it("marks money first recorded as the owner's own as the business's, from the place it came from", async () => {
   const { askForm } = await import("../../core/ui/alerts");
   askForm.mockResolvedValueOnce({ place: "MPESA", amount: "15000" });

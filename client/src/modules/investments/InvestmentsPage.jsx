@@ -22,6 +22,19 @@ const placeName = (key) => (PLACES.find(([value]) => value === key)?.[1] || key)
 const APART = "The M-Pesa agency's cash and float are never used.";
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
+
+// Out of the business's money in investments: what it put in from its places (its capital) and what the investments
+// earned for it (interest less fees, all profit). The two always add up to the total shown above them.
+function BusinessSplit({ total, putIn }) {
+  const capital = Number(putIn || 0);
+  const profit = Number(total || 0) - capital;
+  return (
+    <small className="investSplit">
+      <span>Put in (capital) <b>{money(capital)}</b></span>
+      <span>Profit (interest) <b>{money(profit)}</b></span>
+    </small>
+  );
+}
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 const today = () => new Date().toLocaleDateString("en-CA");
 // The business's money put in may be more than the app expects in its place (business money it has not seen yet):
@@ -636,7 +649,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       <dl className="loanFigures">
         <div className="loanFigureWide"><dt>Total invested</dt><dd><strong>{money(investment.value)}</strong> <small>with interest; matches the statement</small></dd></div>
         {Number(investment.value) > 0 && <div className="loanFigureWide"><dt>Whose it is</dt>
-          <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}</dd></div>}
+          <dd>Business {money(investment.shop_value)} · Your own {money(investment.owner_value)}
+            {Number(investment.shop_value) > 0 && <small className="investSplitLine">Business: {money(investment.from_shop)} put in · {money(Number(investment.shop_value) - Number(investment.from_shop))} profit</small>}</dd></div>}
         <div><dt>Put in</dt><dd>{money(investment.put_in)}</dd></div>
         <div><dt>Taken out</dt><dd>{money(investment.taken_out)}</dd></div>
         <div><dt>Interest earned</dt><dd>{money(investment.interest)}{Number(investment.fees) ? <small> · fees {money(investment.fees)}</small> : null}</dd></div>
@@ -759,7 +773,7 @@ export function InvestmentsPage() {
             <small>+ {money(data.estimated_interest)} interest since the statement</small></article>}
         {Number(data.total_value) > 0 && <>
           <article><span>The business's money</span><strong>{money(data.shop_value)}</strong>
-            <small>From its till, drawer or bank, plus all interest</small></article>
+            <BusinessSplit total={data.shop_value} putIn={data.from_shop} /></article>
           <article><span>Your own money</span><strong>{money(data.owner_value)}</strong>
             <small>Kept out of the business's books</small></article>
         </>}

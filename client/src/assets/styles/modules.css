@@ -2767,6 +2767,10 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .investEarningTiles dd { margin: 2px 0 0; display: grid; gap: 2px; }
 .investEarningTiles strong { font-size: 18px; }
 .investEarningTiles small, .investMetrics small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.investMetrics .investSplit { display: grid; gap: 2px; margin-top: 4px; }
+.investMetrics .investSplit span { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.investMetrics .investSplit b { color: var(--text); font-weight: 700; }
+.investSplitLine { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .investSource { margin: 0 0 10px; font-size: 14px; }
 .investSource > p { margin: 0; }
 .investFormTitle { margin: 0; font-size: 15px; }
