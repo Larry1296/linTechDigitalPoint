@@ -1,70 +1,73 @@
-"""The commission table shared by every agent business using the app.
+"""The one commission table every agent business using the app teaches and uses.
 
-Safaricom pays every agent the same commission for the same transaction at the same amount, so each business need not
-learn the table on its own. What each business has measured (see commission_learning) is pooled into one table, and a
-business uses it for any amount it has not learned itself.
+Safaricom pays every agent the same commission for the same transaction at the same amount, so the app learns one table
+for everybody: every business's measured commissions (see commission_learning) go into it, and every business uses it
+for any amount it has not learned itself. A new business starts with everything the others have taught.
 
 Only the table is shared: a kind of transaction, an amount and what it earned. Never balances, transactions, customers
-or which business measured what. A figure is trusted only when at least MIN_BUSINESSES different businesses agree on it,
-at the same amount or at neighbouring amounts that earned the same, so one business's misread balance never spreads.
-A business's own readings always come first: its own learned figures win, and where its own reading at an amount
-disagrees with the shared table, the app asks again instead of using either.
+or which business measured what. It is trusted by the same rule as a business's own readings, wherever they came from:
+an amount that earned the same twice in a row, or next to an amount that earned the same. Once an amount is confirmed it
+stays so until a different figure is confirmed there (Safaricom changed its rates), so one misread balance anywhere never
+spreads or undoes what is known. A business's own readings come first: its own learned figures win, and where its own
+reading at an amount disagrees with the shared table, the app asks again instead of using either.
 """
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from django.core.cache import cache
 from django.db.models.query import QuerySet
 
-from .commission_learning import EARNING, Rates
+from .commission_learning import EARNING, Rates, confirm_neighbours
 
-MIN_BUSINESSES = 2
 CACHE_KEY = "mpesa:shared-commission-table"
 CACHE_SECONDS = 10 * 60
 
 
-def _by_business():
-    """{kind: {amount: {organization id: earned}}} — each business's latest measurement at each amount."""
+def _pooled():
+    """{kind: {amount: [(done at, earned)]}} — every measurement made by every business. Two passes, like a business's
+    own learning: what the businesses measured on their own makes a first table, which then lets readings with
+    transactions in between that only the table knows count too (a new business's first readings, say)."""
     from apps.tenancy.context import branch_context, organization_context
-    from .commission_learning import _history, _learn, latest_measurements
+    from .commission_learning import _history, _learn
     from .models import MpesaOutlet
-    found = defaultdict(lambda: defaultdict(dict))
+    histories = []
     # Every business with an agent line; read one at a time, each inside its own business.
     for organization in sorted(set(QuerySet(MpesaOutlet).values_list("organization_id", flat=True))):
         with organization_context(organization), branch_context(None):
-            outlets = _history()
-            measured, _ = _learn(outlets)
-            for (kind, amount), earned in latest_measurements(outlets, measured).items():
-                found[kind][amount][organization] = earned
-    return found
+            histories.append(_history())
+
+    def pool(shared=None):
+        found = defaultdict(lambda: defaultdict(list))
+        for outlets in histories:
+            measured, _ = _learn(outlets, shared)
+            for rows in outlets.values():
+                for row in rows:
+                    if row.pk in measured:
+                        found[row.transaction_type][row.amount].append((row.done_at, measured[row.pk]))
+        return found
+
+    return pool(Rates.from_points(build_table(pool())))
+
+
+def _settled(readings):
+    """(earned, confirmed) at one amount: the newest figure read twice in a row, or else the latest reading, unconfirmed."""
+    readings = [earned for _, earned in sorted(readings, key=lambda reading: reading[0])]
+    for i in range(len(readings) - 1, 0, -1):
+        if readings[i] == readings[i - 1]:
+            return readings[i], True
+    return readings[-1], False
 
 
 def build_table(found):
-    """{kind: [(amount, earned, confirmed)]}: at each amount, what most businesses measured; confirmed when at least
-    MIN_BUSINESSES agree there, or together with a neighbouring amount that earned the same."""
-    table = {}
-    for kind, amounts in found.items():
-        points = []
-        for amount in sorted(amounts):
-            votes = Counter(amounts[amount].values()).most_common()
-            if len(votes) > 1 and votes[0][1] == votes[1][1]:
-                continue  # businesses disagree evenly: nothing to share at this amount
-            earned = votes[0][0]
-            points.append([amount, earned, {org for org, value in amounts[amount].items() if value == earned}])
-        for i, point in enumerate(points):
-            together = set(point[2])
-            for j in (i - 1, i + 1):
-                if 0 <= j < len(points) and points[j][1] == point[1]:
-                    together |= points[j][2]
-            point.append(len(together) >= MIN_BUSINESSES)
-        table[kind] = [(amount, earned, confirmed) for amount, earned, _, confirmed in points]
-    return table
+    """{kind: [(amount, earned, confirmed)]} from every business's measurements together."""
+    return {kind: confirm_neighbours([[amount, *_settled(amounts[amount])] for amount in sorted(amounts)])
+            for kind, amounts in found.items()}
 
 
 def shared_rates():
     """The shared table as Rates; worked out again every few minutes."""
     table = cache.get(CACHE_KEY)
     if table is None:
-        table = build_table(_by_business())
+        table = build_table(_pooled())
         cache.set(CACHE_KEY, table, CACHE_SECONDS)
     return Rates.from_points(table)
 

@@ -1,4 +1,4 @@
-"""Every agent business learns from the commission table the others confirmed, without seeing their records."""
+"""Every agent business teaches and uses one commission table, without seeing each other's records."""
 from decimal import Decimal
 from itertools import count
 
@@ -39,13 +39,41 @@ def predicts(business, amount, kind="CUSTOMER_DEPOSIT"):
         return learn([session.outlet_id])[2].predict(kind, Decimal(amount))
 
 
-def test_two_businesses_agreeing_teach_every_business():
+def test_one_business_confirming_an_amount_teaches_every_business():
+    a, newcomer = agent("Shop A"), agent("Shop C")
+    deposit(a, "1000", "107.20")
+    assert predicts(newcomer, "1000") is None and predicts(a, "1000") is None  # one reading: not trusted yet
+    deposit(a, "1000", "114.40")
+    assert predicts(a, "1000") == Decimal("7.20")
+    assert predicts(newcomer, "1000") == Decimal("7.20")  # learned by one business, used by all
+
+
+def test_readings_from_different_businesses_confirm_each_other():
     a, b, newcomer = agent("Shop A"), agent("Shop B"), agent("Shop C")
     deposit(a, "1000", "107.20")
-    assert predicts(newcomer, "1000") is None and predicts(a, "1000") is None  # one business, one reading: not trusted
     deposit(b, "1000", "107.20")
     assert predicts(newcomer, "1000") == Decimal("7.20")
     assert predicts(a, "1000") == Decimal("7.20")
+
+
+def test_one_misread_elsewhere_does_not_undo_what_is_known():
+    a, b, newcomer = agent("Shop A"), agent("Shop B"), agent("Shop C")
+    deposit(a, "1000", "107.20")
+    deposit(a, "1000", "114.40")
+    deposit(b, "1000", "109")
+    assert predicts(newcomer, "1000") == Decimal("7.20")
+    assert predicts(b, "1000") is None  # its own reading disagrees: asked again
+
+
+def test_a_new_business_measures_from_its_first_reading_with_what_others_taught():
+    a, newcomer = agent("Shop A"), agent("Shop C")
+    deposit(a, "1000", "107.20")
+    deposit(a, "1000", "114.40")
+    deposit(newcomer, "1000")              # no reading: the shared table knows it earned 7.20
+    deposit(newcomer, "3000", "117.20")    # so this rise of 17.20 is 7.20 + what the 3,000 earned
+    deposit(newcomer, "3000", "127.20")
+    assert predicts(newcomer, "3000") == Decimal("10")
+    assert predicts(a, "3000") == Decimal("10")
 
 
 def test_amounts_two_businesses_found_earning_the_same_cover_the_band_between():

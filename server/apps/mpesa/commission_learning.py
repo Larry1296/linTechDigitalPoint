@@ -91,6 +91,14 @@ def measure(outlets, rates=None):
     return measured
 
 
+def confirm_neighbours(points):
+    """Marks confirmed each [amount, earned, confirmed] next to an amount that earned the same: both lie in one band."""
+    for i, point in enumerate(points):
+        if any(0 <= j < len(points) and points[j][1] == point[1] for j in (i - 1, i + 1)):
+            point[2] = True
+    return [tuple(point) for point in points]
+
+
 class Rates:
     """What the app has learned: for each kind of transaction, the latest commission measured at each amount, trusted
     once it is confirmed: the same amount earned the same twice in a row, or a neighbouring amount earned the same. So
@@ -109,10 +117,7 @@ class Rates:
                 readings.sort(key=lambda reading: reading[0])
                 latest = readings[-1][1]
                 points.append([value, latest, len(readings) >= 2 and readings[-2][1] == latest])
-            for i, point in enumerate(points):
-                if any(0 <= j < len(points) and points[j][1] == point[1] for j in (i - 1, i + 1)):
-                    point[2] = True
-            self.points[kind] = [tuple(point) for point in points]
+            self.points[kind] = confirm_neighbours(points)
 
     @classmethod
     def from_points(cls, points):
@@ -148,37 +153,29 @@ class Rates:
         return rows
 
 
-def _learn(outlets):
+def _learn(outlets, shared=None):
     """Two passes: readings straight after each other teach the first rates, which then let readings with known
-    transactions in between count too."""
-    first = measure(outlets)
-    measured = measure(outlets, Rates(outlets, first))
+    transactions in between count too. With ``shared`` (the table every business has taught), transactions in between
+    that the shared table knows count from the first reading too, so a new business measures from day one."""
+    first = measure(outlets, shared)
+    from .commission_shared import WithShared
+    own = Rates(outlets, first)
+    measured = measure(outlets, WithShared(own, shared) if shared is not None else own)
     return measured, Rates(outlets, measured)
-
-
-def latest_measurements(outlets, measured):
-    """{(kind, amount): earned} — the latest commission measured for each kind of transaction at each amount."""
-    latest = {}
-    for rows in outlets.values():
-        for row in rows:
-            if row.pk in measured:
-                key = (row.transaction_type, row.amount)
-                if key not in latest or row.done_at >= latest[key][0]:
-                    latest[key] = (row.done_at, measured[row.pk])
-    return {key: value for key, (_, value) in latest.items()}
 
 
 def learn(outlet_ids=None):
     """The transactions, what was measured and the rates learned from all outlets' readings (the tariff is Safaricom's,
     the same everywhere), filled out with what other agents using the app have confirmed (see commission_shared)."""
     from .commission_shared import WithShared, shared_rates
+    shared = shared_rates()
     outlets = _history(outlet_ids)
     if outlet_ids is None:
-        measured, rates = _learn(outlets)
+        measured, rates = _learn(outlets, shared)
     else:
-        measured, _ = _learn(outlets)
-        rates = _learn(_history())[1]
-    return outlets, measured, WithShared(rates, shared_rates())
+        measured, _ = _learn(outlets, shared)
+        rates = _learn(_history(), shared)[1]
+    return outlets, measured, WithShared(rates, shared)
 
 
 def advice(outlet_id, kind, value):
