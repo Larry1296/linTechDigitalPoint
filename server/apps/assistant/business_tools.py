@@ -35,6 +35,7 @@ class Context:
         self.user, self.organization, self.branch = user, organization, branch
         self.modules = set(effective_modules(organization))
         self.membership = membership_for(user)
+        self.tool_results = []  # what the tools returned in this answer: the only figures an AI answer may quote
 
     @property
     def platform_admin(self):
@@ -405,13 +406,66 @@ def financial_summary(ctx, args):
     data = summary(ctx.user, {"start": start.isoformat(), "end": end.isoformat()})
     data.pop("filters", None)
     data["period"] = {"start": start.isoformat(), "end": end.isoformat()}
+    from apps.accounting.profit_report import FORMULA, reconcile_figures
     data["basis_explained"] = ("Accrual basis from the posted books: revenue when earned, costs when incurred. money_received is cash "
-                               "actually collected, which is not the same as revenue.")
+                               "actually collected, which is not the same as revenue. net_profit is profit received, the dashboard's "
+                               "figure: " + FORMULA + ". To explain how a profit was reached, use explain_profit.")
+    totals = data.get("totals", {})
+    if "net_profit" in totals:
+        problems = reconcile_figures(**{k: totals.get(k, ZERO) for k in ("revenue", "cogs", "expenses", "stock_corrections", "interest", "owed_profit")},
+                                     gross_profit=totals["gross_profit"], profit=totals["net_profit"])
+        data["reconciled"] = not problems
     daily = data.pop("daily_sales", {})
     if daily:
         series = daily_series({date.fromisoformat(k): v for k, v in daily.items()}, start, end)
         data["revenue_statistics"] = {k: v for k, v in describe_series(series, forecast_days=0).items() if k != "forecast_next_days"}
     return data
+
+
+def _report_out(data):
+    """A profit report as the assistant reads it: amounts as numbers, every line of the formula, each part, sources."""
+    from apps.accounting.profit_report import LABELS, PART_NAMES
+    total = data["total"]
+    lines = [{"line": LABELS[key], "field": key, "amount": _money(total[key])} for key in
+             ("revenue", "cogs", "gross_profit", "expenses", "stock_corrections", "interest", "owed_profit", "profit")]
+    parts = [{"part": PART_NAMES.get(key, key), "key": key, **{f: _money(v) for f, v in part.items()}} for key, part in data["parts"].items()]
+    return {"label": data["label"], "period": {"start": data["start"].isoformat(), "end": data["end"].isoformat()},
+            "basis": data["basis"], "formula": data["formula"], "lines": lines, "parts": parts,
+            **({"only_part": PART_NAMES.get(data["only_part"], data["only_part"])} if data.get("only_part") else {}),
+            "where_from": {field: [{**row, "amount": _money(row["amount"])} for row in rows] for field, rows in data["sources"].items() if rows},
+            "records": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in data["records"].items()},
+            "reconciled": data["reconciled"],
+            "checks_failed": [{**p, **{k: _money(p[k]) for k in ("expected", "reported", "difference")}} for p in data["checks"]]}
+
+
+def explain_profit(ctx, args):
+    from apps.accounting.profit_report import ALL_TIME, find_figure, report
+    from apps.inventory.dashboard import visible_units_for
+    units = visible_units_for(ctx.user, ctx.organization)
+    if not units:
+        raise ToolError("This person's role cannot see any part of the business's figures.")
+    custom = ()
+    if args.get("start_date") or args.get("end_date"):
+        start, end = _period(args)
+        custom = (("asked", f"Profit received {start:%d %b %Y} to {end:%d %b %Y}", start, end, None),)
+    figure = args.get("figure")
+    if figure not in (None, ""):
+        try:
+            amount = Decimal(str(figure).replace(",", "").replace("KES", "").replace("KSh", "").strip())
+        except Exception:
+            raise ToolError("figure must be a number, e.g. 7315.")
+        found, nearest = find_figure(amount, units, custom)
+        if found:
+            return {"figure_asked": _money(amount), "matched": True, "matches": found["label"], "exact_value": _money(found["value"]),
+                    "report": _report_out(found["report"])}
+        return {"figure_asked": _money(amount), "matched": False,
+                "explain": "No profit the business can see in its records comes to this figure (the dashboard headline since the start, "
+                           "each part's, this month, today, last month" + (", and the dates asked" if custom else "") + "). Say so; do not "
+                           "explain a different figure as if it were this one.",
+                "nearest": [{**row, "value": _money(row["value"]), "difference": _money(row["difference"])} for row in nearest]}
+    if custom:
+        return {"report": _report_out(report(*custom[0][2:4], units, custom[0][1]))}
+    return {"report": _report_out(report(*ALL_TIME, units, "Profit so far, every part together (dashboard headline)"))}
 
 
 def expense_analysis(ctx, args):
@@ -858,6 +912,14 @@ TOOLS = {
     "financial_summary": (financial_summary, "Profit and loss from the posted books for a period, per business unit (shop, services, "
                           "M-Pesa): revenue, cost of sales, expenses, gross and net profit, money received, monthly revenue and its statistics.",
                           _schema(PERIOD), "accounting.view_cashentry", "reports"),
+    "explain_profit": (explain_profit, "How a profit figure was reached, from the posted books, exactly as the dashboard works it out: "
+                       "every line of the formula (sales, cost of the items sold, running costs, stock found or missing, interest on "
+                       "investments, profit still owed by customers), each part of the business, where interest, costs and owed profit "
+                       "came from (down to each sale number), and whether it all adds up. Give figure (e.g. 7315) to find which "
+                       "profit it is; with no dates and no figure it explains the dashboard's \"Profit so far\" since the start. "
+                       "Use this for every question about how a profit or loss was reached.",
+                       _schema({"figure": {"type": "number", "description": "The profit amount the person saw, if they name one."}, **PERIOD}),
+                       "accounting.view_profit", None),
     "expense_analysis": (expense_analysis, "Expenses in a period from the posted books: total, by category, by business unit, by month, "
                          "and as a share of revenue.", _schema(PERIOD), "accounting.view_expense", "expenses"),
     "service_jobs": (service_jobs, "Service desk (jobs) in a period: jobs by status, value completed, average minutes to complete, "

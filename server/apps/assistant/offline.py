@@ -75,6 +75,11 @@ class Writer:
         sign = "-" if number < 0 else ""
         return f"{sign}{self.currency} {abs(number):,.0f}" if abs(number) >= 100 or number == int(number) else f"{sign}{self.currency} {abs(number):,.2f}"
 
+    def exact(self, value):
+        """To the cent, so a breakdown adds up on paper exactly to its total."""
+        number = float(value or 0)
+        return f"{'-' if number < 0 else ''}{self.currency} {abs(number):,.2f}"
+
     def call(self, name, args=None):
         """The tool's result, or None (with the reason in ``self.problem``) when this person cannot use it."""
         offered = {n for n, _, _ in business_tools.available(self.ctx)}
@@ -146,32 +151,112 @@ def sales_trend(w, text):
     return "\n".join(lines)
 
 
+# A money amount named in the question ("how was the KES 7,315 profit reached"): shillings, commas or a decimal allowed.
+AMOUNT = re.compile(r"(?:kes|ksh|kshs|sh)\.?\s*(-?\d[\d,]*(?:\.\d+)?)|(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d{3,}(?:\.\d+)?)")
+NAMES_PERIOD = r"\b(day|week|month|year|today|yesterday|since|ever|all[- ]time|beginning|start)\b"
+
+
+def _amount_named(text):
+    for match in AMOUNT.finditer(text):
+        raw = (match.group(1) or match.group(2) or "").replace(",", "")
+        if not re.fullmatch(r"(19|20)\d\d", raw):  # a year is not an amount
+            return raw
+    return None
+
+
+def _profit_lines(w, report):
+    """Every line of the formula, in order, so the figures can be added up on paper to the profit."""
+    by = {line["field"]: line["amount"] for line in report["lines"]}
+    rows = [f"- Sales: **{w.exact(by['revenue'])}**", f"- Less the cost of the items sold: {w.exact(by['cogs'])}",
+            f"- Gross profit: {w.exact(by['gross_profit'])}" + (f" ({by['gross_profit'] / by['revenue'] * 100:.1f}% margin)" if by["revenue"] else ""),
+            f"- Less running costs (expenses): {w.exact(by['expenses'])}"]
+    if by["stock_corrections"]:
+        rows.append(f"- {'Less stock missing' if by['stock_corrections'] > 0 else 'Plus stock found'} in counts: {w.exact(abs(by['stock_corrections']))}")
+    if by["interest"]:
+        rows.append(f"- {'Plus' if by['interest'] > 0 else 'Less'} interest on investments, after fees: {w.exact(abs(by['interest']))}")
+    if by["owed_profit"]:
+        rows.append(f"- Less profit still owed by customers (counts when they pay): {w.exact(by['owed_profit'])}" if by["owed_profit"] > 0 else
+                    f"- Plus profit from earlier credit sales that customers paid in these dates: {w.exact(-by['owed_profit'])}")
+    rows.append(f"- **Profit received: {w.exact(by['profit'])}**")
+    return rows
+
+
+def _explain_report(w, report, heading):
+    lines = [heading, "", "### How it adds up", *_profit_lines(w, report)]
+    parts = [p for p in report["parts"] if p["key"] != "INVEST" and (p["revenue"] or p["expenses"] or p["profit"])]
+    if len(parts) > 1 or report.get("only_part"):
+        owing = any(p["owed_profit"] for p in parts)
+        lines += ["", "### By part"]
+        lines += table(["Part", "Sales", "Costs"] + (["Owed profit"] if owing else []) + ["Profit"],
+                       [[p["part"], w.exact(p["revenue"]), w.exact(p["cogs"] + p["expenses"] + p["stock_corrections"])]
+                        + ([f"− {w.exact(p['owed_profit'])}" if p["owed_profit"] > 0 else f"+ {w.exact(-p['owed_profit'])}" if p["owed_profit"] else "—"] if owing else [])
+                        + [w.exact(p["profit"])] for p in parts])
+        if owing:
+            lines.append("Owed profit: − is profit in sales not paid for yet; + is profit from earlier credit sales paid in these dates.")
+    where = report.get("where_from", {})
+    owed = where.get("owed_profit") or []
+    if owed:
+        lines += ["", "### Credit sales behind the owed profit"]
+        lines += [f"- Sale {row['source']}: {w.exact(abs(row['amount']))} {'still owed' if row['amount'] > 0 else 'paid in'} ({row['from']}"
+                  + (f" to {row['to']})" if row["to"] != row["from"] else ")") for row in owed[:8]]
+    for field, title in (("interest", "Interest"), ("expenses", "Running costs")):
+        if where.get(field):
+            lines += ["", f"### {title}"] + [f"- {row['source']}: {w.exact(row['amount'])}" for row in where[field][:6]]
+    period = report["period"]
+    span = "every record since the start" if period["start"] <= "1900-01-01" else f"{period['start']} to {period['end']}"
+    if report["reconciled"]:
+        lines += ["", f"> From the posted books ({span}), {report['basis']}. The lines above add up exactly to the profit, and the parts to the whole."]
+    else:
+        lines += ["", "> **These figures do not add up, so this breakdown cannot be relied on.** Checks that failed:"]
+        lines += [f"> - {p['part']}: {p['explain']} Expected {w.exact(p['expected'])}, found {w.exact(p['reported'])} (off by {w.exact(p['difference'])})."
+                  for p in report["checks_failed"]]
+        lines += ["> The difference has been logged for the administrators to look into."]
+    return "\n".join(lines)
+
+
 def profit_and_loss(w, text):
-    start, end, words = period(text + (" this month" if not re.search(r"day|week|month|year|today|yesterday|since|ever", text) else ""))
-    data = w.call("financial_summary", _args(start, end))
+    amount = _amount_named(text)
+    dashboard = re.search(r"\b(dashboard|so far|home page|headline)\b", text)
+    if amount is not None:
+        args = {} if not re.search(NAMES_PERIOD, text) or dashboard else _args(*period(text)[:2])
+        data = w.call("explain_profit", {"figure": amount, **args})
+        if data is None:
+            return w.problem
+        if data["matched"]:
+            report = data["report"]
+            profit = data["exact_value"]
+            return _explain_report(w, report, f"**{w.exact(profit)} is the {report['label'].lower()[0] + report['label'][1:]}.** "
+                                              "Here is exactly how your records reach it.")
+        lines = [f"**{w.money(data['figure_asked'])} cannot be matched** to any profit in your records: not the dashboard's profit since the start, "
+                 "nor any part's, this month's, today's or last month's. I won't explain a different figure in its place.", "",
+                 "### The nearest profits in your records"]
+        lines += [f"- {row['label']}: {w.exact(row['value'])}" for row in data["nearest"]]
+        lines += ["", "> If you read it from a screen, check its dates or part: ask e.g. *how was this month's profit reached*."]
+        return "\n".join(lines)
+    if dashboard and not re.search(NAMES_PERIOD.replace("|since|ever|all[- ]time|beginning|start", ""), text):
+        data = w.call("explain_profit", {})
+        if data is None:
+            return w.problem
+        return _explain_report(w, data["report"], f"**{w.exact(data['report']['lines'][-1]['amount'])} is your profit so far**, every part together, "
+                                                  "as the dashboard shows it.")
+    start, end, words = period(text + (" this month" if not re.search(NAMES_PERIOD, text) else ""))
+    data = w.call("explain_profit", {} if start == "beginning" else _args(start, end))
     if data is None:
         return w.problem
-    t = data["totals"]
-    net = float(t["net_profit"])
-    lines = [f"**{'Profit' if net >= 0 else 'Loss'} of {w.money(abs(net))}** for {words}, from the posted books (accrual basis).", "",
-             "### The figures", f"- Revenue: **{w.money(t['revenue'])}**", f"- Cost of goods sold: {w.money(t['cogs'])}",
-             f"- Gross profit: {w.money(t['gross_profit'])}" + (f" ({float(t['gross_profit']) / float(t['revenue']) * 100:.1f}% margin)" if float(t["revenue"]) else ""),
-             f"- Running costs (expenses): {w.money(t['expenses'])}"]
-    if float(t.get("stock_corrections") or 0):
-        lines.append(f"- Stock corrections: {w.money(t['stock_corrections'])}")
-    lines.append(f"- Net profit: **{w.money(t['net_profit'])}**")
-    units = [u for u in data.get("units", []) if float(u["revenue"]) or float(u["expenses"])]
-    if len(units) > 1:
-        lines += ["", "### By business unit"]
-        lines += table(["Unit", "Revenue", "Costs", "Net"], [[u["business_unit"].title(), w.money(u["revenue"]),
-                                                             w.money(float(u["cogs"]) + float(u["expenses"])), w.money(u["net_profit"])] for u in units])
-    received, revenue = float(t["money_received"]), float(t["revenue"])
-    if abs(received - revenue) > 0.5:
-        lines += ["", f"> Money actually received is {w.money(received)}. Revenue counts sales when made, so credit sales not yet "
-                      "paid are in revenue but not in the money received."]
-    if not float(t["expenses"]):
-        lines += ["", "> No running costs (rent, power, wages) are recorded for this period, so the real profit is lower."]
-    return "\n".join(lines)
+    report = data["report"]
+    profit = report["lines"][-1]["amount"]
+    by = {line["field"]: line["amount"] for line in report["lines"]}
+    out = _explain_report(w, report, f"**{'Profit' if profit >= 0 else 'Loss'} of {w.exact(abs(profit))}** for {words}, from the posted books.")
+    received = w.call("financial_summary", _args(start, end)) if "financial_summary" in {n for n, _, _ in business_tools.available(w.ctx)} else None
+    extra = []
+    if received:
+        cash = float(received["totals"]["money_received"])
+        if abs(cash - by["revenue"]) > 0.5:
+            extra.append(f"> Money customers actually paid in these dates is {w.money(cash)}. Sales count when made, and a payment for an "
+                         "older credit sale is not a new sale, so the two differ.")
+    if not by["expenses"]:
+        extra.append("> No running costs (rent, power, wages) are recorded for these dates, so the real profit is lower.")
+    return out + ("\n\n" + "\n".join(extra) if extra else "")
 
 
 def _category_named(text):

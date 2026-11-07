@@ -29,7 +29,7 @@ def _unit(sale):
 
 
 def owed_profit_rows(start=None, end=None):
-    """[{date, unit, amount}]: how the profit still owed by customers changed on each day (more owed: above zero; paid
+    """[{date, unit, amount, sale}]: how the profit still owed by customers changed on each day (more owed: above zero; paid
     or returned: below zero), between ``start`` and ``end`` (either may be None). Summed up to a day, it is the profit
     still owed at the end of that day."""
     from apps.commerce.models import Sale
@@ -57,7 +57,7 @@ def owed_profit_rows(start=None, end=None):
             owed += changes[day]
             now = (share * max(owed, ZERO)).quantize(CENT)
             if now != before and (start is None or day >= start) and (end is None or day <= end):
-                rows.append({"date": day, "unit": _unit(sale), "amount": now - before})
+                rows.append({"date": day, "unit": _unit(sale), "amount": now - before, "sale": sale.number})
             before = now
     return rows
 

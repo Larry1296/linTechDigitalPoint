@@ -98,15 +98,28 @@ def shared(amount, shares):
     return {part: value if amount >= 0 else -value for part, value in parts.items()}
 
 
+def profit_of(figures):
+    """The one profit formula every screen and the assistant use (profit received): what was sold, less what the sold
+    items cost, the running costs and stock found missing (found stock adds), plus interest on investments after fees,
+    less the profit in sales customers have not paid for yet (a payment for an older credit sale makes that line below
+    zero, so it adds the profit as it comes in). Missing figures count as zero."""
+    get = lambda key: figures.get(key) or ZERO
+    return get('revenue') - get('cogs') - get('expenses') - get('stock_corrections') + get('interest') - get('owed_profit')
+
+
 def accrual_totals(rows, units):
     result = dict(revenue=ZERO, cogs=ZERO, expenses=ZERO, stock_corrections=ZERO, interest=ZERO, owed_profit=ZERO)
     for row in rows:
         if row['unit'] in units and row['field'] in result:
             result[row['field']] += row['amount']
-    # Profit received: what was sold less its cost and the running costs, less the profit customers still owe.
-    result['profit'] = (result['revenue'] - result['cogs'] - result['expenses'] - result['stock_corrections'] + result['interest']
-                        - result['owed_profit'])
+    result['profit'] = profit_of(result)
     return result
+
+
+def visible_units_for(user, organization):
+    """The parts of the business this person may see figures for: the part's tool is on and their role may use it."""
+    enabled = effective_modules(organization)
+    return [key for key, _, runs in UNITS if any(module in enabled and has_business_permission(user, permission) for module, permission in runs)]
 
 
 def unit_series(trend_rows, period_rows, units, profit_visible, first_month, start, end):
@@ -188,7 +201,7 @@ def dashboard_snapshot(request):
     if profit_visible:
         from apps.accounting.investments import book_earnings
         book_earnings()  # interest recorded before it counted in profit is counted once
-    visible_units = [key for key, _, runs in UNITS if any(module in enabled and permits(permission) for module, permission in runs)]
+    visible_units = visible_units_for(request.user, request.organization)
     books = CashEntry.objects.filter(business_unit__in=visible_units, occurred_at__lte=now)
     daily = pnl_rows(today, today)
     totals = accrual_totals(daily, whole(visible_units, profit_visible))

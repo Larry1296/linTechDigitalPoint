@@ -25,7 +25,7 @@ MAX_ROUNDS = 8  # tool rounds per question; the last round must answer with what
 MAX_OUTPUT = 16000
 LABELS = {"business_overview": "Reading the business profile", "find_products": "Looking up products", "stock_levels": "Checking stock levels",
           "inventory_analysis": "Analysing stock", "sales_summary": "Checking sales", "sales_statistics": "Analysing sales trends",
-          "stock_movements": "Checking stock movements", "financial_summary": "Reading the books", "expense_analysis": "Analysing expenses",
+          "stock_movements": "Checking stock movements", "financial_summary": "Reading the books", "explain_profit": "Working out the profit", "expense_analysis": "Analysing expenses",
           "service_jobs": "Checking service jobs", "mpesa_summary": "Checking M-Pesa", "platform_help": "Searching the help centre",
           "agency_commission": "Checking agency commission", "money_position": "Working out where the money is",
           "money_owed_to_business": "Checking who owes you", "money_business_owes": "Checking what you owe",
@@ -89,10 +89,13 @@ def _scope(ctx):
 def _run_tool(ctx, name, args):
     with _scope(ctx):
         try:
-            return business_tools.run(ctx, name, args)
+            text, failed = business_tools.run(ctx, name, args)
         except Exception:
             logger.exception("Business assistant tool %s failed", name)
             return json.dumps({"error": "This lookup failed on the server. Try a different question or period."}), True
+    if not failed:
+        ctx.tool_results.append(text)  # the records this answer may quote figures from (grounding.py)
+    return text, failed
 
 
 def stream_offline_answer(ctx, question, reason=""):
@@ -134,20 +137,50 @@ def web_search_on(provider):
     return provider == "anthropic" and settings.BUSINESS_ASSISTANT_WEB_SEARCH
 
 
+def _text_of(items):
+    return "".join(json.loads(item[6:]).get("text", "") for item in items if '"type": "text"' in item)
+
+
+UNCHECKED = ("The AI's answer quoted {figures} that the records it looked up do not hold, so it was not shown and this is "
+             "answered directly from the records.")
+
+
 def stream_business_answer(ctx, history, question, provider):
+    """The AI's answer. Money questions are held back until every amount in the answer is found in the records the tools
+    returned (grounding.py); an answer quoting an amount the records do not hold is replaced by the answer worked out
+    from the records, so a made-up figure never reaches the business."""
+    from .grounding import is_financial, unsupported
     web = web_search_on(provider)
     with _scope(ctx):
         system = business_prompt(ctx, web=web)
         tools = business_tools.available(ctx)
     stream = (lambda *args: _stream_anthropic(*args, web=web)) if provider == "anthropic" else _stream_openai
-    said = False
+    hold = is_financial(question)
+    said, held, refused = False, [], False
     for item in stream(ctx, system, tools, history, question):
         # The AI could not answer before saying anything (no credit, a bad key, an outage): answer from the records instead.
         if not said and '"type": "error"' in item:
             yield from stream_offline_answer(ctx, question, unavailable_reason(ctx, provider, f'"reason": "{NO_CREDIT}"' in item))
             return
         said = said or '"type": "text"' in item
+        refused = refused or '"type": "refusal"' in item
+        if hold and '"type": "text"' in item:
+            held.append(item)
+            continue
         yield item
+    if refused:
+        yield event("done")
+        return
+    text = _text_of(held) if hold else ""
+    wrong = unsupported(text, ctx.tool_results, ctx.organization.currency) if hold else []
+    if wrong:
+        figures = ", ".join(f"{ctx.organization.currency} {value:,}" for value in wrong[:5])
+        logger.warning("Business assistant (%s, org %s): answer rejected, %s amount(s) not in the records: %s",
+                       provider, ctx.organization.pk, len(wrong), figures)
+        reason = UNCHECKED.format(figures=figures) if ctx.user.is_superuser else ""
+        yield from stream_offline_answer(ctx, question, reason)
+        return
+    yield from held
     yield event("done")
 
 

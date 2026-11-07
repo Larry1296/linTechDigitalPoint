@@ -55,7 +55,7 @@ def summary(user, params):
     """Accrual revenue, cost of sales and expenses per business unit (from journals), with money
     received shown separately. Money received is cash, never revenue or profit."""
     from datetime import date
-    from apps.inventory.dashboard import pnl_rows
+    from apps.inventory.dashboard import pnl_rows, profit_of
     entries, filters = filtered_entries(params)
     profit = has_business_permission(user, 'accounting.view_profit')
     if profit:
@@ -85,7 +85,7 @@ def summary(user, params):
         if profit:
             row['gross_profit'] = row['revenue'] - row['cogs']
             # Profit received: less the profit in what customers still owe, which counts when they pay.
-            row['net_profit'] = row['gross_profit'] - row['expenses'] - row['stock_corrections'] + row.get('interest', Decimal('0')) - row['owed_profit']
+            row['net_profit'] = profit_of(row)  # the dashboard's own formula
         else:
             row.pop('cogs')
             row.pop('stock_corrections')

@@ -30,7 +30,7 @@ def test_periods_are_read_from_the_question():
 def test_the_common_questions_get_exact_answers(shop):  # noqa: F811
     ctx = context(shop)
     text, used = ask(ctx, "Give me a profit and loss summary for this month.")
-    assert used == ["financial_summary"] and "Revenue: **KES 600**" in text
+    assert used == ["explain_profit", "financial_summary"] and "Sales: **KES 600.00**" in text and "Profit received: KES 280.00" in text
     text, used = ask(ctx, "How are my sales trending over the last 90 days?")
     assert used == ["sales_statistics"] and "Too early to call a trend" in text and "KES 600" in text
     text, used = ask(ctx, "What is running low and how much should I reorder?")
