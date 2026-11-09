@@ -345,9 +345,14 @@ def sales(w, text):
     data = w.call("sales_summary", {**_args(start, end), "group_by": "payment_method"})
     if data is None:
         return w.problem
-    t = data["totals"]
+    t, earlier = data["totals"], data.get("paid_on_earlier_sales") or {}
+    paid_earlier = []
+    if earlier.get("count"):
+        methods = ", ".join(f"{row['method'].title()} {w.money(row['amount'])}" for row in earlier["by_method"])
+        paid_earlier = [f"- Paid on earlier credit sales: **{w.money(earlier['amount'])}** from {earlier['count']} "
+                        f"payment{'s' if earlier['count'] != 1 else ''} ({methods}). This is money received, not new sales."]
     if not t["sales_count"]:
-        return f"No completed sales {words}."
+        return "\n".join([f"No new sales {words}.", *([""] + paid_earlier if paid_earlier else [])])
     lines = [f"**{t['sales_count']} sale{'s' if t['sales_count'] != 1 else ''} worth {w.money(t['sales_value'])}** {words}.", "",
              f"- Average sale: {w.money(t['average_sale'])}", f"- Discounts given: {w.money(t['discounts_given'])}"]
     if t.get("gross_profit") is not None:
@@ -357,7 +362,7 @@ def sales(w, text):
     unpaid = (t["sales_value"] or 0) - sum(r["value"] or 0 for r in data["rows"])
     if unpaid > 0.5:
         lines.append(f"- Not paid yet (on credit): {w.money(unpaid)}")
-    return "\n".join(lines)
+    return "\n".join(lines + paid_earlier)
 
 
 def owed_to_me(w, text):

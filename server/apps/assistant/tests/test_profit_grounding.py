@@ -188,3 +188,28 @@ def test_when_the_ai_fails_the_profit_comes_from_the_records(shop):  # noqa: F81
                                          format="json"))
     text = "".join(e.get("text", "") for e in stream if e["type"] == "text")
     assert "**KES 280.00 is the profit so far" in text and "Gross profit: KES 280.00" in text
+
+
+def test_a_day_without_sales_still_shows_money_paid_on_earlier_sales(shop):  # noqa: F811
+    # 9 Nov 2026 (live): a customer paid 250 cash on an earlier credit sale; the assistant said nothing came into the drawer.
+    sale = credit_sale(shop)
+    with organization_context(shop.org):
+        from apps.commerce.models import Sale
+        from apps.commerce.models import Payment
+        earlier = timezone.now() - timezone.timedelta(days=5)
+        Sale.objects.exclude(pk=sale.pk).update(created_at=earlier)
+        Payment.objects.exclude(sale=sale).update(created_at=earlier)  # paid in full when it was sold
+        Sale.objects.filter(pk=sale.pk).update(created_at=timezone.now() - timezone.timedelta(days=3))
+        collect(sale=sale, amount=D("250"), method="CASH", key="part-paid")
+    ctx = context(shop)
+    today = timezone.localdate().isoformat()
+    data, _ = call(ctx, "sales_summary", {"start_date": today, "end_date": today})
+    assert data["totals"]["sales_count"] == 0
+    earlier = data["paid_on_earlier_sales"]
+    assert (earlier["count"], earlier["amount"]) == (1, 250.0) and earlier["by_method"] == [{"method": "CASH", "payments": 1, "amount": 250.0}]
+    assert earlier["payments"][0]["sale_number"] == sale.number
+    text, _ = ask(ctx, "sales today")
+    assert "No new sales today" in text and "Paid on earlier credit sales: **KES 250**" in text and "not new sales" in text
+    # Over the days the sale was made in, its own payment is part of that sale, not an earlier one.
+    week, _ = call(ctx, "sales_summary", {"start_date": (timezone.localdate() - timezone.timedelta(days=4)).isoformat()})
+    assert week["paid_on_earlier_sales"]["count"] == 0

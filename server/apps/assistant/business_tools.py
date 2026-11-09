@@ -258,6 +258,7 @@ def sales_summary(ctx, args):
     if ctx.sees_profit:
         result["totals"].update(cost_of_goods=_money(agg["cogs"]), gross_profit=_money(agg["profit"]),
                                 gross_margin_pct=r(safe_div(agg["profit"], agg["net"]) * 100) if agg["net"] else None)
+    result["paid_on_earlier_sales"] = _paid_on_earlier_sales(start, end)
     rows = defaultdict(lambda: {"sales": 0, "value": ZERO, "profit": ZERO})
     if group in {"day", "week", "month", "channel", "staff", "hour", "weekday"}:
         for sale in sales.values("created_at", "channel", "total", "gross_profit", "created_by__first_name", "created_by__username"):
@@ -299,6 +300,22 @@ def sales_summary(ctx, args):
     limit = _limit(args, 60, 400)
     result.update(group_by=group, groups=len(listed), rows=listed[:limit])
     return result
+
+
+def _paid_on_earlier_sales(start, end):
+    """Money customers paid in the period towards sales made before it (credit sales paid later). It is money received,
+    in the drawer, till or bank, but never a new sale: a day with no sales can still have money coming in."""
+    from apps.commerce.models import Payment
+    paid = Payment.objects.filter(status="COMPLETED", sale__status="COMPLETED", created_at__date__range=(start, end),
+                                  sale__created_at__date__lt=start)
+    by_method = paid.values("method").annotate(n=Count("id"), v=Sum("amount")).order_by("-v")
+    payments = paid.select_related("sale").order_by("created_at")[:20]
+    return {"count": paid.count(), "amount": _money(paid.aggregate(v=Sum("amount"))["v"]),
+            "by_method": [{"method": row["method"], "payments": row["n"], "amount": _money(row["v"])} for row in by_method],
+            "payments": [{"sale_number": p.sale.number, "sold_on": timezone.localtime(p.sale.created_at).date().isoformat(),
+                          "paid_at": timezone.localtime(p.created_at).isoformat(timespec="minutes"), "method": p.method,
+                          "amount": _money(p.amount)} for p in payments],
+            "note": "Customers paying for earlier sales (on credit): money received in this period, not new sales."}
 
 
 def sales_statistics(ctx, args):
@@ -897,6 +914,7 @@ TOOLS = {
                            _schema({"days": {"type": "integer", "description": "Look-back window in days (default 90)."}, **LIMIT}),
                            "inventory.view_stockbalance", "inventory"),
     "sales_summary": (sales_summary, "Completed sales in a period: totals, average sale, discounts and (if allowed) gross profit, "
+                      "plus money customers paid in the period on earlier (credit) sales, which is money received but not a new sale; "
                       "grouped by day, week, month, hour, weekday, product, category, channel, payment_method or staff.",
                       _schema({**PERIOD, "group_by": {"type": "string", "enum": ["day", "week", "month", "hour", "weekday", "product", "category",
                                                                                 "channel", "payment_method", "staff"]}, **LIMIT}),

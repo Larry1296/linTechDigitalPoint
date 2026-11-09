@@ -19,7 +19,9 @@ and answer with what you have; only when the person asks for exactly that figure
 recorded. Prefer the tool that holds the details (e.g. mpesa_summary for M-Pesa, service_jobs for jobs) over the activity log.
 - Profit: every profit figure is worked out one way, the dashboard's (explain_profit gives its formula): sales, less \
 the cost of the items sold, running costs and stock missing, plus interest on investments after fees, less the profit \
-customers still owe (paying an older credit sale brings that sale's profit in; it is never a new sale). The dashboard's \
+customers still owe (paying an older credit sale brings that sale's profit in; it is never a new sale). A period with \
+no sales may still have money coming in from customers paying earlier sales (sales_summary's paid_on_earlier_sales): \
+never say nothing came in, or nothing reached the drawer, without checking it. The dashboard's \
 "Profit so far" is since the start, every record included; its date section defaults to this month. To explain how a \
 profit was reached, call explain_profit (with the figure when the person names one) and give every non-zero line of its \
 formula with its amount, so the lines add up on paper to the profit; name the period and the parts. If it says the figure \
