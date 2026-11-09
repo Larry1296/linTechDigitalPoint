@@ -369,15 +369,20 @@ def owed_to_me(w, text):
     data = w.call("money_owed_to_business", {"limit": 15})
     if data is None:
         return w.problem
-    lines = [f"**Customers owe you {w.money(data['customers_owe_total'])}** ({data['customers_owing']} customer{'s' if data['customers_owing'] != 1 else ''})."]
+    lent = data.get("money_lent_out")
+    lent_rows = lent["loans"] if lent else []
+    who = [f"{data['customers_owing']} customer{'s' if data['customers_owing'] != 1 else ''}"] if data["customers_owing"] or not lent_rows else []
+    who += [f"{len(lent_rows)} loan{'s' if len(lent_rows) != 1 else ''}"] if lent_rows else []
+    lines = [f"**Customers owe you {w.money(data['customers_owe_total'])}** ({', '.join(who)})."]
+    if lent_rows:
+        lines += ["", f"- Sold, not yet paid: {w.money(data['sales_owed_total'])}", f"- Money lent, not yet repaid: {w.money(lent['total_still_owed'])}"]
     if data["customers"]:
         lines += [""] + [f"- {c['customer']}: {w.money(c['owed'])} from {c['unpaid_sales']} sale{'s' if c['unpaid_sales'] != 1 else ''} since {c['oldest_unpaid_sale']}"
                          + (f", {w.money(c['overdue'])} overdue" if c["overdue"] else "") for c in data["customers"]]
     if data.get("by_age"):
         lines += ["", "By age: " + ", ".join(f"{k} {w.money(v)}" for k, v in data["by_age"].items())]
-    lent = data.get("money_lent_out")
-    if lent and lent["loans"]:
-        lines += ["", f"**Money lent out still owed: {w.money(lent['total_still_owed'])}**"]
+    if lent_rows:
+        lines += ["", f"**Money lent, still owed: {w.money(lent['total_still_owed'])}**"]
         lines += [f"- {l['borrower']}: {w.money(l['still_owed'])} ({l['status'].replace('_', ' ').lower()}, due {l['due']})" for l in lent["loans"]]
     if data.get("refunds_the_business_owes_customers"):
         lines += ["", f"You owe customers {w.money(data['refunds_the_business_owes_customers'])} in refunds."]

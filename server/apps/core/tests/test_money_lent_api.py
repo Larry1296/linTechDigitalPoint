@@ -40,3 +40,30 @@ def test_owner_lends_and_confirms_repayments_through_the_api():
     till.force_login(cashier)
     assert till.post("/api/v1/accounting/loans/", {"borrower_name": "X Y", "amount": "10", "method": "CASH", "due_date": str(due),
                      "idempotency_key": "k2"}, format="json").status_code == 403
+
+
+def test_money_lent_counts_with_what_customers_owe():
+    # 2026-11-09, owner: money lent and not yet repaid is counted as customers owing the business.
+    from apps.assistant.tests.test_business_assistant import call, context, make_business
+    from apps.inventory.dashboard_summary import _customers_owe
+    shop = make_business("Lendo", "LND-1")
+    due = timezone.localdate() + timedelta(days=7)
+    made = shop.client.post("/api/v1/accounting/loans/", {"borrower_name": "Peter Olendo", "amount": "200", "method": "CASH",
+                            "due_date": str(due), "idempotency_key": "lend-1"}, format="json")
+    assert made.status_code == 201, made.content
+    with organization_context(shop.org):
+        from apps.inventory.services import complete_sale
+        complete_sale(lines=[{"variant": shop.charger, "quantity": 1, "unit_price": Decimal("300")}], channel="POS", number="CR-1",
+                      user=shop.owner, paid_amount=0)
+        assert _customers_owe() == Decimal("500")
+    board = shop.client.get("/api/v1/inventory/dashboard/").json()
+    owed = board["receivables"]
+    assert (Decimal(str(owed["outstanding"])), Decimal(str(owed["sales_owed"])), Decimal(str(owed["lent_owed"])), owed["lent_count"]) == (
+        Decimal("500"), Decimal("300"), Decimal("200"), 1)
+    assert {"reference": f"Lent {timezone.localdate():%d %b %Y}", "customer": "Peter Olendo (money lent)", "amount": 200.0, "lent": True} in owed["rows"]
+    groups = {g["key"]: g for g in board["net_worth"]["groups"]}
+    assert "loans" not in groups and Decimal(str(groups["receivables"]["amount"])) == Decimal("500")
+    assert [(i["label"], Decimal(str(i["amount"]))) for i in groups["receivables"]["items"]] == [
+        ("Sold, not yet paid", Decimal("300")), ("Money lent, not yet repaid", Decimal("200"))]
+    data, _ = call(context(shop), "money_owed_to_business")
+    assert (data["customers_owe_total"], data["sales_owed_total"]) == (500.0, 300.0)

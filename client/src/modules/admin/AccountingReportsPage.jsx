@@ -50,7 +50,7 @@ function OwnerView({ summary, money }) {
         <div><dt>You owe suppliers</dt><dd>{money(p.you_owe_suppliers)}</dd></div>
         <div><dt>Unpaid bills</dt><dd>{money(p.unpaid_bills)}</dd></div>
         <div><dt>Tax owed</dt><dd>{money(p.tax_owed)}</dd></div>
-        {p.money_lent_out != null && Number(p.money_lent_out) !== 0 && <div><dt>Money lent out</dt><dd>{money(p.money_lent_out)}</dd></div>}
+        {p.money_lent_out != null && Number(p.money_lent_out) !== 0 && <div><dt>Of what customers owe, money lent out</dt><dd>{money(p.money_lent_out)}</dd></div>}
       </dl>
     </section>
     <section className="accountingPanel"><h2>For your KRA returns</h2>

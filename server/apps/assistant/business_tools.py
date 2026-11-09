@@ -669,7 +669,11 @@ def money_owed_to_business(ctx, args):
             if left > 0:
                 loans.append({"borrower": loan.borrower_name, "lent": _money(loan.amount), "lent_on": loan.lent_on.isoformat(), "due": loan.due_date.isoformat(),
                               "still_owed": _money(left), "status": status(loan, today)})
-        result["money_lent_out"] = {"total_still_owed": _money(sum((Decimal(str(l["still_owed"])) for l in loans), ZERO)), "loans": loans}
+        lent = sum((Decimal(str(l["still_owed"])) for l in loans), ZERO)
+        result["money_lent_out"] = {"total_still_owed": _money(lent), "loans": loans}
+        # The owner counts money lent with what customers owe (2026-11-09): the total holds both, each shown.
+        result["sales_owed_total"] = result["customers_owe_total"]
+        result["customers_owe_total"] = _money(Decimal(str(result["customers_owe_total"] or 0)) + lent)
     return result
 
 

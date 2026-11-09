@@ -34,6 +34,19 @@ def outstanding(loan):
     return Decimal("0") if loan.cancelled_at else loan.amount - repaid(loan)
 
 
+def still_owed(today=None):
+    """Money lent and not yet repaid, loan by loan, oldest first. The owner counts it with what customers owe: it is
+    money owed to the business, like a credit sale not yet paid (2026-11-09, owner)."""
+    today = today or timezone.localdate()
+    rows = []
+    for loan in Loan.objects.filter(cancelled_at__isnull=True).prefetch_related("repayments").order_by("lent_on", "pk"):
+        left = outstanding(loan)
+        if left > 0:
+            rows.append({"loan": loan.pk, "borrower": loan.borrower_name, "phone": loan.borrower_phone, "lent": loan.amount,
+                         "lent_on": loan.lent_on, "due_date": loan.due_date, "owed": left, "overdue": loan.due_date < today})
+    return rows
+
+
 def status(loan, today=None):
     if loan.cancelled_at:
         return "CANCELLED"

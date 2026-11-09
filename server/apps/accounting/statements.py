@@ -260,7 +260,7 @@ def owner_summary(start, end):
         "profit_received": {"amount": pl["net_profit_before_tax"] - owed, "loss": pl["net_profit_before_tax"] - owed < 0,
                             "explain": "The profit you really have: the profit above less what customers still owe of it. "
                                        "This is what you can restock or invest with."},
-        "position": {"cash_and_bank": _debit(position, sorted(CASH_ACCOUNTS - {"1300", "1310"})), "customers_owe_you": _debit(position, ["1100"]),
+        "position": {"cash_and_bank": _debit(position, sorted(CASH_ACCOUNTS - {"1300", "1310"})), "customers_owe_you": _debit(position, ["1100", "1150"]),
                      "you_owe_suppliers": -_debit(position, ["2000"]), "unpaid_bills": -_debit(position, ["2150"]),
                      "tax_owed": -_debit(position, ["2200"]), "stock_value": _debit(position, ["1200"]),
                      "money_lent_out": _debit(position, ["1150"])},

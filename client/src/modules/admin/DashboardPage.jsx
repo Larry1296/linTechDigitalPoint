@@ -53,6 +53,14 @@ export function DashboardPage() {
   return user?.roles?.[0] === "EMPLOYEE" ? <WorkDashboard /> : <BusinessDashboard />;
 }
 
+// Customers owe you: sales not yet paid and money lent not yet repaid, each named when there is any.
+function owedNote(receivables, money) {
+  const lent = Number(receivables?.lent_owed || 0);
+  if (!lent) return "Sold, not yet paid";
+  const sold = Number(receivables?.sales_owed || 0);
+  return [sold > 0 && `${money(sold)} sold, not yet paid`, `${money(lent)} lent, not yet repaid`].filter(Boolean).join(" · ");
+}
+
 function BusinessDashboard() {
   const { user } = useAuth();
   const organizationId = user?.organization?.id;
@@ -118,7 +126,7 @@ function BusinessDashboard() {
       [units.filter(unit => !unit.restricted && unit.all_time?.profit != null).map(unit => `${unit.name} ${profitText(unit.all_time.profit, money)}`).join(" · "),
         (investing || Number(ever.interest || 0)) && `interest on investments ${money(ever.interest || 0)}`,
         Number(ever.owed_profit || 0) > 0 && `${money(ever.owed_profit)} more when customers pay`, "money spent lowers it"].filter(Boolean).join(" · "), "/admin/reports", Number(ever.profit) < 0 ? "loss" : "profit"],
-    owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), "Sold, not yet paid", "/admin/sales-history"],
+    owed != null && Number(owed) > 0 && ["Customers owe you", money(owed), owedNote(data.receivables, money), "/admin/sales-history"],
     !inventory.restricted && ["Products running low", count(inventory.low_stock), `Of ${count(inventory.total_skus)} products`, "/admin/products", Number(inventory.low_stock) > 0 ? "warn" : null],
   ].filter(Boolean);
   const actions = [

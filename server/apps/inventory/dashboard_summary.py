@@ -84,9 +84,9 @@ def agency_money(with_commission=False):
 
 
 def _customers_owe():
-    """Sold but not yet paid for: the balance customers still owe the shop."""
+    """What customers owe the business: sales not yet paid for and money lent not yet repaid."""
     from apps.accounting.models import JournalLine
-    return JournalLine.objects.filter(account__code='1100').aggregate(v=Sum(F('debit') - F('credit')))['v'] or ZERO
+    return JournalLine.objects.filter(account__code__in=['1100', '1150']).aggregate(v=Sum(F('debit') - F('credit')))['v'] or ZERO
 
 
 def owner_summary(*, visible_units, profit_visible, permits):

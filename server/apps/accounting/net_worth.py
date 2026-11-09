@@ -74,6 +74,15 @@ def _loans():
     return sum((outstanding(loan) for loan in Loan.objects.filter(cancelled_at__isnull=True)), ZERO)
 
 
+def _owed_to_you(sales, lent):
+    """Customers owe you: sales not yet paid (``sales``, None = not allowed to see) and money lent not yet repaid, in
+    one row with each shown, as the owner counts them together (2026-11-09)."""
+    items = [{"key": "receivables-sales", "label": "Sold, not yet paid", "amount": sales}] if sales is not None else []
+    items += [{"key": "receivables-lent", "label": "Money lent, not yet repaid", "amount": lent}] if lent else []
+    amount = None if sales is None and not lent else (sales or ZERO) + lent
+    return {"key": "receivables", "label": "Customers owe you", "side": "OWNS", "amount": amount, "items": items}
+
+
 def _unpaid_expenses():
     from .models import Expense
     from .services import expense_outstanding
@@ -95,9 +104,8 @@ def snapshot(*, stock=None, receivables=None, payables=None, save=True):
         {"key": "agency", "label": "M-Pesa money in operation (agency stock)", "side": "OWNS",
          "amount": sum((r["amount"] for r in agency), ZERO), "items": agency},
         {"key": "investments", "label": "Investments", "side": "OWNS", "amount": sum((r["amount"] for r in investments), ZERO), "items": investments},
-        {"key": "loans", "label": "Money lent out", "side": "OWNS", "amount": _loans(), "items": []},
         {"key": "commission", "label": "Commission Safaricom still owes", "side": "OWNS", "amount": max(_commission_due(), ZERO), "items": []},
-        {"key": "receivables", "label": "Customers owe you", "side": "OWNS", "amount": receivables, "items": []},
+        _owed_to_you(receivables, _loans()),
         {"key": "stock", "label": "Stock on the shelves (at cost)", "side": "OWNS", "amount": stock, "items": []},
         {"key": "payables", "label": "You owe suppliers", "side": "OWES", "amount": payables, "items": []},
         {"key": "expenses", "label": "Running costs not yet paid", "side": "OWES", "amount": _unpaid_expenses(), "items": []},

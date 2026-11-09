@@ -92,8 +92,19 @@ def enrich_dashboard(data, *, books, purchase_lots, stock_value, start, end, now
             row['quantity'] += quantity
             row['sales'] += amount
     receivables_allowed = bool(channels) and permits('commerce.view_sale') and permits('commerce.view_payment')
+    # Money lent and not yet repaid is owed to the business too, so it counts with what customers owe.
+    sales_owed, lent_owed = outstanding, ZERO
+    if receivables_allowed and permits('accounting.view_loan'):
+        from apps.accounting.loans import still_owed
+        for loan in still_owed():
+            lent_owed += loan['owed']
+            debtors.append({'reference': f"Lent {loan['lent_on']:%d %b %Y}", 'customer': f"{loan['borrower']} (money lent)", 'amount': loan['owed'], 'lent': True})
+        outstanding = sales_owed + lent_owed
     data['receivables'] = {'restricted': not receivables_allowed, 'as_of': end,
                            'outstanding': outstanding if receivables_allowed else None,
+                           'sales_owed': sales_owed if receivables_allowed else None,
+                           'lent_owed': lent_owed if receivables_allowed else None,
+                           'lent_count': sum(1 for row in debtors if row.get('lent')) if receivables_allowed else None,
                            'count': len(debtors) if receivables_allowed else None,
                            'rows': sorted(debtors, key=lambda row: row['amount'], reverse=True)[:10] if receivables_allowed else []}
     data['collections'] = {'restricted': not receivables_allowed,
@@ -125,7 +136,7 @@ def enrich_dashboard(data, *, books, purchase_lots, stock_value, start, end, now
         from apps.accounting.net_worth import snapshot
         inventory = data.get('inventory') or {}
         data['net_worth'] = snapshot(stock=None if inventory.get('restricted') else inventory.get('cost'),
-                                     receivables=data['receivables']['outstanding'], payables=data['payables']['outstanding'])
+                                     receivables=data['receivables']['sales_owed'], payables=data['payables']['outstanding'])
     else:
         data['net_worth'] = None
     data['recent_entries'] = list(books.filter(occurred_at__date__range=(start, end)).values(

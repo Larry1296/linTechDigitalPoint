@@ -3,9 +3,15 @@ import { NetWorthPanel } from "./NetWorthPanel";
 
 const KINDS = { INCOME: "Money in from a sale", EXPENSE: "Money spent", PURCHASE: "Paid a supplier", PRINCIPAL: "M-Pesa customer money", OPENING: "Starting balance", LOAN: "Money lent or repaid", INVESTMENT: "Moved to or from an investment (before investments were kept apart)" };
 
+// What customers owe counts sales not yet paid and money lent not yet repaid, each counted on its own.
+function owedCount(data) {
+  const lent = Number(data.lent_count || 0), sales = Number(data.count) - lent;
+  return [sales > 0 && `${sales} ${sales === 1 ? "sale" : "sales"} not fully paid`, lent > 0 && `${lent} ${lent === 1 ? "loan" : "loans"} not repaid`].filter(Boolean).join(" · ");
+}
+
 export function OutstandingPanel({ title, data, nameField, empty, note, money }) {
   return <section className="accountingPanel"><h2>{title}</h2>{data.restricted ? <p>You don't have access to this.</p> : <>
-    <strong className="accountingValue">{money(data.outstanding)}</strong>{Number(data.count) > 0 && <p>On {data.as_of} · {data.count} {nameField === "customer" ? (data.count === 1 ? "sale" : "sales") : (data.count === 1 ? "delivery" : "deliveries")} not fully paid</p>}<p className="muted">{note}</p>
+    <strong className="accountingValue">{money(data.outstanding)}</strong>{Number(data.count) > 0 && <p>On {data.as_of} · {nameField === "customer" ? owedCount(data) : `${data.count} ${data.count === 1 ? "delivery" : "deliveries"} not fully paid`}</p>}<p className="muted">{note}</p>
     {!data.rows.length ? <p>{empty}</p> : <div className="trendTable"><table><caption>Biggest amounts (up to 10)</caption><thead><tr><th>{nameField === "customer" ? "Sale" : "Delivery"}</th><th>{nameField === "customer" ? "Customer" : "Supplier"}</th><th>Still owed</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.reference}><th scope="row">{row.reference}</th><td>{row[nameField]}</td><td>{money(row.amount)}</td></tr>)}</tbody></table></div>}
   </>}</section>;
 }
@@ -29,7 +35,7 @@ export function PeriodComparison({ data, money }) {
 
 export function OwedPanels({ data, money }) {
   return <>
-    <OutstandingPanel title="Customers owe you" data={data.receivables} nameField="customer" money={money} empty="Every sale has been paid for." note="Sales not yet fully paid, after any returns and price corrections. Online orders that were never paid are not counted." />
+    <OutstandingPanel title="Customers owe you" data={data.receivables} nameField="customer" money={money} empty="Every sale has been paid for and no money lent is still owed." note="Sales not yet fully paid, after any returns and price corrections, and money you lent that has not been repaid. Online orders that were never paid are not counted." />
     <OutstandingPanel title="You owe suppliers" data={data.payables} nameField="supplier" money={money} empty="You don't owe any supplier for stock received." note="Stock received from suppliers that you haven't finished paying for. Stock you already had is not included." />
   </>;
 }
