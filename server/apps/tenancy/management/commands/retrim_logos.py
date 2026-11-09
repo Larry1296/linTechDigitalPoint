@@ -19,6 +19,7 @@ class Command(BaseCommand):
                 cropped = fit(trim(image))
                 if cropped.size == image.size and trim(image).size == image.size:
                     continue
-                with field.storage.open(field.name, "wb") as target:
-                    target.write(png(cropped, "logo.png").read())
+                # Replaced under the same name, so links already sent on receipts keep working.
+                field.storage.delete(field.name)
+                field.storage.save(field.name, png(cropped, "logo.png"))
                 self.stdout.write(f"{organization.name}: {field.name} {image.size} -> {cropped.size}")

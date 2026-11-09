@@ -12,6 +12,7 @@ pytest-django==4.14.0
 factory-boy==3.3.3
 ruff==0.16.5
 Pillow==12.3.0
+cloudinary==1.44.1
 openpyxl==3.1.5
 reportlab==5.0.1
 

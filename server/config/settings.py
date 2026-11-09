@@ -146,8 +146,15 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Uploaded logos and product photos: Cloudinary when its keys are set (a host whose disk is wiped on every redeploy,
+# like Render, would otherwise lose them), else this computer's media/ folder.
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default="")
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default="")
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default="")
+USE_CLOUDINARY = all((CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET))
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": {"BACKEND": "apps.core.media_storage.CloudinaryMediaStorage" if USE_CLOUDINARY
+                else "django.core.files.storage.FileSystemStorage"},
     # Compressed copies of the admin's static files, served by WhiteNoise.
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
