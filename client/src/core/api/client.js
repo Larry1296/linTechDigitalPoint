@@ -119,6 +119,14 @@ export function resetCsrfToken() {
   sessionCheck = undefined;
   expiryNotified = false;
 }
+// Every message in a field error, however deeply the server nests it (a list's errors come keyed by position), so the
+// person reads the reason instead of "[object Object]".
+export function errorText(value) {
+  if (value == null) return "";
+  if (typeof value !== "object") return String(value);
+  return (Array.isArray(value) ? value : Object.values(value)).map(errorText).filter(Boolean).join(" ");
+}
+
 export class ApiError extends Error {
   status;
   data;
@@ -220,7 +228,7 @@ async function request(path, options = {}, retried = false, coordinated = false)
     }
     // M-Pesa and investments are private pages with a PIN: let the page ask for it.
     if (response.status === 403 && data.code === "protected_locked") window.dispatchEvent(new Event("protected-locked"));
-    throw new ApiError(response.status, data.detail || Object.values(data).flat().join(" ") || "Request failed.", data);
+    throw new ApiError(response.status, data.detail || errorText(data) || "Request failed.", data);
   }
   if (path.startsWith("/api/v1/auth/") && data.authenticated) expiryNotified = false;
   if (workspaceLocked && protectedPath) throw new ApiError(423, SESSION_EXPIRED_MESSAGE);

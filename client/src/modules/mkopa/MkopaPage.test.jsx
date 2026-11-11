@@ -82,3 +82,8 @@ it("an employee sees the plans but no commission", async () => {
   expect(screen.queryByRole("region", { name: "What would I earn?" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Add a phone" })).not.toBeInTheDocument();
 });
+
+it("reads a server error nested by position as words, never [object Object]", async () => {
+  const { errorText } = await vi.importActual("../../core/api/client");
+  expect(errorText({ enabled_modules: { 4: ['"mkopa" is not a valid choice.'] } })).toBe('"mkopa" is not a valid choice.');
+});

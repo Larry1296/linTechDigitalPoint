@@ -125,3 +125,16 @@ def test_an_employee_sells_but_the_commission_and_plans_are_the_owners():
 def test_the_tool_must_be_on():
     org, client = business(modules=("pos", "inventory"))
     assert client.get("/api/v1/mkopa/").status_code == 403
+
+
+def test_the_owner_turns_mkopa_on_in_settings_and_it_is_never_on_by_default():
+    from apps.tenancy.models import default_modules
+    assert "mkopa" not in default_modules()
+    org, client = business(modules=("pos", "inventory", "services", "customers"))
+    org.business_model = "MIXED"
+    org.save(update_fields=["business_model"])
+    saved = client.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["pos", "inventory", "services", "customers", "mkopa"]}, format="json")
+    assert saved.status_code == 200, saved.content
+    org.refresh_from_db()
+    assert "mkopa" in org.enabled_modules
+    assert client.get("/api/v1/mkopa/").status_code == 200
