@@ -12,6 +12,7 @@ class BusinessUnit(models.TextChoices):
     SHOP = 'SHOP', 'Retail Shop'
     CYBER = 'CYBER', 'Cyber Services'
     MPESA = 'MPESA', 'M-Pesa Agency'
+    MKOPA = 'MKOPA', 'M-KOPA phones'
 
 
 class PostedRecord(TenantModel):

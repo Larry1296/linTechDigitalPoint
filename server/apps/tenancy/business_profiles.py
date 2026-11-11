@@ -29,6 +29,8 @@ MODULES = {
     "customers": {"label": "Customers", "description": "Customer records, credit sales and balances owed."},
     "expenses": {"label": "Expenses", "description": "Record money spent, such as rent, transport and electricity."},
     "mpesa": {"label": "M-Pesa agency", "description": "Agent float, deposits, withdrawals and commission."},
+    "mkopa": {"label": "M-KOPA phones", "description": "Phones you sell for M-KOPA as a dealer: each phone's plans, phones in hand, "
+                                                     "sales and the commission M-KOPA pays you."},
     "reports": {"label": "Reports", "description": "Profit and loss, balance sheet and trends."},
     "branches": {"label": "Branches", "description": "Run more than one shop or location."},
     "staff": {"label": "Staff", "description": "Give each person their own sign-in and role."},
@@ -45,6 +47,9 @@ EXTRAS = {
     "mpesa": {"question": "Do you run an M-Pesa agency?",
               "hint": "You do deposits and withdrawals for customers from your own float and earn commission. "
                       "Customers paying you by M-Pesa for your goods or services is not this; you set that up after sign-up."},
+    "mkopa": {"question": "Do you sell M-KOPA phones?",
+              "hint": "You sell phones on M-KOPA's plans (a deposit, then a daily payment) and M-KOPA pays you commission for each one. "
+                      "The phones are M-KOPA's and customers pay M-KOPA, so only your commission is your business's money."},
     "chama": {"question": "Are you the treasurer of a chama?",
               "hint": "You keep the chama's records: members, contributions, fines and whose turn it is. Its money stays apart from the business's."},
     "investments": {"question": "Do you keep money in an investment, such as an MMF?",
@@ -63,15 +68,15 @@ BUSINESS_MODELS = {
         "label": "I sell goods",
         "phrase": "only sell goods",
         "hint": "You buy, grow or make products and sell them: a duka, kibanda, hardware or farm produce.",
-        "modules": ["inventory", "locations", "menu", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
+        "modules": ["inventory", "locations", "menu", "pos", "customers", "expenses", "mpesa", "mkopa", "reports", "branches", "staff", "chama", "investments"],
         "requires": ["inventory", "menu"],
     },
     SERVICES: {
         "label": "I provide services",
         "phrase": "only provide services",
         "hint": "Customers pay for your skill or time: a barber, salon, phone repair fundi or tailor.",
-        "modules": ["services", "rooms", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"],
-        "requires": ["services", "rooms", "mpesa"],  # at least one: an M-Pesa agent sells no priced services
+        "modules": ["services", "rooms", "pos", "customers", "expenses", "mpesa", "mkopa", "reports", "branches", "staff", "chama", "investments"],
+        "requires": ["services", "rooms", "mpesa", "mkopa"],  # at least one: an M-Pesa agent or M-KOPA dealer sells no priced services
     },
     MIXED: {
         "label": "Both goods and services",

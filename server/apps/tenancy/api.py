@@ -229,7 +229,7 @@ class PartNames(serializers.DictField):
 
     def to_internal_value(self, data):
         names = super().to_internal_value(data)
-        unknown = set(names) - {"SHOP", "CYBER", "MPESA"}
+        unknown = set(names) - {"SHOP", "CYBER", "MPESA", "MKOPA"}
         if unknown:
             raise serializers.ValidationError("Name only the shop, services and M-Pesa parts.")
         return {key: value for key, value in names.items() if value}

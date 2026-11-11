@@ -108,7 +108,7 @@ def business_breakdown(rows):
             "shop_cost": cost, "shop_profit": profit, "shop_margin": margin}
 
 
-ORDER = ["SHOP", "CYBER", "MPESA"]
+ORDER = ["SHOP", "CYBER", "MPESA", "MKOPA"]
 
 
 def _sum(rows, period):

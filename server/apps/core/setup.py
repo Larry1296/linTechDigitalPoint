@@ -3,7 +3,7 @@ from apps.core.models import Store
 
 ROLES = ["Manager", "Cashier", "Stock Controller", "Cyber Operator", "M-Pesa Operator"]
 ROLE_RULES = {
-    "Manager": {"catalog", "inventory", "commerce", "accounts", "cyber", "mpesa"},
+    "Manager": {"catalog", "inventory", "commerce", "accounts", "cyber", "mpesa", "mkopa"},
     "Cashier": {
         "commerce.add_sale",
         "commerce.view_sale",

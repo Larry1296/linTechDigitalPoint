@@ -20,12 +20,13 @@ ZERO = Decimal('0')
 # Each part, and the tools (with the permission to see them) that run it: a hotel's rooms are its services part.
 UNITS = [('SHOP', 'Products / sales', [('pos', 'commerce.view_sale')]),
          ('CYBER', 'Services', [('services', 'cyber.view_cyberjob'), ('rooms', 'hotel.view_stay')]),
-         ('MPESA', 'M-Pesa agency', [('mpesa', 'mpesa.view_mpesasession')])]
+         ('MPESA', 'M-Pesa agency', [('mpesa', 'mpesa.view_mpesasession')]),
+         ('MKOPA', 'M-KOPA phones', [('mkopa', 'mkopa.view_mkopacommission')])]
 
 
 # Accrual figures come from posted journals. Each P&L account belongs to a business unit; an expense
 # belongs to the unit it was recorded for, or is shared between the parts it names; stock losses belong to the shop.
-REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4030': 'SHOP', '4020': 'CYBER', '4040': 'CYBER', '4010': 'MPESA'}
+REVENUE_UNIT = {'4000': 'SHOP', '4900': 'SHOP', '4030': 'SHOP', '4020': 'CYBER', '4040': 'CYBER', '4010': 'MPESA', '4050': 'MKOPA'}
 COST_UNIT = {'5000': 'SHOP', '5020': 'SHOP', '5010': 'CYBER'}
 # Interest earned on investments (e.g. a CIC money market fund), less their fees or losses, is not a sale of anything
 # and belongs to no part of the business: it is its own line (unit INVEST), added only to the whole business's profit.
@@ -240,6 +241,12 @@ def dashboard_snapshot(request):
             data['cyber'] = {**unit, 'active_jobs': jobs.exclude(status__in=['COMPLETED', 'CANCELLED']).count() if allowed else None,
                              'ready_jobs': jobs.filter(status='READY').count() if allowed else None,
                              'jobs_today': jobs.filter(created_at__date=today).count() if allowed else None, 'restricted': not allowed}
+        elif key == 'MKOPA':
+            if allowed:
+                from apps.mkopa.services import summary
+                data['mkopa'] = {'restricted': False, **summary(), 'commission_received': unit['revenue']}
+            else:
+                data['mkopa'] = {'restricted': True}
         else:
             from .dashboard_summary import agency_money
             shifts = MpesaSession.objects.filter(status='OPEN').count() if allowed else 0

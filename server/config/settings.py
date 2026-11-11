@@ -65,6 +65,7 @@ LOCAL_APPS = [
     "apps.commerce.apps.CommerceConfig",
     "apps.cyber.apps.CyberConfig",
     "apps.mpesa.apps.MpesaConfig",
+    "apps.mkopa.apps.MkopaConfig",
     "apps.chama.apps.ChamaConfig",
     "apps.hotel.apps.HotelConfig",
     "apps.assistant.apps.AssistantConfig",

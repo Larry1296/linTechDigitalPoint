@@ -155,7 +155,7 @@ def cancel_expense(*, expense, user, reason):
 
 
 @transaction.atomic
-def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False, allow_transfer=False):
+def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False, allow_transfer=False, allow_mkopa=False):
     lock_business()
     entry = CashEntry.objects.select_for_update().get(pk=entry.pk)
     if not reason.strip():
@@ -173,6 +173,8 @@ def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False, al
         raise ValidationError('Correct money lent or repaid from the Money lent page, not from the cash book.')
     if entry.kind == 'INVESTMENT' and not allow_investment:
         raise ValidationError('Correct money put into or taken out of an investment from the Investments page, not from the cash book.')
+    if entry.source_key.startswith('mkopa:') and not allow_mkopa:
+        raise ValidationError('Correct commission M-KOPA paid from the M-KOPA phones page, not from the cash book.')
     if entry.source_key.startswith('landed:'):
         raise ValidationError('Correct delivery costs through a stock receipt correction, not from the cash book.')
     reversal = post(unit=entry.business_unit, method=entry.account.payment_method, amount=-entry.amount, cogs=-entry.cogs,

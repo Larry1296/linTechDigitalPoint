@@ -7,6 +7,7 @@ export const MONEY_PARTS = [
   { key: "SHOP", modules: ["inventory", "menu"], name: "Shop" },
   { key: "CYBER", modules: ["services", "rooms"], name: "Cyber / services" },
   { key: "MPESA", modules: ["mpesa"], name: "M-Pesa agency" },
+  { key: "MKOPA", modules: ["mkopa"], name: "M-KOPA phones" },
 ];
 
 // The parts this business runs, from the tools it chose (the shop when none of them is on), with the owner's own names.
@@ -30,9 +31,9 @@ export const STRUCTURES = [
 ];
 // A part's usual name, as the server gives it when the owner has not named it.
 const HOTEL_SECTORS = ["hotel", "hotel_rooms", "lodging"];
-export const defaultPartName = (key, sector = "") => (HOTEL_SECTORS.includes(sector) && key !== "MPESA" ? { SHOP: "Restaurant & bar", CYBER: "Rooms" }[key]
-  : key === "CYBER" && sector && !sector.includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa" }[key]);
-const ROLES = { SHOP: "Products you sell", CYBER: "Services you offer", MPESA: "M-Pesa agency" };
+export const defaultPartName = (key, sector = "") => (HOTEL_SECTORS.includes(sector) && !["MPESA", "MKOPA"].includes(key) ? { SHOP: "Restaurant & bar", CYBER: "Rooms" }[key]
+  : key === "CYBER" && sector && !sector.includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa", MKOPA: "M-KOPA" }[key]);
+const ROLES = { SHOP: "Products you sell", CYBER: "Services you offer", MPESA: "M-Pesa agency", MKOPA: "M-KOPA phones you sell" };
 
 export const MONEY_MODES = [
   { id: "ONE_DRAWER", label: "One drawer and bank account for everything",

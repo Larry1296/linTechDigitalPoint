@@ -133,7 +133,7 @@ def test_the_business_catalogue_is_public_and_every_suggestion_is_valid(client):
 
 def test_setup_asks_about_agency_chama_and_investments_instead_of_assuming_them(client):
     data = client.get("/api/v1/tenancy/business-profiles/").json()
-    assert [extra["id"] for extra in data["extras"]] == ["mpesa", "chama", "investments"]
+    assert [extra["id"] for extra in data["extras"]] == ["mpesa", "mkopa", "chama", "investments"]
     for model in data["models"]:
         assert {"mpesa", "chama", "investments"} <= set(model["modules"]), model["id"]
     # A kind of business never switches on a chama or investments for the owner; only an M-Pesa kind brings the agency.

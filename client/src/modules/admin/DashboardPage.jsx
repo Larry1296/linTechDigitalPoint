@@ -220,7 +220,7 @@ function BusinessDashboard() {
         {units.length > 1 && <section className="dashCard"><h2>Each part's own figures</h2>
           <p className="muted">Each part keeps its own money, sales and costs on its page. Only their profit is added up here.</p>
           <ul className="dashPartLinks">{units.filter(unit => !unit.restricted).map(unit => <li key={unit.key}>
-            <a href={{ SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa" }[unit.key]}>{unit.name}</a></li>)}</ul>
+            <a href={{ SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa", MKOPA: "/admin/mkopa" }[unit.key]}>{unit.name}</a></li>)}</ul>
         </section>}
         {data.performance && <InShort data={data} money={money} />}
         {data.performance && <OwedPanels data={data} money={money} />}

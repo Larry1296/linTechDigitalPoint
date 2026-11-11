@@ -35,7 +35,7 @@ LABELS = {"revenue": "Sales", "cogs": "Cost of the items sold", "expenses": "Run
           "stock_corrections": "Stock found or missing in counts", "interest": "Interest on investments, after fees",
           "owed_profit": "Profit still owed by customers", "gross_profit": "Gross profit (sales less the items' cost)",
           "profit": "Profit received"}
-PART_NAMES = {"SHOP": "Shop", "CYBER": "Services", "MPESA": "M-Pesa agency", "INVEST": "Investments"}
+PART_NAMES = {"SHOP": "Shop", "CYBER": "Services", "MPESA": "M-Pesa agency", "MKOPA": "M-KOPA phones", "INVEST": "Investments"}
 
 
 def money(value):

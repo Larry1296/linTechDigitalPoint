@@ -8,7 +8,7 @@ const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleStr
 const monthLabel = { header: "Month", short: (p) => new Date(`${p.month}-15T12:00:00`).toLocaleDateString(undefined, { month: "short" }),
   full: (p) => new Date(`${p.month}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
 const WORDS = { SHOP: { sold: "Sales", count: "sales" }, CYBER: { sold: "Income from services", count: "services done" },
-  MPESA: { sold: "Commission paid by Safaricom", count: "transactions" } };
+  MPESA: { sold: "Commission paid by Safaricom", count: "transactions" }, MKOPA: { sold: "Commission paid by M-KOPA", count: "phones sold" } };
 
 // One part of the business on its own (server inventory/part_books.py): what it sold, what the items cost, its running
 // costs and its profit or loss since the start, month by month, and its own money. The dashboard adds up only the profit.

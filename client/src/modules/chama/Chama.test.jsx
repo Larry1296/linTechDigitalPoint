@@ -53,6 +53,7 @@ it("adds a chama step to registration when chama management is chosen", async ()
   const question = screen.getByRole("group", { name: /Are you the treasurer of a chama\?/ });
   fireEvent.click(within(question).getByRole("button", { name: /^Yes/ }));
   fireEvent.click(screen.getByRole("button", { name: "No: Do you run an M-Pesa agency?" }));
+  fireEvent.click(screen.getByRole("button", { name: "No: Do you sell M-KOPA phones?" }));
   fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
   next();
   // Chama management is a question, not one of the tools.

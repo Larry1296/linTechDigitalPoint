@@ -1,7 +1,7 @@
 import { profitText } from "./plainMoney";
 
-const SOLD = { SHOP: "Sales", CYBER: "Services", MPESA: "Commission paid" };
-const PAGES = { SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa" };
+const SOLD = { SHOP: "Sales", CYBER: "Services", MPESA: "Commission paid", MKOPA: "Commission paid" };
+const PAGES = { SHOP: "/admin/sales-history", CYBER: "/admin/cyber", MPESA: "/admin/mpesa", MKOPA: "/admin/mkopa" };
 
 // The one thing the dashboard brings together: each part's profit or loss since the start, added up. Each part keeps
 // its own money, sales and costs on its own page; the agency's profit is its commission, counted once Safaricom pays

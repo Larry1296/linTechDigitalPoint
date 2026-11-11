@@ -63,6 +63,9 @@ def _count(key):
     if key == "CYBER":
         from apps.cyber.models import CyberJob
         return CyberJob.objects.filter(completed_at__isnull=False, sale__status="COMPLETED").count()
+    if key == "MKOPA":
+        from apps.mkopa.models import MkopaSale
+        return MkopaSale.objects.filter(reversed_at__isnull=True).count()
     from apps.mpesa.models import MpesaTransaction
     return MpesaTransaction.objects.filter(status="POSTED", reversal_of__isnull=True, reversal__isnull=True,
                                            transaction_type__in=["CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE"]).count()

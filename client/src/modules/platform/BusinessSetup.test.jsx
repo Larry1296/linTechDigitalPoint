@@ -14,8 +14,8 @@ beforeEach(() => {
   sessionStorage.clear();
   api.mockImplementation(async (path) => (path === "/api/v1/tenancy/business-profiles/" ? profiles
     : path === "/api/v1/tenancy/plans/" ? { trial_days: 30, plans: [
-      { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa"] },
-      { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", description: "Everything", enabled_modules: ["inventory", "locations", "services", "pos", "customers", "expenses", "mpesa", "reports", "branches", "staff", "chama", "investments"] }] }
+      { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa", "mkopa"] },
+      { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", description: "Everything", enabled_modules: ["inventory", "locations", "services", "pos", "customers", "expenses", "mpesa", "mkopa", "reports", "branches", "staff", "chama", "investments"] }] }
     : path === "/api/v1/tenancy/create/" ? { id: 9, name: "Created" } : {}));
 });
 const createBody = () => JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
@@ -204,7 +204,8 @@ it("starts an M-Pesa agent at Yes for the agency and still asks about the chama 
   next();
   expect(screen.getByRole("button", { name: "Yes: Do you run an M-Pesa agency?" })).toHaveAttribute("aria-pressed", "true");
   next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Are you the treasurer of a chama?");
+  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Do you sell M-KOPA phones?");
+  fireEvent.click(screen.getByRole("button", { name: "No: Do you sell M-KOPA phones?" }));
   fireEvent.click(screen.getByRole("button", { name: "No: Are you the treasurer of a chama?" }));
   fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
   next();

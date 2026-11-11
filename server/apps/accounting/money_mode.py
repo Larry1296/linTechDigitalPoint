@@ -21,7 +21,7 @@ MODES = {ONE_DRAWER: "One drawer for everything, each part's money labelled",
 # The parts of the business, in order, with the tool that turns each on and how its money is named.
 # A hotel's menu runs its shop part (the restaurant and bar) and its rooms its services part.
 PARTS = [("SHOP", ("inventory", "menu"), "Shop", "Shop sales"), ("CYBER", ("services", "rooms"), "Cyber", "Cyber and services"),
-         ("MPESA", ("mpesa",), "M-Pesa", "M-Pesa commission")]
+         ("MPESA", ("mpesa",), "M-Pesa", "M-Pesa commission"), ("MKOPA", ("mkopa",), "M-KOPA", "M-KOPA commission")]
 NAMES = {key: name for key, _, name, _ in PARTS}
 MONEY_NAMES = {key: money for key, _, _, money in PARTS}
 

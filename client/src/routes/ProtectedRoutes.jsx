@@ -29,7 +29,7 @@ export function StaffProtectedRoute({ children }) {
   // A new employee (or one the owner reset) chooses their own password and lock PIN before anything opens.
   if (user.setup_required) return <FirstSetup />;
   const area = location.pathname.split("/")[2];
-  const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", investments:"investments", reports:"reports", analytics:"reports"};
+  const modules = {pos:"pos", products:"inventory", "product-lookup":"inventory", receive:"inventory", "quick-receive":"inventory", "opening-stock":"inventory", receipts:"inventory", "adjust-stock":"inventory", categories:"inventory", brands:"inventory", "shelf-management":"locations", cyber:"services", mpesa:"mpesa", mkopa:"mkopa", investments:"investments", reports:"reports", analytics:"reports"};
   if (modules[area] && !user.organization.enabled_modules.includes(modules[area])) return <p role="alert">This module is not enabled for your business.</p>;
   return children;
 }

@@ -3,7 +3,7 @@ from django.contrib.auth.models import Permission
 from .context import organization_id
 from .models import Membership
 
-DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "accounting", "accounts", "chama", "hotel"}
+DOMAIN_APPS = {"core", "catalog", "inventory", "commerce", "cyber", "mpesa", "mkopa", "accounting", "accounts", "chama", "hotel"}
 
 
 # Pages the owner can keep an employee out of: (label, module the page belongs to or None, which permissions it is).
@@ -14,6 +14,7 @@ PAGES = {
     "services": ("Services (cyber)", "services", lambda app, code: app == "cyber"),
     "rooms": ("Rooms and guests", "rooms", lambda app, code: app == "hotel"),
     "mpesa": ("M-Pesa agency", "mpesa", lambda app, code: app == "mpesa"),
+    "mkopa": ("M-KOPA phones", "mkopa", lambda app, code: app == "mkopa"),
     "expenses": ("Money spent", "expenses", lambda app, code: app == "accounting" and "expense" in code),
     "loans": ("Money lent", None, lambda app, code: app == "accounting" and "loan" in code),
     "money": ("Money check and cash book", None, lambda app, code: app == "accounting" and ("moneycheck" in code or "cashentry" in code or "dailyclosing" in code)),
@@ -26,7 +27,7 @@ PAGES = {
 # An employee's account: only the pages the owner ticks (Membership.open_pages), each with what it needs to work.
 # The owner's side of the business (money, profit and costs, money spent and lent, chama, subscription, business
 # settings, commission, staff) is never an employee's, whatever is ticked. Investments only if the owner ticks them.
-WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa", "investments")
+WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa", "mkopa", "investments")
 CUSTOMERS = {"accounts.view_customerprofile", "accounts.add_customerprofile", "accounts.change_customerprofile"}
 WORK_NEEDS = {
     "sales": lambda app, code: f"{app}.{code}" in CUSTOMERS or app in {"catalog", "inventory"} and code.startswith("view_"),
@@ -36,6 +37,9 @@ WORK_NEEDS = {
 # The agency's commission, its shift reconciliations (expected against counted), outlet set-up and opening the shift
 # are the owner's: the owner opens the day's shift, the employee records on it and closes it.
 OWNERS_AGENCY = ("mpesacommissionentry", "mpesareconciliation", "add_mpesaoutlet", "change_mpesaoutlet", "delete_mpesaoutlet", "add_mpesasession")
+# M-KOPA: an employee receives phones and sells them; the phones' plans, the commission M-KOPA pays (the business's
+# money) and undoing a sale are the owner's.
+OWNERS_MKOPA = ("mkopacommission", "add_mkopaphone", "change_mkopaphone", "add_mkopaplan", "change_mkopaplan", "change_mkopasale", "change_mkopastock")
 
 
 def employee_permission(key, pages):
@@ -45,7 +49,8 @@ def employee_permission(key, pages):
     # Deleting records (sales, products, outlets, ...) is the owner's: an employee cancels or corrects through the page.
     if app == "accounting" and "investment" in code:
         return "investments" in pages
-    if app in {"accounting", "chama"} or code.startswith("delete_") or app == "mpesa" and any(part in code for part in OWNERS_AGENCY):
+    if app in {"accounting", "chama"} or code.startswith("delete_") or app == "mpesa" and any(part in code for part in OWNERS_AGENCY) \
+            or app == "mkopa" and any(part in code for part in OWNERS_MKOPA):
         return False
     return any(PAGES[page][2](app, code) or page in WORK_NEEDS and WORK_NEEDS[page](app, code) for page in pages if page in WORK_PAGES)
 

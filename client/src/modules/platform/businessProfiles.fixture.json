@@ -13,6 +13,7 @@
     "customers",
     "expenses",
     "mpesa",
+    "mkopa",
     "reports",
     "branches",
     "staff",
@@ -36,6 +37,7 @@
     "customers",
     "expenses",
     "mpesa",
+    "mkopa",
     "reports",
     "branches",
     "staff",
@@ -45,7 +47,8 @@
    "requires": [
     "services",
     "rooms",
-    "mpesa"
+    "mpesa",
+    "mkopa"
    ]
   },
   {
@@ -63,6 +66,7 @@
     "customers",
     "expenses",
     "mpesa",
+    "mkopa",
     "reports",
     "branches",
     "staff",
@@ -159,6 +163,12 @@
    "needs": []
   },
   {
+   "id": "mkopa",
+   "label": "M-KOPA phones",
+   "description": "Phones you sell for M-KOPA as a dealer: each phone's plans, phones in hand, sales and the commission M-KOPA pays you.",
+   "needs": []
+  },
+  {
    "id": "reports",
    "label": "Reports",
    "description": "Profit and loss, balance sheet and trends.",
@@ -194,6 +204,11 @@
    "id": "mpesa",
    "question": "Do you run an M-Pesa agency?",
    "hint": "You do deposits and withdrawals for customers from your own float and earn commission. Customers paying you by M-Pesa for your goods or services is not this; you set that up after sign-up."
+  },
+  {
+   "id": "mkopa",
+   "question": "Do you sell M-KOPA phones?",
+   "hint": "You sell phones on M-KOPA's plans (a deposit, then a daily payment) and M-KOPA pays you commission for each one. The phones are M-KOPA's and customers pay M-KOPA, so only your commission is your business's money."
   },
   {
    "id": "chama",

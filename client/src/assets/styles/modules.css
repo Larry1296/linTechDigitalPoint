@@ -3150,3 +3150,19 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .investWithdrawals p { margin: 8px 0 0; }
 .investMonths td { font-variant-numeric: tabular-nums; }
 .investMonths tr.investMonthOpen td { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+
+/* M-KOPA phones: each phone's plans with the commission it earns, the sales, and a calculator of what selling more earns. */
+.mkopaFigures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px; margin: 14px 0; }
+.mkopaFigures > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+.mkopaFigures dt { font-size: 13px; color: var(--muted); }
+.mkopaFigures dd { margin: 4px 0 0; font-size: 18px; font-weight: 700; }
+.mkopaActions { flex-wrap: wrap; margin: 6px 0 16px; }
+.mkopaPlanFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin: 12px 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 13px; }
+.mkopaPlanFields legend { padding: 0 6px; font-weight: 700; }
+.mkopaPlanFields .mkopaPlanTotal, .mkopaOnePlan { grid-column: 1 / -1; margin: 0; }
+.mkopaPlanFields > button { justify-self: start; }
+.mkopaPhone .mkopaPlans { width: 100%; margin-top: 10px; }
+.mkopaCalculator { margin: 18px 0; }
+.mkopaCalculator input { width: 6em; max-width: 100%; }
+.mkopaSales td small, .mkopaCalculator th small { display: block; }

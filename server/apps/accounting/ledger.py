@@ -32,7 +32,7 @@ CHART = {
     '3000': ('Opening equity', 'EQUITY', False),
     '4000': ('Retail sales', 'REVENUE', False), '4010': ('Agency commission', 'REVENUE', False),
     '4020': ('Service revenue', 'REVENUE', False), '4900': ('Other income', 'REVENUE', False),
-    '4910': ('Interest earned on investments', 'REVENUE', False),
+    '4910': ('Interest earned on investments', 'REVENUE', False), '4050': ('M-KOPA phone commission', 'REVENUE', False),
     '4030': ('Food and drinks made (menu)', 'REVENUE', False), '4040': ('Rooms and guest services', 'REVENUE', False),
     '5000': ('Cost of goods sold (retail)', 'COGS', False),
     '5010': ('Service direct costs (materials and configured cost)', 'COGS', False),

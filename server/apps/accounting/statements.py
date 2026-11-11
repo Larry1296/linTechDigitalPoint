@@ -18,6 +18,7 @@ UNITS = [
     {"key": "retail", "name": "Retail shop", "revenue": ["4000", "4030"], "costs": ["5000", "5020"]},
     {"key": "services", "name": "Cyber & services", "revenue": ["4020", "4040"], "costs": ["5010"]},
     {"key": "mpesa", "name": "M-Pesa agency commission", "revenue": ["4010"], "costs": []},
+    {"key": "mkopa", "name": "M-KOPA phone commission", "revenue": ["4050"], "costs": []},
     {"key": "other", "name": "Other income", "revenue": ["4900"], "costs": []},
     {"key": "interest", "name": "Interest on investments", "revenue": ["4910"], "costs": []},
 ]
@@ -103,7 +104,7 @@ def _cash_flow_group(entry_lines):
         return "loans"
     if "1400" in others:
         return "investments"
-    if "4010" in others:
+    if "4010" in others or "4050" in others:
         return "commission"
     if "3000" in others:
         return "owner"
