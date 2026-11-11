@@ -8,15 +8,18 @@ vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permis
 import { api } from "../../core/api/client";
 import { MkopaPage } from "./MkopaPage";
 
-const plan = (id, deposit, daily, days, commission) => ({ id, deposit, daily_payment: daily, days, total_price: String(deposit + daily * days), active: true,
-  ...(commission != null ? { commission } : {}) });
+const plan = (id, deposit, daily, days, commission, extra = {}) => ({ id, deposit, daily_payment: daily, days, total_price: String(deposit + daily * days), active: true,
+  sold: 0, paid_phones: 0, received: "0", typed_commission: null, learned_commission: commission ?? null, learned_from: commission ? 2 : 0,
+  commission_source: commission ? "LEARNED" : null, ...(commission !== undefined ? { commission } : {}), ...extra });
+const sale = (id, phone, p, name, soldOn) => ({ id, phone, plan_id: p.id, customer_name: name, customer_phone: "", imei: "", sold_on: soldOn,
+  deposit: p.deposit, daily_payment: p.daily_payment, days: p.days, commission: p.commission ?? null, commission_paid: false, reversed_at: null });
 const owner = {
   phones: [{ id: 1, name: "X30", active: true, received: 3, sold: 1, in_hand: 2, tracks_stock: true, old_plans: [],
     plans: [plan(11, 3899, 93, 365, "1200"), plan(12, 5999, 130, 180, "1500")] },
   { id: 2, name: "X4", active: true, received: 0, sold: 0, in_hand: 0, tracks_stock: false, old_plans: [], plans: [plan(21, 2999, 60, 365, "900")] }],
-  sales: [], stock: [], commissions: [], methods: [["CASH", "Cash"], ["MPESA", "M-Pesa"], ["BANK", "Bank"], ["OTHER", "Other"]],
+  sales: [], stock: [], commissions: [], unpaid: [], methods: [["CASH", "Cash"], ["MPESA", "M-Pesa"], ["BANK", "Bank"], ["OTHER", "Other"]],
   can_see_money: true, can_set_up: true, can_undo: true, can_record_commission: true,
-  summary: { phones_sold: 1, commission_earned: "1200", commission_paid: "0", commission_owed: "1200", paid_beyond: "0", month_sold: 1, month_commission: "1200" },
+  summary: { phones_sold: 1, commission_earned: "1200", commission_paid: "0", commission_owed: "1200", unpaid_phones: 1, unknown_phones: 0, month_sold: 1, month_commission: "1200" },
 };
 
 beforeEach(() => {
@@ -29,7 +32,7 @@ it("shows each phone's plans with what the customer pays and the commission, and
   render(<MkopaPage />);
   const x30 = (await screen.findByRole("heading", { name: "X30" })).closest("li");
   const rows = within(x30).getAllByRole("row").slice(1).map((row) => row.textContent);
-  expect(rows[0]).toMatch(/3,899.*93.*365.*37,844.*1,200/);
+  expect(rows[0]).toMatch(/3,899.*93.*365.*37,844.*1,200.*learned from 2 payments/);
   expect(rows[1]).toMatch(/5,999.*130.*180.*29,399.*1,500/);
   expect(screen.getByText("M-KOPA still owes you").nextSibling).toHaveTextContent("1,200");
 });
@@ -86,4 +89,22 @@ it("an employee sees the plans but no commission", async () => {
 it("reads a server error nested by position as words, never [object Object]", async () => {
   const { errorText } = await vi.importActual("../../core/api/client");
   expect(errorText({ enabled_modules: { 4: ['"mkopa" is not a valid choice.'] } })).toBe('"mkopa" is not a valid choice.');
+});
+
+it("records M-KOPA's payment for the phones ticked, comparing it with what the app expected", async () => {
+  const [cheap, quick] = owner.phones[0].plans;
+  const unknownPlan = plan(31, 2999, 60, 365, null);
+  api.mockImplementation(async (path, options) => (options?.method ? {} : { ...owner,
+    unpaid: [sale(1, "X30", cheap, "Mary Achieng", "2026-01-05"), sale(2, "X30", quick, "John Kamau", "2026-01-06"), sale(3, "X4", unknownPlan, "Ann Wairimu", "2026-01-07")] }));
+  render(<MkopaPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Commission M-KOPA paid" }));
+  const form = screen.getByRole("form", { name: "Record commission" });
+  expect(within(form).getAllByRole("checkbox").map((box) => box.checked)).toEqual([true, true, true]);
+  fireEvent.click(within(form).getByLabelText(/Ann Wairimu/));
+  fireEvent.change(within(form).getByLabelText(/Amount paid/), { target: { value: "2700" } });
+  expect(within(form).getByRole("status")).toHaveTextContent(/expected KSh 2,700 for 2 phones.*M-KOPA paid the same/);
+  fireEvent.click(within(form).getByRole("button", { name: "Record commission" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/commission/", expect.objectContaining({ method: "POST" })));
+  const body = JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body);
+  expect(body).toMatchObject({ amount: "2700", method: "MPESA", sales: [1, 2] });
 });

@@ -34,15 +34,36 @@ def plan_row(plan, money):
     row = {"id": plan.pk, "deposit": plan.deposit, "daily_payment": plan.daily_payment, "days": plan.days,
            "total_price": services.total_price(plan), "active": plan.active}
     if money:
-        row["commission"] = plan.commission
+        # The commission used (learned from M-KOPA's payments once they pin it down, else what the owner typed), and both.
+        row.update(commission=plan.rate, typed_commission=plan.commission, learned_commission=plan.learned_commission,
+                   learned_from=plan.learned_from, commission_source="LEARNED" if plan.learned_commission is not None
+                   else "TYPED" if plan.commission is not None else None)
     return row
 
 
-def phone_row(phone, money, sold):
+def plan_figures(money):
+    """Per plan: phones sold, how many M-KOPA has paid for and how much it paid for them."""
+    figures = {}
+    for sale in MkopaSale.objects.filter(reversed_at__isnull=True).select_related("paid_by"):
+        row = figures.setdefault(sale.plan_id, {"sold": 0, "paid_phones": 0, "received": Decimal("0")})
+        row["sold"] += 1
+        if sale.paid_by_id and not sale.paid_by.reversed_at:
+            row["paid_phones"] += 1
+            row["received"] += sale.commission_received or Decimal("0")
+    if not money:
+        for row in figures.values():
+            row.pop("received")
+    return figures
+
+
+def phone_row(phone, money, sold, figures=None):
     received = sum(move.quantity for move in phone.stock.all() if not move.reversed_at)
+    figures = figures or {}
+    empty = {"sold": 0, "paid_phones": 0, **({"received": Decimal("0")} if money else {})}
+    plan = lambda p: {**plan_row(p, money), **figures.get(p.pk, empty)}
     return {"id": phone.pk, "name": phone.name, "active": phone.active,
-            "plans": [plan_row(plan, money) for plan in phone.plans.all() if plan.active],
-            "old_plans": [plan_row(plan, money) for plan in phone.plans.all() if not plan.active],
+            "plans": [plan(p) for p in phone.plans.all() if p.active],
+            "old_plans": [plan(p) for p in phone.plans.all() if not p.active],
             "received": received, "sold": sold.get(phone.pk, 0), "in_hand": received - sold.get(phone.pk, 0),
             "tracks_stock": any(not move.reversed_at for move in phone.stock.all())}
 
@@ -53,7 +74,8 @@ def sale_row(sale, money):
            "daily_payment": sale.daily_payment, "days": sale.days, "total_price": sale.deposit + sale.daily_payment * sale.days,
            "notes": sale.notes, "sold_by": _name(sale.created_by), "reversed_at": sale.reversed_at, "reverse_reason": sale.reverse_reason}
     if money:
-        row["commission"] = sale.commission
+        paid = bool(sale.paid_by_id and not sale.paid_by.reversed_at)
+        row.update(commission=services.expected(sale), commission_paid=paid, paid_on=sale.paid_by.paid_on if paid else None)
     return row
 
 
@@ -63,7 +85,8 @@ def stock_row(move):
 
 
 def commission_row(payment):
-    return {"id": payment.pk, "amount": payment.amount, "paid_on": payment.paid_on, "method": payment.method,
+    phones = [sale for sale in payment.sales.all()]
+    return {"id": payment.pk, "phones": len(phones), "phone_names": sorted({sale.phone.name for sale in phones}), "amount": payment.amount, "paid_on": payment.paid_on, "method": payment.method,
             "method_name": services.METHODS.get(payment.method, payment.method), "reference": payment.reference, "notes": payment.notes,
             "recorded_by": _name(payment.created_by), "reversed_at": payment.reversed_at, "reverse_reason": payment.reverse_reason}
 
@@ -77,15 +100,18 @@ class OverviewView(APIView):
         money = has_business_permission(request.user, MONEY)
         sold = dict(MkopaSale.objects.filter(reversed_at__isnull=True).values("phone_id").annotate(n=Count("pk")).values_list("phone_id", "n"))
         phones = MkopaPhone.objects.prefetch_related("plans", "stock")
-        data = {"phones": [phone_row(phone, money, sold) for phone in phones],
-                "sales": [sale_row(sale, money) for sale in MkopaSale.objects.select_related("phone", "created_by")[:300]],
+        figures = plan_figures(money)
+        data = {"phones": [phone_row(phone, money, sold, figures) for phone in phones],
+                "sales": [sale_row(sale, money) for sale in MkopaSale.objects.select_related("phone", "plan", "paid_by", "created_by")[:300]],
                 "stock": [stock_row(move) for move in MkopaStock.objects.select_related("phone", "created_by")[:200]],
                 "can_see_money": money, "methods": list(services.METHODS.items()),
                 "can_set_up": has_business_permission(request.user, "mkopa.change_mkopaphone"),
                 "can_undo": has_business_permission(request.user, "mkopa.change_mkopasale")}
         if money:
             data["summary"] = services.summary()
-            data["commissions"] = [commission_row(p) for p in MkopaCommission.objects.select_related("created_by")[:200]]
+            data["commissions"] = [commission_row(p) for p in MkopaCommission.objects.select_related("created_by").prefetch_related("sales__phone")[:200]]
+            # The phones a new payment can be for: sold, not undone, commission not paid yet.
+            data["unpaid"] = [sale_row(sale, money) for sale in services.unpaid_sales().select_related("phone", "plan", "paid_by", "created_by")]
             data["can_record_commission"] = has_business_permission(request.user, "mkopa.add_mkopacommission")
         return Response(data)
 
@@ -95,7 +121,7 @@ class PlanInput(serializers.Serializer):
     deposit = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"))
     daily_payment = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
     days = serializers.IntegerField(min_value=1, max_value=3650)
-    commission = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False, default=Decimal("0"))
+    commission = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True, default=None)
 
 
 class PhoneInput(serializers.Serializer):
@@ -199,6 +225,7 @@ class CommissionInput(serializers.Serializer):
     paid_on = serializers.DateField(required=False, allow_null=True)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     notes = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+    sales = serializers.ListField(child=serializers.IntegerField(), required=False, allow_null=True, default=None)
     idempotency_key = serializers.CharField(max_length=100)
 
 
@@ -211,7 +238,7 @@ class CommissionView(APIView):
         form.is_valid(raise_exception=True)
         d = form.validated_data
         payment = services.record_commission(user=request.user, amount=d["amount"], method=d["method"], paid_on=d.get("paid_on"),
-                                             reference=d["reference"], notes=d["notes"], key=d["idempotency_key"])
+                                             reference=d["reference"], notes=d["notes"], key=d["idempotency_key"], sales=d["sales"])
         return Response(commission_row(payment), status=201)
 
 

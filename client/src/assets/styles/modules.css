@@ -3166,3 +3166,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .mkopaCalculator { margin: 18px 0; }
 .mkopaCalculator input { width: 6em; max-width: 100%; }
 .mkopaSales td small, .mkopaCalculator th small { display: block; }
+.mkopaCovers { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; }
+.mkopaCovers legend { padding: 0 6px; font-weight: 700; }
+.mkopaCoverList { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; }
+.mkopaCoverList label { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.mkopaCoverList small, .mkopaSource { display: block; }

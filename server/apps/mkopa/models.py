@@ -37,9 +37,19 @@ class MkopaPlan(TenantModel):
     deposit = models.DecimalField(max_digits=12, decimal_places=2)
     daily_payment = models.DecimalField(max_digits=12, decimal_places=2)
     days = models.PositiveIntegerField()
-    commission = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # The commission per phone the owner typed (None: left for the app to learn), and the one the app learned from
+    # M-KOPA's payments (None until a payment pins it down). The learned one is used once known.
+    commission = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    learned_commission = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    learned_from = models.PositiveIntegerField(default=0)  # how many payments included phones sold on this plan
+    learned_at = models.DateTimeField(null=True, blank=True)
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    @property
+    def rate(self):
+        """The commission one phone sold on this plan earns, as best known: learned, else typed, else None."""
+        return self.learned_commission if self.learned_commission is not None else self.commission
 
     class Meta:
         ordering = ["phone", "deposit", "pk"]
@@ -81,13 +91,16 @@ class MkopaSale(TenantModel):
     deposit = models.DecimalField(max_digits=12, decimal_places=2)
     daily_payment = models.DecimalField(max_digits=12, decimal_places=2)
     days = models.PositiveIntegerField()
-    commission = models.DecimalField(max_digits=12, decimal_places=2)
+    commission = models.DecimalField(max_digits=12, decimal_places=2)  # what the plan was expected to earn on the day
     notes = models.CharField(max_length=300, blank=True)
     idempotency_key = models.CharField(max_length=100)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+")
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     reversed_at = models.DateTimeField(null=True, blank=True)
     reverse_reason = models.TextField(blank=True)
+    # The M-KOPA payment that paid this phone's commission, and the part of that payment that was for it.
+    paid_by = models.ForeignKey("MkopaCommission", null=True, blank=True, related_name="sales", on_delete=models.PROTECT)
+    commission_received = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ["-sold_on", "-pk"]

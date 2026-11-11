@@ -9,7 +9,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -62,7 +62,7 @@ def _plan_terms(data):
         raise ValidationError("Enter how many days the customer pays for (1 to 3650).")
     return {"deposit": _amount(data.get("deposit"), "the deposit", allow_zero=True),
             "daily_payment": _amount(data.get("daily_payment"), "the daily payment"),
-            "days": days, "commission": _amount(data.get("commission") or 0, "your commission", allow_zero=True)}
+            "days": days, "commission": None if data.get("commission") in (None, "") else _amount(data["commission"], "your commission", allow_zero=True)}
 
 
 @transaction.atomic
@@ -197,9 +197,10 @@ def sell(*, user, plan, customer_name, customer_phone="", imei="", sold_on=None,
     received = MkopaStock.objects.filter(phone=phone, reversed_at__isnull=True).exists()
     if received and on_hand(phone) < 1:
         raise ValidationError(f"You have no {phone.name} in hand. Record the phones M-KOPA gave you first.")
+    rate = plan.rate
     sale = MkopaSale.objects.create(phone=phone, plan=plan, customer_name=_words(customer_name, 120, "the customer's name"),
                                     customer_phone=str(customer_phone or "").strip()[:30], imei=imei, sold_on=_day(sold_on, "date of the sale"),
-                                    deposit=plan.deposit, daily_payment=plan.daily_payment, days=plan.days, commission=plan.commission,
+                                    deposit=plan.deposit, daily_payment=plan.daily_payment, days=plan.days, commission=rate or ZERO,
                                     notes=str(notes or "").strip()[:300], idempotency_key=key, created_by=user)
     audit(sale, user, f"{phone.name} sold to {sale.customer_name}")
     return sale
@@ -214,6 +215,8 @@ def undo_sale(*, user, sale, reason):
     reason = _words(reason, 500, "why this sale is being undone")
     if sale.reversed_at:
         return sale
+    if sale.paid_by_id and not sale.paid_by.reversed_at:
+        raise ValidationError(f"M-KOPA already paid this phone's commission (the payment of {sale.paid_by.paid_on:%d %b %Y}). Undo that payment first.")
     MkopaSale.objects.filter(pk=sale.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
     sale.refresh_from_db()
     audit(sale, user, reason)
@@ -223,7 +226,26 @@ def undo_sale(*, user, sale, reason):
 # Commission ----------------------------------------------------------------------------------------------------------
 
 @transaction.atomic
-def record_commission(*, user, amount, method, paid_on=None, reference="", notes="", key):
+def unpaid_sales():
+    """Phones sold whose commission M-KOPA has not paid yet, oldest first."""
+    return MkopaSale.objects.filter(reversed_at__isnull=True).filter(Q(paid_by__isnull=True) | Q(paid_by__reversed_at__isnull=False)).order_by("sold_on", "pk")
+
+
+def relearn():
+    """Learn every plan's commission again from all payments, then split each payment between the phones it paid for."""
+    from .learning import learn, split
+    learn()
+    MkopaSale.objects.filter(paid_by__reversed_at__isnull=False).update(paid_by=None, commission_received=None)
+    for payment in MkopaCommission.objects.filter(reversed_at__isnull=True, sales__isnull=False).distinct():
+        sales = list(payment.sales.select_related("plan"))
+        for pk, part in split(payment.amount, sales).items():
+            MkopaSale.objects.filter(pk=pk).update(commission_received=part)
+
+
+@transaction.atomic
+def record_commission(*, user, amount, method, paid_on=None, reference="", notes="", key, sales=None):
+    """``sales``: the ids of the phones sold this payment is for; None means every phone sold up to the day it was paid
+    whose commission is not paid yet. They teach the app each plan's commission (learning.py)."""
     lock_business()
     existing = MkopaCommission.objects.filter(idempotency_key=key).first()
     if existing:
@@ -233,6 +255,16 @@ def record_commission(*, user, amount, method, paid_on=None, reference="", notes
     if method not in METHODS:
         raise ValidationError("Choose where M-KOPA paid it: cash, M-Pesa, bank or other.")
     paid_on = _day(paid_on, "date it was paid")
+    waiting = unpaid_sales().select_for_update(of=("self",))
+    if sales is None:
+        covered = list(waiting.filter(sold_on__lte=paid_on))
+    else:
+        wanted = {int(pk) for pk in sales}
+        covered = list(waiting.filter(pk__in=wanted))
+        if len(covered) != len(wanted):
+            raise ValidationError("Some of those phones are already paid for, undone, or not yours. Refresh the page and choose again.")
+        if any(sale.sold_on > paid_on for sale in covered):
+            raise ValidationError("A payment cannot be for a phone sold after the day it was paid.")
     reference = str(reference or "").strip().upper()[:120]
     if reference and MkopaCommission.objects.filter(reference=reference, reversed_at__isnull=True).exists():
         raise ValidationError(f"Commission with the reference {reference} is already recorded.")
@@ -245,7 +277,9 @@ def record_commission(*, user, amount, method, paid_on=None, reference="", notes
                                              entry=entry, idempotency_key=key, created_by=user)
     post_journal(key=f"mkopa-commission:{payment.pk}", description=words[:240], branch=branch, date=paid_on, user=user,
                  lines=paired(cash_code(method), ACCOUNT, amount))
-    audit(payment, user, f"M-KOPA paid {amount} commission")
+    MkopaSale.objects.filter(pk__in=[sale.pk for sale in covered]).update(paid_by=payment)
+    relearn()
+    audit(payment, user, f"M-KOPA paid {amount} commission for {len(covered)} phone(s)")
     return payment
 
 
@@ -262,20 +296,33 @@ def undo_commission(*, user, payment, reason):
     if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
         reverse_journal(journal, user=user, reason=reason, key=f"mkopa-commission-undo:{payment.pk}")
     MkopaCommission.objects.filter(pk=payment.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
+    MkopaSale.objects.filter(paid_by=payment).update(paid_by=None, commission_received=None)  # waiting for M-KOPA again
+    relearn()
     payment.refresh_from_db()
     return payment
 
 
 # Figures -------------------------------------------------------------------------------------------------------------
 
+def expected(sale):
+    """What one phone sold earns: what M-KOPA paid for it once paid, else its plan's commission as now known (learned
+    from M-KOPA's payments, else typed), else what was expected on the day it was sold; None when nothing is known."""
+    if sale.paid_by_id and not sale.paid_by.reversed_at and sale.commission_received is not None:
+        return sale.commission_received
+    if sale.plan.rate is not None:
+        return sale.plan.rate
+    return sale.commission if sale.commission else None
+
+
 def summary(today=None):
-    """What the dealer has earned: commission the sales earn, what M-KOPA has paid, what it still owes, and this month."""
+    """What the dealer has earned: what M-KOPA has paid, what the phones not paid for yet will earn, and this month."""
     today = today or timezone.localdate()
-    sales = MkopaSale.objects.filter(reversed_at__isnull=True)
-    earned = sales.aggregate(v=Sum("commission"), n=Count("pk"))
-    month = sales.filter(sold_on__gte=today.replace(day=1), sold_on__lte=today).aggregate(v=Sum("commission"), n=Count("pk"))
+    sales = list(MkopaSale.objects.filter(reversed_at__isnull=True).select_related("plan", "paid_by"))
+    waiting = [sale for sale in sales if not sale.paid_by_id or sale.paid_by.reversed_at]
+    owed = [expected(sale) for sale in waiting]
+    month = [sale for sale in sales if today.replace(day=1) <= sale.sold_on <= today]
     paid = MkopaCommission.objects.filter(reversed_at__isnull=True).aggregate(v=Sum("amount"))["v"] or ZERO
-    expected = earned["v"] or ZERO
-    return {"phones_sold": earned["n"], "commission_earned": expected, "commission_paid": paid,
-            "commission_owed": max(expected - paid, ZERO), "paid_beyond": max(paid - expected, ZERO),
-            "month_sold": month["n"], "month_commission": month["v"] or ZERO}
+    known_owed = sum((value for value in owed if value is not None), ZERO)
+    return {"phones_sold": len(sales), "commission_paid": paid, "commission_owed": known_owed, "commission_earned": paid + known_owed,
+            "unpaid_phones": len(waiting), "unknown_phones": sum(1 for value in owed if value is None),
+            "month_sold": len(month), "month_commission": sum((expected(sale) or ZERO for sale in month), ZERO)}

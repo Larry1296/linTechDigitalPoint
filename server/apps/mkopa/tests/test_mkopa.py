@@ -71,10 +71,12 @@ def test_sales_earn_the_plans_commission_which_counts_as_profit_only_when_mkopa_
     with organization_context(org):
         assert not JournalLine.objects.filter(account__code="4050").exists()  # owed, not yet profit
 
-    paid = client.post("/api/v1/mkopa/commission/", {"amount": "2000", "method": "MPESA", "reference": "tk12ab", "idempotency_key": key()}, format="json")
+    first = overview(client)["unpaid"][0]["id"]  # M-KOPA paid for the first phone only
+    paid = client.post("/api/v1/mkopa/commission/", {"amount": "2000", "method": "MPESA", "reference": "tk12ab", "sales": [first],
+                                                     "idempotency_key": key()}, format="json")
     assert paid.status_code == 201, paid.content
     summary = overview(client)["summary"]
-    assert Decimal(summary["commission_paid"]) == 2000 and Decimal(summary["commission_owed"]) == 700
+    assert Decimal(summary["commission_paid"]) == 2000 and Decimal(summary["commission_owed"]) == 1500 and summary["unpaid_phones"] == 1
     with organization_context(org):
         entry = CashEntry.objects.get(source_key__startswith="mkopa:")
         assert (entry.business_unit, entry.kind, entry.amount) == ("MKOPA", "INCOME", Decimal("2000"))
@@ -85,19 +87,19 @@ def test_sales_earn_the_plans_commission_which_counts_as_profit_only_when_mkopa_
     unit = next(u for u in dashboard["business_units"] if u["key"] == "MKOPA")
     assert unit["enabled"] and Decimal(unit["all_time"]["revenue"]) == 2000
 
-    # Undone: the income and the money both come back out, and M-KOPA owes it again.
+    # Undone: the income and the money both come back out, and M-KOPA owes it again at the plan's commission.
     undone = client.post(f"/api/v1/mkopa/commission/{paid.json()['id']}/undo/", {"reason": "Typed the wrong amount"}, format="json")
     assert undone.status_code == 200, undone.content
-    assert Decimal(overview(client)["summary"]["commission_owed"]) == 2700
+    assert Decimal(overview(client)["summary"]["commission_owed"]) == 2700 and overview(client)["summary"]["unpaid_phones"] == 2
     with organization_context(org):
         assert sum(line.credit - line.debit for line in JournalLine.objects.filter(account__code="4050")) == 0
         from apps.accounting.services import reverse
-        other = client.post("/api/v1/mkopa/commission/", {"amount": "500", "method": "CASH", "idempotency_key": key()}, format="json").json()
+        other = client.post("/api/v1/mkopa/commission/", {"amount": "500", "method": "CASH", "sales": [], "idempotency_key": key()}, format="json").json()
         with pytest.raises(Exception, match="M-KOPA"):
             reverse(entry=CashEntry.objects.get(mkopa_commission__pk=other["id"]), user=None, reason="x")
 
 
-def test_changing_a_plan_keeps_what_earlier_sales_earned_and_an_undone_sale_puts_the_phone_back_in_hand():
+def test_a_phone_not_paid_for_yet_follows_its_plans_commission_and_an_undone_sale_puts_the_phone_back_in_hand():
     org, client = business()
     client.post("/api/v1/mkopa/phones/", X30, format="json")
     phone = overview(client)["phones"][0]
@@ -107,7 +109,7 @@ def test_changing_a_plan_keeps_what_earlier_sales_earned_and_an_undone_sale_puts
     assert changed.status_code == 200, changed.content
     data = overview(client)
     assert len(data["phones"][0]["plans"]) == 1 and len(data["phones"][0]["old_plans"]) == 1  # the 5999 plan stopped, kept for its sales
-    assert Decimal(data["phones"][0]["plans"][0]["commission"]) == 1000 and Decimal(data["sales"][0]["commission"]) == 1200
+    assert Decimal(data["phones"][0]["plans"][0]["commission"]) == 1000 and Decimal(data["sales"][0]["commission"]) == 1000
     assert client.post(f"/api/v1/mkopa/sales/{sale['id']}/undo/", {"reason": "Customer changed their mind"}, format="json").status_code == 200
     assert Decimal(overview(client)["summary"]["commission_earned"]) == 0
 
@@ -138,3 +140,44 @@ def test_the_owner_turns_mkopa_on_in_settings_and_it_is_never_on_by_default():
     org.refresh_from_db()
     assert "mkopa" in org.enabled_modules
     assert client.get("/api/v1/mkopa/").status_code == 200
+
+
+def test_the_app_learns_each_plans_commission_from_mkopas_payments_and_uses_it_for_the_next_phones():
+    org, client = business()
+    blank = {"name": "X30", "plans": [{"deposit": "3899", "daily_payment": "93", "days": 365}, {"deposit": "5999", "daily_payment": "130", "days": 180}]}
+    assert client.post("/api/v1/mkopa/phones/", blank, format="json").status_code == 201
+    cheap, quick = overview(client)["phones"][0]["plans"]
+    assert cheap["commission"] is None and cheap["commission_source"] is None  # not typed: waiting to be learned
+
+    def sell(plan, times):
+        for _ in range(times):
+            client.post("/api/v1/mkopa/sales/", {"plan": plan["id"], "customer_name": "Mary Achieng", "idempotency_key": key()}, format="json")
+
+    def pay(amount):
+        response = client.post("/api/v1/mkopa/commission/", {"amount": amount, "method": "MPESA", "idempotency_key": key()}, format="json")
+        assert response.status_code == 201, response.content
+        return response.json()
+
+    sell(cheap, 4); sell(quick, 2)
+    data = overview(client)
+    assert data["summary"]["unknown_phones"] == 6 and Decimal(data["summary"]["commission_owed"]) == 0
+    first = pay("7800")  # 4 × plan 1 + 2 × plan 2: not enough on its own to tell the two plans apart
+    assert first["phones"] == 6 and overview(client)["phones"][0]["plans"][0]["commission"] is None
+    sell(cheap, 1)
+    pay("1200")  # 1 × plan 1: now both are known
+    plans = overview(client)["phones"][0]["plans"]
+    assert [(Decimal(p["commission"]), p["commission_source"], p["learned_from"]) for p in plans] == [
+        (Decimal("1200"), "LEARNED", 2), (Decimal("1500"), "LEARNED", 1)]
+    assert [(p["sold"], p["paid_phones"], Decimal(p["received"])) for p in plans] == [(5, 5, Decimal("6000")), (2, 2, Decimal("3000"))]
+
+    sell(quick, 1)  # the next phone sold is expected to earn the learned commission
+    data = overview(client)
+    assert Decimal(data["summary"]["commission_owed"]) == 1500 and Decimal(data["sales"][0]["commission"]) == 1500
+    paid_sale = next(s for s in data["sales"] if s["commission_paid"])
+    refused = client.post(f"/api/v1/mkopa/sales/{paid_sale['id']}/undo/", {"reason": "Customer returned it"}, format="json")
+    assert refused.status_code == 400 and "Undo that payment first" in str(refused.json())
+
+    # A payment undone teaches nothing any more.
+    client.post(f"/api/v1/mkopa/commission/{first['id']}/undo/", {"reason": "Wrong amount"}, format="json")
+    plans = overview(client)["phones"][0]["plans"]
+    assert Decimal(plans[0]["commission"]) == 1200 and plans[1]["commission"] is None
