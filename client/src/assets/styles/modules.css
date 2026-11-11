@@ -3214,7 +3214,14 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   border: 1px solid var(--line); border-radius: 13px; }
 .mkopaPlanFields legend { padding: 0 6px; font-weight: 700; }
 .mkopaPlanFields .mkopaPlanTotal, .mkopaOnePlan { grid-column: 1 / -1; margin: 0; }
-.mkopaPlanFields > button { justify-self: start; }
+.mkopaPlanFields { align-items: end; }
+.mkopaPlanFields > button { justify-self: start; white-space: nowrap; }
+.mkopaPhoneTop { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: end; }
+.mkopaPhoneTop label:has(textarea) { grid-column: auto; }
+@media (max-width: 600px) { .mkopaPhoneTop { grid-template-columns: minmax(0, 1fr); } }
+.mkopaChoice { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 12px; padding: 0; border: 0; }
+.mkopaChoice legend { margin-bottom: 6px; font-weight: 700; }
+.mkopaChoice label { display: flex; align-items: center; gap: 8px; }
 .mkopaCovers { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; }
 .mkopaCovers legend { padding: 0 6px; font-weight: 700; }
 .mkopaCoverList { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; }

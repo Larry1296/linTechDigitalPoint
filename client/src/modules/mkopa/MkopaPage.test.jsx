@@ -56,23 +56,53 @@ it("sells a phone on the plan the customer chose", async () => {
   expect(body).toMatchObject({ plan: 12, customer_name: "Mary Achieng" });
 });
 
-it("adds a phone with two plans", async () => {
-  api.mockImplementation(async (path, options) => (options?.method ? {} : { ...owner, phones: [] }));
+it("adds a new model with two plans, one commission known and one left to be filled in when M-KOPA pays", async () => {
+  api.mockImplementation(async (path, options) => (options?.method ? { id: 5 } : { ...owner, phones: [] }));
   render(<MkopaPage />);
-  fireEvent.click(await screen.findByRole("button", { name: "Add a phone" }));
-  const form = screen.getByRole("form", { name: "Add a phone" });
-  fireEvent.change(within(form).getByLabelText("Phone"), { target: { value: "X4e" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Add phones" }));
+  const form = screen.getByRole("form", { name: "Add phones" });
+  fireEvent.change(within(form).getByLabelText("Phone model"), { target: { value: "X4e" } });
   fireEvent.click(within(form).getByRole("button", { name: "+ Add a second plan" }));
   const fill = (index, label, value) => fireEvent.change(within(form).getAllByLabelText(label)[index], { target: { value } });
-  [["3899", "93", "365", "1200"], ["5999", "130", "180", "1500"]].forEach(([d, p, n, c], i) => {
-    fill(i, /Deposit/, d); fill(i, /Paid each day/, p); fill(i, "For how many days", n); fill(i, /Your commission/, c);
+  [["3899", "93", "365", "1200"], ["5999", "130", "180", ""]].forEach(([d, p, n, c], i) => {
+    fill(i, /Deposit/, d); fill(i, /Paid each day/, p); fill(i, "For how many days", n); fill(i, /Commission per phone/, c);
   });
+  fireEvent.change(within(form).getByLabelText(/How many M-KOPA gave you/), { target: { value: "5" } });
   expect(within(form).getByText(/pays M-KOPA KSh 37,844 in all/)).toBeInTheDocument();
   fireEvent.click(within(form).getByRole("button", { name: "Add phone" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/phones/", expect.objectContaining({ method: "POST" })));
   const body = JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body);
   expect(body).toEqual({ name: "X4e", plans: [{ deposit: "3899", daily_payment: "93", days: 365, commission: "1200" },
-    { deposit: "5999", daily_payment: "130", days: 180, commission: "1500" }] });
+    { deposit: "5999", daily_payment: "130", days: 180, commission: null }] });
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/stock/", expect.objectContaining({ method: "POST" })));
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/mkopa/stock/")[1].body)).toMatchObject({ phone: 5, quantity: 5, kind: "RECEIVED" });
+});
+
+it("adds more phones of a model already sold, and another plan for it, without retyping its plans", async () => {
+  render(<MkopaPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Add phones" }));
+  const form = screen.getByRole("form", { name: "Add phones" });
+  expect(within(form).getByLabelText("A model I already sell")).toBeChecked();
+  fireEvent.change(within(form).getByLabelText("Phone model"), { target: { value: "1" } });
+  fireEvent.change(within(form).getByLabelText(/How many more M-KOPA gave you/), { target: { value: "3" } });
+  fireEvent.click(within(form).getByRole("button", { name: "+ Add another plan for X30" }));
+  const fill = (label, value) => fireEvent.change(within(form).getByLabelText(label), { target: { value } });
+  fill(/Deposit/, "7999"); fill(/Paid each day/, "150"); fill("For how many days", "120");
+  fireEvent.click(within(form).getByRole("button", { name: "Add 3 phones" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/stock/", expect.objectContaining({ method: "POST" })));
+  const patch = JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/mkopa/phones/1/" && o?.method === "PATCH")[1].body);
+  expect(patch.plans.map((p) => [p.id, p.deposit])).toEqual([[11, 3899], [12, 5999], [undefined, "7999"]]);
+  expect(JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/mkopa/stock/")[1].body)).toMatchObject({ phone: 1, quantity: 3 });
+});
+
+it("says a new model typed is already in the list", async () => {
+  render(<MkopaPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Add phones" }));
+  const form = screen.getByRole("form", { name: "Add phones" });
+  fireEvent.click(within(form).getByLabelText("A new model"));
+  fireEvent.change(within(form).getByLabelText("Phone model"), { target: { value: "x30" } });
+  expect(within(form).getByText(/X30 is already in your list/)).toBeInTheDocument();
+  expect(within(form).getByRole("button", { name: "Add phone" })).toBeDisabled();
 });
 
 it("an employee sees the plans but no commission", async () => {
@@ -83,7 +113,7 @@ it("an employee sees the plans but no commission", async () => {
   await screen.findByRole("heading", { name: "X30" });
   expect(screen.queryByText(/commission/i, { selector: "th" })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "What would I earn?" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Add a phone" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Add phones" })).not.toBeInTheDocument();
 });
 
 it("reads a server error nested by position as words, never [object Object]", async () => {

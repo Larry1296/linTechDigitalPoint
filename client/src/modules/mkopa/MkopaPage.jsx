@@ -18,24 +18,48 @@ export const planWords = (plan) => `${money(plan.deposit)} deposit, then ${money
 export const planTotal = (plan) => Number(plan.deposit) + Number(plan.daily_payment) * Number(plan.days);
 const blankPlan = () => ({ key: crypto.randomUUID(), deposit: "", daily_payment: "", days: "", commission: "" });
 
-// A phone and its plans: one or two ways to pay (deposit, then so much a day for so many days), and the commission
-// M-KOPA pays you for each phone sold on each plan. Changing a plan later never changes what earlier sales earned.
+const planBody = ({ id, deposit, daily_payment, days, commission }) => ({ ...(id ? { id } : {}), deposit, daily_payment, days: Number(days),
+  commission: commission === "" || commission == null ? null : commission });
+
+// One plan's fields: a deposit, then so much a day for so many days, and the commission per phone when it is known.
+function PlanFields({ plan, title, busy, onChange, onRemove }) {
+  return (
+    <fieldset disabled={busy} className="mkopaPlanFields">
+      <legend>{title}</legend>
+      <FormField label={`Deposit (${businessCurrency()})`} type="number" min="0" step="0.01" required value={plan.deposit}
+        onChange={(event) => onChange("deposit", event.target.value)} placeholder="e.g. 3899" />
+      <FormField label={`Paid each day (${businessCurrency()})`} type="number" min="0.01" step="0.01" required value={plan.daily_payment}
+        onChange={(event) => onChange("daily_payment", event.target.value)} placeholder="e.g. 93" />
+      <FormField label="For how many days" type="number" min="1" max="3650" step="1" required value={plan.days}
+        onChange={(event) => onChange("days", event.target.value)} placeholder="e.g. 365" />
+      <FormField label={`Commission per phone (${businessCurrency()})`} type="number" min="0" step="0.01" value={plan.commission}
+        onChange={(event) => onChange("commission", event.target.value)} placeholder="If you know it" />
+      <p className="muted mkopaPlanTotal">Know the commission? Type it. Not yet? Leave it blank: it is filled in from M-KOPA's payment when M-KOPA pays.</p>
+      {plan.learned_commission != null && <p className="muted mkopaPlanTotal">Filled in from M-KOPA's payments: {money(plan.learned_commission)} a phone
+        ({count(plan.learned_from, "payment")}). That is the one used; what you type here is kept as your own figure.</p>}
+      {plan.deposit !== "" && plan.daily_payment !== "" && plan.days !== "" && <p className="muted mkopaPlanTotal">
+        The customer pays M-KOPA {money(planTotal(plan))} in all.</p>}
+      {onRemove && <button type="button" className="secondary mkopaSmall" onClick={onRemove}>Remove this plan</button>}
+    </fieldset>
+  );
+}
+
+// Changing a phone: its name and its plans. Changing a plan never changes what phones already paid for earned.
 function PhoneForm({ phone, onSaved, onCancel }) {
-  const [name, setName] = useState(phone?.name || "");
-  const [plans, setPlans] = useState(phone ? phone.plans.map((plan) => ({ ...plan, key: String(plan.id), commission: plan.typed_commission ?? "" })) : [blankPlan()]);
+  const [name, setName] = useState(phone.name);
+  const [plans, setPlans] = useState(phone.plans.map((plan) => ({ ...plan, key: String(plan.id), commission: plan.typed_commission ?? "" })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const set = (key, field, value) => setPlans(plans.map((plan) => (plan.key === key ? { ...plan, [field]: value } : plan)));
   const submit = async (event) => {
     event.preventDefault();
-    const body = { name, plans: plans.map(({ id, deposit, daily_payment, days, commission }) => ({ ...(id ? { id } : {}), deposit, daily_payment, days: Number(days), commission: commission === "" || commission == null ? null : commission })) };
-    const dropped = phone ? phone.plans.filter((old) => !plans.some((plan) => plan.id === old.id)) : [];
+    const dropped = phone.plans.filter((old) => !plans.some((plan) => plan.id === old.id));
     if (dropped.length && !(await confirmAction({ title: `Stop selling ${dropped.length === 1 ? "a plan" : `${dropped.length} plans`} of ${name}?`,
       text: `${dropped.map(planWords).join("; ")}. Phones already sold on it keep their commission.`, confirmButtonText: "Save" }))) return;
     setBusy(true);
     setError("");
     try {
-      await api(phone ? `/api/v1/mkopa/phones/${phone.id}/` : "/api/v1/mkopa/phones/", { method: phone ? "PATCH" : "POST", body: JSON.stringify(body) });
+      await api(`/api/v1/mkopa/phones/${phone.id}/`, { method: "PATCH", body: JSON.stringify({ name, plans: plans.map(planBody) }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -43,37 +67,97 @@ function PhoneForm({ phone, onSaved, onCancel }) {
     }
   };
   return (
-    <form className="formCard mkopaPhoneForm" onSubmit={(event) => void submit(event)} aria-label={phone ? `Change ${phone.name}` : "Add a phone"}>
-      <h2>{phone ? `Change ${phone.name}` : "Add an M-KOPA phone"}</h2>
+    <form className="formCard mkopaPhoneForm" onSubmit={(event) => void submit(event)} aria-label={`Change ${phone.name}`}>
+      <h2>Change {phone.name}</h2>
       <fieldset disabled={busy} className="loanFields">
-        <FormField label="Phone" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={80}
-          placeholder="e.g. X30" autoComplete="off" />
+        <FormField label="Phone model" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={80} autoComplete="off" />
       </fieldset>
-      {plans.map((plan, index) => (
-        <fieldset key={plan.key} disabled={busy} className="mkopaPlanFields">
-          <legend>Plan {index + 1}</legend>
-          <FormField label={`Deposit (${businessCurrency()})`} type="number" min="0" step="0.01" required value={plan.deposit}
-            onChange={(event) => set(plan.key, "deposit", event.target.value)} placeholder="e.g. 3899" />
-          <FormField label={`Paid each day (${businessCurrency()})`} type="number" min="0.01" step="0.01" required value={plan.daily_payment}
-            onChange={(event) => set(plan.key, "daily_payment", event.target.value)} placeholder="e.g. 93" />
-          <FormField label="For how many days" type="number" min="1" max="3650" step="1" required value={plan.days}
-            onChange={(event) => set(plan.key, "days", event.target.value)} placeholder="e.g. 365" />
-          <FormField label={`Your commission (${businessCurrency()})`} type="number" min="0" step="0.01" value={plan.commission}
-            onChange={(event) => set(plan.key, "commission", event.target.value)} placeholder="Optional" />
-          <p className="muted mkopaPlanTotal">Commission per phone, if you know it. Leave it blank and the app learns it from M-KOPA's payments.</p>
-          {plan.learned_commission != null && <p className="muted mkopaPlanTotal">Learned from M-KOPA's payments: {money(plan.learned_commission)} a phone
-            ({count(plan.learned_from, "payment")}). The learned figure is used; what you type here is kept as your own guess.</p>}
-          {plan.deposit !== "" && plan.daily_payment !== "" && plan.days !== "" && <p className="muted mkopaPlanTotal">
-            The customer pays M-KOPA {money(planTotal(plan))} in all.</p>}
-          {plans.length > 1 && <button type="button" className="secondary" onClick={() => setPlans(plans.filter((p) => p.key !== plan.key))}>Remove plan {index + 1}</button>}
-        </fieldset>
-      ))}
+      {plans.map((plan, index) => <PlanFields key={plan.key} plan={plan} title={`Plan ${index + 1}`} busy={busy}
+        onChange={(field, value) => set(plan.key, field, value)} onRemove={plans.length > 1 ? () => setPlans(plans.filter((p) => p.key !== plan.key)) : null} />)}
       <button type="button" className="secondary" disabled={busy} onClick={() => setPlans([...plans, blankPlan()])}>+ Add {plans.length === 1 ? "a second" : "another"} plan</button>
       <div className="actionRow">
-        <button disabled={busy}>{phone ? "Save changes" : "Add phone"}</button>
+        <button disabled={busy}>Save changes</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not save the phone." message={error} />
+    </form>
+  );
+}
+
+// Adding phones: more of a model you already sell (and maybe another plan for it), or a new model with its plans. Either
+// way, how many phones M-KOPA gave you now is recorded with it.
+function AddPhonesForm({ phones, onSaved, onCancel }) {
+  const known = phones.filter((phone) => phone.active);
+  const [mode, setMode] = useState(known.length ? "SAME" : "NEW");
+  const [phoneId, setPhoneId] = useState(String(known[0]?.id ?? ""));
+  const [name, setName] = useState("");
+  const [plans, setPlans] = useState([blankPlan()]);
+  const [extra, setExtra] = useState([]);  // new plans for a model already sold
+  const [quantity, setQuantity] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const same = mode === "SAME";
+  const phone = known.find((p) => String(p.id) === phoneId);
+  const taken = !same && phones.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const edit = (list, setList) => (key, field, value) => setList(list.map((plan) => (plan.key === key ? { ...plan, [field]: value } : plan)));
+  const pieces = Number(quantity) || 0;
+  const nothing = same && !pieces && !extra.length;
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      let id = phone?.id;
+      if (same && extra.length) {
+        const kept = phone.plans.map((plan) => planBody({ ...plan, commission: plan.typed_commission }));
+        await api(`/api/v1/mkopa/phones/${id}/`, { method: "PATCH", body: JSON.stringify({ plans: [...kept, ...extra.map(planBody)] }) });
+      }
+      if (!same) id = (await api("/api/v1/mkopa/phones/", { method: "POST", body: JSON.stringify({ name, plans: plans.map(planBody) }) })).id;
+      if (pieces) await api("/api/v1/mkopa/stock/", { method: "POST", body: JSON.stringify({ phone: id, quantity: pieces, kind: "RECEIVED",
+        moved_on: today(), notes: "", idempotency_key: crypto.randomUUID() }) });
+      await onSaved();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="formCard mkopaPhoneForm" onSubmit={(event) => void submit(event)} aria-label="Add phones">
+      <h2>Add phones</h2>
+      {known.length > 0 && <fieldset disabled={busy} className="mkopaChoice">
+        <legend>Which phone?</legend>
+        <label><input type="radio" name="mode" checked={same} onChange={() => setMode("SAME")} /> A model I already sell</label>
+        <label><input type="radio" name="mode" checked={!same} onChange={() => setMode("NEW")} /> A new model</label>
+      </fieldset>}
+      <fieldset disabled={busy} className="loanFields mkopaPhoneTop">
+        {same ? <FormField label="Phone model">
+          <select value={phoneId} onChange={(event) => { setPhoneId(event.target.value); setExtra([]); }}>
+            {known.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </FormField> : <FormField label="Phone model" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={80}
+          placeholder="e.g. X30" autoComplete="off" />}
+        <FormField label={same ? "How many more M-KOPA gave you" : "How many M-KOPA gave you"} type="number" min="0" step="1"
+          value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="0" />
+      </fieldset>
+      {taken && <p className="formNotice formNoticeError">{taken.name} is already in your list. Choose “A model I already sell” to add more of it.</p>}
+      {same && phone && <>
+        <p className="muted">{phone.name} is sold on {count(phone.plans.length, "plan")}: {phone.plans.map(planWords).join("; ")}.</p>
+        {extra.map((plan, index) => <PlanFields key={plan.key} plan={plan} title={`New plan ${index + 1} for ${phone.name}`} busy={busy}
+          onChange={(field, value) => edit(extra, setExtra)(plan.key, field, value)}
+          onRemove={() => setExtra(extra.filter((p) => p.key !== plan.key))} />)}
+        <button type="button" className="secondary" disabled={busy} onClick={() => setExtra([...extra, blankPlan()])}>+ Add another plan for {phone.name}</button>
+      </>}
+      {!same && <>
+        {plans.map((plan, index) => <PlanFields key={plan.key} plan={plan} title={`Plan ${index + 1}`} busy={busy}
+          onChange={(field, value) => edit(plans, setPlans)(plan.key, field, value)} onRemove={plans.length > 1 ? () => setPlans(plans.filter((p) => p.key !== plan.key)) : null} />)}
+        <button type="button" className="secondary" disabled={busy} onClick={() => setPlans([...plans, blankPlan()])}>+ Add {plans.length === 1 ? "a second" : "another"} plan</button>
+      </>}
+      <div className="actionRow">
+        <button disabled={busy || nothing || Boolean(taken)}>{same ? (pieces ? `Add ${count(pieces, "phone")}` : "Save") : "Add phone"}</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      {nothing && <p className="muted">Say how many more {phone?.name} M-KOPA gave you, or add another plan.</p>}
+      <FormError title="Could not add the phones." message={error} />
     </form>
   );
 }
@@ -391,18 +475,18 @@ export function MkopaPage() {
         <div>
           <h1>M-KOPA phones</h1>
           <p className="muted">The phones are M-KOPA's, and customers pay M-KOPA their deposit and daily payments. Yours is the commission M-KOPA pays
-            for each phone you sell, counted as profit when it is paid.</p>
+            for each phone you sell: business profit, like M-Pesa commission and interest on investments, counted when M-KOPA pays it.</p>
         </div>
         {!open && <div className="mkopaActions">
           {can("mkopa.add_mkopasale") && data.phones.some((p) => p.active && p.plans.length) && <button type="button" onClick={() => setOpen("sell")}>Sell a phone</button>}
           {data.can_record_commission && <button type="button" className="secondary" onClick={() => setOpen("commission")}>Commission M-KOPA paid</button>}
           {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && <button type="button" className="secondary" onClick={() => setOpen("stock")}>Phones from M-KOPA</button>}
-          {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add a phone</button>}
+          {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add phones</button>}
         </div>}
       </header>
 
       {seeMoney && summary && <dl className="mkopaStats">
-        <Stat label="M-KOPA has paid you" value={money(summary.commission_paid)} note="Counted as profit" tone="good" />
+        <Stat label="M-KOPA has paid you" value={money(summary.commission_paid)} note="Business profit, in the dashboard's profit" tone="good" />
         <Stat label="M-KOPA still owes you" value={money(summary.commission_owed)}
           note={summary.unpaid_phones ? `For ${count(summary.unpaid_phones - summary.unknown_phones, "phone")} not paid yet${summary.unknown_phones
             ? `; ${summary.unknown_phones} more not known yet` : ""}` : "Every phone sold is paid for"} tone={summary.unknown_phones ? "warn" : undefined} />
@@ -413,7 +497,8 @@ export function MkopaPage() {
       {open === "sell" && <SellForm phones={data.phones} seeMoney={seeMoney} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "stock" && <StockForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "commission" && <CommissionForm methods={data.methods} unpaid={data.unpaid || []} onSaved={saved} onCancel={() => setOpen(null)} />}
-      {(open === "phone" || editing) && <PhoneForm key={editing?.id ?? "new"} phone={editing} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {open === "phone" && <AddPhonesForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {editing && <PhoneForm key={editing.id} phone={editing} onSaved={saved} onCancel={() => setOpen(null)} />}
       <FormError title="Could not undo." message={problem} />
 
       <Card id="mkopa-phones-heading" title="Phones and plans" aside={data.phones.length ? <span className="muted">{count(data.phones.length, "phone")}</span> : null}>

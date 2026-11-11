@@ -1,6 +1,6 @@
 """The first thing the owner sees: every part of the business together, in plain figures.
 
-Sales of products and services, M-Pesa commission, what the sold items really cost, running costs and the profit or
+Sales of products and services, M-Pesa and M-KOPA commission, what the sold items really cost, running costs and the profit or
 loss they leave, today and since the business started; and the money the owner should be holding now (drawer, till,
 bank), worked out step by step from the cash book, with what each part of the business brought into it. The M-Pesa
 agency's cash and float are the agency's money in operation: shown beside the owner's money, never added to it; only
@@ -12,7 +12,9 @@ from django.db.models import F, Sum
 from django.utils import timezone
 
 ZERO = Decimal('0')
-UNITS = ('SHOP', 'CYBER', 'MPESA')  # the agency counts by its commission and costs, never its cash or float
+# The agency counts by its commission and costs, never its cash or float; M-KOPA by the commission M-KOPA paid. Both
+# commissions, like interest on investments, are the business's profit.
+UNITS = ('SHOP', 'CYBER', 'MPESA', 'MKOPA')
 
 
 def _figures(rows, units, profit_visible):
@@ -21,6 +23,7 @@ def _figures(rows, units, profit_visible):
     result = {'products': accrual_totals(rows, ['SHOP'])['revenue'] if 'SHOP' in units else None,
               'services': accrual_totals(rows, ['CYBER'])['revenue'] if 'CYBER' in units else None,
               'commission': accrual_totals(rows, ['MPESA'])['revenue'] if 'MPESA' in units else None,
+              'mkopa_commission': accrual_totals(rows, ['MKOPA'])['revenue'] if 'MKOPA' in units else None,
               'sales': total['revenue']}
     if profit_visible:
         result.update(cost=total['cogs'], expenses=total['expenses'], stock_corrections=total['stock_corrections'], interest=total['interest'],

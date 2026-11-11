@@ -86,6 +86,9 @@ def test_sales_earn_the_plans_commission_which_counts_as_profit_only_when_mkopa_
     dashboard = client.get("/api/v1/inventory/dashboard/").json()
     unit = next(u for u in dashboard["business_units"] if u["key"] == "MKOPA")
     assert unit["enabled"] and Decimal(unit["all_time"]["revenue"]) == 2000
+    # Business profit, like M-Pesa commission and interest: in "Profit so far, every part together".
+    ever = dashboard["owner_summary"]["all_time"]
+    assert Decimal(ever["mkopa_commission"]) == 2000 and Decimal(ever["profit"]) == 2000
 
     # Undone: the income and the money both come back out, and M-KOPA owes it again at the plan's commission.
     undone = client.post(f"/api/v1/mkopa/commission/{paid.json()['id']}/undo/", {"reason": "Typed the wrong amount"}, format="json")

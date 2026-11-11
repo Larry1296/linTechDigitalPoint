@@ -22,6 +22,13 @@ on the day; until M-KOPA pays for it, it is expected to earn its plan's commissi
 M-KOPA paid for it. A plan left out when a phone is changed stops being sold
 and stays on record for its sales.
 
+**Add phones** does both: more of a model already sold (how many M-KOPA gave you, and another plan for it if M-KOPA
+added one, without retyping its plans), or a new model with its one or two plans. Either way the phones M-KOPA gave you
+are recorded with it. A plan's commission is typed when it is known, or left blank and filled in when M-KOPA pays (below).
+
+M-KOPA commission is business profit, like M-Pesa commission and interest on investments: it is in the dashboard's
+"Profit so far, every part together", the reports and the assistant's profit, as its own part.
+
 ## Learning the commission from M-KOPA's payments
 
 The owner may type a plan's commission, or leave it blank. When M-KOPA pays, the owner records the payment and ticks the
