@@ -260,33 +260,40 @@ function StockForm({ phones, onSaved, onCancel }) {
   );
 }
 
-// Commission M-KOPA paid you: it is profit from the day it arrives, in the place it was paid to. Ticking the phones it
-// was for teaches the app each plan's commission (server mkopa/learning.py), so the next phones sold are expected right.
-function CommissionForm({ methods, unpaid, onSaved, onCancel }) {
+// Commission M-KOPA paid you: it is profit from the day it arrives, in the place it was paid to. Usually what it paid for
+// each phone, typed against that phone (each one tells the app its plan's commission outright); or one total for the
+// phones ticked, when M-KOPA's statement gives only a total (server mkopa/learning.py works the plans out from those).
+function CommissionForm({ methods, unpaid, only, onSaved, onCancel }) {
   const [method, setMethod] = useState("MPESA");
   const [paidOn, setPaidOn] = useState(today());
-  const [amount, setAmount] = useState("");
-  const [ticked, setTicked] = useState(() => new Set(unpaid.filter((sale) => sale.sold_on <= today()).map((sale) => sale.id)));
+  const [mode, setMode] = useState("EACH");
+  const [total, setTotal] = useState("");
+  const [ticked, setTicked] = useState(() => new Set(only ? [only] : unpaid.filter((sale) => sale.sold_on <= today()).map((sale) => sale.id)));
+  const [amounts, setAmounts] = useState(() => Object.fromEntries(unpaid.map((sale) => [sale.id, sale.commission != null ? String(Number(sale.commission)) : ""])));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const each = mode === "EACH";
   const chosen = unpaid.filter((sale) => ticked.has(sale.id));
+  const missing = each && chosen.some((sale) => amounts[sale.id] === "");
+  const sum = chosen.reduce((value, sale) => value + (Number(amounts[sale.id]) || 0), 0);
   const known = chosen.filter((sale) => sale.commission != null);
-  const expected = known.reduce((sum, sale) => sum + Number(sale.commission), 0);
-  const unknown = chosen.length - known.length;
-  const gap = (Number(amount) || 0) - expected;
+  const expected = known.reduce((value, sale) => value + Number(sale.commission), 0);
+  const paid = each ? sum : Number(total) || 0;
+  const gap = paid - expected;
   const toggle = (id) => { const next = new Set(ticked); if (next.has(id)) next.delete(id); else next.add(id); setTicked(next); };
+  const blocked = busy || (each ? !chosen.length || missing || sum <= 0 : paid <= 0);
   const submit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    if (!(await confirmAction({ title: `Record ${money(amount)} commission from M-KOPA?`,
-      text: `For ${count(chosen.length, "phone")} sold. It counts as profit on ${date(paidOn)} and goes into your ${Object.fromEntries(methods)[method].toLowerCase()}.`
-        + (chosen.length ? " The app learns each plan's commission from it." : ""),
-      confirmButtonText: "Record commission" }))) return;
+    if (!(await confirmAction({ title: `Record ${money(paid)} commission from M-KOPA?`,
+      text: `For ${chosen.length === 1 ? `${chosen[0].phone} sold to ${chosen[0].customer_name}` : count(chosen.length, "phone")}. It counts as profit on ${date(paidOn)} `
+        + `and goes into your ${Object.fromEntries(methods)[method].toLowerCase()}.`, confirmButtonText: "Record commission" }))) return;
     setBusy(true);
     setError("");
     try {
-      await api("/api/v1/mkopa/commission/", { method: "POST", body: JSON.stringify({ ...values, amount, paid_on: paidOn, method,
-        sales: chosen.map((sale) => sale.id), idempotency_key: crypto.randomUUID() }) });
+      await api("/api/v1/mkopa/commission/", { method: "POST", body: JSON.stringify({ reference: values.reference, notes: values.notes, paid_on: paidOn, method,
+        ...(each ? { amounts: chosen.map((sale) => ({ sale: sale.id, amount: amounts[sale.id] })) } : { amount: total, sales: chosen.map((sale) => sale.id) }),
+        idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
       setError(err.message);
@@ -296,9 +303,40 @@ function CommissionForm({ methods, unpaid, onSaved, onCancel }) {
   return (
     <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Record commission">
       <h2>Commission M-KOPA paid you</h2>
+      <fieldset disabled={busy} className="mkopaChoice">
+        <legend>How did M-KOPA pay?</legend>
+        <label><input type="radio" name="mode" checked={each} onChange={() => setMode("EACH")} /> An amount for each phone</label>
+        <label><input type="radio" name="mode" checked={!each} onChange={() => setMode("TOTAL")} /> One total for several phones</label>
+      </fieldset>
+      <fieldset disabled={busy} className="mkopaCovers">
+        <legend>Phones M-KOPA paid for</legend>
+        {unpaid.length ? <>
+          <div className="mkopaCoverTools">
+            <span className="muted">{count(chosen.length, "phone")} ticked</span>
+            <button type="button" className="secondary mkopaSmall" onClick={() => setTicked(new Set(unpaid.filter((sale) => sale.sold_on <= paidOn).map((sale) => sale.id)))}>Tick all</button>
+            <button type="button" className="secondary mkopaSmall" onClick={() => setTicked(new Set())}>Tick none</button>
+          </div>
+          <ul className="mkopaPayList">{unpaid.map((sale) => {
+            const on = ticked.has(sale.id);
+            return (
+              <li key={sale.id} className={on ? "on" : undefined}>
+                <label className="mkopaPayWho">
+                  <input type="checkbox" checked={on} disabled={sale.sold_on > paidOn} onChange={() => toggle(sale.id)} />
+                  <span><strong>{sale.phone}</strong> · {sale.customer_name}<small>Sold {date(sale.sold_on)} · {planWords(sale)}</small></span>
+                </label>
+                <span className="mkopaPayExpected"><small>Expected</small>{sale.commission != null ? money(sale.commission) : "Not known yet"}</span>
+                {each && <label className="mkopaPayAmount"><small>M-KOPA paid ({businessCurrency()})</small>
+                  <input type="number" min="0" step="0.01" inputMode="decimal" required={on} disabled={!on} value={amounts[sale.id]}
+                    aria-label={`What M-KOPA paid for the ${sale.phone} sold to ${sale.customer_name}`}
+                    onChange={(event) => setAmounts({ ...amounts, [sale.id]: event.target.value })} /></label>}
+              </li>);
+          })}</ul>
+        </> : <p className="muted">Every phone sold is already paid for. Record it as one total: it still counts as commission received.</p>}
+      </fieldset>
       <fieldset disabled={busy} className="loanFields">
-        <FormField label={`Amount paid (${businessCurrency()})`} type="number" min="0.01" step="0.01" required value={amount}
-          onChange={(event) => setAmount(event.target.value)} />
+        {each ? <div className="mkopaPayTotal"><span>Total M-KOPA paid</span><strong>{money(sum)}</strong></div>
+          : <FormField label={`Total M-KOPA paid (${businessCurrency()})`} type="number" min="0.01" step="0.01" required value={total}
+            onChange={(event) => setTotal(event.target.value)} />}
         <FormField label="Paid into">
           <select value={method} onChange={(event) => setMethod(event.target.value)}>{methods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         </FormField>
@@ -306,29 +344,14 @@ function CommissionForm({ methods, unpaid, onSaved, onCancel }) {
         <FormField label={method === "MPESA" ? "M-Pesa code (optional)" : "Reference (optional)"} name="reference" maxLength={120} autoComplete="off" />
         <FormField label="Note (optional)" name="notes" maxLength={300} autoComplete="off" placeholder="e.g. week 45 commission" />
       </fieldset>
-      <fieldset disabled={busy} className="mkopaCovers">
-        <legend>Phones this payment is for</legend>
-        {unpaid.length ? <>
-          <p className="muted">Tick the phones M-KOPA paid for (its statement lists them). Each payment teaches the app what every phone and plan earns.</p>
-          <div className="actionRow">
-            <button type="button" className="secondary" onClick={() => setTicked(new Set(unpaid.filter((sale) => sale.sold_on <= paidOn).map((sale) => sale.id)))}>Tick all</button>
-            <button type="button" className="secondary" onClick={() => setTicked(new Set())}>Tick none</button>
-          </div>
-          <ul className="mkopaCoverList">{unpaid.map((sale) => (
-            <li key={sale.id}><label>
-              <input type="checkbox" checked={ticked.has(sale.id)} disabled={sale.sold_on > paidOn} onChange={() => toggle(sale.id)} />
-              <span>{sale.phone} · {sale.customer_name} · sold {date(sale.sold_on)}<small className="muted"> · {planWords(sale)}
-                {sale.commission != null ? ` · expected ${money(sale.commission)}` : " · not known yet"}</small></span>
-            </label></li>))}</ul>
-        </> : <p className="muted">Every phone sold is already paid for. The payment is still recorded as commission received.</p>}
-      </fieldset>
-      {chosen.length > 0 && <p className="commissionCompare" role="status">
-        {known.length ? `The app expected ${money(expected)} for ${count(known.length, "phone")}` : "The app does not know these phones' commission yet"}
-        {unknown ? `${known.length ? ";" : ","} ${count(unknown, "phone")} not known yet, learned from this payment` : ""}.
-        {Number(amount) > 0 && known.length > 0 && !unknown && (Math.abs(gap) < 0.5 ? " M-KOPA paid the same." : ` M-KOPA paid ${money(Math.abs(gap))} ${gap > 0 ? "more" : "less"}; the app adjusts to it.`)}
+      {chosen.length > 0 && known.length > 0 && paid > 0 && <p className="commissionCompare" role="status">
+        The app expected {money(expected)} for {count(known.length, "phone")}.{" "}
+        {Math.abs(gap) < 0.5 || known.length < chosen.length ? "" : `M-KOPA paid ${money(Math.abs(gap))} ${gap > 0 ? "more" : "less"}; the app adjusts to it.`}
+        {known.length < chosen.length ? `${count(chosen.length - known.length, "phone")} not known yet: learned from this payment.` : ""}
       </p>}
+      {missing && <p className="muted">Type what M-KOPA paid for each ticked phone (0 if it paid nothing for one).</p>}
       <div className="actionRow">
-        <button disabled={busy}>Record commission</button>
+        <button disabled={blocked}>Record commission</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not record the commission." message={error} />
@@ -437,6 +460,7 @@ export function MkopaPage() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState(null);  // which form: sell, stock, commission, phone, or a phone being changed
   const [problem, setProblem] = useState("");
+  const [payFor, setPayFor] = useState(null);  // one phone sold whose commission is being recorded from its row
   const load = async () => {
     try {
       setData(await api("/api/v1/mkopa/"));
@@ -479,7 +503,7 @@ export function MkopaPage() {
         </div>
         {!open && <div className="mkopaActions">
           {can("mkopa.add_mkopasale") && data.phones.some((p) => p.active && p.plans.length) && <button type="button" onClick={() => setOpen("sell")}>Sell a phone</button>}
-          {data.can_record_commission && <button type="button" className="secondary" onClick={() => setOpen("commission")}>Commission M-KOPA paid</button>}
+          {data.can_record_commission && <button type="button" className="secondary" onClick={() => { setPayFor(null); setOpen("commission"); }}>Commission M-KOPA paid</button>}
           {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && <button type="button" className="secondary" onClick={() => setOpen("stock")}>Phones from M-KOPA</button>}
           {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add phones</button>}
         </div>}
@@ -496,7 +520,8 @@ export function MkopaPage() {
 
       {open === "sell" && <SellForm phones={data.phones} seeMoney={seeMoney} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "stock" && <StockForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
-      {open === "commission" && <CommissionForm methods={data.methods} unpaid={data.unpaid || []} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {open === "commission" && <CommissionForm key={payFor ?? "all"} methods={data.methods} unpaid={data.unpaid || []} only={payFor}
+        onSaved={async () => { setPayFor(null); await saved(); }} onCancel={() => { setPayFor(null); setOpen(null); }} />}
       {open === "phone" && <AddPhonesForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
       {editing && <PhoneForm key={editing.id} phone={editing} onSaved={saved} onCancel={() => setOpen(null)} />}
       <FormError title="Could not undo." message={problem} />
@@ -521,7 +546,10 @@ export function MkopaPage() {
               <td><Two main={`${sale.phone} · Plan ${planNumber[sale.plan_id] ?? "—"}`} sub={planShort(sale)} /></td>
               <td><span className="mkopaMono">{sale.imei || "—"}</span></td>
               {seeMoney && <td className="num">{sale.commission != null ? money(sale.commission) : "—"}</td>}
-              {seeMoney && <td><SaleStatus sale={sale} /></td>}
+              {seeMoney && <td><span className="mkopaStatusCell"><SaleStatus sale={sale} />
+                {data.can_record_commission && !sale.reversed_at && !sale.commission_paid && <button type="button" className="linkButton mkopaLink"
+                  aria-label={`Record commission for the ${sale.phone} sold to ${sale.customer_name}`}
+                  onClick={() => { setPayFor(sale.id); setOpen("commission"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Record commission</button>}</span></td>}
               <td>{sale.sold_by || "—"}</td>
               {data.can_undo && <td className="actions">{!sale.reversed_at && !sale.commission_paid && <button type="button" className="secondary mkopaSmall"
                 onClick={() => void undo(`Undo the ${sale.phone} sold to ${sale.customer_name}?`, "It no longer earns commission and the phone is back in hand.",
@@ -538,7 +566,9 @@ export function MkopaPage() {
             <tr key={row.id} className={row.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(row.paid_on)}</td>
               <td className="num"><Two main={money(row.amount)} sub={row.reversed_at ? `Undone: ${row.reverse_reason}` : ""} /></td>
-              <td>{row.phones ? <Two main={count(row.phones, "phone")} sub={row.phone_names.join(", ")} /> : "—"}</td>
+              <td>{row.phones ? (row.itemised ? <ul className="mkopaPaidPhones">{row.for_phones.map((p) => <li key={p.sale}>
+                <span>{p.phone} · {p.customer_name}</span><span>{money(p.amount)}</span></li>)}</ul>
+                : <Two main={count(row.phones, "phone")} sub={`${row.phone_names.join(", ")} · one total`} />) : "—"}</td>
               <td>{row.method_name}</td><td><span className="mkopaMono">{row.reference || "—"}</span></td><td>{row.notes || "—"}</td>
               {data.can_record_commission && <td className="actions">{!row.reversed_at && <button type="button" className="secondary mkopaSmall" onClick={() => void undo(`Undo the ${money(row.amount)} commission?`,
                 `It comes back out of your ${row.method_name.toLowerCase()} and your profit, M-KOPA owes it again, and the app stops learning from it.`, `/api/v1/mkopa/commission/${row.id}/undo/`)}>Undo</button>}</td>}

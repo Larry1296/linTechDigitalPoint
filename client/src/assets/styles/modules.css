@@ -3224,6 +3224,33 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .mkopaChoice label { display: flex; align-items: center; gap: 8px; }
 .mkopaCovers { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; }
 .mkopaCovers legend { padding: 0 6px; font-weight: 700; }
+.mkopaCoverTools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.mkopaCoverTools .muted { margin-right: auto; }
+.mkopaPayList { display: grid; gap: 0; max-height: 420px; overflow-y: auto; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.mkopaPayList li { display: grid; grid-template-columns: minmax(0, 1fr) 130px 170px; align-items: center; gap: 8px 16px; padding: 10px 4px;
+  border-bottom: 1px solid var(--line); }
+.mkopaPayList li:not(.on) { color: var(--muted); }
+.mkopaPayWho { display: flex; align-items: flex-start; gap: 10px; margin: 0; overflow-wrap: anywhere; }
+.mkopaPayWho input { margin-top: 3px; }
+.mkopaPayWho small, .mkopaPayExpected small, .mkopaPayAmount small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.mkopaPayExpected { text-align: right; font-variant-numeric: tabular-nums; }
+.mkopaPayAmount { display: grid; gap: 2px; margin: 0; }
+.mkopaPayAmount input { margin: 0; text-align: right; }
+.mkopaPayTotal { display: grid; align-content: end; gap: 4px; }
+.mkopaPayTotal span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.mkopaPayTotal strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.mkopaStatusCell { display: inline-grid; justify-items: start; gap: 4px; }
+.mkopaLink { min-height: 0; margin: 0; padding: 0; border: 0; background: none; color: var(--primary); font-size: 13px; font-weight: 700;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; box-shadow: none; }
+@media (max-width: 900px) { #root .mkopaStatusCell { justify-items: end; } }
+.mkopaPaidPhones { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.mkopaPaidPhones li { display: flex; justify-content: space-between; gap: 12px; }
+.mkopaPaidPhones li span:last-child { font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) {
+  .mkopaPayList li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mkopaPayWho { grid-column: 1 / -1; }
+  .mkopaPayExpected { text-align: left; }
+}
 .mkopaCoverList { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; }
 .mkopaCoverList label { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
 .mkopaCoverList small { display: block; }
@@ -3244,3 +3271,56 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .mkopaPhone { padding: 12px; }
 }
 @media (max-width: 480px) { .mkopaStats { grid-template-columns: minmax(0, 1fr); } }
+
+/* To buy: a scratch list of what is about to be bought. Item, how many and price in fixed columns so each value sits
+   under its heading; bought items below, crossed out. */
+.toBuyPage { display: grid; gap: 18px; min-width: 0; }
+.toBuyPage > * { margin: 0; min-width: 0; }
+.toBuyHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.toBuyHead > div { flex: 1 1 420px; min-width: 0; }
+.toBuyHead h1 { margin: 0 0 6px; }
+.toBuyHead p { margin: 0; max-width: 70ch; }
+.toBuyHead button { margin: 0; }
+.toBuyAdd, .toBuyCard { padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+.toBuyFields { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: end; gap: 10px 12px; }
+.toBuyFields label { display: grid; gap: 4px; margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.toBuyFields input { margin: 0; width: 100%; }
+.toBuyFields button { margin: 0; min-width: 90px; }
+.toBuyHint { margin: 8px 0 0; font-size: 13px; }
+.toBuyCardHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 8px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.toBuyCardHead h2 { margin: 0; font-size: 18px; }
+.toBuyTotal { font-variant-numeric: tabular-nums; }
+.toBuyTotal small { color: var(--muted); }
+.toBuyColumns, .toBuyList li { display: grid; grid-template-columns: minmax(0, 1fr) 140px 140px 90px; align-items: center; gap: 12px; }
+.toBuyColumns { padding: 0 0 6px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.toBuyColumns span:nth-child(3), .toBuyPrice { text-align: right; }
+.toBuyList { margin: 0; padding: 0; list-style: none; }
+.toBuyList li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.toBuyList li:last-child { border-bottom: 0; }
+.toBuyTick { display: flex; align-items: flex-start; gap: 10px; margin: 0; min-width: 0; cursor: pointer; }
+.toBuyTick input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.toBuyWhat { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+#root .toBuyTick { color: var(--text); font-size: 15px; font-weight: 400; }
+#root .toBuyWhat strong { color: var(--text); font-size: 15px; font-weight: 700; }
+#root .toBuyWhat small { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.toBuyPrice { font-variant-numeric: tabular-nums; }
+.toBuyRemove { justify-self: end; min-height: 0; margin: 0; padding: 5px 12px; font-size: 13px; }
+#root .toBuyList li.bought :is(strong, .toBuyQty, .toBuyPrice) { color: var(--muted); text-decoration: line-through; }
+.toBuyDone { box-shadow: none; }
+@media (max-width: 900px) {
+  .toBuyFields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .toBuyFields .toBuyName, .toBuyFields .toBuyNote { grid-column: 1 / -1; }
+  .toBuyFields button { grid-column: 1 / -1; }
+  .toBuyColumns { display: none; }
+  .toBuyList li { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .toBuyTick { grid-column: 1 / -1; }
+  .toBuyQty { padding-left: 28px; color: var(--muted); }
+  .toBuyQty::before { content: "How many: "; }
+  .toBuyPrice { grid-column: 1; padding-left: 28px; text-align: left; }
+  .toBuyRemove { grid-row: 2 / span 2; grid-column: 2; align-self: center; }
+}
+@media print {
+  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyRemove { display: none !important; }
+  .toBuyCard { border: 0; box-shadow: none; padding: 0; }
+}

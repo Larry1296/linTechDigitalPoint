@@ -184,3 +184,32 @@ def test_the_app_learns_each_plans_commission_from_mkopas_payments_and_uses_it_f
     client.post(f"/api/v1/mkopa/commission/{first['id']}/undo/", {"reason": "Wrong amount"}, format="json")
     plans = overview(client)["phones"][0]["plans"]
     assert Decimal(plans[0]["commission"]) == 1200 and plans[1]["commission"] is None
+
+
+def test_commission_is_recorded_for_each_phone_specifically_and_teaches_each_plan_at_once():
+    org, client = business()
+    client.post("/api/v1/mkopa/phones/", {"name": "X30", "plans": [{"deposit": "3899", "daily_payment": "93", "days": 365},
+                                                                   {"deposit": "5999", "daily_payment": "130", "days": 180}]}, format="json")
+    cheap, quick = overview(client)["phones"][0]["plans"]
+    for plan in (cheap, cheap, quick):
+        client.post("/api/v1/mkopa/sales/", {"plan": plan["id"], "customer_name": "Mary Achieng", "idempotency_key": key()}, format="json")
+    first, second, third = sorted(overview(client)["unpaid"], key=lambda sale: sale["id"])
+    # M-KOPA paid two of the three phones, an amount for each; the third waits.
+    paid = client.post("/api/v1/mkopa/commission/", {"method": "MPESA", "amounts": [{"sale": first["id"], "amount": "1200"},
+                       {"sale": third["id"], "amount": "1450"}], "idempotency_key": key()}, format="json")
+    assert paid.status_code == 201, paid.content
+    row = paid.json()
+    assert Decimal(row["amount"]) == 2650 and row["itemised"] and [Decimal(p["amount"]) for p in row["for_phones"]] == [1200, 1450]
+    data = overview(client)
+    by_id = {sale["id"]: sale for sale in data["sales"]}
+    assert Decimal(by_id[first["id"]]["commission"]) == 1200 and Decimal(by_id[third["id"]]["commission"]) == 1450
+    assert not by_id[second["id"]]["commission_paid"] and Decimal(by_id[second["id"]]["commission"]) == 1200  # learned from the first phone
+    plans = data["phones"][0]["plans"]
+    assert [(Decimal(p["commission"]), p["commission_source"]) for p in plans] == [(Decimal("1200"), "LEARNED"), (Decimal("1450"), "LEARNED")]
+    assert Decimal(data["summary"]["commission_owed"]) == 1200
+
+    mismatch = client.post("/api/v1/mkopa/commission/", {"method": "CASH", "amount": "999", "amounts": [{"sale": second["id"], "amount": "1200"}],
+                                                         "idempotency_key": key()}, format="json")
+    assert mismatch.status_code == 400 and "add up to 1,200.00" in str(mismatch.json())
+    twice = client.post("/api/v1/mkopa/commission/", {"method": "CASH", "amounts": [{"sale": first["id"], "amount": "1200"}], "idempotency_key": key()}, format="json")
+    assert twice.status_code == 400 and "already paid" in str(twice.json())

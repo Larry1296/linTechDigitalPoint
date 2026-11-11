@@ -32,7 +32,7 @@ import {
   Coins,
   Store,
   Briefcase,
-  Users, BedDouble, ChefHat, TabletSmartphone, ConciergeBell, UtensilsCrossed, BookUser } from "lucide-react";
+  Users, BedDouble, ChefHat, TabletSmartphone, ClipboardList, ConciergeBell, UtensilsCrossed, BookUser } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import { useKeyboardShortcuts } from "../core/ui/keyboardShortcuts";
 import { SubscriptionBanner } from "../modules/billing/SubscriptionBanner";
@@ -105,7 +105,7 @@ const shopLinks = [
   ...lookupLinks,
   ...inventoryLinks,
 ];
-const businessLinks = [links[6], { to: "/admin/expenses", label: "Money spent", icon: Receipt, permission: "accounting.add_expense" }, { to: "/admin/money-lent", label: "Money lent", icon: HandCoins, permission: "accounting.view_loan" }, { to: "/admin/investments", label: "Investments", icon: PiggyBank, permission: "accounting.view_investment" }, { to: "/admin/money-check", label: "Money check", icon: Wallet, permission: "accounting.view_moneycheck" }, { to: "/admin/subscription", label: "Subscription", icon: CreditCard, permission: null, managers: true }, { to: "/admin/settings", label: "Settings", icon: MonitorCog, permission: null }];
+const businessLinks = [links[6], { to: "/admin/to-buy", label: "To buy", icon: ClipboardList, permission: "core.view_tobuyitem" }, { to: "/admin/expenses", label: "Money spent", icon: Receipt, permission: "accounting.add_expense" }, { to: "/admin/money-lent", label: "Money lent", icon: HandCoins, permission: "accounting.view_loan" }, { to: "/admin/investments", label: "Investments", icon: PiggyBank, permission: "accounting.view_investment" }, { to: "/admin/money-check", label: "Money check", icon: Wallet, permission: "accounting.view_moneycheck" }, { to: "/admin/subscription", label: "Subscription", icon: CreditCard, permission: null, managers: true }, { to: "/admin/settings", label: "Settings", icon: MonitorCog, permission: null }];
 // Each service opens as a full page from Income by service, so the menu stays short.
 const cyberLinks = [
   { to: "/admin/cyber", label: "Service Desk", icon: MonitorCog, permission: "cyber.view_cyberjob", end: true },

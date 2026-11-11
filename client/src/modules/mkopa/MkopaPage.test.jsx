@@ -121,20 +121,51 @@ it("reads a server error nested by position as words, never [object Object]", as
   expect(errorText({ enabled_modules: { 4: ['"mkopa" is not a valid choice.'] } })).toBe('"mkopa" is not a valid choice.');
 });
 
-it("records M-KOPA's payment for the phones ticked, comparing it with what the app expected", async () => {
+const payingData = () => {
   const [cheap, quick] = owner.phones[0].plans;
   const unknownPlan = plan(31, 2999, 60, 365, null);
-  api.mockImplementation(async (path, options) => (options?.method ? {} : { ...owner,
-    unpaid: [sale(1, "X30", cheap, "Mary Achieng", "2026-01-05"), sale(2, "X30", quick, "John Kamau", "2026-01-06"), sale(3, "X4", unknownPlan, "Ann Wairimu", "2026-01-07")] }));
+  const unpaid = [sale(1, "X30", cheap, "Mary Achieng", "2026-01-05"), sale(2, "X30", quick, "John Kamau", "2026-01-06"), sale(3, "X4", unknownPlan, "Ann Wairimu", "2026-01-07")];
+  return { ...owner, unpaid, sales: unpaid };
+};
+const posted = () => JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/mkopa/commission/" && o?.method === "POST")[1].body);
+
+it("records what M-KOPA paid for each phone specifically, the total adding itself up", async () => {
+  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
   render(<MkopaPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Commission M-KOPA paid" }));
   const form = screen.getByRole("form", { name: "Record commission" });
-  expect(within(form).getAllByRole("checkbox").map((box) => box.checked)).toEqual([true, true, true]);
-  fireEvent.click(within(form).getByLabelText(/Ann Wairimu/));
-  fireEvent.change(within(form).getByLabelText(/Amount paid/), { target: { value: "2700" } });
-  expect(within(form).getByRole("status")).toHaveTextContent(/expected KSh 2,700 for 2 phones.*M-KOPA paid the same/);
+  expect(within(form).getByLabelText("An amount for each phone")).toBeChecked();
+  expect(within(form).getByLabelText(/paid for the X30 sold to Mary Achieng/)).toHaveValue(1200);  // filled in with what is expected
+  fireEvent.click(within(form).getByLabelText(/Ann Wairimu/, { selector: "input[type=checkbox]" }));
+  fireEvent.change(within(form).getByLabelText(/paid for the X30 sold to John Kamau/), { target: { value: "1450" } });
+  expect(within(form).getByText("Total M-KOPA paid").nextSibling).toHaveTextContent("KSh 2,650");
   fireEvent.click(within(form).getByRole("button", { name: "Record commission" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/commission/", expect.objectContaining({ method: "POST" })));
-  const body = JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body);
-  expect(body).toMatchObject({ amount: "2700", method: "MPESA", sales: [1, 2] });
+  expect(posted()).toMatchObject({ method: "MPESA", amounts: [{ sale: 1, amount: "1200" }, { sale: 2, amount: "1450" }] });
+  expect(posted().amount).toBeUndefined();
+});
+
+it("records one phone's commission straight from its row in Phones sold", async () => {
+  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
+  window.scrollTo = vi.fn();
+  render(<MkopaPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Record commission for the X4 sold to Ann Wairimu" }));
+  const form = screen.getByRole("form", { name: "Record commission" });
+  expect(within(form).getAllByRole("checkbox").map((box) => box.checked)).toEqual([false, false, true]);
+  fireEvent.change(within(form).getByLabelText(/paid for the X4 sold to Ann Wairimu/), { target: { value: "900" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Record commission" }));
+  await waitFor(() => expect(posted()).toMatchObject({ amounts: [{ sale: 3, amount: "900" }] }));
+});
+
+it("still takes one total for several phones when M-KOPA's statement gives only a total", async () => {
+  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
+  render(<MkopaPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Commission M-KOPA paid" }));
+  const form = screen.getByRole("form", { name: "Record commission" });
+  fireEvent.click(within(form).getByLabelText("One total for several phones"));
+  fireEvent.click(within(form).getByLabelText(/Ann Wairimu/, { selector: "input[type=checkbox]" }));
+  fireEvent.change(within(form).getByLabelText(/Total M-KOPA paid/), { target: { value: "2700" } });
+  expect(within(form).getByRole("status")).toHaveTextContent(/expected KSh 2,700 for 2 phones/);
+  fireEvent.click(within(form).getByRole("button", { name: "Record commission" }));
+  await waitFor(() => expect(posted()).toMatchObject({ amount: "2700", sales: [1, 2] }));
 });

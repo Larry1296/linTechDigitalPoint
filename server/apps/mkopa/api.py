@@ -86,7 +86,9 @@ def stock_row(move):
 
 def commission_row(payment):
     phones = [sale for sale in payment.sales.all()]
-    return {"id": payment.pk, "phones": len(phones), "phone_names": sorted({sale.phone.name for sale in phones}), "amount": payment.amount, "paid_on": payment.paid_on, "method": payment.method,
+    return {"id": payment.pk, "phones": len(phones), "phone_names": sorted({sale.phone.name for sale in phones}), "itemised": payment.itemised,
+            "for_phones": [{"sale": sale.pk, "phone": sale.phone.name, "customer_name": sale.customer_name, "amount": sale.commission_received}
+                           for sale in sorted(phones, key=lambda sale: (sale.sold_on, sale.pk))], "amount": payment.amount, "paid_on": payment.paid_on, "method": payment.method,
             "method_name": services.METHODS.get(payment.method, payment.method), "reference": payment.reference, "notes": payment.notes,
             "recorded_by": _name(payment.created_by), "reversed_at": payment.reversed_at, "reverse_reason": payment.reverse_reason}
 
@@ -219,8 +221,14 @@ class SaleUndoView(APIView):
         return Response(sale_row(sale, has_business_permission(request.user, MONEY)))
 
 
+class PhoneAmount(serializers.Serializer):
+    sale = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"))
+
+
 class CommissionInput(serializers.Serializer):
-    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"), required=False, allow_null=True)
+    amounts = PhoneAmount(many=True, required=False, allow_null=True, default=None)
     method = serializers.ChoiceField(choices=list(services.METHODS))
     paid_on = serializers.DateField(required=False, allow_null=True)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
@@ -237,8 +245,13 @@ class CommissionView(APIView):
         form = CommissionInput(data=request.data)
         form.is_valid(raise_exception=True)
         d = form.validated_data
-        payment = services.record_commission(user=request.user, amount=d["amount"], method=d["method"], paid_on=d.get("paid_on"),
-                                             reference=d["reference"], notes=d["notes"], key=d["idempotency_key"], sales=d["sales"])
+        each = {row["sale"]: row["amount"] for row in d["amounts"]} if d["amounts"] is not None else None
+        if each is not None and len(each) != len(d["amounts"]):
+            raise serializers.ValidationError({"amounts": "Each phone once."})
+        if each is None and d.get("amount") is None:
+            raise serializers.ValidationError({"amount": "Enter the amount M-KOPA paid."})
+        payment = services.record_commission(user=request.user, amount=d.get("amount"), method=d["method"], paid_on=d.get("paid_on"),
+                                             reference=d["reference"], notes=d["notes"], key=d["idempotency_key"], sales=d["sales"], amounts=each)
         return Response(commission_row(payment), status=201)
 
 

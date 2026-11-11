@@ -31,3 +31,23 @@ class AuditLog(TenantModel):
         ordering=["-created_at"]
         base_manager_name = "objects"
         default_manager_name = "objects"
+
+
+class ToBuyItem(TenantModel):
+    """A line on the owner's scratch list of things to buy. Only a note: it never touches stock, money or the books. It
+    leaves the list by itself once the item is recorded in the system: stock received for its product (``variant``,
+    when one was picked), or for a product of the same name."""
+    name = models.CharField(max_length=160)
+    variant = models.ForeignKey("catalog.ProductVariant", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    quantity = models.CharField(max_length=40, blank=True)  # free words: "2", "1 carton", "5 kg"
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # a rough price for all of it
+    note = models.CharField(max_length=200, blank=True)
+    bought = models.BooleanField(default=False)
+    position = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["bought", "position", "pk"]
+        base_manager_name = "objects"
+        default_manager_name = "objects"

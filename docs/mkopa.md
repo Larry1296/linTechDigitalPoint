@@ -31,8 +31,11 @@ M-KOPA commission is business profit, like M-Pesa commission and interest on inv
 
 ## Learning the commission from M-KOPA's payments
 
-The owner may type a plan's commission, or leave it blank. When M-KOPA pays, the owner records the payment and ticks the
-phones sold it covers (every unpaid phone sold by that day is ticked to start with). Each payment is one equation, e.g.
+The owner may type a plan's commission, or leave it blank. When M-KOPA pays, the owner records the payment for the
+phones it covers, usually **an amount for each phone** (from the payment form, or from a phone's own row under Phones
+sold): each phone keeps exactly what M-KOPA paid for it, and each one tells the app its plan's commission outright. When
+M-KOPA's statement gives only **one total** for several phones, the owner ticks them (every unpaid phone sold by that day
+is ticked to start with) and the total is one equation. Each payment is one equation, e.g.
 4 × (X30 plan 1) + 2 × (X30 plan 2) = 7,800. `apps/mkopa/learning.py` solves all the payments together by least squares
 in exact fractions, so a bonus or deduction in one payment is evened out by the rest. A plan's commission is learned
 only once the payments pin it down on its own (a plan always paid together with another in the same mix cannot be told

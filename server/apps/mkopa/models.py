@@ -119,6 +119,8 @@ class MkopaCommission(TenantModel):
     reference = models.CharField(max_length=120, blank=True)
     notes = models.CharField(max_length=300, blank=True)
     entry = models.OneToOneField("accounting.CashEntry", related_name="mkopa_commission", on_delete=models.PROTECT)
+    # True when the owner gave what M-KOPA paid for each phone; else the amount is one total for the phones it covers.
+    itemised = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=100)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+")
     created_at = models.DateTimeField(default=timezone.now, editable=False)

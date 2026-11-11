@@ -236,20 +236,30 @@ def relearn():
     from .learning import learn, split
     learn()
     MkopaSale.objects.filter(paid_by__reversed_at__isnull=False).update(paid_by=None, commission_received=None)
-    for payment in MkopaCommission.objects.filter(reversed_at__isnull=True, sales__isnull=False).distinct():
+    for payment in MkopaCommission.objects.filter(reversed_at__isnull=True, itemised=False, sales__isnull=False).distinct():
         sales = list(payment.sales.select_related("plan"))
         for pk, part in split(payment.amount, sales).items():
             MkopaSale.objects.filter(pk=pk).update(commission_received=part)
 
 
 @transaction.atomic
-def record_commission(*, user, amount, method, paid_on=None, reference="", notes="", key, sales=None):
+def record_commission(*, user, amount=None, method, paid_on=None, reference="", notes="", key, sales=None, amounts=None):
     """``sales``: the ids of the phones sold this payment is for; None means every phone sold up to the day it was paid
-    whose commission is not paid yet. They teach the app each plan's commission (learning.py)."""
+    whose commission is not paid yet. Or ``amounts``, {sale id: what M-KOPA paid for that phone}: the payment is their sum.
+    Either way they teach the app each plan's commission (learning.py)."""
     lock_business()
     existing = MkopaCommission.objects.filter(idempotency_key=key).first()
     if existing:
         return existing
+    each = None
+    if amounts is not None:
+        if not amounts:
+            raise ValidationError("Choose the phones M-KOPA paid for and what it paid for each.")
+        each = {int(pk): _amount(value, "what M-KOPA paid for each phone", allow_zero=True) for pk, value in amounts.items()}
+        sales, total = list(each), sum(each.values(), ZERO)
+        if amount not in (None, "") and money(amount) != total:
+            raise ValidationError(f"The phones' amounts add up to {total:,.2f}, not {money(amount):,.2f}.")
+        amount = total
     amount = _amount(amount, "the amount M-KOPA paid")
     method = str(method or "").upper()
     if method not in METHODS:
@@ -274,10 +284,12 @@ def record_commission(*, user, amount, method, paid_on=None, reference="", notes
     entry = post(unit=UNIT, method=method, amount=amount, kind="INCOME", reference=words[:160], key=f"mkopa:{key}", user=user,
                  occurred_at=occurred, reason=str(notes or "").strip(), branch=branch, journal=False)
     payment = MkopaCommission.objects.create(amount=amount, paid_on=paid_on, method=method, reference=reference, notes=str(notes or "").strip()[:300],
-                                             entry=entry, idempotency_key=key, created_by=user)
+                                             entry=entry, idempotency_key=key, created_by=user, itemised=each is not None)
     post_journal(key=f"mkopa-commission:{payment.pk}", description=words[:240], branch=branch, date=paid_on, user=user,
                  lines=paired(cash_code(method), ACCOUNT, amount))
     MkopaSale.objects.filter(pk__in=[sale.pk for sale in covered]).update(paid_by=payment)
+    for pk, value in (each or {}).items():
+        MkopaSale.objects.filter(pk=pk).update(commission_received=value)  # exactly what M-KOPA paid for that phone
     relearn()
     audit(payment, user, f"M-KOPA paid {amount} commission for {len(covered)} phone(s)")
     return payment

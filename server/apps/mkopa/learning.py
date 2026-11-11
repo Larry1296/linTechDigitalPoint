@@ -79,12 +79,18 @@ def solve(payments):
 
 
 def payment_equations():
+    """One equation per payment of one total ({plan: phones}, amount), and one per phone when the owner gave what M-KOPA
+    paid for each phone ({plan: 1}, its amount): those say each plan's commission outright."""
     from .models import MkopaCommission, MkopaSale
-    counts = defaultdict(lambda: defaultdict(int))
-    for payment, plan in MkopaSale.objects.filter(paid_by__reversed_at__isnull=True, paid_by__isnull=False).values_list("paid_by_id", "plan_id"):
-        counts[payment][plan] += 1
+    counts, each = defaultdict(lambda: defaultdict(int)), []
+    paid = MkopaSale.objects.filter(paid_by__reversed_at__isnull=True, paid_by__isnull=False)
+    for payment, plan, itemised, received in paid.order_by("paid_by_id", "pk").values_list("paid_by_id", "plan_id", "paid_by__itemised", "commission_received"):
+        if itemised:
+            each.append(({plan: 1}, received or 0))
+        else:
+            counts[payment][plan] += 1
     amounts = dict(MkopaCommission.objects.filter(pk__in=counts).values_list("pk", "amount"))
-    return [(dict(counts[pk]), amounts[pk]) for pk in sorted(counts)]
+    return [(dict(counts[pk]), amounts[pk]) for pk in sorted(counts)] + each
 
 
 def learn():
