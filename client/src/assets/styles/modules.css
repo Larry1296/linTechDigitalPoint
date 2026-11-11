@@ -3272,8 +3272,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 }
 @media (max-width: 480px) { .mkopaStats { grid-template-columns: minmax(0, 1fr); } }
 
-/* To buy: a scratch list of what is about to be bought. Item, how many and price in fixed columns so each value sits
-   under its heading; bought items below, crossed out. */
+/* To buy: a scratch list of what is about to be bought and what it comes to. The money figures on top, each under its
+   label; lines in fixed columns (item, how many, price each, total) so each value sits under its heading. */
 .toBuyPage { display: grid; gap: 18px; min-width: 0; }
 .toBuyPage > * { margin: 0; min-width: 0; }
 .toBuyHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
@@ -3281,46 +3281,75 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuyHead h1 { margin: 0 0 6px; }
 .toBuyHead p { margin: 0; max-width: 70ch; }
 .toBuyHead button { margin: 0; }
+.toBuyStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.toBuyStat { display: grid; align-content: start; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: 12px; background: var(--surface); }
+.toBuyStat.need { border-left-color: var(--primary); }
+.toBuyStat dt, .toBuyHave label { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.toBuyStat dd { display: grid; gap: 4px; margin: 0; }
+.toBuyStat dd strong { font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.toBuyStat dd span, .toBuyHave span { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.toBuyHave input { margin: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.toBuyHave span.good { color: var(--success, #15803d); font-weight: 700; }
+.toBuyHave span.short { color: var(--danger, #b42318); font-weight: 700; }
 .toBuyAdd, .toBuyCard { padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
-.toBuyFields { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: end; gap: 10px 12px; }
+.toBuyFields { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) auto;
+  align-items: end; gap: 10px 12px; }
 .toBuyFields label { display: grid; gap: 4px; margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
 .toBuyFields input { margin: 0; width: 100%; }
 .toBuyFields button { margin: 0; min-width: 90px; }
+.toBuyFields .toBuyNote { grid-column: 1 / -1; }
+.toBuyLineTotal { display: grid; gap: 4px; }
+.toBuyLineTotal span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.toBuyLineTotal strong { display: flex; align-items: center; min-height: 42px; font-size: 17px; font-variant-numeric: tabular-nums; }
 .toBuyHint { margin: 8px 0 0; font-size: 13px; }
 .toBuyCardHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 8px;
   padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .toBuyCardHead h2 { margin: 0; font-size: 18px; }
-.toBuyTotal { font-variant-numeric: tabular-nums; }
-.toBuyTotal small { color: var(--muted); }
-.toBuyColumns, .toBuyList li { display: grid; grid-template-columns: minmax(0, 1fr) 140px 140px 90px; align-items: center; gap: 12px; }
+.toBuyColumns, .toBuyList li { display: grid; grid-template-columns: minmax(0, 1fr) 180px 130px 140px 90px; align-items: center; gap: 12px; }
 .toBuyColumns { padding: 0 0 6px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
-.toBuyColumns span:nth-child(3), .toBuyPrice { text-align: right; }
+.toBuyColumns span:nth-child(n+3):nth-child(-n+4), .toBuyEach, .toBuyTotalCell { text-align: right; }
+.toBuyColumns span:nth-child(2) { padding-right: 72px; text-align: right; }
 .toBuyList { margin: 0; padding: 0; list-style: none; }
 .toBuyList li { padding: 10px 0; border-bottom: 1px solid var(--line); }
-.toBuyList li:last-child { border-bottom: 0; }
 .toBuyTick { display: flex; align-items: flex-start; gap: 10px; margin: 0; min-width: 0; cursor: pointer; }
 .toBuyTick input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
 .toBuyWhat { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 #root .toBuyTick { color: var(--text); font-size: 15px; font-weight: 400; }
 #root .toBuyWhat strong { color: var(--text); font-size: 15px; font-weight: 700; }
 #root .toBuyWhat small { color: var(--muted); font-size: 12.5px; font-weight: 400; }
-.toBuyPrice { font-variant-numeric: tabular-nums; }
+.toBuyQty { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 8px; }
+.toBuyQty > :first-child { justify-self: end; }
+.toBuyQty small { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.toBuyQty input, .toBuyEach input { width: 100%; max-width: 110px; margin: 0; padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.toBuyEach, .toBuyTotalCell { font-variant-numeric: tabular-nums; }
+.toBuyTotalCell { font-weight: 700; }
 .toBuyRemove { justify-self: end; min-height: 0; margin: 0; padding: 5px 12px; font-size: 13px; }
-#root .toBuyList li.bought :is(strong, .toBuyQty, .toBuyPrice) { color: var(--muted); text-decoration: line-through; }
+#root .toBuyList li.bought :is(strong, .toBuyQty span, .toBuyEach span, .toBuyTotalCell span) { color: var(--muted); text-decoration: line-through; }
+.toBuyFoot { display: flex; justify-content: flex-end; gap: 24px; padding: 12px 102px 0 0; border-top: 2px solid var(--line); font-variant-numeric: tabular-nums; }
+.toBuyFoot span { color: var(--muted); font-weight: 700; }
+.toBuyFoot strong { min-width: 140px; text-align: right; font-size: 17px; }
 .toBuyDone { box-shadow: none; }
+@media (max-width: 1100px) { .toBuyFields { grid-template-columns: repeat(4, minmax(0, 1fr)); } .toBuyFields .toBuyName { grid-column: 1 / -1; } }
 @media (max-width: 900px) {
+  .toBuyStats { grid-template-columns: minmax(0, 1fr); }
   .toBuyFields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .toBuyFields .toBuyName, .toBuyFields .toBuyNote { grid-column: 1 / -1; }
-  .toBuyFields button { grid-column: 1 / -1; }
+  .toBuyFields .toBuyName, .toBuyFields .toBuyNote, .toBuyFields button { grid-column: 1 / -1; }
+  .toBuyFields .toBuyNote { order: 1; }
+  .toBuyFields button { order: 2; }
   .toBuyColumns { display: none; }
-  .toBuyList li { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .toBuyList li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
   .toBuyTick { grid-column: 1 / -1; }
-  .toBuyQty { padding-left: 28px; color: var(--muted); }
-  .toBuyQty::before { content: "How many: "; }
-  .toBuyPrice { grid-column: 1; padding-left: 28px; text-align: left; }
-  .toBuyRemove { grid-row: 2 / span 2; grid-column: 2; align-self: center; }
+  .toBuyList li > [data-label] { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-left: 28px; }
+  .toBuyList li > [data-label]::before { content: attr(data-label); color: var(--muted); font-size: 13px; font-weight: 600; margin-right: auto; }
+  .toBuyQty input, .toBuyEach input { max-width: 130px; }
+  .toBuyQty input, .toBuyEach input { width: 130px; flex: none; }
+  .toBuyQty small { flex: none; width: 56px; }
+  .toBuyEach::after, .toBuyTotalCell::after { content: ""; flex: none; width: 56px; }
+  .toBuyRemove { grid-column: 1 / -1; justify-self: start; margin-left: 28px; }
+  .toBuyFoot { padding-right: 0; }
 }
 @media print {
-  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyRemove { display: none !important; }
-  .toBuyCard { border: 0; box-shadow: none; padding: 0; }
+  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyRemove, .toBuyHave { display: none !important; }
+  .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
 }

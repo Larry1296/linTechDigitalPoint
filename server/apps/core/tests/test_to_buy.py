@@ -25,20 +25,23 @@ def business():
     return org, client
 
 
-def test_the_owner_lists_what_to_buy_ticks_it_off_and_clears_what_is_bought_without_touching_the_books():
+def test_the_list_works_out_each_lines_total_and_the_money_to_carry_without_touching_the_books():
     org, client = business()
-    for item in [{"name": "Type-C cables", "quantity": "10", "price": "1500"}, {"name": "Printing paper", "quantity": "2 reams"},
-                 {"name": "Screen protectors", "quantity": "20", "price": "800", "note": "Tecno and Samsung"}]:
+    for item in [{"name": "Type-C cables", "count": "10", "unit_price": "150"}, {"name": "Printing paper", "count": "2", "unit": "reams"},
+                 {"name": "Screen protectors", "count": "20", "unit_price": "40", "note": "Tecno and Samsung"}]:
         assert client.post("/api/v1/to-buy/", item, format="json").status_code == 201
     data = client.get("/api/v1/to-buy/").json()
-    assert [i["name"] for i in data["items"]] == ["Type-C cables", "Printing paper", "Screen protectors"]
-    assert data["left"] == 3 and Decimal(data["left_price"]) == 2300 and data["unpriced"] == 1
+    assert [(i["name"], i["total"] and Decimal(str(i["total"]))) for i in data["items"]] == [("Type-C cables", 1500), ("Printing paper", None), ("Screen protectors", 800)]
+    assert data["left"] == 3 and Decimal(data["left_total"]) == 2300 and data["unpriced"] == 1
     cables = data["items"][0]["id"]
+    data = client.patch(f"/api/v1/to-buy/{cables}/", {"count": "12"}, format="json").json()  # changing how many works it out again
+    assert Decimal(data["left_total"]) == 2600
     data = client.patch(f"/api/v1/to-buy/{cables}/", {"bought": True}, format="json").json()
-    assert [i["name"] for i in data["items"]][-1] == "Type-C cables" and data["left"] == 2 and Decimal(data["left_price"]) == 800
+    assert data["items"][-1]["name"] == "Type-C cables" and Decimal(data["left_total"]) == 800 and Decimal(data["bought_total"]) == 1800
     assert client.post("/api/v1/to-buy/", {"name": " "}, format="json").status_code == 400
+    assert client.post("/api/v1/to-buy/", {"name": "Glue", "count": "0"}, format="json").status_code == 400
     data = client.delete("/api/v1/to-buy/").json()
-    assert [i["name"] for i in data["items"]] == ["Printing paper", "Screen protectors"]
+    assert [i["name"] for i in data["items"]] == ["Printing paper", "Screen protectors"] and Decimal(data["bought_total"]) == 0
     with organization_context(org):
         assert not CashEntry.objects.exists() and not JournalEntry.objects.exists()
     other_org, other = business()
@@ -53,8 +56,8 @@ def test_a_line_leaves_the_list_once_the_item_is_received_into_stock():
         category = Category.objects.create(name="Cables", slug="cables")
         cable = ProductVariant.objects.create(product=Product.objects.create(name="Type-C cable", slug="type-c", category=category), sku="TC1")
         charger = ProductVariant.objects.create(product=Product.objects.create(name="Charger", slug="charger", category=category), sku="CH1")
-    client.post("/api/v1/to-buy/", {"name": "Cables for the shop", "variant": cable.pk, "quantity": "10"}, format="json")
-    client.post("/api/v1/to-buy/", {"name": "charger", "quantity": "5"}, format="json")  # typed, no product picked
+    client.post("/api/v1/to-buy/", {"name": "Cables for the shop", "variant": cable.pk, "count": "10"}, format="json")
+    client.post("/api/v1/to-buy/", {"name": "charger", "count": "5"}, format="json")  # typed, no product picked
     client.post("/api/v1/to-buy/", {"name": "Printing paper"}, format="json")
     data = client.get("/api/v1/to-buy/").json()
     assert data["items"][0]["product"] == "Type-C cable"

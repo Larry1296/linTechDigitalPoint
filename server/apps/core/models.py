@@ -1,3 +1,4 @@
+from decimal import Decimal
 from apps.tenancy.base import TenantModel
 from django.conf import settings
 from django.db import models
@@ -39,13 +40,22 @@ class ToBuyItem(TenantModel):
     when one was picked), or for a product of the same name."""
     name = models.CharField(max_length=160)
     variant = models.ForeignKey("catalog.ProductVariant", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    quantity = models.CharField(max_length=40, blank=True)  # free words: "2", "1 carton", "5 kg"
-    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # a rough price for all of it
+    # How many (count) of what (unit: "pcs", "cartons", "kg") at what price each; the line's total is count × unit_price.
+    count = models.DecimalField(max_digits=12, decimal_places=3, default=1)
+    unit = models.CharField(max_length=30, blank=True)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # Before the list worked totals out: free words and a price for all of it, turned into the fields above (core 0006).
+    quantity = models.CharField(max_length=40, blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     note = models.CharField(max_length=200, blank=True)
     bought = models.BooleanField(default=False)
     position = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def total(self):
+        return (self.count * self.unit_price).quantize(Decimal("0.01")) if self.unit_price is not None else None
 
     class Meta:
         ordering = ["bought", "position", "pk"]

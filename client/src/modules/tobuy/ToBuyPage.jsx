@@ -8,6 +8,12 @@ import { useLiveRefresh } from "../../core/data/liveRefresh";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const label = (v) => (!v.variant_name || v.variant_name === "Standard" ? v.product_name : `${v.product_name} ${v.variant_name}`);
+const num = (value) => (value === "" || value == null ? null : Number(value));
+const lineTotal = (count, price) => (num(price) == null || !num(count) ? null : num(count) * num(price));
+const plain = (value) => String(Number(value));
+const HAVE_KEY = "lintech.toBuy.have";
+const readHave = () => { try { return localStorage.getItem(HAVE_KEY) || ""; } catch { return ""; } };
+const keepHave = (value) => { try { localStorage.setItem(HAVE_KEY, value); } catch { /* this device only, and only if allowed */ } };
 
 // Your products as you type, so a line can be linked to the one it is: it then leaves the list when that is received.
 function useProductSuggestions(text, enabled) {
@@ -25,23 +31,26 @@ function useProductSuggestions(text, enabled) {
   return found;
 }
 
+// An item: what, how many of what, at what price each; its total is worked out as you type.
 function AddItem({ canSearch, onAdded }) {
   const [name, setName] = useState("");
   const [variant, setVariant] = useState(null);
-  const [quantity, setQuantity] = useState("");
+  const [count, setCount] = useState("1");
+  const [unit, setUnit] = useState("");
   const [price, setPrice] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const first = useRef(null);
   const found = useProductSuggestions(variant ? "" : name, canSearch);
+  const total = lineTotal(count, price);
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await onAdded({ name, variant: variant?.id ?? null, quantity, price: price === "" ? null : price, note });
-      setName(""); setVariant(null); setQuantity(""); setPrice(""); setNote("");
+      await onAdded({ name, variant: variant?.id ?? null, count: count || "1", unit, unit_price: price === "" ? null : price, note });
+      setName(""); setVariant(null); setCount("1"); setUnit(""); setPrice(""); setNote("");
       first.current?.focus();
     } catch (err) {
       setError(err.message);
@@ -61,10 +70,13 @@ function AddItem({ canSearch, onAdded }) {
             }} />
         </label>
         <datalist id="to-buy-products">{found.map((v) => <option key={v.id} value={label(v)}>{v.category}</option>)}</datalist>
-        <label>How many<input value={quantity} maxLength={40} autoComplete="off" placeholder="e.g. 10, 1 carton" onChange={(event) => setQuantity(event.target.value)} /></label>
-        <label>Rough price ({businessCurrency()})<input type="number" min="0" step="0.01" value={price} placeholder="Optional" onChange={(event) => setPrice(event.target.value)} /></label>
-        <label className="toBuyNote">Note<input value={note} maxLength={200} autoComplete="off" placeholder="e.g. from the Luthuli supplier" onChange={(event) => setNote(event.target.value)} /></label>
+        <label>How many<input type="number" min="0.001" step="any" inputMode="decimal" required value={count} onChange={(event) => setCount(event.target.value)} /></label>
+        <label>Unit<input value={unit} maxLength={30} autoComplete="off" placeholder="pcs, cartons" onChange={(event) => setUnit(event.target.value)} /></label>
+        <label>Price each ({businessCurrency()})<input type="number" min="0" step="0.01" inputMode="decimal" value={price} placeholder="If you know it"
+          onChange={(event) => setPrice(event.target.value)} /></label>
+        <div className="toBuyLineTotal" aria-live="polite"><span>Total</span><strong>{total == null ? "—" : money(total)}</strong></div>
         <button disabled={busy || !name.trim()}>Add</button>
+        <label className="toBuyNote">Note<input value={note} maxLength={200} autoComplete="off" placeholder="e.g. from the Luthuli supplier" onChange={(event) => setNote(event.target.value)} /></label>
       </div>
       <p className="muted toBuyHint">{variant ? `Linked to your product ${variant.label}: it leaves the list when you receive it into stock.`
         : "Pick one of your products from the suggestions to link it, or type anything new: it leaves the list when you receive a product of that name."}</p>
@@ -73,27 +85,64 @@ function AddItem({ canSearch, onAdded }) {
   );
 }
 
-function ItemRow({ item, canChange, canRemove, onChange, onRemove }) {
+// A line still to buy: how many and the price each can be changed right here; the totals follow as you type.
+function ItemRow({ item, draft, canChange, canRemove, onDraft, onSave, onTick, onRemove }) {
+  const count = draft?.count ?? plain(item.count);
+  const price = draft?.unit_price ?? (item.unit_price == null ? "" : plain(item.unit_price));
+  const total = lineTotal(count, price);
+  const save = () => {
+    if (!draft) return;
+    if (!num(count)) { onDraft(item.id, null); return; }  // an empty or zero count is not kept
+    onSave(item, { count, unit_price: price === "" ? null : price });
+  };
+  const keys = (event) => { if (event.key === "Enter") event.currentTarget.blur(); };
+  const editable = canChange && !item.bought;
   return (
     <li className={item.bought ? "bought" : undefined}>
       <label className="toBuyTick">
-        <input type="checkbox" checked={item.bought} disabled={!canChange} onChange={() => onChange(item, { bought: !item.bought })}
+        <input type="checkbox" checked={item.bought} disabled={!canChange} onChange={() => onTick(item)}
           aria-label={`${item.bought ? "Not bought yet" : "Bought"}: ${item.name}`} />
         <span className="toBuyWhat"><strong>{item.name}</strong>
           {(item.product || item.note) && <small>{[item.product && item.product !== item.name && `Your product: ${item.product}`, item.note].filter(Boolean).join(" · ")}</small>}</span>
       </label>
-      <span className="toBuyQty">{item.quantity || "—"}</span>
-      <span className="toBuyPrice">{item.price != null ? money(item.price) : "—"}</span>
-      {canRemove && <button type="button" className="secondary toBuyRemove" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>Remove</button>}
+      <span className="toBuyQty" data-label="How many">
+        {editable ? <input type="number" min="0.001" step="any" inputMode="decimal" value={count} aria-label={`How many ${item.name}`}
+          onChange={(event) => onDraft(item.id, { count: event.target.value, unit_price: price })} onBlur={save} onKeyDown={keys} /> : <span>{plain(item.count)}</span>}
+        <small>{item.unit}</small>
+      </span>
+      <span className="toBuyEach" data-label="Price each">
+        {editable ? <input type="number" min="0" step="0.01" inputMode="decimal" value={price} placeholder="—" aria-label={`Price each for ${item.name}`}
+          onChange={(event) => onDraft(item.id, { count, unit_price: event.target.value })} onBlur={save} onKeyDown={keys} />
+          : <span>{item.unit_price == null ? "—" : money(item.unit_price)}</span>}
+      </span>
+      <span className="toBuyTotalCell" data-label="Total">{total == null ? <span className="muted toBuyNoPrice">No price</span> : <span>{money(total)}</span>}</span>
+      {canRemove ? <button type="button" className="secondary toBuyRemove" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>Remove</button> : <span />}
     </li>
   );
 }
 
-// A scratch list of what you are about to buy. Only notes: it never changes stock, money or the books.
+// What you have with you against what the list needs. Kept on this device only; it is not the business's money.
+function MoneyCheck({ need, unpriced }) {
+  const [have, setHave] = useState(readHave);
+  const gap = num(have) == null ? null : num(have) - need;
+  return (
+    <div className="toBuyStat toBuyHave">
+      <label htmlFor="to-buy-have">Money you have</label>
+      <input id="to-buy-have" type="number" min="0" step="1" inputMode="decimal" placeholder="Type how much" value={have}
+        onChange={(event) => { setHave(event.target.value); keepHave(event.target.value); }} />
+      <span className={gap == null ? "muted" : gap >= 0 ? "good" : "short"} role="status">
+        {gap == null ? "To see if it is enough" : gap >= 0 ? `Enough: ${money(gap)} left over` : `Short by ${money(-gap)}`}
+        {gap != null && unpriced > 0 ? `, not counting ${unpriced} without a price` : ""}</span>
+    </div>
+  );
+}
+
+// A scratch list of what you are about to buy, with what it comes to. Only notes: it never changes stock, money or the books.
 export function ToBuyPage() {
   const { user } = useAuth();
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const [data, setData] = useState();
+  const [drafts, setDrafts] = useState({});  // lines being changed and not saved yet, so the totals follow the typing
   const [error, setError] = useState("");
   const [problem, setProblem] = useState("");
   const load = async () => {
@@ -106,45 +155,59 @@ export function ToBuyPage() {
   };
   useEffect(() => { void load(); }, []);
   useLiveRefresh(load);
-  const act = async (path, options) => {
+  const act = async (path, options, done) => {
     setProblem("");
     try {
       setData(await api(path, options));
+      done?.();
     } catch (err) {
       setProblem(err.message);
     }
   };
+  const draft = (id, value) => setDrafts((all) => { const next = { ...all }; if (value) next[id] = value; else delete next[id]; return next; });
   if (error) return <ErrorState message={error} retry={load} />;
   if (!data) return <Loading />;
   const left = data.items.filter((item) => !item.bought);
   const bought = data.items.filter((item) => item.bought);
+  const totalOf = (item) => (drafts[item.id] ? lineTotal(drafts[item.id].count, drafts[item.id].unit_price) : item.total == null ? null : Number(item.total));
+  const need = left.reduce((sum, item) => sum + (totalOf(item) ?? 0), 0);
+  const unpriced = left.filter((item) => totalOf(item) == null).length;
   const canSearch = (user?.organization?.enabled_modules || []).includes("inventory") && can("catalog.view_product");
-  const row = (item) => <ItemRow key={item.id} item={item} canChange={can("core.change_tobuyitem")} canRemove={can("core.delete_tobuyitem")}
-    onChange={(it, change) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify(change) })}
-    onRemove={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "DELETE" })} />;
+  const row = (item) => <ItemRow key={item.id} item={item} draft={drafts[item.id]} canChange={can("core.change_tobuyitem")} canRemove={can("core.delete_tobuyitem")}
+    onDraft={draft} onSave={(it, change) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify(change) }, () => draft(it.id, null))}
+    onTick={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify({ bought: !it.bought }) })}
+    onRemove={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "DELETE" }, () => draft(it.id, null))} />;
+  const columns = <div className="toBuyColumns" aria-hidden="true"><span>Item</span><span>How many</span><span>Price each</span><span>Total</span><span /></div>;
   return (
     <div className="toBuyPage">
       <header className="toBuyHead">
         <div>
           <h1>To buy</h1>
-          <p className="muted">A scratch list of what you are about to buy. It never changes your stock or money; each item leaves the list by itself
-            once you receive it into stock.</p>
+          <p className="muted">A scratch list of what you are about to buy, and what it comes to. It never changes your stock or money; each item
+            leaves the list by itself once you receive it into stock.</p>
         </div>
         {left.length > 0 && <button type="button" className="secondary" onClick={() => window.print()}>Print the list</button>}
       </header>
+
+      <dl className="toBuyStats">
+        <div className="toBuyStat need"><dt>Money to carry</dt><dd><strong>{money(need)}</strong>
+          <span>For {left.length} {left.length === 1 ? "item" : "items"} still to buy{unpriced ? `; ${unpriced} without a price not counted` : ""}</span></dd></div>
+        <div className="toBuyStat"><dt>Spent so far</dt><dd><strong>{money(data.bought_total)}</strong>
+          <span>{bought.length ? `${bought.length} ticked as bought` : "Nothing ticked yet"}</span></dd></div>
+        <MoneyCheck need={need} unpriced={unpriced} />
+      </dl>
+
       {can("core.add_tobuyitem") && <AddItem canSearch={canSearch} onAdded={async (item) => {
         setData(await api("/api/v1/to-buy/", { method: "POST", body: JSON.stringify(item) }));
       }} />}
       <FormError title="Could not change the list." message={problem} />
+
       <section className="toBuyCard" aria-labelledby="to-buy-left">
-        <header className="toBuyCardHead">
-          <h2 id="to-buy-left">Still to buy</h2>
-          <span className="toBuyTotal">{left.length ? <>{left.length} {left.length === 1 ? "item" : "items"} · about <strong>{money(data.left_price)}</strong>
-            {data.unpriced > 0 && <small> ({data.unpriced} without a price)</small>}</> : null}</span>
-        </header>
+        <header className="toBuyCardHead"><h2 id="to-buy-left">Still to buy</h2></header>
         {left.length ? <>
-          <div className="toBuyColumns" aria-hidden="true"><span>Item</span><span>How many</span><span>Rough price</span><span /></div>
+          {columns}
           <ul className="toBuyList">{left.map(row)}</ul>
+          <div className="toBuyFoot"><span>Total to carry</span><strong>{money(need)}</strong></div>
         </> : <Empty>Nothing to buy. Add what you need above.</Empty>}
       </section>
       {bought.length > 0 && <section className="toBuyCard toBuyDone" aria-labelledby="to-buy-done">
@@ -152,7 +215,9 @@ export function ToBuyPage() {
           <h2 id="to-buy-done">Ticked as bought ({bought.length})</h2>
           {can("core.delete_tobuyitem") && <button type="button" className="secondary toBuyRemove" onClick={() => act("/api/v1/to-buy/", { method: "DELETE" })}>Clear these</button>}
         </header>
+        {columns}
         <ul className="toBuyList">{bought.map(row)}</ul>
+        <div className="toBuyFoot"><span>Spent</span><strong>{money(data.bought_total)}</strong></div>
       </section>}
     </div>
   );

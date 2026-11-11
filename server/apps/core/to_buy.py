@@ -22,15 +22,20 @@ def variant_label(variant):
 
 class ItemInput(serializers.ModelSerializer):
     name = serializers.CharField(max_length=160, trim_whitespace=True)
-    price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    count = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal("0.001"), required=False)
+    unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
     product = serializers.SerializerMethodField()
+    total = serializers.SerializerMethodField()
 
     class Meta:
         model = ToBuyItem
-        fields = ["id", "name", "variant", "product", "quantity", "price", "note", "bought"]
+        fields = ["id", "name", "variant", "product", "count", "unit", "unit_price", "total", "note", "bought"]
 
     def get_product(self, item):
         return variant_label(item.variant) if item.variant_id else None
+
+    def get_total(self, item):
+        return item.total
 
 
 def cleared_by(variant):
@@ -51,9 +56,11 @@ def clear_received(sender, instance, created, **kwargs):
 def listing():
     items = list(ToBuyItem.objects.select_related("variant__product"))
     left = [item for item in items if not item.bought]
-    return {"items": ItemInput(items, many=True).data, "left": len(left),
-            "left_price": sum((item.price for item in left if item.price is not None), Decimal("0")),
-            "unpriced": sum(1 for item in left if item.price is None)}
+    bought = [item for item in items if item.bought]
+    add = lambda rows: sum((item.total for item in rows if item.total is not None), Decimal("0"))
+    return {"items": ItemInput(items, many=True).data, "left": len(left), "left_total": add(left),
+            "unpriced": sum(1 for item in left if item.total is None), "bought": len(bought), "bought_total": add(bought),
+            "all_total": add(items)}
 
 
 class ToBuyView(APIView):
