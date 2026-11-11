@@ -58,8 +58,9 @@ function PhoneForm({ phone, onSaved, onCancel }) {
             onChange={(event) => set(plan.key, "daily_payment", event.target.value)} placeholder="e.g. 93" />
           <FormField label="For how many days" type="number" min="1" max="3650" step="1" required value={plan.days}
             onChange={(event) => set(plan.key, "days", event.target.value)} placeholder="e.g. 365" />
-          <FormField label={`Your commission per phone, if you know it (${businessCurrency()})`} type="number" min="0" step="0.01" value={plan.commission}
-            onChange={(event) => set(plan.key, "commission", event.target.value)} placeholder="Blank: the app learns it" />
+          <FormField label={`Your commission (${businessCurrency()})`} type="number" min="0" step="0.01" value={plan.commission}
+            onChange={(event) => set(plan.key, "commission", event.target.value)} placeholder="Optional" />
+          <p className="muted mkopaPlanTotal">Commission per phone, if you know it. Leave it blank and the app learns it from M-KOPA's payments.</p>
           {plan.learned_commission != null && <p className="muted mkopaPlanTotal">Learned from M-KOPA's payments: {money(plan.learned_commission)} a phone
             ({count(plan.learned_from, "payment")}). The learned figure is used; what you type here is kept as your own guess.</p>}
           {plan.deposit !== "" && plan.daily_payment !== "" && plan.days !== "" && <p className="muted mkopaPlanTotal">
@@ -251,63 +252,99 @@ function CommissionForm({ methods, unpaid, onSaved, onCancel }) {
   );
 }
 
+// A plan in a few words for tables: "KSh 3,899 deposit + KSh 93 a day × 365 days".
+const planShort = (plan) => `${money(plan.deposit)} deposit + ${money(plan.daily_payment)} a day × ${plan.days} days`;
+const SOURCE = { LEARNED: (plan) => `Learned from ${count(plan.learned_from, "payment")}`, TYPED: () => "Typed by you" };
+
+// One figure, its label above it and a line saying what it means, so each value reads with its own label.
+function Stat({ label, value, note, tone }) {
+  return <div className={`mkopaStat${tone ? ` ${tone}` : ""}`}><dt>{label}</dt><dd><strong>{value}</strong>{note && <span>{note}</span>}</dd></div>;
+}
+
+// A card: a heading on the left, an optional figure or button on the right, then its content.
+function Card({ id, title, aside, children, className = "" }) {
+  return (
+    <section className={`mkopaCard ${className}`} aria-labelledby={id}>
+      <header className="mkopaCardHead"><h2 id={id}>{title}</h2>{aside && <div className="mkopaCardAside">{aside}</div>}</header>
+      {children}
+    </section>
+  );
+}
+
+// A table cell with a main line and a smaller line under it (both stay together on a phone's labelled card).
+const Two = ({ main, sub }) => <span className="mkopaTwo"><span>{main}</span>{sub && <small>{sub}</small>}</span>;
+
 // "If I sell this many, what do I earn?": a number for each plan, the commission added up as you type.
 function EarningsCalculator({ phones }) {
-  const plans = phones.filter((phone) => phone.active).flatMap((phone) => phone.plans.map((plan) => ({ ...plan, phone: phone.name })))
+  const plans = phones.filter((phone) => phone.active).flatMap((phone) => phone.plans.map((plan, index) => ({ ...plan, phone: phone.name, number: index + 1 })))
     .filter((plan) => plan.commission != null);
   const [counts, setCounts] = useState({});
   if (!plans.length) return null;
   const total = plans.reduce((sum, plan) => sum + (Number(counts[plan.id]) || 0) * Number(plan.commission), 0);
   const phonesCount = plans.reduce((sum, plan) => sum + (Number(counts[plan.id]) || 0), 0);
   return (
-    <section className="dashCard mkopaCalculator" aria-labelledby="mkopa-calc-heading">
-      <h2 id="mkopa-calc-heading">What would I earn?</h2>
-      <p className="muted">Type how many phones you expect to sell on each plan, such as this week or this month. It uses each plan's commission as
-        learned from M-KOPA's payments (or as you typed it).</p>
-      <div className="trendTable"><table>
-        <thead><tr><th scope="col">Phone and plan</th><th scope="col">Commission each</th><th scope="col">How many</th><th scope="col">You earn</th></tr></thead>
+    <Card id="mkopa-calc-heading" title="What would I earn?" aside={<span className="mkopaAsideFigure">{money(total)}</span>}>
+      <p className="muted mkopaLead">Type how many phones you expect to sell on each plan, for a week or a month. Each plan's commission is the one
+        learned from M-KOPA's payments, or the one you typed.</p>
+      <div className="mkopaTableWrap"><table className="mkopaTable">
+        <thead><tr><th scope="col">Phone</th><th scope="col">Plan</th><th scope="col" className="num">Commission each</th>
+          <th scope="col" className="num">How many</th><th scope="col" className="num">You earn</th></tr></thead>
         <tbody>{plans.map((plan) => (
           <tr key={plan.id}>
-            <th scope="row">{plan.phone}<small className="muted"> · {planWords(plan)}</small></th>
-            <td>{money(plan.commission)}</td>
-            <td><input aria-label={`How many ${plan.phone} on ${planWords(plan)}`} type="number" min="0" step="1" inputMode="numeric"
-              value={counts[plan.id] ?? ""} onChange={(event) => setCounts({ ...counts, [plan.id]: event.target.value })} /></td>
-            <td>{money((Number(counts[plan.id]) || 0) * Number(plan.commission))}</td>
+            <th scope="row">{plan.phone}</th>
+            <td><Two main={`Plan ${plan.number}`} sub={planShort(plan)} /></td>
+            <td className="num">{money(plan.commission)}</td>
+            <td className="num"><input className="mkopaCount" aria-label={`How many ${plan.phone} on ${planWords(plan)}`} type="number" min="0" step="1"
+              inputMode="numeric" placeholder="0" value={counts[plan.id] ?? ""} onChange={(event) => setCounts({ ...counts, [plan.id]: event.target.value })} /></td>
+            <td className="num">{money((Number(counts[plan.id]) || 0) * Number(plan.commission))}</td>
           </tr>))}</tbody>
-        <tfoot><tr><th scope="row">Total</th><td /><td>{count(phonesCount, "phone")}</td><td><strong>{money(total)}</strong></td></tr></tfoot>
+        <tfoot><tr><th scope="row" colSpan={3}>Total</th><td className="num">{count(phonesCount, "phone")}</td><td className="num"><strong>{money(total)}</strong></td></tr></tfoot>
       </table></div>
-    </section>
+    </Card>
   );
 }
 
-function PhoneCard({ phone, seeMoney, canSetUp, onEdit }) {
+function PhonePlans({ phone, seeMoney, canSetUp, onEdit }) {
   return (
-    <li className={`loanCard mkopaPhone${phone.active ? "" : " muted"}`}>
-      <header className="loanCardHead">
-        <div>
-          <h3>{phone.name}{!phone.active && " (not sold now)"}</h3>
-          <p className="muted">{[count(phone.sold, "sold", "sold"), phone.tracks_stock && `${phone.in_hand} in hand`].filter(Boolean).join(" · ")}</p>
-        </div>
-        {canSetUp && <button type="button" className="secondary" onClick={onEdit}>Change</button>}
+    <article className={`mkopaPhone${phone.active ? "" : " mkopaOff"}`} aria-labelledby={`mkopa-phone-${phone.id}`}>
+      <header className="mkopaPhoneHead">
+        <h3 id={`mkopa-phone-${phone.id}`}>{phone.name}</h3>
+        <ul className="mkopaChips" aria-label={`${phone.name} in numbers`}>
+          {!phone.active && <li className="off">Not sold now</li>}
+          <li>{count(phone.sold, "phone")} sold</li>
+          {phone.tracks_stock && <li className={phone.in_hand < 0 ? "warn" : undefined}>{phone.in_hand} in hand</li>}
+          <li>{count(phone.plans.length, "plan")}</li>
+        </ul>
+        {canSetUp && <button type="button" className="secondary mkopaSmall" onClick={onEdit} aria-label={`Change ${phone.name}`}>Change</button>}
       </header>
       {phone.tracks_stock && phone.in_hand < 0 && <p className="formNotice formNoticeError">More {phone.name} sold than M-KOPA gave you: record the phones you received.</p>}
-      <div className="trendTable"><table className="mkopaPlans">
+      <div className="mkopaTableWrap"><table className="mkopaTable">
         <caption className="visuallyHidden">{phone.name} plans</caption>
-        <thead><tr><th scope="col">Plan</th><th scope="col">Deposit</th><th scope="col">Each day</th><th scope="col">Days</th><th scope="col">Customer pays in all</th>
-          {seeMoney && <th scope="col">Your commission</th>}<th scope="col">Sold</th>{seeMoney && <th scope="col">M-KOPA paid for them</th>}</tr></thead>
+        <thead><tr><th scope="col">Plan</th><th scope="col" className="num">Deposit</th><th scope="col" className="num">Each day</th>
+          <th scope="col" className="num">Days</th><th scope="col" className="num">Customer pays in all</th>
+          {seeMoney && <th scope="col" className="num">Commission per phone</th>}<th scope="col" className="num">Sold</th>
+          {seeMoney && <th scope="col" className="num">M-KOPA paid for them</th>}</tr></thead>
         <tbody>{phone.plans.map((plan, index) => (
           <tr key={plan.id}>
-            <th scope="row">Plan {index + 1}</th><td>{money(plan.deposit)}</td><td>{money(plan.daily_payment)}</td><td>{plan.days}</td>
-            <td>{money(plan.total_price)}</td>
-            {seeMoney && <td>{plan.commission != null ? <strong>{money(plan.commission)}</strong> : "Not known yet"}<small className="muted mkopaSource">{
-              plan.commission_source === "LEARNED" ? `learned from ${count(plan.learned_from, "payment")}`
-                : plan.commission_source === "TYPED" ? "typed by you" : "learned when M-KOPA pays"}</small></td>}
-            <td>{plan.sold}</td>
-            {seeMoney && <td>{plan.paid_phones ? `${money(plan.received)} for ${count(plan.paid_phones, "phone")}` : "—"}</td>}
+            <th scope="row">Plan {index + 1}</th>
+            <td className="num">{money(plan.deposit)}</td><td className="num">{money(plan.daily_payment)}</td><td className="num">{plan.days}</td>
+            <td className="num">{money(plan.total_price)}</td>
+            {seeMoney && <td className="num"><Two main={plan.commission != null ? <strong>{money(plan.commission)}</strong> : "Not known yet"}
+              sub={SOURCE[plan.commission_source]?.(plan) || "Learned when M-KOPA pays"} /></td>}
+            <td className="num">{plan.sold}</td>
+            {seeMoney && <td className="num">{plan.paid_phones ? <Two main={money(plan.received)} sub={`for ${count(plan.paid_phones, "phone")}`} /> : "—"}</td>}
           </tr>))}</tbody>
       </table></div>
-    </li>
+    </article>
   );
+}
+
+// Where a phone's commission stands: paid (and when), expected, not known yet, or the sale was undone.
+function SaleStatus({ sale }) {
+  if (sale.reversed_at) return <Two main={<span className="mkopaPill off">Undone</span>} sub={sale.reverse_reason} />;
+  if (sale.commission_paid) return <Two main={<span className="mkopaPill paid">Paid</span>} sub={date(sale.paid_on)} />;
+  if (sale.commission == null) return <span className="mkopaPill unknown">Not known yet</span>;
+  return <span className="mkopaPill due">Expected</span>;
 }
 
 export function MkopaPage() {
@@ -339,101 +376,108 @@ export function MkopaPage() {
     }
   };
   const phonesById = useMemo(() => Object.fromEntries((data?.phones || []).map((phone) => [phone.id, phone])), [data]);
+  // "Plan 2" for a sale, numbered as on its phone's card.
+  const planNumber = useMemo(() => Object.fromEntries((data?.phones || []).flatMap((phone) => [...phone.plans, ...phone.old_plans].map((plan, index) => [plan.id, index + 1]))), [data]);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!data) return <Loading />;
   const seeMoney = data.can_see_money;
   const summary = data.summary;
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const editing = typeof open === "number" ? phonesById[open] : null;
+  const live = data.sales.filter((sale) => !sale.reversed_at).length;
   return (
-    <>
-      <h1>M-KOPA phones</h1>
-      <p className="muted">The phones are M-KOPA's and customers pay M-KOPA their deposit and daily payments. What is yours is the commission M-KOPA pays
-        for each phone you sell; it counts as profit when M-KOPA pays it.</p>
-      {seeMoney && summary && <dl className="loanFigures mkopaFigures">
-        <div><dt>Phones sold</dt><dd>{Number(summary.phones_sold).toLocaleString()}</dd></div>
-        <div><dt>Commission earned</dt><dd>{money(summary.commission_earned)}</dd></div>
-        <div><dt>M-KOPA has paid you</dt><dd>{money(summary.commission_paid)}</dd></div>
-        <div><dt>M-KOPA still owes you</dt><dd><strong>{money(summary.commission_owed)}</strong></dd></div>
-        <div><dt>This month</dt><dd>{count(summary.month_sold, "phone")} · {money(summary.month_commission)}</dd></div>
+    <div className="mkopaPage">
+      <header className="mkopaHead">
+        <div>
+          <h1>M-KOPA phones</h1>
+          <p className="muted">The phones are M-KOPA's, and customers pay M-KOPA their deposit and daily payments. Yours is the commission M-KOPA pays
+            for each phone you sell, counted as profit when it is paid.</p>
+        </div>
+        {!open && <div className="mkopaActions">
+          {can("mkopa.add_mkopasale") && data.phones.some((p) => p.active && p.plans.length) && <button type="button" onClick={() => setOpen("sell")}>Sell a phone</button>}
+          {data.can_record_commission && <button type="button" className="secondary" onClick={() => setOpen("commission")}>Commission M-KOPA paid</button>}
+          {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && <button type="button" className="secondary" onClick={() => setOpen("stock")}>Phones from M-KOPA</button>}
+          {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add a phone</button>}
+        </div>}
+      </header>
+
+      {seeMoney && summary && <dl className="mkopaStats">
+        <Stat label="M-KOPA has paid you" value={money(summary.commission_paid)} note="Counted as profit" tone="good" />
+        <Stat label="M-KOPA still owes you" value={money(summary.commission_owed)}
+          note={summary.unpaid_phones ? `For ${count(summary.unpaid_phones - summary.unknown_phones, "phone")} not paid yet${summary.unknown_phones
+            ? `; ${summary.unknown_phones} more not known yet` : ""}` : "Every phone sold is paid for"} tone={summary.unknown_phones ? "warn" : undefined} />
+        <Stat label="Commission earned" value={money(summary.commission_earned)} note={`Paid and still owed, ${count(summary.phones_sold, "phone")} sold`} />
+        <Stat label="This month" value={money(summary.month_commission)} note={`${count(summary.month_sold, "phone")} sold`} />
       </dl>}
-      {seeMoney && summary?.unknown_phones > 0 && <p className="muted">{count(summary.unknown_phones, "phone")} sold on plans whose commission is not known yet:
-        not counted in what M-KOPA owes you. The app learns it when you record M-KOPA's payment for them.</p>}
-      {!open && <div className="actionRow mkopaActions">
-        {can("mkopa.add_mkopasale") && data.phones.some((p) => p.active && p.plans.length) && <button type="button" onClick={() => setOpen("sell")}>Sell a phone</button>}
-        {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && <button type="button" className="secondary" onClick={() => setOpen("stock")}>Phones from M-KOPA</button>}
-        {data.can_record_commission && <button type="button" className="secondary" onClick={() => setOpen("commission")}>Commission M-KOPA paid</button>}
-        {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add a phone</button>}
-      </div>}
+
       {open === "sell" && <SellForm phones={data.phones} seeMoney={seeMoney} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "stock" && <StockForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "commission" && <CommissionForm methods={data.methods} unpaid={data.unpaid || []} onSaved={saved} onCancel={() => setOpen(null)} />}
       {(open === "phone" || editing) && <PhoneForm key={editing?.id ?? "new"} phone={editing} onSaved={saved} onCancel={() => setOpen(null)} />}
       <FormError title="Could not undo." message={problem} />
 
-      <section aria-labelledby="mkopa-phones-heading">
-        <h2 id="mkopa-phones-heading">Phones and plans</h2>
-        {data.phones.length ? <ul className="loanList">{data.phones.map((phone) => <PhoneCard key={phone.id} phone={phone} seeMoney={seeMoney}
-          canSetUp={data.can_set_up} onEdit={() => setOpen(phone.id)} />)}</ul>
-          : <Empty>No phones yet. {data.can_set_up ? "Add each phone M-KOPA gives you to sell, such as X30, with its plans and your commission." : "The owner adds them."}</Empty>}
-      </section>
+      <Card id="mkopa-phones-heading" title="Phones and plans" aside={data.phones.length ? <span className="muted">{count(data.phones.length, "phone")}</span> : null}>
+        {data.phones.length ? <div className="mkopaPhones">{data.phones.map((phone) => <PhonePlans key={phone.id} phone={phone} seeMoney={seeMoney}
+          canSetUp={data.can_set_up} onEdit={() => setOpen(phone.id)} />)}</div>
+          : <Empty>No phones yet. {data.can_set_up ? "Add each phone M-KOPA gives you to sell, such as X30, with its plans." : "The owner adds them."}</Empty>}
+      </Card>
 
       {seeMoney && <EarningsCalculator phones={data.phones} />}
 
-      <section aria-labelledby="mkopa-sales-heading">
-        <h2 id="mkopa-sales-heading">Phones sold</h2>
-        {data.sales.length ? <div className="trendTable"><table className="mkopaSales">
-          <thead><tr><th scope="col">Date</th><th scope="col">Customer</th><th scope="col">Phone and plan</th><th scope="col">IMEI</th>
-            {seeMoney && <th scope="col">Commission</th>}<th scope="col">Sold by</th>{data.can_undo && <th scope="col"><span className="visuallyHidden">Action</span></th>}</tr></thead>
+      <Card id="mkopa-sales-heading" title="Phones sold" aside={<span className="muted">{count(live, "phone")}</span>}>
+        {data.sales.length ? <div className="mkopaTableWrap"><table className="mkopaTable">
+          <thead><tr><th scope="col">Date</th><th scope="col">Customer</th><th scope="col">Phone</th><th scope="col">IMEI</th>
+            {seeMoney && <th scope="col" className="num">Commission</th>}{seeMoney && <th scope="col">Status</th>}<th scope="col">Sold by</th>
+            {data.can_undo && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
           <tbody>{data.sales.map((sale) => (
-            <tr key={sale.id} className={sale.reversed_at ? "muted" : undefined}>
+            <tr key={sale.id} className={sale.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(sale.sold_on)}</td>
-              <td>{sale.customer_name}{sale.customer_phone && <small className="muted"> · {sale.customer_phone}</small>}</td>
-              <td>{sale.phone}<small className="muted"> · {planWords(sale)}</small>{sale.reversed_at && <small> · undone ({sale.reverse_reason})</small>}</td>
-              <td>{sale.imei || "—"}</td>
-              {seeMoney && <td>{sale.commission != null ? money(sale.commission) : "Not known yet"}<small className="muted">{sale.reversed_at ? ""
-                : sale.commission_paid ? ` · paid ${date(sale.paid_on)}` : " · expected"}</small></td>}
+              <td><Two main={sale.customer_name} sub={sale.customer_phone} /></td>
+              <td><Two main={`${sale.phone} · Plan ${planNumber[sale.plan_id] ?? "—"}`} sub={planShort(sale)} /></td>
+              <td><span className="mkopaMono">{sale.imei || "—"}</span></td>
+              {seeMoney && <td className="num">{sale.commission != null ? money(sale.commission) : "—"}</td>}
+              {seeMoney && <td><SaleStatus sale={sale} /></td>}
               <td>{sale.sold_by || "—"}</td>
-              {data.can_undo && <td>{!sale.reversed_at && <button type="button" className="secondary" onClick={() => void undo(`Undo the ${sale.phone} sold to ${sale.customer_name}?`,
-                "It no longer earns commission and the phone is back in hand.", `/api/v1/mkopa/sales/${sale.id}/undo/`)}>Undo</button>}</td>}
+              {data.can_undo && <td className="actions">{!sale.reversed_at && !sale.commission_paid && <button type="button" className="secondary mkopaSmall"
+                onClick={() => void undo(`Undo the ${sale.phone} sold to ${sale.customer_name}?`, "It no longer earns commission and the phone is back in hand.",
+                  `/api/v1/mkopa/sales/${sale.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
         </table></div> : <Empty>No phones sold yet.</Empty>}
-      </section>
+      </Card>
 
-      {seeMoney && <section aria-labelledby="mkopa-paid-heading">
-        <h2 id="mkopa-paid-heading">Commission M-KOPA paid</h2>
-        {data.commissions.length ? <div className="trendTable"><table>
-          <thead><tr><th scope="col">Date</th><th scope="col">Amount</th><th scope="col">For</th><th scope="col">Paid into</th><th scope="col">Reference</th><th scope="col">Note</th>
-            {data.can_record_commission && <th scope="col"><span className="visuallyHidden">Action</span></th>}</tr></thead>
+      {seeMoney && <Card id="mkopa-paid-heading" title="Commission M-KOPA paid" aside={<span className="mkopaAsideFigure">{money(summary.commission_paid)}</span>}>
+        {data.commissions.length ? <div className="mkopaTableWrap"><table className="mkopaTable">
+          <thead><tr><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">For</th><th scope="col">Paid into</th>
+            <th scope="col">Reference</th><th scope="col">Note</th>{data.can_record_commission && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
           <tbody>{data.commissions.map((row) => (
-            <tr key={row.id} className={row.reversed_at ? "muted" : undefined}>
+            <tr key={row.id} className={row.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(row.paid_on)}</td>
-              <td>{money(row.amount)}{row.reversed_at && <small> · undone ({row.reverse_reason})</small>}</td>
-              <td>{row.phones ? `${count(row.phones, "phone")} (${row.phone_names.join(", ")})` : "—"}</td>
-              <td>{row.method_name}</td><td>{row.reference || "—"}</td><td>{row.notes || "—"}</td>
-              {data.can_record_commission && <td>{!row.reversed_at && <button type="button" className="secondary" onClick={() => void undo(`Undo the ${money(row.amount)} commission?`,
+              <td className="num"><Two main={money(row.amount)} sub={row.reversed_at ? `Undone: ${row.reverse_reason}` : ""} /></td>
+              <td>{row.phones ? <Two main={count(row.phones, "phone")} sub={row.phone_names.join(", ")} /> : "—"}</td>
+              <td>{row.method_name}</td><td><span className="mkopaMono">{row.reference || "—"}</span></td><td>{row.notes || "—"}</td>
+              {data.can_record_commission && <td className="actions">{!row.reversed_at && <button type="button" className="secondary mkopaSmall" onClick={() => void undo(`Undo the ${money(row.amount)} commission?`,
                 `It comes back out of your ${row.method_name.toLowerCase()} and your profit, M-KOPA owes it again, and the app stops learning from it.`, `/api/v1/mkopa/commission/${row.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
         </table></div> : <Empty>No commission recorded yet. When M-KOPA pays you, record it here.</Empty>}
-      </section>}
+      </Card>}
 
-      {data.stock.length > 0 && <details className="loanSettled">
-        <summary>Phones received and given back ({data.stock.length})</summary>
-        <div className="trendTable"><table>
-          <thead><tr><th scope="col">Date</th><th scope="col">Phone</th><th scope="col">Phones</th><th scope="col">Note</th><th scope="col">By</th>
-            {data.can_set_up && <th scope="col"><span className="visuallyHidden">Action</span></th>}</tr></thead>
+      {data.stock.length > 0 && <Card id="mkopa-stock-heading" title="Phones received and given back" className="mkopaQuiet"
+        aside={<span className="muted">{count(data.stock.length, "entry", "entries")}</span>}>
+        <div className="mkopaTableWrap"><table className="mkopaTable">
+          <thead><tr><th scope="col">Date</th><th scope="col">Phone</th><th scope="col" className="num">Phones</th><th scope="col">Note</th><th scope="col">Recorded by</th>
+            {data.can_set_up && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
           <tbody>{data.stock.map((move) => (
-            <tr key={move.id} className={move.reversed_at ? "muted" : undefined}>
+            <tr key={move.id} className={move.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(move.moved_on)}</td><td>{move.phone}</td>
-              <td>{move.quantity > 0 ? `${move.quantity} received` : `${-move.quantity} given back`}{move.reversed_at && <small> · undone ({move.reverse_reason})</small>}</td>
+              <td className="num"><Two main={move.quantity > 0 ? `${move.quantity} received` : `${-move.quantity} given back`} sub={move.reversed_at ? `Undone: ${move.reverse_reason}` : ""} /></td>
               <td>{move.notes || "—"}</td><td>{move.recorded_by || "—"}</td>
-              {data.can_set_up && <td>{!move.reversed_at && <button type="button" className="secondary" onClick={() => void undo("Undo this entry?",
+              {data.can_set_up && <td className="actions">{!move.reversed_at && <button type="button" className="secondary mkopaSmall" onClick={() => void undo("Undo this entry?",
                 "The phones in hand go back to what they were before it.", `/api/v1/mkopa/stock/${move.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
         </table></div>
-      </details>}
+      </Card>}
 
-      {seeMoney && <PartBooks part="MKOPA" refreshKey={summary?.commission_paid} />}
-    </>
+      {seeMoney && <div className="mkopaCard mkopaBooks"><PartBooks part="MKOPA" refreshKey={summary?.commission_paid} /></div>}
+    </div>
   );
 }

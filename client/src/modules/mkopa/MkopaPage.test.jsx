@@ -30,9 +30,9 @@ beforeEach(() => {
 
 it("shows each phone's plans with what the customer pays and the commission, and what M-KOPA still owes", async () => {
   render(<MkopaPage />);
-  const x30 = (await screen.findByRole("heading", { name: "X30" })).closest("li");
+  const x30 = await screen.findByRole("article", { name: "X30" });
   const rows = within(x30).getAllByRole("row").slice(1).map((row) => row.textContent);
-  expect(rows[0]).toMatch(/3,899.*93.*365.*37,844.*1,200.*learned from 2 payments/);
+  expect(rows[0]).toMatch(/3,899.*93.*365.*37,844.*1,200.*Learned from 2 payments/);
   expect(rows[1]).toMatch(/5,999.*130.*180.*29,399.*1,500/);
   expect(screen.getByText("M-KOPA still owes you").nextSibling).toHaveTextContent("1,200");
 });

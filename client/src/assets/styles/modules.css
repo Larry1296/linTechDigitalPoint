@@ -3151,23 +3151,89 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .investMonths td { font-variant-numeric: tabular-nums; }
 .investMonths tr.investMonthOpen td { background: color-mix(in srgb, var(--primary) 6%, transparent); }
 
-/* M-KOPA phones: each phone's plans with the commission it earns, the sales, and a calculator of what selling more earns. */
-.mkopaFigures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px; margin: 14px 0; }
-.mkopaFigures > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
-.mkopaFigures dt { font-size: 13px; color: var(--muted); }
-.mkopaFigures dd { margin: 4px 0 0; font-size: 18px; font-weight: 700; }
-.mkopaActions { flex-wrap: wrap; margin: 6px 0 16px; }
-.mkopaPlanFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin: 12px 0; padding: 12px 14px;
+/* M-KOPA phones: a header with the page's actions, four figures each under its own label, then cards with tables whose
+   headings sit exactly over their values (amounts right-aligned so they line up), extra details on a smaller line. */
+.mkopaPage { display: grid; gap: 20px; min-width: 0; }
+.mkopaPage > * { margin: 0; min-width: 0; }
+.mkopaHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; }
+.mkopaHead > div:first-child { flex: 1 1 420px; min-width: 0; }
+.mkopaHead h1 { margin: 0 0 6px; }
+.mkopaHead p { margin: 0; max-width: 68ch; }
+.mkopaActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mkopaActions button { margin: 0; }
+.mkopaStats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.mkopaStat { display: grid; align-content: start; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: 12px; background: var(--surface); }
+.mkopaStat.good { border-left-color: var(--success, #15803d); }
+.mkopaStat.warn { border-left-color: var(--warning, #b45309); }
+.mkopaStat dt { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.mkopaStat dd { display: grid; gap: 4px; margin: 0; }
+.mkopaStat dd strong { font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.mkopaStat dd span { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.mkopaCard { min-width: 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+.mkopaCardHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 12px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.mkopaCardHead h2 { margin: 0; font-size: 18px; }
+.mkopaAsideFigure { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mkopaLead { margin: 0 0 12px; max-width: 75ch; }
+.mkopaPhones { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.mkopaPhone { min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.mkopaPhone.mkopaOff { opacity: .7; }
+.mkopaPhoneHead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.mkopaPhoneHead h3 { margin: 0; font-size: 17px; }
+.mkopaPhoneHead button { margin: 0 0 0 auto; }
+.mkopaChips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mkopaChips li { padding: 2px 10px; border-radius: 999px; background: var(--line); font-size: 12.5px; font-weight: 600; }
+.mkopaChips li.warn, .mkopaChips li.off { color: var(--danger, #b42318); }
+.mkopaSmall { min-height: 0; padding: 5px 12px; font-size: 13px; }
+.mkopaTableWrap { min-width: 0; overflow-x: auto; }
+.mkopaTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.mkopaTable :is(th, td) { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.mkopaTable :is(th, td):first-child { padding-left: 0; }
+.mkopaTable :is(th, td):last-child { padding-right: 0; }
+.mkopaTable thead th { padding-top: 0; color: var(--muted); font-size: 12.5px; font-weight: 700; white-space: nowrap; vertical-align: bottom; }
+.mkopaTable tbody th { font-weight: 700; }
+.mkopaTable .num { text-align: right; }
+.mkopaTable .actions { width: 1%; text-align: right; white-space: nowrap; }
+.mkopaTable tbody tr:last-child :is(th, td) { border-bottom: 0; }
+.mkopaTable tfoot :is(th, td) { border-top: 2px solid var(--line); border-bottom: 0; font-weight: 700; }
+.mkopaTwo { display: inline-grid; gap: 2px; }
+.mkopaTable .num .mkopaTwo { justify-items: end; }
+.mkopaTwo small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.mkopaMono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.mkopaUndone :is(td, th) { color: var(--muted); }
+.mkopaPill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: var(--line); }
+.mkopaPill.paid { color: var(--success, #15803d); background: color-mix(in srgb, var(--success, #15803d) 14%, transparent); }
+.mkopaPill.due { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.mkopaPill.unknown { color: var(--warning, #b45309); background: color-mix(in srgb, var(--warning, #b45309) 14%, transparent); }
+.mkopaCount { width: 6em; max-width: 100%; margin: 0; text-align: right; }
+.mkopaQuiet { box-shadow: none; }
+.mkopaBooks > :first-child { margin-top: 0; }
+/* The forms. */
+.mkopaPlanFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 12px; margin: 12px 0; padding: 12px 14px;
   border: 1px solid var(--line); border-radius: 13px; }
 .mkopaPlanFields legend { padding: 0 6px; font-weight: 700; }
 .mkopaPlanFields .mkopaPlanTotal, .mkopaOnePlan { grid-column: 1 / -1; margin: 0; }
 .mkopaPlanFields > button { justify-self: start; }
-.mkopaPhone .mkopaPlans { width: 100%; margin-top: 10px; }
-.mkopaCalculator { margin: 18px 0; }
-.mkopaCalculator input { width: 6em; max-width: 100%; }
-.mkopaSales td small, .mkopaCalculator th small { display: block; }
 .mkopaCovers { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; }
 .mkopaCovers legend { padding: 0 6px; font-weight: 700; }
 .mkopaCoverList { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; }
 .mkopaCoverList label { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
-.mkopaCoverList small, .mkopaSource { display: block; }
+.mkopaCoverList small { display: block; }
+@media (max-width: 1100px) { .mkopaStats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Phones and tablets: tables become the app's labelled cards; a two-line value stays together on the right. */
+@media (max-width: 900px) {
+  .mkopaHead { align-items: stretch; }
+  .mkopaActions button { flex: 1 1 auto; }
+  .mkopaCard { padding: 14px; }
+  #root .mkopaTable :is(th, td) { padding: 5px 0; border-bottom: 0; }
+  #root .mkopaTable thead + tbody tr :is(th, td) { text-align: right; }
+  #root .mkopaTable .mkopaTwo { justify-items: end; text-align: right; }
+  #root .mkopaTable tfoot th[colspan] { display: none; }
+  #root .mkopaTable .actions { width: 100%; }
+  #root .mkopaTableWrap { overflow: visible; }
+  #root .mkopaTable :is(th, td) { flex-wrap: wrap; white-space: normal; overflow-wrap: anywhere; }
+  #root .mkopaTable :is(th, td) > * { min-width: 0; max-width: 100%; margin-left: auto; }
+  .mkopaPhone { padding: 12px; }
+}
+@media (max-width: 480px) { .mkopaStats { grid-template-columns: minmax(0, 1fr); } }
