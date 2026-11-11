@@ -8,6 +8,7 @@ import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { PartBooks } from "../admin/PartBooks";
+import { Pager, usePages, useServerPages } from "../../components/Pager";
 
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -461,9 +462,15 @@ export function MkopaPage() {
   const [open, setOpen] = useState(null);  // which form: sell, stock, commission, phone, or a phone being changed
   const [problem, setProblem] = useState("");
   const [payFor, setPayFor] = useState(null);  // one phone sold whose commission is being recorded from its row
+  // Phones sold grow every day, so they come from the server a page at a time; each reload of the page reloads its page too.
+  const [version, setVersion] = useState(0);
+  const sales = useServerPages(version ? "/api/v1/mkopa/sales/" : null, { version });
+  const commissionPages = usePages(data?.commissions);
+  const stockPages = usePages(data?.stock);
   const load = async () => {
     try {
       setData(await api("/api/v1/mkopa/"));
+      setVersion((v) => v + 1);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -492,7 +499,7 @@ export function MkopaPage() {
   const summary = data.summary;
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const editing = typeof open === "number" ? phonesById[open] : null;
-  const live = data.sales.filter((sale) => !sale.reversed_at).length;
+  const live = data.sold;
   return (
     <div className="mkopaPage">
       <header className="mkopaHead">
@@ -535,11 +542,11 @@ export function MkopaPage() {
       {seeMoney && <EarningsCalculator phones={data.phones} />}
 
       <Card id="mkopa-sales-heading" title="Phones sold" aside={<span className="muted">{count(live, "phone")}</span>}>
-        {data.sales.length ? <div className="mkopaTableWrap"><table className="mkopaTable">
+        {sales.count ? <><div className="mkopaTableWrap"><table className="mkopaTable">
           <thead><tr><th scope="col">Date</th><th scope="col">Customer</th><th scope="col">Phone</th><th scope="col">IMEI</th>
             {seeMoney && <th scope="col" className="num">Commission</th>}{seeMoney && <th scope="col">Status</th>}<th scope="col">Sold by</th>
             {data.can_undo && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
-          <tbody>{data.sales.map((sale) => (
+          <tbody>{sales.rows.map((sale) => (
             <tr key={sale.id} className={sale.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(sale.sold_on)}</td>
               <td><Two main={sale.customer_name} sub={sale.customer_phone} /></td>
@@ -555,14 +562,14 @@ export function MkopaPage() {
                 onClick={() => void undo(`Undo the ${sale.phone} sold to ${sale.customer_name}?`, "It no longer earns commission and the phone is back in hand.",
                   `/api/v1/mkopa/sales/${sale.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
-        </table></div> : <Empty>No phones sold yet.</Empty>}
+        </table></div><Pager {...sales} noun="phones sold" /></> : sales.busy ? <Loading /> : <Empty>No phones sold yet.</Empty>}
       </Card>
 
       {seeMoney && <Card id="mkopa-paid-heading" title="Commission M-KOPA paid" aside={<span className="mkopaAsideFigure">{money(summary.commission_paid)}</span>}>
         {data.commissions.length ? <div className="mkopaTableWrap"><table className="mkopaTable">
           <thead><tr><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">For</th><th scope="col">Paid into</th>
             <th scope="col">Reference</th><th scope="col">Note</th>{data.can_record_commission && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
-          <tbody>{data.commissions.map((row) => (
+          <tbody>{commissionPages.rows.map((row) => (
             <tr key={row.id} className={row.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(row.paid_on)}</td>
               <td className="num"><Two main={money(row.amount)} sub={row.reversed_at ? `Undone: ${row.reverse_reason}` : ""} /></td>
@@ -574,6 +581,7 @@ export function MkopaPage() {
                 `It comes back out of your ${row.method_name.toLowerCase()} and your profit, M-KOPA owes it again, and the app stops learning from it.`, `/api/v1/mkopa/commission/${row.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
         </table></div> : <Empty>No commission recorded yet. When M-KOPA pays you, record it here.</Empty>}
+        <Pager {...commissionPages} noun="payments" />
       </Card>}
 
       {data.stock.length > 0 && <Card id="mkopa-stock-heading" title="Phones received and given back" className="mkopaQuiet"
@@ -581,7 +589,7 @@ export function MkopaPage() {
         <div className="mkopaTableWrap"><table className="mkopaTable">
           <thead><tr><th scope="col">Date</th><th scope="col">Phone</th><th scope="col" className="num">Phones</th><th scope="col">Note</th><th scope="col">Recorded by</th>
             {data.can_set_up && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
-          <tbody>{data.stock.map((move) => (
+          <tbody>{stockPages.rows.map((move) => (
             <tr key={move.id} className={move.reversed_at ? "mkopaUndone" : undefined}>
               <td>{date(move.moved_on)}</td><td>{move.phone}</td>
               <td className="num"><Two main={move.quantity > 0 ? `${move.quantity} received` : `${-move.quantity} given back`} sub={move.reversed_at ? `Undone: ${move.reverse_reason}` : ""} /></td>
@@ -590,6 +598,7 @@ export function MkopaPage() {
                 "The phones in hand go back to what they were before it.", `/api/v1/mkopa/stock/${move.id}/undo/`)}>Undo</button>}</td>}
             </tr>))}</tbody>
         </table></div>
+        <Pager {...stockPages} noun="entries" />
       </Card>}
 
       {seeMoney && <div className="mkopaCard mkopaBooks"><PartBooks part="MKOPA" refreshKey={summary?.commission_paid} /></div>}

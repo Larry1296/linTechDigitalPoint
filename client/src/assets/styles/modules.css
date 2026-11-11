@@ -3353,3 +3353,13 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyRemove, .toBuyHave { display: none !important; }
   .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
 }
+
+/* Pager: long lists come a page at a time ("21–30 of 340 jobs", Previous, page numbers, Next). */
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 12px 0 4px; }
+.pagerCount { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.pagerButtons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pagerButtons button { min-width: 40px; min-height: 36px; padding: 6px 12px; font-variant-numeric: tabular-nums; }
+.pagerButtons .pagerOn { cursor: default; }
+.pagerGap { color: var(--muted); padding: 0 2px; }
+.jobsHeading { margin: 16px 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+@media (max-width: 600px) { .pager { justify-content: center; } .pagerCount { width: 100%; text-align: center; } }

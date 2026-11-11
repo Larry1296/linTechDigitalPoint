@@ -22,10 +22,14 @@ const owner = {
   summary: { phones_sold: 1, commission_earned: "1200", commission_paid: "0", commission_owed: "1200", unpaid_phones: 1, unknown_phones: 0, month_sold: 1, month_commission: "1200" },
 };
 
+// The overview, and phones sold a page at a time from their own list.
+const reply = (path, data) => (path.startsWith("/api/v1/mkopa/sales/?")
+  ? { results: data.sales, count: data.sales.length, page: 1, pages: 1 } : data);
+
 beforeEach(() => {
   vi.clearAllMocks();
   permissions = ["mkopa.view_mkopasale", "mkopa.add_mkopasale", "mkopa.add_mkopastock"];
-  api.mockImplementation(async (path, options) => (options?.method ? {} : owner));
+  api.mockImplementation(async (path, options) => (options?.method ? {} : reply(path, owner)));
 });
 
 it("shows each phone's plans with what the customer pays and the commission, and what M-KOPA still owes", async () => {
@@ -130,7 +134,7 @@ const payingData = () => {
 const posted = () => JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/mkopa/commission/" && o?.method === "POST")[1].body);
 
 it("records what M-KOPA paid for each phone specifically, the total adding itself up", async () => {
-  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
+  api.mockImplementation(async (path, options) => (options?.method ? {} : reply(path, payingData())));
   render(<MkopaPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Commission M-KOPA paid" }));
   const form = screen.getByRole("form", { name: "Record commission" });
@@ -146,7 +150,7 @@ it("records what M-KOPA paid for each phone specifically, the total adding itsel
 });
 
 it("records one phone's commission straight from its row in Phones sold", async () => {
-  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
+  api.mockImplementation(async (path, options) => (options?.method ? {} : reply(path, payingData())));
   window.scrollTo = vi.fn();
   render(<MkopaPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Record commission for the X4 sold to Ann Wairimu" }));
@@ -158,7 +162,7 @@ it("records one phone's commission straight from its row in Phones sold", async 
 });
 
 it("still takes one total for several phones when M-KOPA's statement gives only a total", async () => {
-  api.mockImplementation(async (path, options) => (options?.method ? {} : payingData()));
+  api.mockImplementation(async (path, options) => (options?.method ? {} : reply(path, payingData())));
   render(<MkopaPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Commission M-KOPA paid" }));
   const form = screen.getByRole("form", { name: "Record commission" });

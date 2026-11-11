@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -313,9 +314,9 @@ export function MpesaCommissionPage() {
       <section className="panel">
         <h2>Commission recorded</h2>
         <FormError title="Could not undo it." message={notice} />
-        {data.entries.length ? <div className="trendTable"><table className="loanRepayments">
+        {data.entries.length ? <Paged rows={data.entries} size={12} noun="payments">{(pageRows) => <div className="trendTable"><table className="loanRepayments">
           <thead><tr><th>Earned in</th><th>Amount</th><th>Paid</th><th>Went to</th><th>Reference</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-          <tbody>{data.entries.map((e) => (
+          <tbody>{pageRows.map((e) => (
             <tr key={e.id} className={e.reversed_at ? "muted" : undefined}>
               <td>{e.month}{e.notes && <small> · {e.notes}</small>}</td>
               <td>{money(e.amount)}{e.reversed_at && <small> · undone ({e.reverse_reason})</small>}</td>
@@ -324,7 +325,7 @@ export function MpesaCommissionPage() {
               <td>{e.reference || "—"}</td>
               <td>{!e.reversed_at && can("accounting.reverse_cashentry") && <button type="button" className="secondary" onClick={() => void undo(e)}>Undo</button>}</td>
             </tr>))}</tbody>
-        </table></div> : <p className="muted">No commission recorded yet.</p>}
+        </table></div>}</Paged> : <p className="muted">No commission recorded yet.</p>}
       </section>
     </>
   );

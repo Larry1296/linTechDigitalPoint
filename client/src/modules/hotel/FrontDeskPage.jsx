@@ -1,3 +1,4 @@
+import { PAGE_SIZE, Pager } from "../../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { BedDouble, Settings2, UserPlus } from "lucide-react";
@@ -134,7 +135,12 @@ export function GuestsPage() {
   const [status, setStatus] = useState("BOOKED,IN");
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
-  const load = useCallback(() => api(`/api/v1/hotel/stays/?status=${status}&q=${encodeURIComponent(query)}`).then(setRows).catch((e) => setError(e.message)), [status, query]);
+  const [page, setPage] = useState(1);
+  const [paging, setPaging] = useState({ count: 0, pages: 1, page: 1 });
+  useEffect(() => setPage(1), [status, query]);  // a new tab or search starts at its first page
+  const load = useCallback(() => api(`/api/v1/hotel/stays/?status=${status}&q=${encodeURIComponent(query)}&page=${page}&page_size=${PAGE_SIZE}`)
+    .then((body) => { setRows(body.results); setPaging({ count: body.count, pages: body.pages, page: body.page }); })
+    .catch((e) => setError(e.message)), [status, query, page]);
   useEffect(() => { const timer = setTimeout(() => void load(), 250); return () => clearTimeout(timer); }, [load]);
   useLiveRefresh(load);
   if (error && !rows) return <ErrorState message={error} retry={load} />;
@@ -152,5 +158,6 @@ export function GuestsPage() {
         <Link className="button secondary" to={`/admin/rooms/stays/${stay.id}`}>Open</Link>
       </li>)}
     </ul>}
+    {rows?.length > 0 && <Pager {...paging} onPage={setPage} noun="stays" />}
   </div>;
 }

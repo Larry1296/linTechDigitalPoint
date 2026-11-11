@@ -1,3 +1,4 @@
+import { Pager } from "../../components/Pager";
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../../core/api/client';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -129,6 +130,6 @@ export function SalesPage() {
         <button disabled={busy}>Record correction</button>{problem(`/api/v1/commerce/sales/${s.id}/notes/`,'Could not record the correction.')}</form></details>}
       {s.status==='COMPLETED'&&canCorrect&&<details><summary>Return all goods and refund received payments</summary><p>Confirm that every item has physically returned. Service sales require separate review.</p><form onSubmit={e=>submit(e,`/api/v1/commerce/sales/${s.id}/return/`,{},`${s.number} returned and refunded.`)}><label>Reason<TextBox name="reason" required maxLength="240" /></label><label className="checkRow"><input type="checkbox" required /> Goods returned and refund completed</label><button disabled={busy}>Record full return</button>{problem(`/api/v1/commerce/sales/${s.id}/return/`,'Could not record the full return.')}</form></details>}
     </section></details>{notice?.saleId===s.id&&<FormSuccess message={notice.text} />}</Fragment>;})}</>}{explainItem&&<ExplainProfitPanel itemId={explainItem} onClose={()=>setExplainItem(null)} />}{receiptSale&&<ReceiptPanel saleId={receiptSale} onClose={()=>setReceiptSale(null)} />}
-    <nav className="pager" aria-label="Sales pages"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>Previous</button><span> Page {page}{data?.count?` of ${Math.max(1,Math.ceil(data.count/50))}`:''} </span><button disabled={!data||page*50>=data.count} onClick={()=>setPage(p=>p+1)}>Next</button></nav>
+    {data?.count>0&&<Pager page={page} pages={Math.ceil(data.count/50)} count={data.count} size={50} onPage={n=>{setPage(n);window.scrollTo?.({top:0});}} noun="sales" />}
   </>;
 }

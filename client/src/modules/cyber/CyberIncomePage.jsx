@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -612,10 +613,10 @@ export function CyberServiceIncomePage() {
       <section aria-labelledby="income-history">
         <h2 id="income-history">History</h2>
         <FormError title="Could not delete the receipt." message={deleteError} />
-        {!data.history.length ? <Empty>Nothing recorded for {data.name} yet.</Empty> : (
+        {!data.history.length ? <Empty>Nothing recorded for {data.name} yet.</Empty> : <Paged rows={data.history} size={20} noun="services done">{(pageRows) => (
           <table className="incomeTable">
             <thead><tr><th>When</th><th>Option</th><th>How many</th><th>Amount</th><th>Paid by</th><th>Customer</th><th>Receipt</th>{canDeleteSales && <th><span className="visuallyHidden">Delete</span></th>}</tr></thead>
-            <tbody>{data.history.map((row) => (
+            <tbody>{pageRows.map((row) => (
               <tr key={row.id}>
                 <td>{when(row.date)}</td>
                 <td>{row.option}</td>
@@ -628,7 +629,7 @@ export function CyberServiceIncomePage() {
               </tr>
             ))}</tbody>
           </table>
-        )}
+        )}</Paged>}
       </section>
       {receipt && <ReceiptPanel saleId={receipt} onClose={() => setReceipt(null)} />}
     </>

@@ -1,3 +1,4 @@
+import { Pager, usePages } from "../../components/Pager";
 import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
 import { label } from "../../core/ui/labels";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +30,7 @@ export function AdjustmentReport() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
+  const shown = usePages(rows);
   const load = () => {
     if (canAdjust(user))
       api("/api/v1/inventory/adjustments/")
@@ -43,7 +45,7 @@ export function AdjustmentReport() {
       <h2>Stock adjustment report</h2>
       {error && <p role="alert">{error}</p>}
       {!rows.length && <p>No stock changes yet.</p>}
-      {rows.map((a) => (
+      {shown.rows.map((a) => (
         <article key={a.id}>
           <b>
             {a.display_name} · {a.sku}
@@ -59,6 +61,7 @@ export function AdjustmentReport() {
           </p>
         </article>
       ))}
+      <Pager {...shown} noun="stock changes" />
     </section>
   );
 }
@@ -71,6 +74,7 @@ export function StockAdjustmentPage() {
   const [zones, setZones] = useState([]);
   const [shelf, setShelf] = useState("");
   const [context, setContext] = useState(null);
+  const history = usePages(context?.history, { reset: context?.sku });
   const [counted, setCounted] = useState("");
   const [lot, setLot] = useState("");
   const [reason, setReason] = useState("");
@@ -374,7 +378,7 @@ export function StockAdjustmentPage() {
           <b>
             {context.display_name} · {context.sku}
           </b>
-          {context.history.map((m) => (
+          {history.rows.map((m) => (
             <article key={m.id}>
               <p>
                 {label(m.movement_type)} · {m.shelf} · Lot {m.lot_id} · Quantity{" "}
@@ -391,6 +395,7 @@ export function StockAdjustmentPage() {
               </p>
             </article>
           ))}
+          <Pager {...history} noun="stock moves" />
         </section>
       )}
       <AdjustmentReport key={result?.id || "initial"} />

@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { businessCurrency } from "../../core/organization/presentation";
 import { label } from "../../core/ui/labels";
 import { AdjustmentReport } from "../inventory/StockAdjustmentPage";
@@ -52,8 +53,8 @@ export function StaffOrdersPage() {
       {!data.length ? (
         <Empty>No online orders.</Empty>
       ) : (
-        <div className="list">
-          {data.map((o) => (
+        <Paged rows={data} noun="orders">{(pageRows) => <div className="list">
+          {pageRows.map((o) => (
             <article key={o.id}>
               <div>
                 <b>{o.number}</b>
@@ -82,7 +83,7 @@ export function StaffOrdersPage() {
               )}
             </article>
           ))}
-        </div>
+        </div>}</Paged>
       )}
     </>
   );

@@ -73,8 +73,8 @@ beforeEach(() => {
           sku: "BLACK",
         },
       ];
-    if (url.endsWith("receipts/"))
-      return [{ ...receipt, line_count: 1, total_units: "3.000" }];
+    if (url.includes("receipts/?page="))
+      return { results: [{ ...receipt, line_count: 1, total_units: "3.000" }], count: 1, page: 1, pages: 1 };
     return receipt;
   });
 });

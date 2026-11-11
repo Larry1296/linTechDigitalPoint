@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -71,10 +72,10 @@ export function PlatformAdminPage() {
       </select></label>
     </div>
 
-    <div className="platformTableWrap">
+    <Paged rows={rows} size={20} reset={rows.length} noun="businesses">{(pageRows) => <div className="platformTableWrap">
       <table className="platformTable">
         <thead><tr><th>Business</th><th>Owner</th><th>Plan</th><th>Status</th><th>Ends</th><th>Paid in total</th><th>Joined</th></tr></thead>
-        <tbody>{rows.map((row) => {
+        <tbody>{pageRows.map((row) => {
           const view = statusOf(row.subscription);
           return <tr key={row.id} className={selected === row.id ? "selected" : undefined}>
             <td><button type="button" className="linkButton" onClick={() => setSelected(row.id)}>{row.name}</button><small>{row.business_type || "—"}</small></td>
@@ -88,20 +89,20 @@ export function PlatformAdminPage() {
         })}</tbody>
       </table>
       {!rows.length && <p className="muted" style={{ padding: 16 }}>No businesses match.</p>}
-    </div>
+    </div>}</Paged>
 
     {selected && <BusinessDetail key={selected} id={selected} plans={data.plans} kinds={data.kinds || []} onChanged={load} onClose={() => setSelected(null)}
       onDeleted={() => { setSelected(null); void load(); }} />}
 
     <h2>Recent payments</h2>
-    {data.recent_payments.length ? <div className="platformTableWrap"><table className="platformTable">
+    {data.recent_payments.length ? <Paged rows={data.recent_payments} noun="payments">{(pageRows) => <div className="platformTableWrap"><table className="platformTable">
       <thead><tr><th>Date</th><th>Business</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Receipt</th></tr></thead>
-      <tbody>{data.recent_payments.map((payment) => <tr key={payment.id}>
+      <tbody>{pageRows.map((payment) => <tr key={payment.id}>
         <td>{dateText(payment.created_at)}</td><td>{payment.business}</td><td>{payment.plan}</td><td>{money(payment.amount, payment.currency)}</td>
         <td>{payment.method === "MPESA" ? `M-Pesa ${payment.phone}` : "Recorded"}</td>
         <td><span className={`paymentStatus ${payment.status.toLowerCase()}`}>{payment.status.toLowerCase()}</span></td><td>{payment.receipt_number || "—"}</td>
       </tr>)}</tbody>
-    </table></div> : <p className="muted">No payments yet.</p>}
+    </table></div>}</Paged> : <p className="muted">No payments yet.</p>}
 
     <h2>Plans</h2>
     <p className="muted">Each plan has a standard price. Set a different price for a kind of business (a kibanda pays less than a hardware shop),

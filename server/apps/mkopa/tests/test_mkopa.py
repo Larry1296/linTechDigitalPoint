@@ -36,7 +36,9 @@ def key(n=[0]):
 def overview(client):
     response = client.get("/api/v1/mkopa/")
     assert response.status_code == 200, response.content
-    return response.json()
+    sales = client.get("/api/v1/mkopa/sales/")  # phones sold have their own (paged) list
+    assert sales.status_code == 200, sales.content
+    return {**response.json(), "sales": sales.json()}
 
 
 def test_a_phone_with_two_plans_shows_what_the_customer_pays_and_the_commission_each_earns():
@@ -213,3 +215,17 @@ def test_commission_is_recorded_for_each_phone_specifically_and_teaches_each_pla
     assert mismatch.status_code == 400 and "add up to 1,200.00" in str(mismatch.json())
     twice = client.post("/api/v1/mkopa/commission/", {"method": "CASH", "amounts": [{"sale": first["id"], "amount": "1200"}], "idempotency_key": key()}, format="json")
     assert twice.status_code == 400 and "already paid" in str(twice.json())
+
+
+def test_phones_sold_come_a_page_at_a_time_newest_first():
+    org, client = business()
+    client.post("/api/v1/mkopa/phones/", X30, format="json")
+    plan = overview(client)["phones"][0]["plans"][0]
+    for n in range(12):
+        client.post("/api/v1/mkopa/sales/", {"plan": plan["id"], "customer_name": f"Customer {n}", "idempotency_key": key()}, format="json")
+    first = client.get("/api/v1/mkopa/sales/?page=1&page_size=10").json()
+    assert (first["count"], first["pages"], first["page"], len(first["results"])) == (12, 2, 1, 10)
+    assert first["results"][0]["customer_name"] == "Customer 11"
+    last = client.get("/api/v1/mkopa/sales/?page=9&page_size=10").json()  # past the end: the last page
+    assert last["page"] == 2 and [s["customer_name"] for s in last["results"]] == ["Customer 1", "Customer 0"]
+    assert overview(client)["sold"] == 12

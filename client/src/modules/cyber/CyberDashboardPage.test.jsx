@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("./api", () => ({
   getCyberDashboard: vi.fn(async () => ({ today: { revenue: "0", jobs: 0, average: "0" }, active_jobs: 0, ready_jobs: 0 })),
-  getCyberJobs: vi.fn(async () => []), getCyberAnalysis: vi.fn(async () => ({ days: [], services: [], hours: [], waits: [] })),
+  getCyberJobs: vi.fn(async () => []), getCyberDoneJobs: vi.fn(async () => ({ results: [], count: 0, page: 1, pages: 1 })), getCyberAnalysis: vi.fn(async () => ({ days: [], services: [], hours: [], waits: [] })),
   getCyberServices: vi.fn(async () => [{ id: 1, variant: 11, product: 5, name: "Typing", variant_name: "Standard", selling_price: "50.00", billing_unit: "PER_PAGE", requires_job: true, active: true }]),
   createCyberJob: vi.fn(), deleteCyberJob: vi.fn(async () => undefined), deleteCyberSale: vi.fn(async () => ({})),
   createCyberService: vi.fn(), updateCyberService: vi.fn(), completeCyberJob: vi.fn(), transitionCyberJob: vi.fn(),
@@ -74,11 +74,26 @@ it("hides Delete from people without permission to delete jobs", async () => {
 it("deletes a paid job recorded wrongly, with a reason, so it can be recorded again", async () => {
   const { askForm } = await import("../../core/ui/alerts");
   perms.list = [...perms.list, "commerce.change_sale"];
-  cyber.getCyberJobs.mockResolvedValue([job(4, "COMPLETED", { sale: 40 }), job(5, "COMPLETED", { sale: 50 })]);
+  cyber.getCyberDoneJobs.mockResolvedValue({ results: [job(4, "COMPLETED", { sale: 40 }), job(5, "COMPLETED", { sale: 50 })], count: 2, page: 1, pages: 1 });
   askForm.mockResolvedValueOnce({ reason: "Recorded wrongly" });
   await renderDesk();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Delete paid job CYB-4" })); });
   expect(cyber.deleteCyberSale).toHaveBeenCalledWith(40, "Recorded wrongly");
+});
+
+it("keeps jobs still to do on top and pages the finished ones, 10 at a time", async () => {
+  cyber.getCyberJobs.mockResolvedValue([job(1, "QUEUED")]);
+  const done = Array.from({ length: 10 }, (_, i) => job(100 + i, "COMPLETED", { sale: 100 + i }));
+  cyber.getCyberDoneJobs.mockImplementation(async (page) => ({ results: page === 1 ? done : [job(200, "COMPLETED", { sale: 200 })], count: 11, page, pages: 2 }));
+  await renderDesk();
+  expect(cyber.getCyberDoneJobs).toHaveBeenCalledWith(1, 10);
+  expect(screen.getByText("1–10 of 11 jobs done")).toBeInTheDocument();
+  expect(screen.getByText(/CYB-1 ·/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Next ›" })); });
+  expect(cyber.getCyberDoneJobs).toHaveBeenLastCalledWith(2, 10);
+  expect(screen.getByText("11–11 of 11 jobs done")).toBeInTheDocument();
+  expect(screen.getByText(/CYB-200 ·/)).toBeInTheDocument();
+  expect(screen.queryByText(/CYB-100 ·/)).toBeNull();
 });
 
 it("puts recording a service done first, and lists your services with Edit and Delete and a Create button", async () => {

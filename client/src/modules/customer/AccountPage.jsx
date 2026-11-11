@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { businessCurrency } from "../../core/organization/presentation";
 import { label } from "../../core/ui/labels";
 import { ProductImage } from "../storefront/components/ProductImage";
@@ -87,8 +88,8 @@ export function OrdersPage() {
       {!rows.length ? (
         <Empty>No orders yet.</Empty>
       ) : (
-        <div className="list">
-          {rows.map((o) => (
+        <Paged rows={rows} noun="orders">{(pageRows) => <div className="list">
+          {pageRows.map((o) => (
             <Link to={"/account/orders/" + o.id} key={o.id}>
               <b>{o.number}</b>
               <span>{label(o.status)}</span>
@@ -96,7 +97,7 @@ export function OrdersPage() {
               <strong>{businessCurrency()} {o.total}</strong>
             </Link>
           ))}
-        </div>
+        </div>}</Paged>
       )}
     </>
   );

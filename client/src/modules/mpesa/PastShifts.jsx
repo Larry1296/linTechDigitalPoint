@@ -1,3 +1,4 @@
+import { Pager, usePages } from "../../components/Pager";
 import { useState } from "react";
 import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
 import { FormError } from "../../components/forms/FormNotice";
@@ -51,6 +52,7 @@ export function PastShifts() {
   const shift = shifts?.find((row) => String(row.id) === picked);
   const reload = () => pick(picked);
   const others = (records || []).filter((entry) => !CUSTOMER.includes(entry.transaction_type));
+  const shownOthers = usePages(others, { reset: picked });
   return (
     <section className="monthlyReport pastShifts" aria-labelledby="past-shifts-heading">
       <div className="sectionHeading">
@@ -102,7 +104,7 @@ export function PastShifts() {
               <div className="table ledgerTable agencyLedger" role="table" aria-label="Other movements in that shift">
                 <div role="row"><b role="columnheader">Time</b><b role="columnheader">Type</b><b role="columnheader">Amount</b>
                   <b role="columnheader">Cash effect</b><b role="columnheader">Float effect</b><b role="columnheader">Reference</b></div>
-                {others.map((entry) => (
+                {shownOthers.rows.map((entry) => (
                   <div key={entry.id} role="row">
                     <span role="rowheader">{clock(entry.occurred_at)}</span>
                     <span role="cell">{entry.transaction_type.replaceAll("_", " ").toLowerCase()}</span>
@@ -113,6 +115,7 @@ export function PastShifts() {
                   </div>
                 ))}
               </div>
+              <Pager {...shownOthers} noun="movements" />
             </section>
           )}
         </div>

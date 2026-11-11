@@ -1,3 +1,4 @@
+import { Pager, usePages } from "../../components/Pager";
 import { useState } from "react";
 import { businessCurrency } from "../../core/organization/presentation";
 import { FormError } from "../../components/forms/FormNotice";
@@ -46,6 +47,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
   const deposit = type === "CUSTOMER_DEPOSIT";
   const airtime = type === "AIRTIME_SALE";
   const total = rows.filter((t) => !reversed.has(t.id)).reduce((sum, t) => sum + Number(t.amount), 0);
+  const shown = usePages(rows);
   return (
     <section aria-labelledby={`${type}-heading${closed ? "-past" : ""}`}>
       <h2 id={`${type}-heading${closed ? "-past" : ""}`}>{title} {scope} ({rows.length})</h2>
@@ -66,7 +68,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
             <b role="columnheader">Transaction ID</b>
             {canCorrect && <b role="columnheader"><span className="visuallyHidden">Correct</span></b>}
           </div>
-          {rows.map((entry) => (
+          {shown.rows.map((entry) => (
             <div key={entry.id} role="row" className={reversed.has(entry.id) ? "muted" : undefined}>
               <span role="rowheader">{time(entry)}{reversed.has(entry.id) && <small> · reversed</small>}{entry.corrects && <small> · corrected</small>}</span>
               {deposit && <><span role="cell">{localPhone(entry.customer_phone)}</span><span role="cell">{entry.customer_id_number || "—"}</span></>}
@@ -80,6 +82,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
             </div>
           ))}
         </div>
+        <Pager {...shown} noun={title.toLowerCase()} />
       </>}
     </section>
   );

@@ -260,7 +260,8 @@ def stays(request):
         status = request.query_params.get("status")
         if status:
             rows = rows.filter(status__in=status.split(","))
-        return Response([stay_data(s) for s in rows[:100]])
+        from apps.core.pagination import page_or_list
+        return page_or_list(request, rows, stay_data, cap=100)  # ?page=N: every stay reachable, a page at a time
     need(request, "hotel.add_stay")
     data = valid(BookInput, request.data)
     with transaction.atomic():

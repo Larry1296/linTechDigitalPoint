@@ -5,7 +5,9 @@ export const createCyberService = (body) =>
   api("/api/v1/cyber/services/", { method: "POST", body: JSON.stringify(body) });
 export const updateCyberService = (id, body) =>
   api(`/api/v1/cyber/services/${id}/`, { method: "PATCH", body: JSON.stringify(body) });
-export const getCyberJobs = () => api("/api/v1/cyber/jobs/");
+// Jobs still to do (waiting, in progress or ready); finished ones come a page at a time, newest first.
+export const getCyberJobs = () => api("/api/v1/cyber/jobs/?state=open");
+export const getCyberDoneJobs = (page = 1, size = 10) => api(`/api/v1/cyber/jobs/?state=done&page=${page}&page_size=${size}`);
 export const createCyberJob = (body) =>
   api("/api/v1/cyber/jobs/", { method: "POST", body: JSON.stringify(body) });
 export const deleteCyberJob = (id) => api(`/api/v1/cyber/jobs/${id}/`, { method: "DELETE" });

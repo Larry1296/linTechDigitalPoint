@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from apps.core.pagination import page_or_list
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -104,7 +105,8 @@ class OverviewView(APIView):
         phones = MkopaPhone.objects.prefetch_related("plans", "stock")
         figures = plan_figures(money)
         data = {"phones": [phone_row(phone, money, sold, figures) for phone in phones],
-                "sales": [sale_row(sale, money) for sale in MkopaSale.objects.select_related("phone", "plan", "paid_by", "created_by")[:300]],
+                # Phones sold grow every day: the page reads them a page at a time from GET /mkopa/sales/?page=N.
+                "sold": MkopaSale.objects.filter(reversed_at__isnull=True).count(),
                 "stock": [stock_row(move) for move in MkopaStock.objects.select_related("phone", "created_by")[:200]],
                 "can_see_money": money, "methods": list(services.METHODS.items()),
                 "can_set_up": has_business_permission(request.user, "mkopa.change_mkopaphone"),
@@ -201,6 +203,16 @@ class SaleInput(serializers.Serializer):
 class SalesView(APIView):
     permission_classes = [HasLinTechPermission]
     permission_required = "mkopa.add_mkopasale"
+
+    def get_permissions(self):
+        self.permission_required = "mkopa.view_mkopasale" if self.request.method == "GET" else "mkopa.add_mkopasale"
+        return super().get_permissions()
+
+    def get(self, request):
+        """Phones sold, newest first: one page with ?page=N, else every one."""
+        money = has_business_permission(request.user, MONEY)
+        rows = MkopaSale.objects.select_related("phone", "plan", "paid_by", "created_by").order_by("-sold_on", "-pk")
+        return page_or_list(request, rows, lambda sale: sale_row(sale, money))
 
     def post(self, request):
         form = SaleInput(data=request.data)

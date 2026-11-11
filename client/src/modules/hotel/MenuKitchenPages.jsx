@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -149,10 +150,10 @@ export function KitchenPage() {
 
     {history.length > 0 && <>
       <h2>Kitchen use</h2>
-      <ul className="hotelList">{history.map((use) => <li key={use.id}>
+      <Paged rows={history} noun="days">{(pageRows) => <ul className="hotelList">{pageRows.map((use) => <li key={use.id}>
         <div><b>{day(use.used_on)}</b><small className="muted">{use.lines.map((line) => `${line.name} ${Number(line.quantity).toLocaleString()}${line.unit ? ` ${line.unit}` : ""}`).join(", ")}</small></div>
         <b>{money(use.total_cost)}</b>
-      </li>)}</ul>
+      </li>)}</ul>}</Paged>
     </>}
   </div>;
 }

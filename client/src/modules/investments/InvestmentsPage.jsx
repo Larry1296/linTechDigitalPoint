@@ -1,3 +1,4 @@
+import { Pager, usePages } from "../../components/Pager";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -592,7 +593,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
   // Only the latest few entries, so the card stays short; the rest open with one click.
   const [showAll, setShowAll] = useState(false);
   const RECENT = 5;
-  const shown = showAll ? history : history.slice(0, RECENT);
+  const allPages = usePages(history, { reset: showUndone });
+  const shown = showAll ? allPages.rows : history.slice(0, RECENT);
   const [error, setError] = useState("");
   const card = useRef(null);
   useEffect(() => {
@@ -707,6 +709,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           ))}</tbody>
         </table>
       )}
+      {showAll && <Pager {...allPages} noun="entries" />}
       {(history.length > RECENT || undoneCount > 0) && <div className="actionRow">
         {history.length > RECENT && <button type="button" className="linkButton" onClick={() => setShowAll(!showAll)}>
           {showAll ? "Show only the latest" : `Show all history (${history.length})`}</button>}

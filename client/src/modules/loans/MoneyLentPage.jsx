@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useEffect, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -201,12 +202,12 @@ export function MoneyLentPage() {
       {lending && <LendForm onCancel={() => setLending(false)} onSaved={async () => { setLending(false); await load(); }} />}
       <section aria-labelledby="owed-heading">
         <h2 id="owed-heading">Still owed ({owed.length})</h2>
-        {owed.length ? <ul className="loanList">{owed.map(card)}</ul> : <Empty>Nobody owes you borrowed money.</Empty>}
+        {owed.length ? <Paged rows={owed} noun="loans">{(rows) => <ul className="loanList">{rows.map(card)}</ul>}</Paged> : <Empty>Nobody owes you borrowed money.</Empty>}
       </section>
       {settled.length > 0 && (
         <details className="loanSettled">
           <summary>Repaid and cancelled ({settled.length})</summary>
-          <ul className="loanList">{settled.map(card)}</ul>
+          <Paged rows={settled} noun="loans">{(rows) => <ul className="loanList">{rows.map(card)}</ul>}</Paged>
         </details>
       )}
     </>

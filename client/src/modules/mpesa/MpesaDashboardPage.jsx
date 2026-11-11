@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { businessCurrency } from "../../core/organization/presentation";
 import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
@@ -598,6 +599,7 @@ export function MpesaDashboardPage() {
         {!shiftTransactions.length ? (
           <Empty>{dashboard.session ? "No transactions in this shift yet." : "No shift open. Open a shift to start recording."}</Empty>
         ) : (
+          <Paged rows={shiftTransactions} size={20} noun="transactions">{(pageRows) => (
           <div className="table ledgerTable agencyLedger">
             <div>
               <b>Reference</b>
@@ -607,7 +609,7 @@ export function MpesaDashboardPage() {
               <b>Float effect</b>
               <b>Action</b>
             </div>
-            {shiftTransactions.map((entry) => (
+            {pageRows.map((entry) => (
               <div key={entry.id}>
                 <span>
                   {entry.provider_reference || entry.internal_reference}
@@ -647,6 +649,7 @@ export function MpesaDashboardPage() {
               </div>
             ))}
           </div>
+          )}</Paged>
         )}
       </section>
     </>

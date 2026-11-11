@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 
 from apps.accounts.models import CustomerProfile
+from apps.core.pagination import OptionalPages
 from apps.core.permissions import HasLinTechPermission
 
 from .models import CyberJob, CyberJobLine, CyberServiceProfile, ServiceMaterialRequirement
@@ -111,6 +112,16 @@ class CyberJobViewSet(viewsets.ReadOnlyModelViewSet):
     permission_required = "cyber.view_cyberjob"
     # A job whose sale was deleted (recorded by mistake) no longer exists for the desk.
     queryset = CyberJob.objects.exclude(sale__status="CANCELLED").select_related("customer", "operator", "sale").prefetch_related("lines", "sale__payments")
+    pagination_class = OptionalPages  # ?page=N gives one page; the desk pages finished jobs, which grow every day
+
+    def get_queryset(self):
+        rows = super().get_queryset()
+        state = self.request.query_params.get("state")
+        if state == "open":  # still to do: waiting, being worked on or ready for collection
+            rows = rows.exclude(status__in=["COMPLETED", "CANCELLED"])
+        elif state == "done":
+            rows = rows.filter(status__in=["COMPLETED", "CANCELLED"])
+        return rows.order_by("-created_at", "-pk")
 
     def create(self, request):
         if not has_business_permission(request.user, "cyber.add_cyberjob"):

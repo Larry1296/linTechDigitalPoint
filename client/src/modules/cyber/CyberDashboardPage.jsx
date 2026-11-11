@@ -3,6 +3,7 @@ import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Empty, ErrorState, Loading } from "../../components/States";
+import { PAGE_SIZE, Pager } from "../../components/Pager";
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormError } from "../../components/forms/FormNotice";
 import {
@@ -12,6 +13,7 @@ import {
   deleteCyberSale,
   getCyberDashboard,
   getCyberJobs,
+  getCyberDoneJobs,
   getCyberServices,
   transitionCyberJob,
 } from "./api";
@@ -72,6 +74,10 @@ export function CyberDashboardPage() {
   const [serviceError, setServiceError] = useState(null);
   const [dashboard, setDashboard] = useState();
   const [jobs, setJobs] = useState([]);
+  // Finished jobs grow every day: they come a page at a time, newest first.
+  const [donePage, setDonePage] = useState(1);
+  const [done, setDone] = useState({ rows: [], page: 1, pages: 1, count: 0, size: PAGE_SIZE });
+  const [version, setVersion] = useState(0);
   const [services, setServices] = useState([]);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState("");
@@ -93,6 +99,7 @@ export function CyberDashboardPage() {
       ]);
       setDashboard(summary);
       setJobs(jobRows);
+      setVersion((v) => v + 1);
       setServices(serviceRows);
       setIncome(incomeRows || { services: [], groups: [] });
     } catch (err) {
@@ -102,6 +109,14 @@ export function CyberDashboardPage() {
   useEffect(() => {
     void load();
   }, []);
+  useEffect(() => {
+    if (!version) return undefined;
+    let live = true;
+    getCyberDoneJobs(donePage, PAGE_SIZE).then((body) => {
+      if (live) setDone({ rows: body.results || [], page: body.page || 1, pages: body.pages || 1, count: body.count || 0, size: PAGE_SIZE });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [donePage, version]);
   useLiveRefresh(load);
   if (error) return <ErrorState message={error} retry={load} />;
   if (!dashboard) return <Loading />;
@@ -143,58 +158,7 @@ export function CyberDashboardPage() {
     await load();
   };
   const payingJob = paying || (jobCheckout && (jobs.find((job) => job.id === jobCheckout.job_id) || { id: jobCheckout.job_id, number: "", total: jobCheckout.total }));
-  return (
-    <>
-      <span className="eyebrow">{user?.organization?.business_type || "Services"}</span>
-      <h1>Service Desk</h1>
-      <p className="privacyNotice">
-        Store operational metadata only. Never record customer passwords, PINs,
-        OTPs, or document contents.
-      </p>
-      {receipt && (
-        <div className="success">
-          <b>Cyber receipt: {receipt}</b>
-          {receiptSale && <button onClick={() => setShowReceipt(true)}>View &amp; send receipt</button>}
-        </div>
-      )}
-      {showReceipt && receiptSale && <ReceiptPanel saleId={receiptSale} onClose={() => setShowReceipt(false)} />}
-      {payingJob && <JobPayment user={user} job={payingJob} checkout={jobCheckout} setCheckout={setJobCheckout} onPaid={paid}
-        onClose={() => setPaying(null)} />}
-      <div className="metrics">
-        <MetricCard label="Revenue since the start">
-          {businessCurrency()} {dashboard.all_time?.revenue ?? 0}
-        </MetricCard>
-        <MetricCard label="Active jobs">{dashboard.active_jobs}</MetricCard>
-        <MetricCard label="Ready">{dashboard.ready_jobs}</MetricCard>
-        <MetricCard label="Completed today">{dashboard.today.jobs}</MetricCard>
-        <MetricCard label="Average job">
-          {businessCurrency()} {Number(dashboard.all_time?.average || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-        </MetricCard>
-      </div>
-      <div className="deskGrid">
-        <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
-          title="Record a service done" />
-        <section>
-          <div className="sectionHeading">
-            <h2>Jobs</h2>
-            {!takingJob && <button type="button" className="secondary" onClick={() => setTakingJob(true)}>+ Take in a job for later</button>}
-          </div>
-          {takingJob && <>
-            <CyberJobForm
-              services={services.filter((service) => service.active)}
-              onSave={async (data) => {
-                const job = await createCyberJob(data);
-                await load();
-                return job;
-              }}
-            />
-            <button type="button" className="secondary" onClick={() => setTakingJob(false)}>Close</button>
-          </>}
-          {!jobs.length ? (
-            <Empty>No Cyber jobs yet.</Empty>
-          ) : (
-            <div className="list">
-              {jobs.slice(0, 20).map((job) => (
+  const jobRow = (job) => (
                 <article key={job.id}>
                   <div>
                     <b>
@@ -293,9 +257,61 @@ export function CyberDashboardPage() {
                       )}
                   </div>
                 </article>
-              ))}
-            </div>
-          )}
+  );
+  return (
+    <>
+      <span className="eyebrow">{user?.organization?.business_type || "Services"}</span>
+      <h1>Service Desk</h1>
+      <p className="privacyNotice">
+        Store operational metadata only. Never record customer passwords, PINs,
+        OTPs, or document contents.
+      </p>
+      {receipt && (
+        <div className="success">
+          <b>Cyber receipt: {receipt}</b>
+          {receiptSale && <button onClick={() => setShowReceipt(true)}>View &amp; send receipt</button>}
+        </div>
+      )}
+      {showReceipt && receiptSale && <ReceiptPanel saleId={receiptSale} onClose={() => setShowReceipt(false)} />}
+      {payingJob && <JobPayment user={user} job={payingJob} checkout={jobCheckout} setCheckout={setJobCheckout} onPaid={paid}
+        onClose={() => setPaying(null)} />}
+      <div className="metrics">
+        <MetricCard label="Revenue since the start">
+          {businessCurrency()} {dashboard.all_time?.revenue ?? 0}
+        </MetricCard>
+        <MetricCard label="Active jobs">{dashboard.active_jobs}</MetricCard>
+        <MetricCard label="Ready">{dashboard.ready_jobs}</MetricCard>
+        <MetricCard label="Completed today">{dashboard.today.jobs}</MetricCard>
+        <MetricCard label="Average job">
+          {businessCurrency()} {Number(dashboard.all_time?.average || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        </MetricCard>
+      </div>
+      <div className="deskGrid">
+        <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
+          title="Record a service done" />
+        <section>
+          <div className="sectionHeading">
+            <h2>Jobs</h2>
+            {!takingJob && <button type="button" className="secondary" onClick={() => setTakingJob(true)}>+ Take in a job for later</button>}
+          </div>
+          {takingJob && <>
+            <CyberJobForm
+              services={services.filter((service) => service.active)}
+              onSave={async (data) => {
+                const job = await createCyberJob(data);
+                await load();
+                return job;
+              }}
+            />
+            <button type="button" className="secondary" onClick={() => setTakingJob(false)}>Close</button>
+          </>}
+          <h3 className="jobsHeading">Still to do</h3>
+          {!jobs.length ? <Empty>No jobs waiting. Jobs taken in for later show here until they are paid for.</Empty>
+            : <div className="list">{jobs.map(jobRow)}</div>}
+          <h3 className="jobsHeading" id="cyber-done-jobs">Done</h3>
+          {!done.count ? <Empty>No finished jobs yet.</Empty>
+            : <><div className="list" aria-labelledby="cyber-done-jobs">{done.rows.map(jobRow)}</div>
+              <Pager {...done} onPage={setDonePage} noun="jobs done" /></>}
         </section>
       </div>
       <section aria-labelledby="your-services">

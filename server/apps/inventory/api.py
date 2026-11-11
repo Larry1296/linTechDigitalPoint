@@ -76,10 +76,12 @@ def receipts(request):
     if request.method=="GET":
         if not has_business_permission(request.user, "inventory.view_stockreceipt"):return Response({"detail":"Receipt history permission required."},status=403)
         from apps.accounting.services import purchase_outstanding
-        rows=StockReceipt.objects.prefetch_related("lines").select_related("purchase").order_by("-received_at", "-pk")[:100]
+        from apps.core.pagination import page_or_list
+        rows=StockReceipt.objects.prefetch_related("lines").select_related("purchase").order_by("-received_at", "-pk")
         # What each receipt still owes its supplier, so an unpaid one is easy to find and clear.
         owed=lambda r:purchase_outstanding(r.purchase) if hasattr(r,"purchase") else Decimal("0")
-        return Response([{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count(),"owed":owed(r)} for r in rows])
+        row=lambda r:{"id":r.id,"receipt_number":r.receipt_number,"supplier_name":r.supplier_name,"received_at":r.received_at,"total_units":sum((l.received_quantity for l in r.lines.all()),0),"line_count":r.lines.count(),"owed":owed(r)}
+        return page_or_list(request,rows,row,cap=100)
     if not has_business_permission(request.user, "inventory.add_stockreceipt"):return Response({"detail":"Receiving permission required."},status=403)
     try:
         receipt=complete_stock_receipt(supplier_name=request.data.get("supplier_name",""),external_reference=request.data.get("external_reference",request.data.get("reference","")),received_at=request.data.get("received_at") or timezone.now(),notes=request.data.get("notes",""),lines=request.data.get("lines",[]),user=request.user,idempotency_key=request.data.get("idempotency_key"),

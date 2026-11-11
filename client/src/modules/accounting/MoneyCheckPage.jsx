@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../core/api/client";
@@ -237,12 +238,12 @@ export function MoneyCheckPage() {
       {can("accounting.reverse_cashentry") && data.starting?.length > 0 && <StartingEntries rows={data.starting} onChanged={load} />}
       {data.history.length > 0 && <section aria-labelledby="history-heading">
         <h2 id="history-heading">Earlier counts</h2>
-        <div className="trendTable"><table><thead><tr><th scope="col">When</th><th scope="col">Where</th><th scope="col">You had</th><th scope="col">App expected</th><th scope="col">Difference</th><th scope="col">Counted by</th><th scope="col">Note</th></tr></thead>
-          <tbody>{data.history.map((check) => <tr key={check.id}><td>{when(check.created_at)}</td><td>{data.places.find((p) => p.method === check.method && (p.unit || null) === (check.unit || null))?.label || check.method}</td>
+        <Paged rows={data.history} noun="counts">{(pageRows) => <div className="trendTable"><table><thead><tr><th scope="col">When</th><th scope="col">Where</th><th scope="col">You had</th><th scope="col">App expected</th><th scope="col">Difference</th><th scope="col">Counted by</th><th scope="col">Note</th></tr></thead>
+          <tbody>{pageRows.map((check) => <tr key={check.id}><td>{when(check.created_at)}</td><td>{data.places.find((p) => p.method === check.method && (p.unit || null) === (check.unit || null))?.label || check.method}</td>
             <td>{money(check.actual)}</td><td>{money(check.expected)}</td>
             <td className={Math.abs(Number(check.difference)) < 0.005 ? undefined : "lossText"}>{Math.abs(Number(check.difference)) < 0.005 ? "✓ matched" : Number(check.difference) < 0 ? `${money(-Number(check.difference))} short` : `${money(check.difference)} over`}</td>
             <td>{check.counted_by}</td><td>{check.note}</td></tr>)}</tbody>
-        </table></div>
+        </table></div>}</Paged>
       </section>}
     </>
   );

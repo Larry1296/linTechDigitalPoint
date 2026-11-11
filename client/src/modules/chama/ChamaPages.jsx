@@ -1,3 +1,4 @@
+import { Paged } from "../../components/Pager";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowDown, ArrowUp } from "lucide-react";
@@ -317,14 +318,14 @@ function Statement({ chama, member }) {
   if (error) return <FormError title="Could not load the statement." message={error} />;
   if (!data) return <Loading />;
   return <div className="chamaStatement">
-    <table>
+    <Paged rows={data.dues} size={15} noun="contributions">{(pageRows) => <table>
       <caption>{member.full_name}'s contributions</caption>
       <thead><tr><th>Date</th><th>Contribution</th><th>Paid</th><th>Status</th><th>Fine</th></tr></thead>
-      <tbody>{data.dues.map((d) => <tr key={d.id}>
+      <tbody>{pageRows.map((d) => <tr key={d.id}>
         <td>{date(d.period_date)}</td><td>{money(d.amount)}</td><td>{money(d.paid)}</td><td><DueBadge due={d} />{d.excuse_reason && <small> · {d.excuse_reason}</small>}</td>
         <td>{Number(d.fine_amount) > 0 ? (d.fine_waived ? `Waived (${d.fine_waive_reason})` : `${money(d.fine_amount)}${Number(d.fine_owed) > 0 ? ` · owes ${money(d.fine_owed)}` : " · paid"}`) : "—"}</td>
       </tr>)}</tbody>
-    </table>
+    </table>}</Paged>
     {data.payouts.length > 0 && <p>Received: {data.payouts.filter((p) => !p.reversed_at).map((p) => `${money(p.amount)} on ${date(p.paid_on)}${p.round ? ` (turn ${p.round})` : ""}`).join(", ") || "nothing"}</p>}
   </div>;
 }
@@ -515,24 +516,24 @@ function Fines({ chama, setChama, can }) {
   return <section aria-labelledby="fines-heading">
     <h2 id="fines-heading">Fines</h2>
     <p className="muted">{Number(chama.fine_amount) > 0 ? `A member who has not paid in full by the deadline is fined ${money(chama.fine_amount)} once for that contribution. Excused members are fined only if they miss the date they promised.` : "This chama does not fine late payments. Set a fine under Rules."}</p>
-    {chama.fines.length ? <div className="trendTable"><table>
+    {chama.fines.length ? <Paged rows={chama.fines} noun="fines">{(pageRows) => <div className="trendTable"><table>
       <thead><tr><th>Member</th><th>Contribution of</th><th>Fine</th><th>Status</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-      <tbody>{chama.fines.map((f) => <tr key={f.id} className={f.fine_waived ? "muted" : undefined}>
+      <tbody>{pageRows.map((f) => <tr key={f.id} className={f.fine_waived ? "muted" : undefined}>
         <th scope="row">{f.member}</th><td>{date(f.period_date)}</td><td>{money(f.fine_amount)}</td>
         <td>{f.fine_waived ? `Waived: ${f.fine_waive_reason}` : Number(f.fine_owed) > 0 ? `Owes ${money(f.fine_owed)}` : "Paid"}</td>
         <td>{!f.fine_waived && Number(f.fine_paid) === 0 && can("chama.change_chama") &&
           <ReverseButton label="Waive" path={`/api/v1/chama/dues/${f.id}/waive-fine/`} title={`Waive ${f.member}'s fine of ${money(f.fine_amount)}?`}
             text="Only when the members agree, for example the member was sick." setChama={setChama} />}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>No fines so far.</Empty>}
+    </table></div>}</Paged> : <Empty>No fines so far.</Empty>}
     <h2>Excuses</h2>
-    {chama.excuses.length ? <div className="trendTable"><table>
+    {chama.excuses.length ? <Paged rows={chama.excuses} noun="excuses">{(pageRows) => <div className="trendTable"><table>
       <thead><tr><th>Member</th><th>Contribution of</th><th>Promised to pay by</th><th>Reason</th><th>Status</th></tr></thead>
-      <tbody>{chama.excuses.map((e) => <tr key={e.id}>
+      <tbody>{pageRows.map((e) => <tr key={e.id}>
         <th scope="row">{e.member}</th><td>{date(e.period_date)}</td><td>{date(e.excused_until)}</td><td>{e.excuse_reason}</td>
         <td>{e.status === "PAID" ? "Paid" : Number(e.fine_amount) > 0 ? "Missed the promise: fined" : e.status === "LATE" ? "Missed the promise" : "Waiting"}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>No member has asked to pay late. Use Excuse on the board when one does.</Empty>}
+    </table></div>}</Paged> : <Empty>No member has asked to pay late. Use Excuse on the board when one does.</Empty>}
   </section>;
 }
 
@@ -554,9 +555,9 @@ function Record({ chama, setChama, can }) {
   const latestRound = Math.max(0, ...chama.payouts.filter((p) => !p.reversed_at && p.round).map((p) => p.round));
   return <section aria-labelledby="record-heading">
     <h2 id="record-heading">Money paid in</h2>
-    {payments.length ? <div className="trendTable"><table>
+    {payments.length ? <Paged rows={payments} size={20} noun="payments">{(pageRows) => <div className="trendTable"><table>
       <thead><tr><th>Date</th><th>Member</th><th>Amount</th><th>By</th><th>What it paid</th><th>Recorded by</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-      <tbody>{payments.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
+      <tbody>{pageRows.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
         <td>{date(p.paid_on)}</td><th scope="row">{p.member}</th>
         <td>{money(p.amount)}{p.reversed_at && <small> · reversed ({p.reverse_reason})</small>}</td>
         <td>{methodName(p.method)}{p.reference && ` · ${p.reference}`}</td>
@@ -566,15 +567,15 @@ function Record({ chama, setChama, can }) {
           text={`Use this only if the money never came in or was entered twice. It is undone as if it never happened: the chama no longer holds it, ${p.member} owes what it paid again, and a fine for paying late comes back where the deadline has passed.`}
           setChama={setChama} />}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>{chama.payments.length ? "Every payment recorded has been reversed." : "No payments recorded yet."}</Empty>}
+    </table></div>}</Paged> : <Empty>{chama.payments.length ? "Every payment recorded has been reversed." : "No payments recorded yet."}</Empty>}
     <ReversedToggle count={chama.payments.filter((p) => p.reversed_at).length} shown={showReversed} setShown={setShowReversed} />
     <h2>Money given out</h2>
     {chama.payout_mode === "SAVINGS" && can("chama.add_chamapayout") && (giving
       ? <PayoutForm chama={chama} setChama={setChama} onDone={() => setGiving(false)} />
       : <button type="button" onClick={() => setGiving(true)}>Give out money</button>)}
-    {payouts.length ? <div className="trendTable"><table>
+    {payouts.length ? <Paged rows={payouts} size={20} noun="payouts">{(pageRows) => <div className="trendTable"><table>
       <thead><tr><th>Date</th><th>Given to</th><th>Amount</th><th>By</th><th>Turn</th><th>Recorded by</th><th><span className="visuallyHidden">Action</span></th></tr></thead>
-      <tbody>{payouts.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
+      <tbody>{pageRows.map((p) => <tr key={p.id} className={p.reversed_at ? "muted" : undefined}>
         <td>{date(p.paid_on)}</td><th scope="row">{p.member}</th>
         <td>{money(p.amount)}{p.reversed_at && <small> · reversed ({p.reverse_reason})</small>}</td>
         <td>{methodName(p.method)}{p.reference && ` · ${p.reference}`}</td><td>{p.round || "—"}</td><td>{p.recorded_by}</td>
@@ -583,7 +584,7 @@ function Record({ chama, setChama, can }) {
           title={`Reverse ${p.member}'s payout of ${money(p.amount)}?`}
           text={`Use this only if the money was never given out. It is undone as if it never happened: the chama holds the money again${p.round ? ` and it becomes ${p.member}'s turn again` : ""}.`} setChama={setChama} />}</td>
       </tr>)}</tbody>
-    </table></div> : <Empty>{chama.payouts.length ? "Every payout recorded has been reversed." : "Nothing given out yet."}</Empty>}
+    </table></div>}</Paged> : <Empty>{chama.payouts.length ? "Every payout recorded has been reversed." : "Nothing given out yet."}</Empty>}
     <ReversedToggle count={chama.payouts.filter((p) => p.reversed_at).length} shown={showReversedOut} setShown={setShowReversedOut} />
   </section>;
 }

@@ -7,6 +7,7 @@ import { confirmAction } from "../../core/ui/alerts";
 import { FormError } from "../../components/forms/FormNotice";
 import { ReceiptSupplier } from "./ReceiptSupplier";
 import { TextArea, TextBox } from "../../components/forms/TextBox";
+import { PAGE_SIZE, Pager } from "../../components/Pager";
 
 const allowed = (user, permission) =>
   Boolean(user?.is_superuser || user?.permissions?.includes(permission));
@@ -18,6 +19,8 @@ export function ReceiptHistoryPage() {
   const { user } = useAuth();
   const { id } = useParams();
   const [rows, setRows] = useState(null);
+  const [page, setPage] = useState(1);
+  const [paging, setPaging] = useState({ count: 0, pages: 1 });
   const [receipt, setReceipt] = useState(null);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
@@ -31,11 +34,11 @@ export function ReceiptHistoryPage() {
     setSelected(null);
     setError("");
     setMessage("");
-    api(`/api/v1/inventory/receipts/${id ? `${id}/` : ""}`)
+    api(id ? `/api/v1/inventory/receipts/${id}/` : `/api/v1/inventory/receipts/?page=${page}&page_size=${PAGE_SIZE}`)
       .then((data) => {
         if (active) {
           if (id) setReceipt(data);
-          else setRows(data);
+          else { setRows(data.results); setPaging({ count: data.count, pages: data.pages, page: data.page }); }
         }
       })
       .catch((e) => {
@@ -44,7 +47,7 @@ export function ReceiptHistoryPage() {
     return () => {
       active = false;
     };
-  }, [id, canView]);
+  }, [id, canView, page]);
   if (!canView)
     return <p role="alert">Receipt history permission is required.</p>;
   return (
@@ -55,7 +58,7 @@ export function ReceiptHistoryPage() {
       {!id ? (
         <>
           <p>
-            Latest 100 receipts. Open a receipt to review its lines and
+            Every receipt, newest first. Open a receipt to review its lines and
             correction history, or to clear what it says is owed to the
             supplier.
           </p>
@@ -93,6 +96,7 @@ export function ReceiptHistoryPage() {
               </p>
             </article>
           ))}
+          <Pager page={paging.page || page} pages={paging.pages} count={paging.count} onPage={(n) => { setPage(n); window.scrollTo?.({ top: 0 }); }} noun="receipts" />
         </>
       ) : (
         <>
