@@ -71,3 +71,24 @@ it("ticks an item as bought and clears the bought ones", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Clear these" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/", { method: "DELETE" }));
 });
+
+it("edits everything on a line, a bought one too, and removes any line", async () => {
+  render(<ToBuyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Printing paper" }));
+  const form = screen.getByRole("form", { name: "Change Printing paper" });
+  fireEvent.change(within(form).getByLabelText("Item"), { target: { value: "Printing paper A3" } });
+  fireEvent.change(within(form).getByLabelText("Unit"), { target: { value: "packets" } });
+  fireEvent.change(within(form).getByLabelText(/Price each/), { target: { value: "500" } });
+  fireEvent.change(within(form).getByLabelText("Note"), { target: { value: "" } });
+  expect(within(form).getByText("Total").nextSibling).toHaveTextContent("KSh 1,000");
+  fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/2/", { method: "PATCH",
+    body: JSON.stringify({ name: "Printing paper A3", variant: null, count: "2", unit: "packets", unit_price: "500", note: "" }) }));
+  await waitFor(() => expect(screen.queryByRole("form", { name: "Change Printing paper" })).toBeNull());
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit Glue" }));
+  fireEvent.click(within(screen.getByRole("form", { name: "Change Glue" })).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("form", { name: "Change Glue" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Remove Glue" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/3/", { method: "DELETE" }));
+});

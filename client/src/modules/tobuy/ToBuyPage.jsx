@@ -85,8 +85,57 @@ function AddItem({ canSearch, onAdded }) {
   );
 }
 
-// A line still to buy: how many and the price each can be changed right here; the totals follow as you type.
-function ItemRow({ item, draft, canChange, canRemove, onDraft, onSave, onTick, onRemove }) {
+// The whole line changed at once: what it is, how many of what, the price each and the note. Works on bought lines too.
+function EditItem({ item, canSearch, onSave, onCancel }) {
+  const [name, setName] = useState(item.name);
+  const [variant, setVariant] = useState(item.variant ? { id: item.variant, label: item.product } : null);
+  const [count, setCount] = useState(plain(item.count));
+  const [unit, setUnit] = useState(item.unit || "");
+  const [price, setPrice] = useState(item.unit_price == null ? "" : plain(item.unit_price));
+  const [note, setNote] = useState(item.note || "");
+  const [busy, setBusy] = useState(false);
+  const found = useProductSuggestions(variant && name === item.name ? "" : name, canSearch);
+  const total = lineTotal(count, price);
+  const listId = `to-buy-edit-${item.id}`;
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    const done = await onSave(item, { name, variant: variant?.id ?? null, count: count || "1", unit, unit_price: price === "" ? null : price, note });
+    if (!done) setBusy(false);
+  };
+  return (
+    <li className="toBuyEditing">
+      <form className="toBuyFields" onSubmit={(event) => void submit(event)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}
+        aria-label={`Change ${item.name}`}>
+        <label className="toBuyName">Item
+          <input value={name} required maxLength={160} autoComplete="off" autoFocus list={listId}
+            onChange={(event) => {
+              const typed = event.target.value;
+              const match = found.find((v) => label(v) === typed);
+              setName(typed);
+              if (match) setVariant({ id: match.id, label: label(match) });
+              else if (!variant || typed !== variant.label) setVariant(typed === item.name && item.variant ? { id: item.variant, label: item.product } : null);
+            }} />
+        </label>
+        <datalist id={listId}>{found.map((v) => <option key={v.id} value={label(v)}>{v.category}</option>)}</datalist>
+        <label>How many<input type="number" min="0.001" step="any" inputMode="decimal" required value={count} onChange={(event) => setCount(event.target.value)} /></label>
+        <label>Unit<input value={unit} maxLength={30} autoComplete="off" placeholder="pcs, cartons" onChange={(event) => setUnit(event.target.value)} /></label>
+        <label>Price each ({businessCurrency()})<input type="number" min="0" step="0.01" inputMode="decimal" value={price} placeholder="If you know it"
+          onChange={(event) => setPrice(event.target.value)} /></label>
+        <div className="toBuyLineTotal" aria-live="polite"><span>Total</span><strong>{total == null ? "—" : money(total)}</strong></div>
+        <div className="toBuyEditButtons">
+          <button disabled={busy || !name.trim()}>Save</button>
+          <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+        </div>
+        <label className="toBuyNote">Note<input value={note} maxLength={200} autoComplete="off" placeholder="e.g. from the Luthuli supplier" onChange={(event) => setNote(event.target.value)} /></label>
+        <p className="muted toBuyHint">{variant ? `Linked to your product ${variant.label}.` : "Not linked to one of your products."}</p>
+      </form>
+    </li>
+  );
+}
+
+// A line on the list: how many and the price each can be changed right here (the totals follow as you type); Edit changes everything.
+function ItemRow({ item, draft, canChange, canRemove, onDraft, onSave, onTick, onEdit, onRemove }) {
   const count = draft?.count ?? plain(item.count);
   const price = draft?.unit_price ?? (item.unit_price == null ? "" : plain(item.unit_price));
   const total = lineTotal(count, price);
@@ -96,7 +145,7 @@ function ItemRow({ item, draft, canChange, canRemove, onDraft, onSave, onTick, o
     onSave(item, { count, unit_price: price === "" ? null : price });
   };
   const keys = (event) => { if (event.key === "Enter") event.currentTarget.blur(); };
-  const editable = canChange && !item.bought;
+  const editable = canChange;
   return (
     <li className={item.bought ? "bought" : undefined}>
       <label className="toBuyTick">
@@ -116,7 +165,10 @@ function ItemRow({ item, draft, canChange, canRemove, onDraft, onSave, onTick, o
           : <span>{item.unit_price == null ? "—" : money(item.unit_price)}</span>}
       </span>
       <span className="toBuyTotalCell" data-label="Total">{total == null ? <span className="muted toBuyNoPrice">No price</span> : <span>{money(total)}</span>}</span>
-      {canRemove ? <button type="button" className="secondary toBuyRemove" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>Remove</button> : <span />}
+      <span className="toBuyActions">
+        {canChange && <button type="button" className="secondary toBuyRemove" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`}>Edit</button>}
+        {canRemove && <button type="button" className="secondary toBuyRemove" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>Remove</button>}
+      </span>
     </li>
   );
 }
@@ -145,6 +197,7 @@ export function ToBuyPage() {
   const [drafts, setDrafts] = useState({});  // lines being changed and not saved yet, so the totals follow the typing
   const [error, setError] = useState("");
   const [problem, setProblem] = useState("");
+  const [editing, setEditing] = useState(null);  // the line open for changing everything on it
   const load = async () => {
     try {
       setData(await api("/api/v1/to-buy/"));
@@ -160,8 +213,10 @@ export function ToBuyPage() {
     try {
       setData(await api(path, options));
       done?.();
+      return true;
     } catch (err) {
       setProblem(err.message);
+      return false;
     }
   };
   const draft = (id, value) => setDrafts((all) => { const next = { ...all }; if (value) next[id] = value; else delete next[id]; return next; });
@@ -173,10 +228,14 @@ export function ToBuyPage() {
   const need = left.reduce((sum, item) => sum + (totalOf(item) ?? 0), 0);
   const unpriced = left.filter((item) => totalOf(item) == null).length;
   const canSearch = (user?.organization?.enabled_modules || []).includes("inventory") && can("catalog.view_product");
-  const row = (item) => <ItemRow key={item.id} item={item} draft={drafts[item.id]} canChange={can("core.change_tobuyitem")} canRemove={can("core.delete_tobuyitem")}
-    onDraft={draft} onSave={(it, change) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify(change) }, () => draft(it.id, null))}
-    onTick={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify({ bought: !it.bought }) })}
-    onRemove={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "DELETE" }, () => draft(it.id, null))} />;
+  const row = (item) => (editing === item.id
+    ? <EditItem key={item.id} item={item} canSearch={canSearch} onCancel={() => setEditing(null)}
+      onSave={(it, change) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify(change) }, () => { draft(it.id, null); setEditing(null); })} />
+    : <ItemRow key={item.id} item={item} draft={drafts[item.id]} canChange={can("core.change_tobuyitem")} canRemove={can("core.delete_tobuyitem")}
+      onDraft={draft} onSave={(it, change) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify(change) }, () => draft(it.id, null))}
+      onTick={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "PATCH", body: JSON.stringify({ bought: !it.bought }) })}
+      onEdit={(it) => { draft(it.id, null); setEditing(it.id); }}
+      onRemove={(it) => act(`/api/v1/to-buy/${it.id}/`, { method: "DELETE" }, () => { draft(it.id, null); if (editing === it.id) setEditing(null); })} />);
   const columns = <div className="toBuyColumns" aria-hidden="true"><span>Item</span><span>How many</span><span>Price each</span><span>Total</span><span /></div>;
   return (
     <div className="toBuyPage">

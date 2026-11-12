@@ -3306,7 +3306,7 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuyCardHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 8px;
   padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .toBuyCardHead h2 { margin: 0; font-size: 18px; }
-.toBuyColumns, .toBuyList li { display: grid; grid-template-columns: minmax(0, 1fr) 180px 130px 140px 90px; align-items: center; gap: 12px; }
+.toBuyColumns, .toBuyList li { display: grid; grid-template-columns: minmax(0, 1fr) 180px 130px 140px 150px; align-items: center; gap: 12px; }
 .toBuyColumns { padding: 0 0 6px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .toBuyColumns span:nth-child(n+3):nth-child(-n+4), .toBuyEach, .toBuyTotalCell { text-align: right; }
 .toBuyColumns span:nth-child(2) { padding-right: 72px; text-align: right; }
@@ -3326,10 +3326,16 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuyTotalCell { font-weight: 700; }
 .toBuyRemove { justify-self: end; min-height: 0; margin: 0; padding: 5px 12px; font-size: 13px; }
 #root .toBuyList li.bought :is(strong, .toBuyQty span, .toBuyEach span, .toBuyTotalCell span) { color: var(--muted); text-decoration: line-through; }
-.toBuyFoot { display: flex; justify-content: flex-end; gap: 24px; padding: 12px 102px 0 0; border-top: 2px solid var(--line); font-variant-numeric: tabular-nums; }
+.toBuyFoot { display: flex; justify-content: flex-end; gap: 24px; padding: 12px 162px 0 0; border-top: 2px solid var(--line); font-variant-numeric: tabular-nums; }
 .toBuyFoot span { color: var(--muted); font-weight: 700; }
 .toBuyFoot strong { min-width: 140px; text-align: right; font-size: 17px; }
 .toBuyDone { box-shadow: none; }
+.toBuyActions { display: flex; justify-content: flex-end; gap: 6px; }
+.toBuyActions .toBuyRemove { padding: 5px 10px; }
+#root .toBuyList li.toBuyEditing { display: block; padding: 12px 0; }
+.toBuyEditing .toBuyHint { grid-column: 1 / -1; margin: 0; }
+.toBuyEditButtons { display: flex; gap: 6px; align-items: end; }
+.toBuyEditButtons button { min-width: 0; }
 @media (max-width: 1100px) { .toBuyFields { grid-template-columns: repeat(4, minmax(0, 1fr)); } .toBuyFields .toBuyName { grid-column: 1 / -1; } }
 @media (max-width: 900px) {
   .toBuyStats { grid-template-columns: minmax(0, 1fr); }
@@ -3346,11 +3352,12 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .toBuyQty input, .toBuyEach input { width: 130px; flex: none; }
   .toBuyQty small { flex: none; width: 56px; }
   .toBuyEach::after, .toBuyTotalCell::after { content: ""; flex: none; width: 56px; }
-  .toBuyRemove { grid-column: 1 / -1; justify-self: start; margin-left: 28px; }
+  .toBuyActions { grid-column: 1 / -1; justify-content: flex-start; margin-left: 28px; }
+  .toBuyFields .toBuyEditButtons { grid-column: 1 / -1; order: 2; }
   .toBuyFoot { padding-right: 0; }
 }
 @media print {
-  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyRemove, .toBuyHave { display: none !important; }
+  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyActions, .toBuyHave { display: none !important; }
   .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
 }
 
