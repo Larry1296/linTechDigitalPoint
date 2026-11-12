@@ -87,6 +87,9 @@ it("keeps the till, the M-Pesa agency and other entry-after-entry screens open",
   vi.restoreAllMocks();
   vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
   expect(await saveOn("/admin/mpesa/transactions")).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
+  expect(await saveOn("/admin/to-buy")).not.toHaveBeenCalled();  // adding or editing a line keeps you on the list
 });
 
 it("stays when the page was opened directly, or the form is in a dialog", async () => {

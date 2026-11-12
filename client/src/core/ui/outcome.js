@@ -22,8 +22,8 @@ const SETTLE = 700; // time for the page to show its own success message first
 export const outcomeOverlays = () => enabled;
 export function setOutcomeOverlays(on) { enabled = on; pending = null; inflight = 0; failed = false; clearTimeout(timer); }
 
-// The till, the M-Pesa agency, the stock count, a chama's payments and the cyber job queue take entry after entry.
-const STAY = [/^\/admin\/pos\b/, /^\/admin\/mpesa\b/, /^\/admin\/stock-check\b/, /^\/admin\/chama\/\d+/, /^\/admin\/cyber\/jobs\b/];
+// The till, the M-Pesa agency, the stock count, a chama's payments, the cyber job queue and the to-buy list take entry after entry.
+const STAY = [/^\/admin\/pos\b/, /^\/admin\/to-buy\b/, /^\/admin\/mpesa\b/, /^\/admin\/stock-check\b/, /^\/admin\/chama\/\d+/, /^\/admin\/cyber\/jobs\b/];
 const address = () => (typeof window === "undefined" ? "" : window.location.pathname + window.location.search);
 
 export function returnToPrevious(form, where) {
