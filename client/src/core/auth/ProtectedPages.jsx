@@ -46,7 +46,29 @@ export function ProtectedPages() {
       <button type="button" className="linkButton" onClick={() => void lockNow()}>Lock now</button></p>
     <Outlet />
   </>;
-  return <PrivatePageLock page={page} state={state} onOpen={setState} />;
+  return <LockArea><PrivatePageLock page={page} state={state} onOpen={setState} /></LockArea>;
+}
+
+// The private page's lock card sits in the middle of what is left of the screen below the bar and back link, whole
+// and with no scrolling: the area stretches from where it starts down to the bottom of the screen, kept right as the
+// screen turns or resizes, and the page is brought back to its top so the card is in view.
+function LockArea({ children }) {
+  const area = useRef(null);
+  useEffect(() => {
+    const node = area.current;
+    if (!node) return;
+    if (window.scrollY > 0) window.scrollTo(0, 0);
+    const fit = () => {
+      const top = node.getBoundingClientRect().top + window.scrollY;
+      const screen = window.visualViewport?.height || window.innerHeight;
+      node.style.minHeight = `${Math.max(0, screen - top - 12)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("resize", fit);
+    return () => { window.removeEventListener("resize", fit); window.visualViewport?.removeEventListener("resize", fit); };
+  }, []);
+  return <div ref={area} className="protectedLockArea">{children}</div>;
 }
 
 // Locks the open private page once nobody has touched the screen or keyboard for PRIVATE_IDLE_MS, also while the tab
