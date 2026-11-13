@@ -701,7 +701,8 @@ def test_an_instant_withdrawal_takes_its_charge_out_of_the_fund_too_and_a_standa
 
 def test_the_businesss_money_put_in_may_be_more_than_its_place_is_expected_to_hold(shop):
     """2026-11-05, owner: 3,000 of the business's money invested while the app expected less in the place (business
-    money it had not seen yet). It is recorded; the place shows below zero until a count settles it."""
+    money it had not seen yet). 2026-11-13, owner: investing is not spending, so no place shows below zero: the extra
+    2,000 is recorded as business money the till had, the till stops at zero and the business's money is all there."""
     client, org, owner, *_ = shop
     mmf = _mmf(client)
     with organization_context(org):
@@ -711,15 +712,43 @@ def test_the_businesss_money_put_in_may_be_more_than_its_place_is_expected_to_ho
     assert put.status_code == 201, put.content
     row = put.json()
     assert (D(str(row["value"])), D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("3000"), D("3000"), D("0"))
-    money = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
-    assert money["MPESA"] == D("-2000")
-    accounts, _, pl = _books(org)
+    places = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert places()["MPESA"] == 0
+    accounts, checks, pl = _books(org)
     assert accounts["1400"]["balance"] == D("3000") and pl["net_profit_before_tax"] == 0
-    # A place expected to hold nothing is still offered, and money can be put in from it too.
+    assert all(c["reconciled"] for c in checks if c["key"] in {"investments", "cash"})
+    # The recorded extra is part of putting it in: it cannot be undone as starting money, only with the put-in.
+    starting = client.get("/api/v1/accounting/money-check/").json()["starting"]
+    extra = next(e for e in starting if D(str(e["amount"])) == D("2000"))
+    assert not extra["can_undo"]
+    # A place expected to hold nothing is still offered, and money can be put in from it too; it stays at zero.
     keys = {row["key"] for row in client.get("/api/v1/accounting/investments/").json()["business_places"]}
     assert {"MPESA", "CASH"} <= keys
     swept = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"CASH": "500"}, "idempotency_key": "cash"}, format="json")
     assert swept.status_code == 201, swept.content
+    assert places()["CASH"] == 0
+    # Undoing the put-in takes the extra back too: the till holds its 1,000 of sales again.
+    undone = client.post(f"/api/v1/accounting/investments/movements/{row['movements'][0]['id']}/undo/", {"reason": "Mistake"}, format="json")
+    assert undone.status_code == 200, undone.content
+    assert places()["MPESA"] == D("1000")
+
+
+def test_places_left_below_zero_by_money_put_in_before_are_brought_to_zero_once(shop):
+    """Records from before 2026-11-13 left the till below zero (more put in from it than it had recorded). The first
+    look brings it to zero with the shortfall recorded as business money it had; a later shortfall is not covered."""
+    client, org, owner, *_ = shop
+    with organization_context(org):
+        from apps.tenancy.models import Organization
+        from apps.accounting.services import post
+        post(unit="SHOP", method="MPESA", amount=D("3139"), kind="INCOME", reference="Sales", key="sales", user=owner)
+        post(unit="SHOP", method="MPESA", amount=D("-8039"), kind="INVESTMENT", reference="Put into CIC", key="old", user=owner, journal=False)
+        settings = Organization.objects.get(pk=org.pk).settings or {}
+        Organization.objects.filter(pk=org.pk).update(settings={k: v for k, v in settings.items() if k != "investment_covers_settled"})
+    places = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert places()["MPESA"] == 0
+    with organization_context(org):
+        post(unit="SHOP", method="MPESA", amount=D("-100"), kind="EXPENSE", reference="Paid out", key="later", user=owner)
+    assert places()["MPESA"] == D("-100")
 
 
 def test_the_businesss_money_shows_which_part_it_came_from_and_the_shops_cost_of_goods_and_profit(shop, monkeypatch):

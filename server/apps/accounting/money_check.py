@@ -150,7 +150,7 @@ def starting_entries():
     rows = (CashEntry.objects.filter(kind="OPENING", reversal_of__isnull=True, account__payment_method__in=dict(PLACES))
             .exclude(pk__in=undone).select_related("account"))
     return [{"id": e.pk, "place": _place_label(e.account.payment_method, e.business_unit), "amount": e.amount, "date": e.occurred_at,
-             "note": e.reference, "can_undo": not e.source_key.startswith("owner-pays:")} for e in rows]
+             "note": e.reference, "can_undo": not e.source_key.startswith(("owner-pays:", "investment-cover:"))} for e in rows]
 
 
 @transaction.atomic
@@ -162,4 +162,6 @@ def undo_starting_money(*, user, entry_id, reason=""):
         raise ValidationError("That starting money was not found.")
     if entry.source_key.startswith("owner-pays:"):
         raise ValidationError("This is your own money that paid a supplier. Undo that supplier payment on the stock receipt instead.")
+    if entry.source_key.startswith("investment-cover:"):
+        raise ValidationError("This is business money that went into an investment. Undo that money put in on the investment instead.")
     return reverse(entry=entry, user=user, reason=str(reason or "").strip() or "Starting money entered by mistake")

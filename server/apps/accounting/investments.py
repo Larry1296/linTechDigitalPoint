@@ -206,7 +206,8 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
         raise ValidationError("The instant withdrawal charge cannot be below zero.")
     unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
     # The business's money put in may be more than the app expects in its place (2026-11-05, owner: business money
-    # the app has not seen yet, e.g. collected elsewhere). The place then shows below zero until a count settles it.
+    # the app has not seen yet, e.g. collected elsewhere). The extra is that money, recorded as it goes in, so the place
+    # stops at zero and never shows below it (2026-11-13, owner: investing is not spending).
     if not putting_in:
         holds = business_value(investment) if business else own_value(investment)
         if amount > holds:
@@ -221,6 +222,8 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     entry = None
     if business:
         from .services import post as post_cash
+        if putting_in:
+            cover(method=place, unit=unit, amount=amount, fund=investment.name, key=key, user=user, occurred_at=_moment(day))
         entry = post_cash(unit=unit, method=place, amount=-amount if putting_in else amount, kind="INVESTMENT",
                           reference=f"{words}{' from' if putting_in else ' to'} {PLACE_WORDS[place]}"[:160], key=f"investment:{key}",
                           user=user, occurred_at=_moment(day), branch=resolve_branch(), journal=False)
@@ -440,6 +443,7 @@ def undo(*, movement, user, reason):
     # The business's money goes back where it was, and interest or fees leave profit, in the month they were counted.
     if movement.whose == BUSINESS_MONEY and movement.entry_id and not CashEntry.objects.filter(reversal_of=movement.entry).exists():
         reverse_cash(entry=movement.entry, user=user, reason=reason, allow_investment=True)
+    uncover([movement.idempotency_key, f"claim:{movement.pk}"], user, reason)
     for prefix in (MOVED, EARNED, OWNER_HELD):
         _reverse(f"{prefix}:{movement.pk}", user, reason, f"{prefix}-undo:{movement.pk}")
     movement.refresh_from_db()
@@ -475,6 +479,8 @@ def claim(*, movement, user, place, amount=None, note=""):
     if account_closed or FinancialPeriod.objects.filter(start__lte=day, end__gte=day, closed=True).exists():
         day = timezone.localdate()
     words = f"Put into {movement.investment.name}: the business's money, from {PLACE_WORDS[place]}"
+    cover(method=place, unit=drawer or unit or "SHOP", amount=amount, fund=movement.investment.name, key=f"claim:{movement.pk}",
+          user=user, occurred_at=_moment(day))
     entry = post_cash(unit=drawer or unit or "SHOP", method=place, amount=-amount, kind="INVESTMENT", reference=f"{words} (first recorded as own money)"[:160],
                       key=f"investment-claim:{movement.pk}", user=user, occurred_at=_moment(day), branch=movement.branch, journal=False)
     note = str(note or "").strip()
@@ -487,6 +493,64 @@ def claim(*, movement, user, place, amount=None, note=""):
     movement.refresh_from_db()
     return movement
 
+
+COVER = "investment-cover:"
+COVER_WORDS = "not recorded there before"
+# Business money put in before covers existed (2026-11-13) could leave its place below zero; settle_covers() brings
+# those places to zero once per business, then marks the business so it never runs again.
+COVERS_SETTLED = "investment_covers_settled"
+
+def _held(method, unit):
+    from .money_check import expected
+    from .money_mode import separate_cash
+    return expected(method, unit if method == "CASH" and separate_cash() else None)[0]
+
+
+def cover(*, method, unit, amount, fund, key, user, occurred_at=None):
+    """The business's money put into an investment that is more than its place holds: the extra is business money the
+    place had that the app never saw (sales or money collected elsewhere), recorded into the place as it goes in so the
+    place stops at zero. It is money the business already had, not a sale, so profit does not change."""
+    short = money(amount) - max(_held(method, unit), Decimal("0"))
+    if short <= 0:
+        return None
+    return post(unit=unit or "SHOP", method=method, amount=short, kind="OPENING", key=f"{COVER}{key}"[:180], user=user,
+                reference=f"Business money in {PLACE_WORDS[method]} {COVER_WORDS}, put into {fund}"[:160],
+                reason="Put into an investment: more than the app had seen in this place", occurred_at=occurred_at, branch=resolve_branch())
+
+
+def uncover(keys, user, reason):
+    """Undoing business money put in also takes back the unrecorded money it brought into its place."""
+    for entry in CashEntry.objects.filter(source_key__in=[f"{COVER}{k}"[:180] for k in keys], reversal_of__isnull=True):
+        if not CashEntry.objects.filter(reversal_of=entry).exists():
+            reverse_cash(entry=entry, user=user, reason=reason)
+
+
+def settle_covers():
+    """Once per business: places left below zero by the business's money put into investments before covers existed
+    are brought to zero, the shortfall recorded as business money the place had that the app never saw (capped at what
+    was put in from there). The business is then marked, so a place that goes below zero later for another reason is
+    never covered by this: every later put-in covers itself."""
+    from apps.tenancy.context import organization_id
+    from apps.tenancy.models import Organization
+    from .money_check import PLACES, _cash_units
+    from .money_mode import separate_cash
+    org = Organization.objects.filter(pk=organization_id()).first()
+    if not org or (org.settings or {}).get(COVERS_SETTLED):
+        return
+    lock_business()
+    org.refresh_from_db(fields=["settings"])
+    if (org.settings or {}).get(COVERS_SETTLED):
+        return
+    for method, _ in PLACES:
+        for unit in (_cash_units() if method == "CASH" and separate_cash() else [None]):
+            rows = CashEntry.objects.filter(account__payment_method=method, kind="INVESTMENT")
+            invested = -((rows.filter(business_unit=unit) if unit else rows).aggregate(v=Sum("amount"))["v"] or Decimal("0"))
+            short = min(-_held(method, unit), invested)
+            if short > 0:
+                post(unit=unit or "SHOP", method=method, amount=short, kind="OPENING", key=f"{COVER}settle:{method}:{unit or ''}",
+                     reference=f"Business money in {PLACE_WORDS[method]} {COVER_WORDS}, put into investments"[:160],
+                     reason="Put into investments before 13 Nov 2026: more than the app had seen in this place", branch=resolve_branch())
+    Organization.objects.filter(pk=org.pk).update(settings={**(org.settings or {}), COVERS_SETTLED: True})
 
 SWITCH = "business-money-in"
 
@@ -588,6 +652,7 @@ def settle_books():
     through the M-Pesa agency stays as the agency recorded it: on the agency side it was already the owner's money
     coming in or going out. Afterwards there is nothing left to do."""
     _separate()
+    settle_covers()
     book_earnings()  # then interest and fees count in profit
 
 

@@ -60,9 +60,9 @@ function BusinessSources({ total, breakdown }) {
 const date = (value) => (value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 const today = () => new Date().toLocaleDateString("en-CA");
 // The business's money put in may be more than the app expects in its place (business money it has not seen yet):
-// it is allowed, and the confirmation says what that place will show after it.
-const beyond = (label, expected, amount) => (Number(amount) > Number(expected)
-  ? ` ${label} is expected to hold ${money(expected)}, so it will show ${money(Number(expected) - Number(amount))} until you count it and record the difference.`
+// it is allowed, the extra is recorded as money that place had, and the place stops at zero, never below it.
+const beyond = (label, expected, amount) => (Number(amount) > Number(Math.max(Number(expected) || 0, 0))
+  ? ` ${label} is expected to hold ${money(Math.max(Number(expected) || 0, 0))}; the other ${money(Number(amount) - Math.max(Number(expected) || 0, 0))} is recorded as business money it had that the app had not seen, so it shows ${money(0)}, not below zero.`
   : "");
 const percent = (value) => `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
 

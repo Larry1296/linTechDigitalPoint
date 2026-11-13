@@ -781,7 +781,7 @@ def top_customers(ctx, args):
 def investments(ctx, args):
     from apps.accounting import fund_rates
     from apps.accounting.investment_interest import earnings, estimate, rate_now
-    from apps.accounting.investments import settle_books, totals, value
+    from apps.accounting.investments import business_value, own_value, settle_books, totals, value
     from apps.accounting.models import Investment
     settle_books()
     rows = []
@@ -790,7 +790,7 @@ def investments(ctx, args):
         guess, rate = estimate(inv), rate_now(inv)
         fund = fund_rates.summary(inv.fund)
         row = {"investment": inv.name, "value_now": _money(value(inv)),
-               "kept_apart": "The owner's own money, kept apart from the business: not in the business's money, profit or net worth.",
+               "business_money": _money(business_value(inv)), "owners_own_money": _money(own_value(inv)),
                **{k: (_money(v) if isinstance(v, Decimal) else v) for k, v in (t or {}).items()}}
         if rate is not None:
             balance = guess["value"] if guess else value(inv)
@@ -805,8 +805,10 @@ def investments(ctx, args):
             row["estimated_value_today"] = _money(guess["value"])
         rows.append(row)
     return {"investments": rows, "total_value": _money(sum((Decimal(str(row["value_now"] or 0)) for row in rows), ZERO)),
-            "explained": "The money put in is the owner's own, kept apart from the business: never in its money or net worth. "
-                         "Only the interest each statement shows (its balance less put in, less taken out, plus interest and less fees "
+            "explained": "Each investment holds two kinds of money. business_money is the business's money kept there (put in from the "
+                         "drawer, till or bank, less taken back, plus interest less fees): it is still the business's money, part of its "
+                         "money and net worth, only kept in the fund instead of a drawer; putting it in is not spending. owners_own_money "
+                         "is the owner's own, kept apart from the business: never in its money or net worth. All the interest each statement shows (its balance less put in, less taken out, plus interest and less fees "
                          "recorded before), after fees, is the business's profit, as 'Interest on investments'. "
                          "Value is from recorded deposits, withdrawals, interest and fees; interest not yet on a statement is not counted. "
                          "earns_after_tax is what the money earns now at the current yearly rate after withholding tax: a day, an "
@@ -970,7 +972,7 @@ TOOLS = {
                    _schema({"sale_number": {"type": "string"}, "customer": {"type": "string"}, **LIMIT}), "commerce.view_sale", None),
     "top_customers": (top_customers, "Customers in a period: top spenders, new versus returning, and walk-in sales. Default: last 90 days.",
                       _schema({**PERIOD, **LIMIT}), "commerce.view_sale", None),
-    "investments": (investments, "Investments such as money market funds, the owner's own money kept apart from the business (never in its money or net worth; only the interest from statements, after fees, is the business's profit): value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
+    "investments": (investments, "Investments such as money market funds: the business's money kept there (still the business's money, in its net worth) and the owner's own money kept apart (never in the business's money or net worth); all the interest from statements, after fees, is the business's profit: value now, money put in and taken out, interest and fees, the yearly rate now (CIC's published rate when followed) and what the money earns a day, month and year after tax.",
                     _schema(), "accounting.view_investment", "investments"),
     "chamas": (chamas, "The chamas (savings groups) the business manages: members, contribution, money held, this period's "
                "collection, late members and whose turn is next.", _schema(), "chama.view_chama", "chama"),
