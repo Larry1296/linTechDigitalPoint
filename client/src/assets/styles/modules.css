@@ -3433,3 +3433,16 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .soldOne small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .soldOne a { justify-self: start; color: var(--primary); font-size: 13px; font-weight: 700; text-decoration: none; }
 .soldOne a:hover, .soldOne a:focus-visible { text-decoration: underline; }
+.soldBridge { border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.soldBridge summary { padding: 12px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.soldBridge[open] summary { border-bottom: 1px solid var(--line); }
+.soldBridge > :not(summary) { margin: 12px 16px; }
+.soldBridge > p { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.soldSteps { display: grid; margin: 12px 16px; font-size: 14px; }
+.soldSteps > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; }
+.soldSteps > div + div { border-top: 1px dashed var(--line); }
+.soldSteps dt { min-width: 0; }
+.soldSteps dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.soldSteps .first { font-weight: 700; }
+.soldSteps > .last { margin-top: 2px; padding-top: 10px; border-top: 2px solid var(--line); font-weight: 800; }
+.soldBridge .soldWhere { color: var(--text); }

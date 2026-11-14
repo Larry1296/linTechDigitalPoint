@@ -104,3 +104,35 @@ def sold_since_start(rows, *, units, enabled, profit_visible):
             groups.append({"key": key, "name": name, "amount": amount, "lines": shown})
             total += amount
     return {"groups": groups, "total": total}
+
+
+# The business's own places, as on the Money check page; the agency's own cash and float are never among them.
+OWNER_PLACES = ("CASH", "MPESA", "BANK", "OTHER")
+
+
+def money_bridge(sold_total, interest):
+    """How what was brought in became the business's money now, for someone who may see the business's money: every
+    line is the cash book of the business's own places grouped by what it was, so the bridge always ends exactly at
+    what those places should hold plus the business's money kept in investments (the Money check and Investments pages).
+
+    Interest is earned inside the investment, never through a place; what was sold but not received yet is what was
+    brought in less what was received and less that interest. {"lines": [{"key", "amount"}], "money_now", "in_places",
+    "in_investments", "interest"}; a line's amount is added (negative takes away)."""
+    from apps.accounting.models import CashEntry
+    from apps.accounting.money_check import kept_in_investments
+    entries = CashEntry.objects.filter(account__payment_method__in=OWNER_PLACES)
+    by_kind = {kind: amount or ZERO for kind, amount in entries.values_list("kind").annotate(v=Sum("amount"))}
+    opening = entries.filter(kind="OPENING")
+    own = opening.filter(source_key__startswith="owner-pays:").aggregate(v=Sum("amount"))["v"] or ZERO
+    found = opening.filter(source_key__startswith="investment-cover:").aggregate(v=Sum("amount"))["v"] or ZERO
+    starting = by_kind.get("OPENING", ZERO) - own - found
+    received = by_kind.get("INCOME", ZERO)
+    interest = interest or ZERO
+    lines = [("not_received", -(sold_total - interest - received)), ("starting", starting), ("own_for_suppliers", own),
+             ("found", found), ("agency", by_kind.get("TRANSFER", ZERO)), ("suppliers", by_kind.get("PURCHASE", ZERO)),
+             ("expenses", by_kind.get("EXPENSE", ZERO)), ("loans", by_kind.get("LOAN", ZERO)),
+             ("other", sum((v for k, v in by_kind.items() if k not in {"INCOME", "OPENING", "TRANSFER", "PURCHASE", "EXPENSE", "LOAN", "INVESTMENT"}), ZERO))]
+    in_places = sum(by_kind.values(), ZERO)
+    invested = kept_in_investments()["total"]
+    return {"lines": [{"key": key, "amount": amount} for key, amount in lines if amount],
+            "money_now": in_places + invested, "in_places": in_places, "in_investments": invested, "interest": interest}

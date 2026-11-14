@@ -11,7 +11,7 @@ from decimal import Decimal
 from django.db.models import F, Sum
 from django.utils import timezone
 
-from .sold_summary import sold_since_start
+from .sold_summary import money_bridge, sold_since_start
 
 ZERO = Decimal('0')
 # The agency counts by its commission and costs, never its cash or float; M-KOPA by the commission M-KOPA paid. Both
@@ -94,7 +94,15 @@ def _customers_owe():
     return JournalLine.objects.filter(account__code__in=['1100', '1150']).aggregate(v=Sum(F('debit') - F('credit')))['v'] or ZERO
 
 
-def owner_summary(*, visible_units, profit_visible, permits, enabled=()):
+def _bridge(rows, units, profit_visible):
+    """The money bridge, from the total sold and earned to the business's money now. Only for a viewer who sees every
+    part and its profit: the business's places hold every part's money, so a part on its own has no total to start from."""
+    from .dashboard import accrual_totals, whole
+    totals = accrual_totals(rows, whole(units, profit_visible))
+    return money_bridge(totals["revenue"] + totals["interest"], totals["interest"])
+
+
+def owner_summary(*, visible_units, profit_visible, permits, enabled=(), whole_business=False):
     from .dashboard import pnl_rows, whole
     units = [unit for unit in UNITS if unit in visible_units]
     if not units:
@@ -115,5 +123,7 @@ def owner_summary(*, visible_units, profit_visible, permits, enabled=()):
             # What was brought in since the start, by goods, services, commission and interest, from the same rows.
             'sold': sold_since_start(rows, units=units, enabled=set(enabled), profit_visible=profit_visible),
             'money': _money() if money_allowed else None,
+            # Why the business's money is not the total brought in: from one to the other, from the cash book.
+            'money_bridge': _bridge(rows, units, profit_visible) if money_allowed and profit_visible and whole_business else None,
             'agency': agency_money() if money_allowed and 'MPESA' in units else None,
             'customers_owe': _customers_owe() if money_allowed else None}

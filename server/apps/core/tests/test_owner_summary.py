@@ -125,7 +125,9 @@ def test_what_was_sold_since_the_start_is_goods_services_commission_and_interest
                        "payment_method": "CASH", "idempotency_key": "c1"}, format="json").status_code == 201
     assert client.post("/api/v1/mpesa/commission/", {"outlet": outlet.pk, "period": str(last_month), "amount": "700", "reference": "SOLD01",
                        "settlement_method": "MPESA", "idempotency_key": "SOLD01"}, format="json").status_code == 201
-    sold = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["sold"]
+    assert client.post("/api/v1/accounting/money-check/starting/", {"method": "CASH", "amount": "1000", "idempotency_key": "start"}, format="json").status_code == 201
+    summary = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]
+    sold = summary["sold"]
     groups = {group["key"]: group for group in sold["groups"]}
     assert [group["key"] for group in sold["groups"]] == ["GOODS", "SERVICES", "COMMISSION", "INTEREST"]
     line = lambda key, code: next(row for row in groups[key]["lines"] if row["code"] == code)
@@ -136,3 +138,9 @@ def test_what_was_sold_since_the_start_is_goods_services_commission_and_interest
     # The menu, rooms and M-KOPA are not used, so they are not shown; the total is every line added up.
     assert {row["code"] for group in sold["groups"] for row in group["lines"]} == {"4000", "4020", "4010", "4910"}
     assert D(sold["total"]) == D("1570") == sum(D(group["amount"]) for group in sold["groups"])
+    # From the total sold and earned to the business's money now: every shilling was received (nothing on credit), the
+    # owner started with 1,000 in the drawer, and the interest stays in the fund. It always ends exactly at the money now.
+    bridge = summary["money_bridge"]
+    assert {line["key"]: D(line["amount"]) for line in bridge["lines"]} == {"starting": D("1000")}
+    assert (D(bridge["in_places"]), D(bridge["in_investments"]), D(bridge["money_now"])) == (D("2320"), D("250"), D("2570"))
+    assert D(sold["total"]) + sum(D(line["amount"]) for line in bridge["lines"]) == D(bridge["money_now"])

@@ -182,7 +182,7 @@ function BusinessDashboard() {
     <CommissionReminder />
     {user?.roles?.[0] === "OWNER" && <StaffUndos />}
     {/* What came in leads, on its own row, before the profit that is left of it. */}
-    <SoldSummary sold={owner?.sold} since={owner?.since} owedSales={data.receivables && !data.receivables.restricted ? data.receivables.sales_owed : null} money={money} />
+    <SoldSummary sold={owner?.sold} since={owner?.since} owedSales={data.receivables && !data.receivables.restricted ? data.receivables.sales_owed : null} bridge={owner?.money_bridge} money={money} />
     <section className="dashKpis" aria-label="Where the business has reached">
       {kpis.map(([label, value, detail, href, tone]) => {
         const body = <><span>{label}</span><strong>{value}</strong><small>{detail}</small></>;
