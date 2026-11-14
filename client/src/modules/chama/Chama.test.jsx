@@ -14,12 +14,12 @@ const refresh = vi.fn(async () => {});
 const user = { id: 1, first_name: "Larry", last_name: "Musau", phone: "0712345678", memberships: [], permissions: ["chama.view_chama", "chama.add_chama"] };
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user, loading: false, refresh }) }));
 const PLANS = { trial_days: 30, plans: [
-  { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa"] },
-  { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", description: "Everything", enabled_modules: [...profiles.modules.map((m) => m.id)] }] };
+  { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", period_days: 30, description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa"] },
+  { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", period_days: 30, description: "Everything", enabled_modules: [...profiles.modules.map((m) => m.id)] }] };
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
-  api.mockImplementation(async (path) => (path === "/api/v1/tenancy/business-profiles/" ? profiles : path === "/api/v1/tenancy/plans/" ? PLANS
+  api.mockImplementation(async (path) => (path === "/api/v1/tenancy/business-profiles/" ? profiles : path.startsWith("/api/v1/tenancy/plans/") ? PLANS
     : path === "/api/v1/tenancy/create/" ? { id: 9, name: "Created" } : {}));
 });
 const next = () => fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -42,24 +42,18 @@ it("adds a chama step to registration when chama management is chosen", async ()
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
   await screen.findByRole("heading", { name: "Your business" });
   fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Mama Duka" } });
-  fireEvent.click(screen.getByRole("button", { name: /I sell goods/ }));
-  next();
-  // The chama is a Pro tool: the plan is chosen first, and only Pro offers it.
-  fireEvent.click(await screen.findByRole("button", { name: /^Pro · KES/ }));
-  next();
-  fireEvent.click(screen.getByRole("button", { name: /Duka \/ general shop/ }));
-  next();
+  await act(async () => { next(); });
+  fireEvent.change(screen.getByLabelText("What do you call your kind of business?"), { target: { value: "Duka" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Sell products I keep in stock/ }));
   expect(screen.queryByRole("heading", { name: "Your chama" })).not.toBeInTheDocument();
-  const question = screen.getByRole("group", { name: /Are you the treasurer of a chama\?/ });
-  fireEvent.click(within(question).getByRole("button", { name: /^Yes/ }));
-  fireEvent.click(screen.getByRole("button", { name: "No: Do you run an M-Pesa agency?" }));
-  fireEvent.click(screen.getByRole("button", { name: "No: Do you sell M-KOPA phones?" }));
-  fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
+  // The chama is something the owner looks after, kept apart from the business.
+  const also = screen.getByRole("group", { name: /Anything else you look after/ });
+  fireEvent.click(within(also).getByRole("button", { name: /^Chama management/ }));
   next();
-  // Chama management is a question, not one of the tools.
-  expect(screen.queryByRole("button", { name: /^Chama management/ })).not.toBeInTheDocument();
+  next();  // starter list
+  // Only Pro has the chama, so Pro is the plan chosen for them.
+  expect(screen.getByRole("button", { name: /^Pro · KES/ })).toHaveAttribute("aria-pressed", "true");
   next();
-
   expect(screen.getByRole("heading", { name: "Your chama" })).toBeInTheDocument();
   expect(screen.getByText(/kept completely apart from your shop/)).toBeInTheDocument();
   next();
@@ -87,10 +81,9 @@ it("adds a chama step to registration when chama management is chosen", async ()
   expect(screen.getByLabelText(/Who receives the first turn/)).toHaveValue("0");
   next();
   next();
-  next();
 
   expect(screen.getByText(/Wamama Chama · KES 300 each · 2 members · treasurer Mary Achieng/)).toBeInTheDocument();
-  expect(screen.getByText("Pro · first month free")).toBeInTheDocument();
+  expect(screen.getByText("Pro · first month free, then KES 1,000 / month")).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
   expect(body.enabled_modules).toContain("chama");

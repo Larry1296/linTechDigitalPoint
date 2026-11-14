@@ -1,4 +1,43 @@
 {
+ "activities": [
+  {
+   "id": "inventory",
+   "label": "Sell products I keep in stock"
+  },
+  {
+   "id": "services",
+   "label": "Do work or services for customers: repairs, haircuts, printing, cleaning\u2026"
+  },
+  {
+   "id": "menu",
+   "label": "Cook and sell food or drinks"
+  },
+  {
+   "id": "rooms",
+   "label": "Rent out rooms by the night"
+  },
+  {
+   "id": "mpesa",
+   "label": "Run an M-Pesa agency (deposits and withdrawals for customers)"
+  },
+  {
+   "id": "mkopa",
+   "label": "Sell M-KOPA phones as a dealer"
+  }
+ ],
+ "running": [
+  "pos",
+  "customers",
+  "expenses",
+  "reports",
+  "locations",
+  "staff",
+  "branches"
+ ],
+ "also": [
+  "chama",
+  "investments"
+ ],
  "models": [
   {
    "id": "GOODS",
@@ -89,12 +128,12 @@
   },
   {
    "id": "SMALL",
-   "label": "2 – 10 people",
+   "label": "2 \u2013 10 people",
    "hint": "A few workers or helpers"
   },
   {
    "id": "MEDIUM",
-   "label": "11 – 50 people",
+   "label": "11 \u2013 50 people",
    "hint": "Several staff, maybe more than one location"
   }
  ],
@@ -749,7 +788,7 @@
    },
    {
     "id": "food",
-    "label": "Food kiosk & café",
+    "label": "Food kiosk & caf\u00e9",
     "hint": "Snacks, tea and quick meals made on site",
     "modules": {
      "SOLO": [
@@ -1466,7 +1505,7 @@
    },
    {
     "id": "cyber",
-    "label": "Cyber café & printing",
+    "label": "Cyber caf\u00e9 & printing",
     "hint": "Printing, photocopy, typing and online services",
     "modules": {
      "SOLO": [
@@ -1699,7 +1738,7 @@
     },
     "categories": [],
     "services": [],
-    "keywords": "agent mobile money float"
+    "keywords": "agent agency mobile money float"
    },
    {
     "id": "other_services",

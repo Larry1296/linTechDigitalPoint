@@ -1,5 +1,11 @@
 """What kinds of business the platform serves, and how each one is set up.
 
+Since 2026-11-13 the owner describes their business in their own words and chooses what it does (activities) and how
+it is run (tools); nothing has to be picked from a list. The way it makes money (its *model*) follows from the tools
+chosen (model_for_modules). The kinds below (sectors) are no longer a required choice: they are templates that
+suggest() matches against the owner's words, to tick the usual tools and offer a starter list, all of which the owner
+changes freely. The rest of this note describes the catalogue those suggestions come from.
+
 This catalogue is the single source of truth for registration and settings. The owner first says
 how the business makes money (its *model*): selling goods, providing services, or both. The model
 decides which tools can exist at all, so a barbershop is never asked about shelves or stock
@@ -202,7 +208,7 @@ SECTORS = {
                 ["rooms", "customers", "expenses", "reports"], services=[_room("Single room"), _room("Double room")],
                 keywords="lodge lodging guest house bnb airbnb rooms accommodation motel"),
         _sector("mpesa_agent", "M-Pesa / mobile money agent", "Deposits, withdrawals and float", ["mpesa", "expenses", "reports"],
-                keywords="agent mobile money float"),
+                keywords="agent agency mobile money float"),
         _sector("other_services", "Other service provider", "Not listed? Name your business: customers pay for your skill or time", ["services", *BASE]),
     ],
     MIXED: [
@@ -286,14 +292,19 @@ def record_kind(organization, model, label, modules, categories=(), services=())
     return kind
 
 
+# The goods side and the services side of a business, by the tools that run each.
+GOODS_TOOLS = {"inventory", "locations", "menu"}
+SERVICE_TOOLS = {"services", "rooms"}
+
+
 def model_for_modules(modules):
-    """The business model that fits an existing set of tools (used for businesses created before models existed)."""
+    """How a business makes money, from the tools it chose: goods (products, shelves, a menu), services (services,
+    rooms) or both. A business with neither, such as an M-Pesa agent, earns from services."""
     modules = set(modules)
-    if "inventory" in modules and "services" in modules:
+    goods, services = bool(modules & GOODS_TOOLS), bool(modules & SERVICE_TOOLS)
+    if goods and services:
         return MIXED
-    if "inventory" in modules or "locations" in modules:
-        return GOODS
-    return SERVICES
+    return GOODS if goods else SERVICES
 
 
 def module_problems(model, modules):
@@ -333,9 +344,101 @@ def _sectors_with_listed_kinds():
             for model, sectors in SECTORS.items()}
 
 
+# What the business does, in the owner's words: each one is a tool that earns money. At least one is needed.
+ACTIVITIES = {
+    "inventory": "Sell products I keep in stock",
+    "services": "Do work or services for customers: repairs, haircuts, printing, cleaning…",
+    "menu": "Cook and sell food or drinks",
+    "rooms": "Rent out rooms by the night",
+    "mpesa": "Run an M-Pesa agency (deposits and withdrawals for customers)",
+    "mkopa": "Sell M-KOPA phones as a dealer",
+}
+# How the business is run and the owner's other work, each switched on only when wanted.
+RUNNING = ["pos", "customers", "expenses", "reports", "locations", "staff", "branches"]
+ALSO = ["chama", "investments"]
+
+# Everyday words that point to a tool whatever the kind of business ("I also do M-Pesa", "we keep money in an MMF").
+# Words are matched whole, after lower-casing and dropping hyphens ("M-Pesa" is "mpesa").
+MODULE_WORDS = {
+    "mpesa": {"agent", "agency", "float", "withdrawals", "withdrawal", "withdraw"},
+    "mkopa": {"mkopa"},
+    "chama": {"chama", "chamas", "merry", "treasurer"},
+    "investments": {"mmf", "invest", "investment", "investments"},
+    "rooms": {"rooms", "room", "lodging", "lodge", "bnb", "airbnb", "accommodation", "guesthouse"},
+    "menu": {"restaurant", "hotel", "cafe", "café", "meals", "food", "eatery", "kitchen", "hoteli"},
+    "services": {"repair", "repairs", "service", "services", "fundi", "printing", "salon", "barber", "kinyozi", "tailor", "cleaning", "laundry"},
+    "inventory": {"sell", "selling", "shop", "duka", "stock", "products", "retail", "wholesale", "goods", "accessories", "spares", "kiosk"},
+}
+STOP_WORDS = {"and", "or", "the", "a", "an", "of", "for", "with", "in", "on", "my", "our", "we", "i", "do", "also", "sell", "shop",
+              "business", "other", "your", "you", "plus", "to", "from", "by", "own", "is", "are", "at", "&", "who", "that", "it"}
+
+
+def _words(text):
+    import re
+    return [w for w in re.findall(r"[a-z0-9é]+", str(text or "").lower().replace("-", "")) if w]
+
+
+def _close(word, term):
+    """Whole words, or one the start of the other when both are long ("printing" and "print", "phones" and "phone")."""
+    return word == term or (len(word) >= 4 and len(term) >= 4 and (word.startswith(term) or term.startswith(word)))
+
+
+def suggest(text, size="SMALL"):
+    """What the owner's own description of their business suggests: the tools to tick, the kinds of business it is
+    closest to (best first), the name of the closest one, and a starter list merged from them. Only a suggestion: the
+    owner changes any of it. {"modules", "matches": [{"id", "label"}], "template", "business_type", "categories",
+    "services"}."""
+    every = set(_words(text))
+    words = [w for w in every if w not in STOP_WORDS]
+    size = size if size in SIZES else "SMALL"
+    scored = []
+    for model, sectors in _sectors_with_listed_kinds().items():
+        for sector in sectors:
+            if sector["id"] in OTHER_SECTORS:
+                continue
+            terms = {t for t in _words(f"{sector['label']} {sector['keywords']}") if t not in STOP_WORDS}
+            score = sum(1 for w in words if any(_close(w, t) for t in terms))
+            if score:
+                scored.append((score, model, sector))
+    scored.sort(key=lambda row: -row[0])
+    best = scored[0][0] if scored else 0
+    # The closest kind, and any other that fits as well, or nearly as well when the description says a lot (a cyber that
+    # also sells phone accessories is both); one stray word shared with another kind ("mama") is not enough.
+    chosen = [(model, sector) for score, model, sector in scored if score >= (best - 1 if best >= 3 else best)][:3 if best > 1 else 1]
+    modules = set(SIZES[size]["modules"])
+    for model, sector in chosen:
+        modules |= set(suggested_modules(model, sector, size))
+    for module, cues in MODULE_WORDS.items():
+        if every & cues:
+            modules.add(module)
+    if modules & set(ACTIVITIES):
+        modules |= set(BASE)
+    if not modules & {"inventory", "services", "menu"}:
+        modules.discard("pos")
+    if "locations" in modules and "inventory" not in modules:
+        modules.discard("locations")
+    categories, services = [], []
+    for _, sector in chosen:
+        categories += [c for c in sector["categories"] if c not in categories]
+        services += [s for s in sector["services"] if s["name"] not in {x["name"] for x in services}]
+    template = chosen[0][1] if chosen else None
+    return {"modules": [m for m in MODULES if m in modules],
+            "matches": [{"id": sector["id"], "label": sector["label"]} for _, sector in chosen],
+            "template": template["id"] if template else "", "business_type": template["label"] if template else "",
+            "categories": categories[:15], "services": services[:20]}
+
+
+def known_label(label):
+    """Whether a name is already one of the listed kinds of business (built-in or listed)."""
+    key = kind_key(label)
+    return any(kind_key(sector["label"]) == key for sectors in _sectors_with_listed_kinds().values() for sector in sectors)
+
+
 def catalogue():
     """Everything the registration and settings screens need, in display order."""
     return {
+        "activities": [{"id": key, "label": label} for key, label in ACTIVITIES.items()],
+        "running": RUNNING, "also": ALSO,
         "models": [{"id": key, **value} for key, value in BUSINESS_MODELS.items()],
         "sizes": [{"id": key, "label": value["label"], "hint": value["hint"]} for key, value in SIZES.items()],
         "modules": [{"id": key, **value, "needs": list(MODULE_NEEDS.get(key, ()))} for key, value in MODULES.items()],

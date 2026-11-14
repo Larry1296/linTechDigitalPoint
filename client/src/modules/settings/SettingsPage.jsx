@@ -8,7 +8,7 @@ import { askForm, confirmAction } from "../../core/ui/alerts";
 import { LogoImage } from "../../components/LogoImage";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
-import { allowedModules, findSector, fitModules, moduleProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
+import { setupProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
 import { BusinessPartsChoice, MONEY_PARTS } from "../../core/organization/MoneyModeChoice";
 import { TextBox } from "../../components/forms/TextBox";
 
@@ -112,7 +112,7 @@ function BusinessSettings() {
   const [busy, setBusy] = useState(false);
   const show = (settings) => {
     setData(settings);
-    setProfile({ business_model: settings.business_model, sector: settings.sector, business_size: settings.business_size,
+    setProfile({ sector: settings.sector, business_size: settings.business_size, description: settings.description || "",
       business_type: settings.business_type, modules: new Set(settings.enabled_modules), money_mode: settings.money_mode || "ONE_DRAWER",
       structure: settings.structure || "SINGLE", part_names: settings.own_part_names || {}, sale_mpesa_to: settings.sale_mpesa_to || "AGENT_LINE" });
   };
@@ -123,31 +123,20 @@ function BusinessSettings() {
   useEffect(load, [load]);
   if ((error || catalogueError) && !(data && catalogue)) return <ErrorState message={error || catalogueError} retry={load} />;
   if (!data || !catalogue) return <Loading />;
-  const allowed = allowedModules(catalogue, profile.business_model);
-  const isOther = catalogue.other_sectors.includes(profile.sector);
-  // A different way of making money keeps only the tools that still fit; the owner reviews them before saving.
-  const chooseModel = (model) => {
-    const { modules, removed } = fitModules(catalogue, model, profile.modules);
-    setNotes(removed.length ? [`${removed.join(", ")} turned off: not used when you ${catalogue.models.find((m) => m.id === model).phrase}. Your past records are kept.`] : []);
-    setProfile({ ...profile, business_model: model, sector: "", business_type: "", modules });
-  };
-  const chooseSector = (id) => {
-    const sector = findSector(catalogue, id);
-    setProfile({ ...profile, sector: id, business_type: sector && !catalogue.other_sectors.includes(id) ? sector.label : "" });
-  };
+  // What the business does follows from the tools it uses: any tool can be turned on, nothing is picked from a list.
   const chooseModule = (id) => {
-    const result = toggleModule(catalogue, profile.business_model, profile.modules, id);
+    const result = toggleModule(catalogue, "MIXED", profile.modules, id);
     setProfile({ ...profile, modules: result.modules });
     setNotes(result.notes);
   };
   const save = async (event) => {
     event.preventDefault();
-    const problem = moduleProblem(catalogue, profile.business_model, profile.modules);
+    const problem = !profile.business_type.trim() ? "Say what you call your kind of business." : setupProblem(catalogue, profile.modules);
     if (problem) { setError(problem); return; }
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(["name", "phone", "email", "address", "timezone", "receipt_footer"].map((key) => [key, form.get(key) || ""]));
-    Object.assign(body, { business_model: profile.business_model, sector: profile.sector, business_size: profile.business_size,
-      business_type: profile.business_type, enabled_modules: [...profile.modules], money_mode: profile.money_mode,
+    Object.assign(body, { business_size: profile.business_size, description: profile.description.trim(),
+      business_type: profile.business_type.trim(), enabled_modules: [...profile.modules], money_mode: profile.money_mode,
       structure: profile.structure, sale_mpesa_to: profile.sale_mpesa_to, part_names: Object.fromEntries(MONEY_PARTS.map((part) => [part.key, profile.part_names[part.key]?.trim() || ""])) });
     setBusy(true); setError(""); setMessage("");
     try {
@@ -164,14 +153,8 @@ function BusinessSettings() {
   return <form className="formCard" onSubmit={(event) => void save(event)}>
     <h2>Business details</h2>
     <FormField label="Business name" name="name" defaultValue={data.name} required maxLength={160} />
-    <label>How the business makes money<select value={profile.business_model} onChange={(e) => chooseModel(e.target.value)}>
-      {catalogue.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-    </select></label>
-    <label>Kind of business<select value={profile.sector} onChange={(e) => chooseSector(e.target.value)}>
-      <option value="">Choose…</option>
-      {catalogue.sectors[profile.business_model].map((sector) => <option key={sector.id} value={sector.id}>{sector.label}</option>)}
-    </select></label>
-    {(isOther || !profile.sector) && <label>Name your kind of business<TextBox value={profile.business_type} onChange={(e) => setProfile({ ...profile, business_type: e.target.value })} maxLength={100} /></label>}
+    <label>What you call your kind of business<TextBox value={profile.business_type} onChange={(e) => setProfile({ ...profile, business_type: e.target.value })} maxLength={100} required /></label>
+    <label>What your business does, in your own words<textarea value={profile.description} onChange={(e) => setProfile({ ...profile, description: e.target.value })} maxLength={1000} rows={3} /></label>
     <label>People working in the business<select value={profile.business_size} onChange={(e) => setProfile({ ...profile, business_size: e.target.value })}>
       {catalogue.sizes.map((size) => <option key={size.id} value={size.id}>{size.label}</option>)}
     </select></label>
@@ -184,21 +167,23 @@ function BusinessSettings() {
     {data.plan && <section className="planSummary" aria-label="Your plan">
       <h3>Plan: {data.plan.name || "None"}{data.plan.complimentary ? " · free, every tool" : ""}{data.plan.ended ? " · ended" : ""}</h3>
       <p>Includes: {catalogue.modules.filter((m) => data.plan.includes.includes(m.id)).map((m) => m.label).join(", ")}.</p>
-      {data.plan.waiting.length > 0 && <p className="muted">Chosen but not in {data.plan.name}, so switched off until you are on Pro: {catalogue.modules.filter((m) => data.plan.waiting.includes(m.id)).map((m) => m.label).join(", ")}.</p>}
-      {!data.plan.complimentary && <p className="muted"><Link to="/admin/subscription">Change plan</Link>: switch between Basic and Pro when you pay for the next month.</p>}
+      {data.plan.waiting.length > 0 && <p className="muted">Chosen but not in {data.plan.name}, so switched off until you change plan: {catalogue.modules.filter((m) => data.plan.waiting.includes(m.id)).map((m) => m.label).join(", ")}.</p>}
+      {!data.plan.complimentary && <p className="muted"><Link to="/admin/subscription">Change plan</Link> when you pay for the next period.</p>}
     </section>}
-    <fieldset className="checkList">
-      <legend>Tools</legend>
-      {catalogue.modules.filter((module) => allowed.includes(module.id)).map((module) => {
-        // Tools outside the plan cannot be switched on here; they unlock with an upgrade.
-        const locked = Boolean(data.plan_modules && !data.plan_modules.includes(module.id));
-        return <label key={module.id} className={locked ? "lockedTool" : undefined}>
-          <input type="checkbox" checked={!locked && profile.modules.has(module.id)} disabled={locked} onChange={() => chooseModule(module.id)} /> {module.label}
-          {locked && <small> · Pro plan</small>}
+    {[["What the business does to earn money", catalogue.activities.map((activity) => activity.id)], ["Tools to run it", catalogue.running], ["Also looked after", catalogue.also]].map(([title, ids]) => <fieldset className="checkList" key={title}>
+      <legend>{title}</legend>
+      {ids.map((id) => {
+        const module = catalogue.modules.find((item) => item.id === id);
+        // Tools outside the plan cannot be switched on here; they unlock with the plan named.
+        const locked = Boolean(data.plan_modules && !data.plan_modules.includes(id));
+        const label = catalogue.activities.find((activity) => activity.id === id)?.label || module?.label || id;
+        return <label key={id} className={locked ? "lockedTool" : undefined}>
+          <input type="checkbox" checked={!locked && profile.modules.has(id)} disabled={locked} onChange={() => chooseModule(id)} /> {label}
+          {locked && <small> · {data.plan?.unlocked_by?.[id] ? `${data.plan.unlocked_by[id]} plan` : "not in your plan"}</small>}
         </label>;
       })}
-    </fieldset>
-    {data.plan_modules && allowed.some((id) => !data.plan_modules.includes(id)) && <p className="muted">Tools marked Pro plan are not in your current plan. <Link to="/admin/subscription">Upgrade to Pro</Link> to use them.</p>}
+    </fieldset>)}
+    {data.plan_modules && catalogue.modules.some((module) => !data.plan_modules.includes(module.id)) && <p className="muted">Tools marked with a plan are not in {data.plan?.name || "your plan"}. <Link to="/admin/subscription">Change plan</Link> to use them.</p>}
     {notes.length > 0 && <p className="muted" role="status">{notes.join(" ")}</p>}
     {MONEY_PARTS.filter((part) => part.modules.some((module) => profile.modules.has(module))).length > 1 && <BusinessPartsChoice parts={MONEY_PARTS.filter((part) => part.modules.some((module) => profile.modules.has(module)))}
       sector={profile.sector} value={profile} onChange={(next) => setProfile({ ...profile, ...next })} />}

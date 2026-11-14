@@ -36,10 +36,14 @@ def end_subscription(organization):
     OrganizationSubscription.objects.filter(organization=organization).update(ends_at=timezone.now() - timedelta(minutes=1))
 
 
-def test_the_two_plans_exist_with_their_prices():
+def test_basic_and_pro_are_offered_and_business_waits_for_the_platform_owners_price():
     public = APIClient().get("/api/v1/tenancy/plans/").json()
-    assert [(p["code"], p["price"]) for p in public["plans"]] == [("BASIC", "500.00"), ("PRO", "1000.00")] and public["trial_days"] == 30
-    assert [(p.code, p.price) for p in SubscriptionPlan.objects.exclude(code="").order_by("sort_order")] == [("BASIC", Decimal("500.00")), ("PRO", Decimal("1000.00"))]
+    assert [(p["code"], p["price"], p["highlighted"]) for p in public["plans"]] == [("BASIC", "500.00", False), ("PRO", "1000.00", True)]
+    assert public["trial_days"] == 30
+    plans = [(p.code, p.price, p.active) for p in SubscriptionPlan.objects.exclude(code="").order_by("sort_order")]
+    assert plans == [("BASIC", Decimal("500.00"), True), ("BUSINESS", Decimal("0.00"), False), ("PRO", Decimal("1000.00"), True)]
+    business = SubscriptionPlan.objects.get(code="BUSINESS")
+    assert {"reports", "staff", "locations"} <= set(business.enabled_modules) and "branches" not in business.enabled_modules
 
 
 def test_a_new_business_gets_a_free_month_on_the_plan_it_chose_and_basic_hides_pro_tools():
@@ -266,3 +270,56 @@ def test_switching_plan_converts_unused_days_at_the_businesss_own_prices():
     subscription = OrganizationSubscription.objects.get(organization=organization)
     subscription.status, subscription.ends_at = "ACTIVE", now + timedelta(days=12)
     assert billing.new_period_end(subscription, pro, now) == now + timedelta(days=33)  # 12 days at 250 = 3 days at 1,000
+
+
+def test_the_platform_owner_prices_offers_and_shapes_every_plan():
+    """The platform owner sets what each plan costs and includes. A plan is offered only once it has a price; new plans
+    can be added and, while nobody uses them, removed; one plan is recommended; at least one is always on offer."""
+    admin = signed_in("platform-owner", superuser=True)
+    business = SubscriptionPlan.objects.get(code="BUSINESS")
+    path = f"/api/v1/tenancy/platform-admin/plans/{business.pk}/"
+    refused = admin.patch(path, {"active": True}, format="json")
+    assert refused.status_code == 400 and "Set what this plan costs" in str(refused.json())
+    offered = admin.patch(path, {"active": True, "price": "750", "user_limit": 5, "branch_limit": 1, "highlighted": True}, format="json")
+    assert offered.status_code == 200, offered.content
+    assert (offered.json()["price"], offered.json()["user_limit"], offered.json()["highlighted"]) == ("750.00", 5, True)
+    public = APIClient().get("/api/v1/tenancy/plans/").json()["plans"]
+    assert [(p["code"], p["highlighted"]) for p in public] == [("BASIC", False), ("BUSINESS", True), ("PRO", False)]
+    # Stopping offering the recommended plan stops recommending it.
+    assert admin.patch(path, {"active": False}, format="json").json()["highlighted"] is False
+    admin.patch(path, {"active": True, "highlighted": True}, format="json")
+    # A new tier, added switched off, then removed while unused.
+    made = admin.post("/api/v1/tenancy/platform-admin/plans/", {"name": "Enterprise", "price": "2500", "enabled_modules": ["inventory", "pos", "branches"]}, format="json")
+    assert made.status_code == 201, made.content
+    assert (made.json()["code"], made.json()["active"], made.json()["enabled_modules"]) == ("ENTERPRISE", False, ["inventory", "pos", "branches"])
+    assert admin.post("/api/v1/tenancy/platform-admin/plans/", {"name": "enterprise", "enabled_modules": ["pos"]}, format="json").status_code == 400
+    assert admin.delete(f"/api/v1/tenancy/platform-admin/plans/{made.json()['id']}/").status_code == 204
+    # A plan a business is on stays; the last plan on offer cannot be switched off.
+    owner = signed_in("owner")
+    new_business(owner, "BASIC")
+    basic = SubscriptionPlan.objects.get(code="BASIC")
+    assert admin.delete(f"/api/v1/tenancy/platform-admin/plans/{basic.pk}/").status_code == 400
+    for plan in SubscriptionPlan.objects.exclude(pk=basic.pk).exclude(code=""):
+        admin.patch(f"/api/v1/tenancy/platform-admin/plans/{plan.pk}/", {"active": False}, format="json")
+    last = admin.patch(f"/api/v1/tenancy/platform-admin/plans/{basic.pk}/", {"active": False}, format="json")
+    assert last.status_code == 400 and "at least one plan" in str(last.json())
+    assert owner.post("/api/v1/tenancy/platform-admin/plans/", {"name": "Mine", "enabled_modules": ["pos"]}, format="json").status_code == 403
+
+
+def test_messages_and_upgrades_name_the_plan_that_has_the_tool():
+    """With Business offered, a Basic business is pointed to Business for reports and staff, and to Pro for branches."""
+    admin = signed_in("platform-owner", superuser=True)
+    business = SubscriptionPlan.objects.get(code="BUSINESS")
+    admin.patch(f"/api/v1/tenancy/platform-admin/plans/{business.pk}/", {"active": True, "price": "750"}, format="json")
+    owner = signed_in("owner")
+    new_business(owner, "BASIC")
+    refused = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["inventory", "pos", "reports"]}, format="json")
+    assert "Reports needs the Business plan" in str(refused.json())
+    refused = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["inventory", "pos", "branches"]}, format="json")
+    assert "Branches needs the Pro plan" in str(refused.json())
+    plan = owner.get("/api/v1/tenancy/settings/").json()["plan"]
+    assert (plan["unlocked_by"]["reports"], plan["unlocked_by"]["branches"]) == ("Business", "Pro")
+    assert owner.get("/api/v1/tenancy/billing/").json()["subscription"]["upgrade_to"] == {"code": "BUSINESS", "name": "Business"}
+    # Set up without naming a plan, a business gets the first plan that has every tool it chose.
+    made = owner.post("/api/v1/tenancy/create/", {"name": "Reports shop", "enabled_modules": ["inventory", "pos", "reports"]}, format="json")
+    assert made.status_code == 201 and made.json()["subscription"]["plan"] == "BUSINESS"

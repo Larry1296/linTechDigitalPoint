@@ -81,10 +81,10 @@ HOTEL_SECTORS = {"hotel", "hotel_rooms", "lodging"}
 
 
 def default_name(key, sector=""):
-    """A part's usual name. The services part is "Cyber" for a cyber (and for businesses set up before kinds existed)."""
+    """A part's usual name. The services part is "Cyber" only for a cyber; any other business calls it "Services"."""
     if sector in HOTEL_SECTORS:
         return {"SHOP": "Restaurant & bar", "CYBER": "Rooms"}.get(key, NAMES[key])
-    if key == "CYBER" and sector and "cyber" not in sector:
+    if key == "CYBER" and "cyber" not in (sector or ""):
         return "Services"
     return NAMES[key]
 

@@ -18,7 +18,7 @@ const PLANS = [
   { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", period_days: 30, description: "Basics", features: ["Point of sale & receipts"], enabled_modules: ["pos"] },
   { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", period_days: 30, description: "Everything", features: ["Profit & loss, balance sheet and reports"], enabled_modules: ["pos", "reports"] },
 ];
-const trial = { status: "TRIAL", plan: "BASIC", plan_name: "Basic", ended: false, days_left: 23, ends_at: "2026-10-25T09:00:00Z", complimentary: false, expiring_soon: false };
+const trial = { upgrade_to: { code: "PRO", name: "Pro" }, status: "TRIAL", plan: "BASIC", plan_name: "Basic", ended: false, days_left: 23, ends_at: "2026-10-25T09:00:00Z", complimentary: false, expiring_soon: false };
 beforeEach(() => {
   vi.clearAllMocks();
   POLL_INTERVAL.ms = 0;
@@ -80,10 +80,10 @@ it("counts down on every page and tells staff what an ended subscription means",
     act(() => { vi.advanceTimersByTime(1000); });
     expect(screen.getByRole("timer")).toHaveTextContent("23 days 00h 00m 01s");
     expect(screen.getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
-    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE", days_left: 3, expiring_soon: true, ends_at: "2026-10-04T12:30:05Z" } }} canManage /></MemoryRouter>);
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", upgrade_to: null, status: "ACTIVE", days_left: 3, expiring_soon: true, ends_at: "2026-10-04T12:30:05Z" } }} canManage /></MemoryRouter>);
     expect(screen.getByRole("status")).toHaveTextContent("Pro: 2 days 03h 30m 06s left");
     expect(screen.getByRole("status")).toHaveTextContent("Renew before it ends");
-    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", status: "ACTIVE" } }} canManage={false} /></MemoryRouter>);
+    rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, plan: "PRO", plan_name: "Pro", upgrade_to: null, status: "ACTIVE" } }} canManage={false} /></MemoryRouter>);
     expect(screen.getByRole("timer")).toHaveTextContent("23 days 00h 00m 01s");
     rerender(<MemoryRouter><SubscriptionBanner organization={{ subscription: { ...trial, status: "EXPIRED", ended: true, days_left: 0 } }} canManage={false} /></MemoryRouter>);
     expect(screen.getByRole("alert")).toHaveTextContent("accounting, stock receiving and other tools are paused");
@@ -165,6 +165,37 @@ it("prices a plan for each kind of business and gives one business its own price
   await act(async () => { fireEvent.submit(own); });
   const [, priced] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/businesses/2/" && o?.method === "PATCH");
   expect(JSON.parse(priced.body)).toEqual({ prices: { BASIC: "300" }, note: "" });
+});
+
+it("lets the platform owner set each plan's price, limits and tools, recommend one, and add a new plan", async () => {
+  useAuth.mockReturnValue({ user: { platform_admin: true } });
+  const unpriced = { ...overview.plans[0], id: 3, code: "BUSINESS", name: "Business", price: "0.00", active: false, highlighted: false, sort_order: 2, period_days: 30,
+    user_limit: null, branch_limit: null, kind_prices: {}, business_prices: 0, enabled_modules: ["inventory", "pos", "reports"] };
+  api.mockImplementation(async (path) => (path === "/api/v1/tenancy/platform-admin/overview/"
+    ? { ...overview, summary: { ...overview.summary, plan_names: { BASIC: "Basic", PRO: "Pro" } }, plans: [...overview.plans, unpriced], kinds: [] } : {}));
+  render(<MemoryRouter><PlatformAdminPage /></MemoryRouter>);
+  expect(await screen.findByText("On Pro")).toBeInTheDocument();
+  const business = await screen.findByRole("form", { name: "Business plan" });
+  expect(within(business).getByText(/Set what this plan costs/)).toBeInTheDocument();
+  fireEvent.change(within(business).getByLabelText(/^Price/), { target: { value: "750" } });
+  fireEvent.change(within(business).getByLabelText("People allowed"), { target: { value: "5" } });
+  fireEvent.click(within(business).getByLabelText("Menu & kitchen"));
+  fireEvent.click(within(business).getByLabelText("Offered to businesses"));
+  fireEvent.click(within(business).getByLabelText("Recommended plan"));
+  await act(async () => { fireEvent.submit(business); });
+  const [, saved] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/plans/3/" && o?.method === "PATCH");
+  expect(JSON.parse(saved.body)).toMatchObject({ price: "750", user_limit: 5, branch_limit: null, period_days: 30, active: true, highlighted: true,
+    enabled_modules: ["inventory", "pos", "reports", "menu"] });
+
+  fireEvent.click(screen.getByText("Add a plan"));
+  const fresh = screen.getByRole("form", { name: "New plan" });
+  fireEvent.change(within(fresh).getByLabelText("Name"), { target: { value: "Enterprise" } });
+  fireEvent.change(within(fresh).getByLabelText(/^Price/), { target: { value: "2500" } });
+  fireEvent.click(within(fresh).getByLabelText("Branches"));
+  await act(async () => { fireEvent.submit(fresh); });
+  const [, added] = api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/platform-admin/plans/" && o?.method === "POST");
+  expect(JSON.parse(added.body)).toMatchObject({ name: "Enterprise", price: "2500", period_days: 30, user_limit: null,
+    enabled_modules: expect.arrayContaining(["inventory", "services", "pos", "customers", "expenses", "branches"]) });
 });
 
 it("deletes a switched-off business only with its name and the administrator's sign-in password", async () => {

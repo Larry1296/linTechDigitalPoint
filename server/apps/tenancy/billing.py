@@ -4,7 +4,7 @@ A new business gets its first period free on the plan chosen at registration. Af
 extends the subscription. When a subscription ends without renewal the business keeps its data and can still
 sign in, view records and record counter sales, but everything else (accounting, stock receiving, expenses,
 shelves, staff, branches, M-Pesa agency) is paused until it renews. The platform owner's own businesses and
-any the platform grants for free are *complimentary*: always on the Pro plan and never expire.
+any the platform grants for free are *complimentary*: every tool, on the plan with the most tools, never expiring.
 """
 import base64
 import json
@@ -29,6 +29,35 @@ WARN_DAYS = 5
 def plan(code):
     from .models import SubscriptionPlan
     return SubscriptionPlan.objects.filter(code=code, active=True).first()
+
+
+def offered():
+    """The plans businesses can choose, in the platform owner's order (lowest first)."""
+    from .models import SubscriptionPlan
+    return SubscriptionPlan.objects.filter(active=True).exclude(code="").order_by("sort_order", "price", "pk")
+
+
+def top_plan():
+    """The plan with the most tools: what the platform owner's own (complimentary) businesses are on."""
+    from .models import SubscriptionPlan
+    rows = list(offered()) or list(SubscriptionPlan.objects.exclude(code=""))
+    return max(rows, key=lambda p: (len(p.enabled_modules), p.sort_order), default=None)
+
+
+def lowest_plan_with(modules):
+    """The first plan on offer (in order) that includes every one of ``modules``, or None."""
+    wanted = set(modules)
+    return next((p for p in offered() if wanted <= set(p.enabled_modules)), None)
+
+
+def upgrade_for(organization):
+    """The next plan on offer with more tools than the business's own, for "Upgrade to …", or None."""
+    subscription = getattr(organization, "subscription", None)
+    if not subscription or subscription.complimentary or not subscription.plan_id:
+        return None
+    have = set(subscription.plan.enabled_modules)
+    return next((p for p in offered() if p.sort_order >= subscription.plan.sort_order and p.pk != subscription.plan_id
+                 and set(p.enabled_modules) > have), None)
 
 
 def billing_sector(organization):
@@ -107,7 +136,7 @@ def start_trial(organization, plan_code, platform_owner=False):
     from .models import OrganizationSubscription
     now = timezone.now()
     if platform_owner:
-        return OrganizationSubscription.objects.create(organization=organization, plan=plan("PRO"), status="ACTIVE",
+        return OrganizationSubscription.objects.create(organization=organization, plan=top_plan(), status="ACTIVE",
                                                        complimentary=True, started_at=now)
     return OrganizationSubscription.objects.create(organization=organization, plan=plan(plan_code), status="TRIAL",
                                                    billing_sector=organization.sector, started_at=now, ends_at=now + timedelta(days=TRIAL_DAYS))

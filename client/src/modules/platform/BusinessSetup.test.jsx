@@ -2,217 +2,176 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { BusinessSetupPage } from "./BusinessSetup";
-import { fitModules, moduleProblem, searchSectors, toggleModule } from "./businessSetupData";
+import { modelFor, planFor, setupProblem, toggleModule } from "./businessSetupData";
 import profiles from "./businessProfiles.fixture.json";
 import { api } from "../../core/api/client";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
 const refresh = vi.fn(async () => {});
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { id: 1, memberships: [] }, loading: false, refresh }) }));
+
+const PLANS = [
+  { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", period_days: 30, description: "Basics", highlighted: false,
+    enabled_modules: ["inventory", "services", "menu", "rooms", "pos", "customers", "expenses", "mpesa", "mkopa"] },
+  { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", period_days: 30, description: "Everything", highlighted: true, user_limit: null, branch_limit: null,
+    enabled_modules: profiles.modules.map((module) => module.id) }];
+// What the server suggests for a description (apps/tenancy/business_profiles.py suggest()), by the words in it.
+const SUGGESTIONS = {
+  kinyozi: { modules: ["services", "pos", "expenses", "reports"], matches: [{ id: "barber", label: "Barbershop" }], template: "barber", business_type: "Barbershop",
+    categories: [], services: [{ name: "Haircut", billing_unit: "FIXED", requires_job: false }, { name: "Shave", billing_unit: "FIXED", requires_job: false }] },
+  none: { modules: [], matches: [], template: "", business_type: "", categories: [], services: [] },
+};
+let suggestion = SUGGESTIONS.none;
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+  suggestion = SUGGESTIONS.none;
   api.mockImplementation(async (path) => (path === "/api/v1/tenancy/business-profiles/" ? profiles
-    : path === "/api/v1/tenancy/plans/" ? { trial_days: 30, plans: [
-      { code: "BASIC", name: "Basic", price: "500.00", currency: "KES", description: "Basics", enabled_modules: ["inventory", "services", "pos", "customers", "expenses", "mpesa", "mkopa"] },
-      { code: "PRO", name: "Pro", price: "1000.00", currency: "KES", description: "Everything", enabled_modules: ["inventory", "locations", "services", "pos", "customers", "expenses", "mpesa", "mkopa", "reports", "branches", "staff", "chama", "investments"] }] }
+    : path.startsWith("/api/v1/tenancy/business-profiles/suggest/") ? suggestion
+    : path.startsWith("/api/v1/tenancy/plans/") ? { trial_days: 30, plans: PLANS }
     : path === "/api/v1/tenancy/create/" ? { id: 9, name: "Created" } : {}));
 });
 const createBody = () => JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/tenancy/create/")[1].body);
-const next = () => fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-// The "Other things you do" step: No to each question unless told otherwise (questions outside the plan are not asked).
-const answer = (yes = []) => profiles.extras.forEach((extra) => {
-  const button = screen.queryByRole("button", { name: `${yes.includes(extra.id) ? "Yes" : "No"}: ${extra.question}` });
-  if (button) fireEvent.click(button);
-});
-// The plan comes before any tool: the steps after it offer only what it includes.
-const pickPlan = async (name) => {
-  expect(screen.getByRole("heading", { name: "Your plan" })).toBeInTheDocument();
-  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name} · KES`) }));
-  next();
+const next = async () => { await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Continue" })); }); };
+const describe = async (name, words, size) => {
+  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: name } });
+  fireEvent.change(screen.getByLabelText("Describe your business in your own words"), { target: { value: words } });
+  if (size) fireEvent.click(screen.getByRole("button", { name: new RegExp(size) }));
+  await next();
 };
+const ticked = (name) => screen.getByRole("button", { name }).getAttribute("aria-pressed") === "true";
 
-it("keeps tools that need each other together, within what the business can use", () => {
-  const on = toggleModule(profiles, "SERVICES", new Set(["reports"]), "pos");
-  expect([...on.modules].sort()).toEqual(["pos", "reports", "services"]);
-  expect(on.notes[0]).toBe("Services & jobs was turned on because Point of sale needs it.");
-  const goods = toggleModule(profiles, "GOODS", new Set(), "pos");
-  expect([...goods.modules].sort()).toEqual(["inventory", "pos"]);
+it("works out how the business makes money from what it ticks, and which plan has it all", () => {
+  expect(modelFor(new Set(["services", "pos"]))).toBe("SERVICES");
+  expect(modelFor(new Set(["menu", "pos"]))).toBe("GOODS");
+  expect(modelFor(new Set(["rooms", "menu"]))).toBe("MIXED");
+  expect(modelFor(new Set(["mpesa"]))).toBe("SERVICES");
+  expect(setupProblem(profiles, new Set(["reports", "expenses"]))).toBe("Tick at least one thing your business does to earn money.");
+  expect(setupProblem(profiles, new Set(["mpesa", "expenses"]))).toBe("");
+  // Turning on the till also turns on something to sell; any tool can be ticked.
+  const on = toggleModule(profiles, "MIXED", new Set(["reports"]), "pos");
+  expect([...on.modules].sort()).toEqual(["inventory", "pos", "reports"]);
   const off = toggleModule(profiles, "MIXED", new Set(["inventory", "services", "pos", "locations"]), "inventory");
-  expect([...off.modules].sort()).toEqual(["pos", "services"]);   // POS still has services to sell
+  expect([...off.modules].sort()).toEqual(["pos", "services"]);
   expect(off.notes).toEqual(["Shelves & locations was turned off because it needs Products & stock."]);
-  expect(fitModules(profiles, "SERVICES", new Set(["inventory", "pos", "locations", "mpesa"])).modules).toEqual(new Set(["mpesa"]));
-  expect(moduleProblem(profiles, "MIXED", new Set(["reports"]))).toBe("Turn on Products & stock or Services & jobs or Menu & kitchen or Rooms & guests.");
-  expect(moduleProblem(profiles, "SERVICES", new Set(["mpesa"]))).toBe("");
-  expect(searchSectors(profiles.sectors.SERVICES, "kinyozi").map((sector) => sector.id)).toEqual(["barber"]);
+  expect(planFor(PLANS, new Set(["services", "pos"])).code).toBe("BASIC");
+  expect(planFor(PLANS, new Set(["services", "reports"])).code).toBe("PRO");
 });
 
-it("sets up a barbershop with its price list and never mentions stock or shelves", async () => {
+it("sets up a barbershop from the owner's own words, with the ticks and price list they suggest", async () => {
+  suggestion = SUGGESTIONS.kinyozi;
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
   await screen.findByRole("heading", { name: "Your business" });
-  next();
+  await next();
   expect(screen.getByRole("alert")).toHaveTextContent("Enter your business name.");
-  fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Fresh Cuts" } });
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Choose how your business makes money.");
-  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
-  fireEvent.click(screen.getByRole("button", { name: /Just me/ }));
-  next();
-  await pickPlan("Basic");
+  await describe("Fresh Cuts", "A kinyozi: haircuts, shaves and beard trims", "Just me");
 
-  expect(screen.queryByRole("button", { name: /Mama mboga/ })).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Search kinds of business"), { target: { value: "kinyozi" } });
-  fireEvent.click(screen.getByRole("button", { name: /Barbershop/ }));
-  next();
+  expect(screen.getByRole("heading", { name: "What it does" })).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("We ticked what businesses like Barbershop usually use.");
+  expect(screen.getByLabelText("What do you call your kind of business?")).toHaveValue("Barbershop");
+  expect(ticked(/^Do work or services for customers/)).toBe(true);
+  expect(ticked(/^Sell products I keep in stock/)).toBe(false);
+  expect(ticked(/^Reports/)).toBe(true);
+  // A one-person shop does not need reports on this plan: untick it.
+  fireEvent.click(screen.getByRole("button", { name: /^Reports/ }));
+  fireEvent.change(screen.getByLabelText("What do you call your kind of business?"), { target: { value: "Kinyozi" } });
+  await next();
 
-  expect(screen.getByRole("heading", { name: "Other things you do" })).toBeInTheDocument();
-  // On Basic the chama and investments are not offered: they are Pro tools.
-  expect(screen.queryByRole("button", { name: /Are you the treasurer of a chama/ })).not.toBeInTheDocument();
-  expect(screen.getAllByText("Not in Basic: choose Pro to use it")).toHaveLength(2);
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Do you run an M-Pesa agency?");
-  answer();
-  next();
-  // Reports is usual for a barbershop but not in Basic: it shows locked and is not set up.
-  expect(screen.getByRole("button", { name: /^Reports/ })).toBeDisabled();
-  expect(screen.getByRole("button", { name: /^Reports/ })).toHaveAttribute("aria-pressed", "false");
-
-  expect(screen.getByRole("button", { name: /^Services & jobs/ })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByRole("button", { name: /^M-Pesa agency/ })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /^Point of sale/ })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByRole("button", { name: /Products & stock/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Shelves/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Your starter list" })).toBeInTheDocument();
   expect(screen.queryByText("Product categories")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Price for Haircut"), { target: { value: "200" } });
   fireEvent.change(screen.getByLabelText("Price for Shave"), { target: { value: "100" } });
-  next();
-  next();
-  next();
+  await next();
 
-  expect(screen.getByText("Barbershop · I provide services")).toBeInTheDocument();
-  expect(screen.getByText("Basic · first month free")).toBeInTheDocument();
-  expect(screen.getByText("Services & jobs, Point of sale, Expenses", { selector: "dd" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Your plan" })).toBeInTheDocument();
+  expect(screen.getByText(/is the first plan with everything you ticked/)).toHaveTextContent("Basic is the first plan");
+  expect(screen.getByRole("button", { name: /^Basic · KES 500 \/ month/ })).toHaveAttribute("aria-pressed", "true");
+  await next();
+  await next();  // location & money
+
+  expect(screen.getByText("Fresh Cuts · Kinyozi · Just me")).toBeInTheDocument();
+  expect(screen.getByText("Basic · first month free, then KES 500 / month")).toBeInTheDocument();
   expect(screen.getByText("Haircut KES 200, Shave KES 100")).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
-  expect(createBody()).toMatchObject({ name: "Fresh Cuts", business_model: "SERVICES", sector: "barber", business_size: "SOLO",
-    business_type: "Barbershop", plan: "BASIC", starter_categories: [],
+  const body = createBody();
+  expect(body).toMatchObject({ name: "Fresh Cuts", business_type: "Kinyozi", description: "A kinyozi: haircuts, shaves and beard trims", sector: "barber",
+    business_size: "SOLO", plan: "BASIC", starter_categories: [], structure: "SINGLE", money_mode: "ONE_DRAWER",
     starter_services: [{ name: "Haircut", selling_price: "200", billing_unit: "FIXED", requires_job: false },
       { name: "Shave", selling_price: "100", billing_unit: "FIXED", requires_job: false }] });
-  expect(createBody().enabled_modules.sort()).toEqual(["expenses", "pos", "services"]);
-  expect(createBody()).toMatchObject({ structure: "SINGLE", money_mode: "ONE_DRAWER" });  // a barber's till sells services: one part
+  expect(body).not.toHaveProperty("business_model");  // the server works it out from the tools
+  expect(body.enabled_modules.sort()).toEqual(["expenses", "pos", "services"]);
   expect(refresh).toHaveBeenCalled();
   expect(screen.getByRole("heading", { name: "Add your logo" })).toBeInTheDocument();
 }, 20000);  // a whole multi-step set-up: slow when every test file runs at once
 
-it("sets up a business that does both, with its own description, categories and location", async () => {
+it("sets up a business no list has, exactly as the owner defines it", async () => {
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
-  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Kiandas Agrovet" } });
-  fireEvent.click(screen.getByRole("button", { name: /Both goods and services/ }));
-  next();
-  await pickPlan("Pro");
-  fireEvent.click(screen.getByRole("button", { name: /Other mix of goods and services/ }));
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Name your kind of business.");
-  fireEvent.change(screen.getByLabelText("Name your kind of business"), { target: { value: "Agrovet and vet clinic" } });
-  next();
-  answer(["investments"]);
-  next();
-
-  expect(screen.getByRole("button", { name: /^Shelves & locations/ })).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("New category"), { target: { value: "Animal feeds" } });
-  fireEvent.click(screen.getByRole("button", { name: "Add" }));
-  fireEvent.click(screen.getByRole("button", { name: /^Products & stock/ }));
-  fireEvent.click(screen.getByRole("button", { name: /^Services & jobs/ }));
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Turn on Products & stock or Services & jobs or Menu & kitchen or Rooms & guests.");
-  fireEvent.click(screen.getByRole("button", { name: /^Products & stock/ }));
-  fireEvent.click(screen.getByRole("button", { name: /^Services & jobs/ }));
-  expect(screen.queryByRole("button", { name: /^Shelves & locations/ })).toHaveAttribute("aria-pressed", "false");  // turned off with stock
-  next();
-
-  fireEvent.change(screen.getByLabelText("First branch or shop name"), { target: { value: "Kiandas market stall" } });
-  fireEvent.change(screen.getByLabelText("Country"), { target: { value: "UG" } });
-  expect(screen.getByLabelText("Currency")).toHaveValue("UGX");
-  next();
-  fireEvent.change(screen.getByLabelText(/Cash in the till/), { target: { value: "15000" } });
-  // Products and services: the owner says whether these are one business or several, and names the parts.
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Say whether this is one business or several businesses under one name.");
-  fireEvent.click(screen.getByRole("button", { name: /Several businesses under one name/ }));
-  expect(screen.getByLabelText("Services you offer")).toHaveAttribute("placeholder", "Services");
-  fireEvent.change(screen.getByLabelText("Services you offer"), { target: { value: "Vet clinic" } });
-  expect(screen.getByRole("group", { name: /How do you keep the money of Shop and Vet clinic/ })).toBeInTheDocument();
-  next();
-  expect(screen.getByText(/Shop, Vet clinic · One drawer and bank account for everything/)).toBeInTheDocument();
+  await describe("Wanjiku Car Hire", "We hire out cars by the day and do airport transfers");
+  // Nothing matched: nothing is ticked or named for them.
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  await next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Say what you call your kind of business, in your own words.");
+  fireEvent.change(screen.getByLabelText("What do you call your kind of business?"), { target: { value: "Car hire & airport transfers" } });
+  await next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Tick at least one thing your business does to earn money.");
+  fireEvent.click(screen.getByRole("button", { name: /^Do work or services for customers/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Point of sale/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Customers/ }));
+  await next();
+  fireEvent.click(screen.getByRole("button", { name: /Add a service/ }));
+  fireEvent.change(screen.getByPlaceholderText("Service name"), { target: { value: "Car hire a day" } });
+  fireEvent.change(screen.getByLabelText("Price for Car hire a day"), { target: { value: "4500" } });
+  await next();
+  await next();  // Basic has everything ticked
+  await next();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
-  expect(createBody()).toMatchObject({ business_model: "MIXED", sector: "other_mixed", business_type: "Agrovet and vet clinic",
-    starter_categories: ["Animal feeds"], starter_services: [], branch_name: "Kiandas market stall", country: "UG",
-    currency: "UGX", timezone: "Africa/Kampala", opening_cash: "15000",
-    structure: "PARTS", money_mode: "ONE_DRAWER", part_names: { SHOP: "", CYBER: "Vet clinic" } });
-  expect(createBody().enabled_modules).toContain("investments");
-  expect(createBody().enabled_modules).not.toContain("mpesa");
-}, 20000);  // the same multi-step set-up as above
+  expect(createBody()).toMatchObject({ business_type: "Car hire & airport transfers", sector: "", plan: "BASIC",
+    starter_services: [{ name: "Car hire a day", selling_price: "4500", billing_unit: "FIXED", requires_job: false }] });
+  expect(createBody().enabled_modules.sort()).toEqual(["customers", "pos", "services"]);
+}, 20000);
+
+it("recommends the plan with every tool ticked and explains what a smaller plan leaves out", async () => {
+  suggestion = SUGGESTIONS.kinyozi;
+  render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
+  await describe("Fresh Cuts", "kinyozi");
+  await next();  // keeps Reports
+  await next();  // starter list
+  expect(screen.getByRole("button", { name: /^Pro · KES 1,000 \/ month/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: /^Basic · KES 500/ })).toHaveTextContent("Does not include: Reports");
+  fireEvent.click(screen.getByRole("button", { name: /^Basic · KES 500/ }));
+  await next();
+  expect(screen.getByRole("alert")).toHaveTextContent("Reports is not in Basic. Choose Pro, or go back and leave it off.");
+}, 20000);
 
 it("resumes where the owner stopped after the page reloads, and forgets the draft once the business exists", async () => {
-  sessionStorage.clear();
+  suggestion = SUGGESTIONS.kinyozi;
   const first = render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
-  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Fresh Cuts" } });
-  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
-  next();
-  await pickPlan("Basic");
-  fireEvent.click(screen.getByRole("button", { name: /Barbershop/ }));
-  next();
-  answer();
-  next();
+  await describe("Fresh Cuts", "kinyozi");
+  await next();
   fireEvent.change(screen.getByLabelText("Price for Haircut"), { target: { value: "200" } });
   first.unmount();
 
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
-  expect(await screen.findByRole("heading", { name: "Tools & starter list" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Your starter list" })).toBeInTheDocument();
   expect(screen.getByLabelText("Price for Haircut")).toHaveValue(200);
-  next(); next(); next();
+  await next(); await next(); await next();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
   expect(createBody()).toMatchObject({ name: "Fresh Cuts", sector: "barber", starter_services: [expect.objectContaining({ name: "Haircut", selling_price: "200" })] });
   expect(sessionStorage.getItem("business-setup-draft:1")).toBeNull();
-});
+}, 20000);
 
-it("lets an owner whose business is not listed create it straight from the search", async () => {
+it("sets up an M-Pesa agent with only the agency, without stock or a till", async () => {
   render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
-  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Sauti Studio" } });
-  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
-  next();
-  await pickPlan("Basic");
-  fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "music studio" } });
-  // "Other" stays offered even when the search matches nothing.
-  expect(screen.getByRole("button", { name: /Other service provider/ })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Create “music studio” as my kind of business" }));
-  expect(screen.getByLabelText("Name your kind of business")).toHaveValue("music studio");
-  expect(screen.getByRole("button", { name: /Other service provider/ })).toHaveAttribute("aria-pressed", "true");
-  next();
-  answer();
-  next();
-  expect(screen.getByText(/usual tools for a/)).toHaveTextContent("music studio");
-});
-
-it("starts an M-Pesa agent at Yes for the agency and still asks about the chama and investments", async () => {
-  render(<MemoryRouter><BusinessSetupPage /></MemoryRouter>);
-  fireEvent.change(await screen.findByLabelText("Business name"), { target: { value: "Juma Agency" } });
-  fireEvent.click(screen.getByRole("button", { name: /I provide services/ }));
-  next();
-  await pickPlan("Pro");
-  fireEvent.click(screen.getByRole("button", { name: /M-Pesa \/ mobile money agent/ }));
-  next();
-  expect(screen.getByRole("button", { name: "Yes: Do you run an M-Pesa agency?" })).toHaveAttribute("aria-pressed", "true");
-  next();
-  expect(screen.getByRole("alert")).toHaveTextContent("Answer Yes or No: Do you sell M-KOPA phones?");
-  fireEvent.click(screen.getByRole("button", { name: "No: Do you sell M-KOPA phones?" }));
-  fireEvent.click(screen.getByRole("button", { name: "No: Are you the treasurer of a chama?" }));
-  fireEvent.click(screen.getByRole("button", { name: "No: Do you keep money in an investment, such as an MMF?" }));
-  next();
-  expect(screen.getByRole("heading", { name: "Tools & starter list" })).toBeInTheDocument();
-  next(); next(); next();
+  await describe("Juma Agency", "");
+  fireEvent.change(screen.getByLabelText("What do you call your kind of business?"), { target: { value: "M-Pesa agent" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Run an M-Pesa agency/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Expenses/ }));
+  await next();
+  // No products, services, menu or rooms: no starter list step.
+  expect(screen.getByRole("heading", { name: "Your plan" })).toBeInTheDocument();
+  await next(); await next();
   expect(screen.getByText("M-Pesa agency", { selector: "dd" })).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create business workspace" })); });
-  expect(createBody().enabled_modules.sort()).toEqual(["expenses", "mpesa", "reports", "staff"]);
+  expect(createBody().enabled_modules.sort()).toEqual(["expenses", "mpesa"]);
   expect(createBody().chama).toBeNull();
 }, 20000);

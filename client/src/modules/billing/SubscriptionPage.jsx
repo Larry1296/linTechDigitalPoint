@@ -107,13 +107,14 @@ export function SubscriptionPage() {
       <div className="planGrid">
         {data.plans.map((plan) => {
           const isCurrent = plan.code === subscription.plan;
-          return <article key={plan.code} className={`planCard${isCurrent ? " current" : ""}${plan.code === "PRO" ? " pro" : ""}`}>
+          return <article key={plan.code} className={`planCard${isCurrent ? " current" : ""}${plan.highlighted ? " pro" : ""}`}>
             <header>
-              <h2>{plan.code === "PRO" && <Crown size={18} aria-hidden="true" />} {plan.name}</h2>
-              {isCurrent && <span className="planBadge">Your plan</span>}
+              <h2>{plan.highlighted && <Crown size={18} aria-hidden="true" />} {plan.name}</h2>
+              {isCurrent ? <span className="planBadge">Your plan</span> : plan.highlighted && <span className="planBadge">Recommended</span>}
             </header>
             <p className="planPrice"><strong>{money(plan.currency, plan.price)}</strong> / {plan.period_days} days</p>
             <p className="muted">{plan.description}</p>
+            {(plan.user_limit || plan.branch_limit) && <p className="muted">{[plan.user_limit && `Up to ${plan.user_limit} people`, plan.branch_limit && `${plan.branch_limit} ${plan.branch_limit === 1 ? "branch" : "branches"}`].filter(Boolean).join(" · ")}</p>}
             <ul>{plan.features.map((feature) => <li key={feature}><Check size={16} aria-hidden="true" /> {feature}</li>)}</ul>
             <button type="button" disabled={busy} className={isCurrent ? "secondary" : ""} onClick={() => void choose(plan)}>
               {isCurrent ? (subscription.ended ? "Renew" : "Pay for next period") : current && Number(plan.price) > Number(current.price) ? "Upgrade" : "Switch"} · {money(plan.currency, plan.price)}

@@ -85,6 +85,14 @@
 .platformPlans .checkList label { display:flex; gap:6px; font-weight:400; }
 .platformPlans label.inline { display:flex; flex-direction:row; align-items:center; gap:8px; font-weight:600; }
 .platformPlans label.inline input { width:auto; }
+.planEditorRow { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:10px; }
+.planEditorActions { display:flex; flex-wrap:wrap; gap:8px; }
+.newPlan { margin:14px 0; }
+.newPlan > summary { cursor:pointer; font-weight:700; color:var(--primary); }
+.newPlan form { display:grid; gap:10px; max-width:640px; margin-top:10px; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+.newPlan label { display:grid; gap:4px; font-size:13px; font-weight:700; }
+.newPlan .checkList { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:4px; }
+.newPlan .checkList label { display:flex; gap:6px; font-weight:400; }
 
 /* AI assistants (platform owner) */
 .assistantProviders { margin:0 0 6px; padding-left:18px; }

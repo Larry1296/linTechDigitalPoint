@@ -26,13 +26,15 @@ def public_logo_path(organization, variant="logo"):
 
 def organization_data(organization):
     from apps.accounting.money_mode import money_mode, parts_data, structure
-    from .billing import state
+    from .billing import state, upgrade_for
     subscription_view = state(organization)
+    upgrade = upgrade_for(organization)
+    subscription_view = {**subscription_view, "upgrade_to": {"code": upgrade.code, "name": upgrade.name} if upgrade else None}
     return {"id": organization.pk, "name": organization.name, "slug": organization.slug,
             "logo_url": public_logo_path(organization), "logo_dark_url": public_logo_path(organization, "logo_dark"),
             "currency": organization.currency, "country": organization.country, "timezone": organization.timezone,
             "business_model": organization.business_model, "sector": organization.sector, "business_type": organization.business_type,
-            "enabled_modules": sorted(effective_modules(organization)), "money_mode": money_mode(organization),
+            "description": organization.description, "enabled_modules": sorted(effective_modules(organization)), "money_mode": money_mode(organization),
             "structure": structure(organization), "parts": parts_data(organization),
             "subscription_status": subscription_view["status"],
             "subscription": subscription_view}
@@ -193,8 +195,19 @@ def business_profiles(request):
     return Response(profiles.catalogue())
 
 
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def suggest_profile(request):
+    """What the owner's own description of their business suggests ticking, and a starter list (public: set-up runs
+    before the business exists). ?q=<description>&size=SOLO|SMALL|MEDIUM"""
+    text = str(request.query_params.get("q", ""))[:1000]
+    return Response(profiles.suggest(text, str(request.query_params.get("size", "SMALL"))))
+
+
 class ProfileInput(serializers.Serializer):
-    """How the business makes money, what kind it is, and the tools it uses. Checked together."""
+    """What the business does and the tools it uses, checked together. The way it makes money follows from the tools
+    unless it is sent (older clients and tests send it, and its rules then apply as before). A kind of business
+    (``sector``) is optional: the template the owner started from, kept for its usual part names and pricing."""
     business_model = serializers.ChoiceField(choices=list(profiles.BUSINESS_MODELS), required=False)
     sector = serializers.CharField(max_length=40, allow_blank=True, required=False)
     business_size = serializers.ChoiceField(choices=list(profiles.SIZES), required=False)
@@ -202,14 +215,15 @@ class ProfileInput(serializers.Serializer):
     enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES))
 
     def validate(self, data):
-        # Older clients send only tools; the way the business makes money then follows from them.
+        # The way the business makes money follows from the tools it chose, unless it was sent.
+        explicit = "business_model" in data
         model = data.setdefault("business_model", profiles.model_for_modules(data["enabled_modules"]))
         sector = data.get("sector", "")
         found = profiles.find_sector(sector, also=self.context.get("current_sector", "")) if sector else None
         if sector:
             if not found:
                 raise serializers.ValidationError({"sector": "Choose your kind of business from the list."})
-            if found[0] != model:
+            if found[0] != model and explicit:
                 raise serializers.ValidationError({"sector": "That kind of business does not match how your business makes money."})
             if sector in profiles.OTHER_SECTORS and not data.get("business_type", "").strip():
                 raise serializers.ValidationError({"business_type": "Describe what your business does."})
@@ -217,8 +231,9 @@ class ProfileInput(serializers.Serializer):
         if problems:
             raise serializers.ValidationError({"enabled_modules": " ".join(problems)})
         data["enabled_modules"] = sorted(set(data["enabled_modules"]))
-        # The label shown on the dashboard: the owner's own words for "other", otherwise the sector's name.
-        if sector and sector not in profiles.OTHER_SECTORS:
+        # What the business is called: the owner's own words, else the name of the kind it started from.
+        data["business_type"] = " ".join(str(data.get("business_type") or "").split())[:100]
+        if not data["business_type"] and sector and sector not in profiles.OTHER_SECTORS:
             data["business_type"] = found[1]["label"]
         return data
 
@@ -264,10 +279,12 @@ def seed_starter_records(user, modules, categories, services):
 
 
 def note_kind(organization, categories=(), services=()):
-    """A business described under "Other" suggests a new kind for the list; one chosen from the list counts a use."""
+    """A business that names its kind in its own words (one not listed yet) suggests it for the list, with the tools and
+    starter list it chose, so the platform owner can list it and later owners' descriptions match it. Starting from a
+    listed kind counts a use of it."""
     from django.db.models import F
     from .models import BusinessKind
-    if organization.sector in profiles.OTHER_SECTORS:
+    if organization.business_type and not profiles.known_label(organization.business_type):
         profiles.record_kind(organization, organization.business_model, organization.business_type, organization.enabled_modules, categories, services)
     elif organization.sector.startswith(profiles.KIND_PREFIX):
         BusinessKind.objects.filter(pk=organization.sector[len(profiles.KIND_PREFIX):]).update(uses=F("uses") + 1)
@@ -276,6 +293,7 @@ def note_kind(organization, categories=(), services=()):
 class BusinessInput(serializers.Serializer):
     name = serializers.CharField(max_length=160)
     business_type = serializers.CharField(max_length=100, allow_blank=True, default="")
+    description = serializers.CharField(max_length=1000, allow_blank=True, default="")
     currency = serializers.RegexField(r"^[A-Z]{3}$", default="KES")
     timezone = serializers.CharField(default="Africa/Nairobi")
     country = serializers.RegexField(r"^[A-Z]{2}$", default="KE")
@@ -297,7 +315,7 @@ def create_business(request):
         enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), default=list)
         starter_categories = serializers.ListField(child=serializers.CharField(max_length=120), default=list, max_length=30)
         starter_services = StarterService(many=True, default=list, max_length=40)
-        plan = serializers.ChoiceField(choices=["BASIC", "PRO"], default="BASIC")
+        plan = serializers.CharField(max_length=20, required=False, allow_blank=True)  # the code of a plan on offer
         branch_name = serializers.CharField(max_length=160, default='Main branch')
         phone = serializers.CharField(max_length=40, allow_blank=True, default="")
         email = serializers.EmailField(allow_blank=True, default="")
@@ -314,16 +332,21 @@ def create_business(request):
     branch_name = values.pop('branch_name')
     opening_cash, opening_bank = values.pop('opening_cash'), values.pop('opening_bank')
     starter_categories, starter_services = values.pop('starter_categories'), values.pop('starter_services')
-    plan_code = values.pop('plan')
+    plan_code = values.pop('plan', '') or ''
     if not request.user.is_superuser:
-        # Only what the chosen plan includes: a Basic business never starts with Pro tools.
-        from .billing import plan as find_plan
-        chosen_plan = find_plan(plan_code)
-        beyond = sorted(set(values["enabled_modules"]) - set(chosen_plan.enabled_modules), key=MODULES.index) if chosen_plan else []
+        # Only what the chosen plan includes. With no plan named, the first plan on offer that has every chosen tool.
+        from .billing import lowest_plan_with, offered, plan as find_plan
+        chosen_plan = find_plan(plan_code) if plan_code else (lowest_plan_with(values["enabled_modules"]) or offered().first())
+        if not chosen_plan:
+            return Response({"plan": ["Choose one of the plans shown."]}, status=400)
+        plan_code = chosen_plan.code
+        beyond = sorted(set(values["enabled_modules"]) - set(chosen_plan.enabled_modules), key=MODULES.index)
         if beyond:
             names = ", ".join(profiles.MODULES[module]["label"] for module in beyond)
+            fits = lowest_plan_with(values["enabled_modules"])
+            choose = f"Choose {fits.name}" if fits else "Choose another plan"
             return Response({"enabled_modules": [f"{names} {'is' if len(beyond) == 1 else 'are'} not in the {chosen_plan.name} plan. "
-                                                 f"Choose Pro, or leave {'it' if len(beyond) == 1 else 'them'} off."]}, status=400)
+                                                 f"{choose}, or leave {'it' if len(beyond) == 1 else 'them'} off."]}, status=400)
     chama = values.pop('chama')
     money_mode = values.pop('money_mode')
     stored = {"money_mode": money_mode}
@@ -615,6 +638,7 @@ class SettingsInput(serializers.Serializer):
     sector = serializers.CharField(max_length=40, allow_blank=True, required=False)
     business_size = serializers.ChoiceField(choices=list(profiles.SIZES), required=False)
     business_type = serializers.CharField(max_length=100, allow_blank=True, required=False)
+    description = serializers.CharField(max_length=1000, allow_blank=True, required=False)
     phone = serializers.CharField(max_length=40, allow_blank=True, required=False)
     email = serializers.EmailField(allow_blank=True, required=False)
     address = serializers.CharField(allow_blank=True, required=False)
@@ -628,12 +652,15 @@ class SettingsInput(serializers.Serializer):
     validate_timezone = BusinessInput.validate_timezone
 
 def _plan_view(organization):
-    """The plan the business is on, for Settings: which tools it includes, and which chosen tools wait for Pro."""
-    from .billing import plan_modules, state
+    """The plan the business is on, for Settings: which tools it includes, which chosen tools wait for a bigger plan, and
+    the first plan that includes each tool it lacks."""
+    from .billing import lowest_plan_with, plan_modules, state
     subscription = getattr(organization, "subscription", None)
     included = plan_modules(organization)
     view = state(organization)
-    return {"code": view["plan"], "name": "Pro" if subscription and subscription.complimentary else view["plan_name"],
+    lacking = [module for module in MODULES if included is not None and module not in included]
+    return {"code": view["plan"], "name": "Every tool" if subscription and subscription.complimentary else view["plan_name"],
+            "unlocked_by": {module: (found.name if (found := lowest_plan_with([module])) else "") for module in lacking},
             "complimentary": bool(subscription and subscription.complimentary), "ended": view["ended"],
             "includes": [module for module in MODULES if included is None or module in included],
             "waiting": [module for module in MODULES if included is not None and module in organization.enabled_modules and module not in included]}
@@ -646,6 +673,7 @@ def settings_data(organization, store):
     from apps.mpesa.combined import sale_mpesa_to
     return {"money_mode": money_mode(organization), "structure": structure(organization), "part_names": part_names(organization),
             "own_part_names": own_names, "sale_mpesa_to": sale_mpesa_to(organization), "name": organization.name, "business_type": organization.business_type, "business_model": organization.business_model,
+            "description": organization.description,
             "sector": organization.sector, "business_size": organization.business_size, "phone": organization.phone,
             "email": organization.email, "address": organization.address, "currency": organization.currency,
             "timezone": organization.timezone, "country": organization.country,
@@ -671,10 +699,13 @@ def business_settings(request):
     values = dict(form.validated_data)
     profile_fields = {"business_model", "sector", "business_size", "business_type", "enabled_modules"}
     if profile_fields & set(values):
-        # A change to what the business does or which tools it uses is checked against the whole profile.
-        current = {field: getattr(organization, field) for field in profile_fields}
+        # A change to what the business does or which tools it uses is checked against the whole profile. Unless the way
+        # it makes money is sent, it follows from the tools: a salon that starts selling hair products is now both.
+        current = {field: getattr(organization, field) for field in profile_fields if field != "business_model"}
         if "business_model" in values and "sector" not in values and values["business_model"] != organization.business_model:
             current["sector"] = ""  # the old kind of business belongs to the old model
+        if "sector" in values and "business_type" not in values and values["sector"] != organization.sector:
+            current["business_type"] = ""  # named after the new kind, unless the owner names it
         profile = ProfileInput(data={**current, **{k: v for k, v in values.items() if k in profile_fields}}, context={"current_sector": organization.sector})
         profile.is_valid(raise_exception=True)
         values.update(profile.validated_data)
@@ -683,8 +714,11 @@ def business_settings(request):
         # Tools already chosen before (for example at set-up) are kept; newly ticked ones must be in the plan.
         beyond = sorted(set(values["enabled_modules"]) - set(organization.enabled_modules) - included, key=MODULES.index) if included is not None else []
         if beyond:
+            from .billing import lowest_plan_with
             names = ", ".join(profiles.MODULES[module]["label"] for module in beyond)
-            return Response({"enabled_modules": [f"{names} {'needs' if len(beyond) == 1 else 'need'} the Pro plan. Upgrade on the Subscription page to use {'it' if len(beyond) == 1 else 'them'}."]}, status=400)
+            fits = lowest_plan_with(beyond)
+            return Response({"enabled_modules": [f"{names} {'needs' if len(beyond) == 1 else 'need'} the {fits.name if fits else 'a bigger'} plan. "
+                                                 f"Upgrade on the Subscription page to use {'it' if len(beyond) == 1 else 'them'}."]}, status=400)
     before = settings_data(organization, store)
     footer = values.pop("receipt_footer", None)
     # How the money is kept, whether the business has parts and what they are called live in the business's settings.
@@ -702,7 +736,7 @@ def business_settings(request):
             store.receipt_footer = footer
             store.save(update_fields=["receipt_footer", "updated_at"])
         after = settings_data(organization, store)
-        if before["sector"] != after["sector"] or (organization.sector in profiles.OTHER_SECTORS and before["business_type"] != after["business_type"]):
+        if before["sector"] != after["sector"] or before["business_type"] != after["business_type"]:
             note_kind(organization)
         AuditLog.objects.create(action="BUSINESS_SETTINGS_CHANGED", object_type="Organization", object_id=str(organization.pk), user=request.user,
                                 before={k: before[k] for k in values if k in before}, after={k: after[k] for k in values if k in after})

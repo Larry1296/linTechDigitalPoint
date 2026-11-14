@@ -15,17 +15,6 @@ export function useBusinessProfiles() {
 
 export const moduleLabel = (catalogue, id) => catalogue.modules.find((module) => module.id === id)?.label || id;
 export const allowedModules = (catalogue, model) => catalogue.models.find((item) => item.id === model)?.modules || [];
-export const findSector = (catalogue, id) => Object.values(catalogue.sectors).flat().find((sector) => sector.id === id);
-
-// Sectors whose name, description or everyday words match what the owner typed.
-export function searchSectors(sectors, query) {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return sectors;
-  return sectors.filter((sector) => {
-    const text = `${sector.label} ${sector.hint} ${sector.keywords}`.toLowerCase();
-    return words.every((word) => text.includes(word));
-  });
-}
 
 export const COUNTRIES = [
   { code: "KE", name: "Kenya", currency: "KES", timezone: "Africa/Nairobi" },
@@ -84,21 +73,36 @@ export function toggleModule(catalogue, model, selected, id) {
   return { modules: next, notes };
 }
 
-// The tools that still fit another way of making money, and the labels of those turned off.
-export function fitModules(catalogue, model, selected) {
-  const allowed = allowedModules(catalogue, model);
-  const next = new Set([...selected].filter((module) => allowed.includes(module)));
-  for (const module of catalogue.modules) {
-    if (next.has(module.id) && module.needs.length && !module.needs.some((need) => next.has(need))) next.delete(module.id);
-  }
-  return { modules: next, removed: [...selected].filter((module) => !next.has(module)).map((module) => moduleLabel(catalogue, module)) };
-}
-
 // The first reason a set of tools does not suit the business, or "". The server checks the same rules.
-export function moduleProblem(catalogue, model, modules) {
+function moduleProblem(catalogue, model, modules) {
   const rules = catalogue.models.find((item) => item.id === model);
   const label = (module) => moduleLabel(catalogue, module);
   if (!modules.size) return "Choose at least one tool.";
   if (!rules.requires.some((module) => modules.has(module))) return `Turn on ${rules.requires.map(label).join(" or ")}.`;
   return "";
+}
+
+// How the business makes money follows from the tools it uses, as on the server: goods (products, shelves, a menu),
+// services (services, rooms), or both. Nothing is picked from a list.
+const GOODS_TOOLS = ["inventory", "locations", "menu"];
+const SERVICE_TOOLS = ["services", "rooms"];
+export function modelFor(modules) {
+  const has = (list) => list.some((id) => modules.has(id));
+  if (has(GOODS_TOOLS) && has(SERVICE_TOOLS)) return "MIXED";
+  return has(GOODS_TOOLS) ? "GOODS" : "SERVICES";
+}
+
+// The first thing missing before the business can be set up with these tools, or "".
+export function setupProblem(catalogue, modules) {
+  if (!catalogue.activities.some((activity) => modules.has(activity.id))) return "Tick at least one thing your business does to earn money.";
+  return moduleProblem(catalogue, modelFor(modules), modules);
+}
+
+// The first plan on offer (in the platform owner's order) that includes every chosen tool, or null.
+export const planFor = (plans, modules) => (plans || []).find((plan) => [...modules].every((id) => plan.enabled_modules.includes(id))) || null;
+
+// What the owner's description suggests ticking, and a starter list (from the server, which knows every listed kind).
+export async function suggestFor(description, size) {
+  const query = new URLSearchParams({ q: description.slice(0, 1000), size });
+  return api(`/api/v1/tenancy/business-profiles/suggest/?${query}`);
 }

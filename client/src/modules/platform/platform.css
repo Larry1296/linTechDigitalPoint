@@ -165,3 +165,10 @@ html { scroll-behavior: smooth; }
 .tenantForm .businessParts fieldset.partNames { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap:12px; }
 .tenantForm .businessParts fieldset.partNames > label { display:grid; gap:6px; align-content:start; }
 .choiceCard .planTools { font-size:.82rem; opacity:.85; }
+/* Set-up in the owner's own words: the description box, what it suggested, the recommended plan. */
+.setupPanel textarea { width:100%; box-sizing:border-box; min-height:96px; resize:vertical; font:inherit; }
+.setupHint { display:flex; gap:8px; align-items:flex-start; margin:0; padding:10px 12px; border-radius:10px; background:var(--primary2); color:var(--text); }
+.setupHint svg { flex:none; margin-top:2px; color:var(--primary); }
+.setupSubhead { margin:12px 0 0; font-size:1.05rem; }
+.choiceCard.recommendedPlan:not(.selected) { border-color:color-mix(in srgb, var(--primary) 45%, var(--line)); }
+.choiceCard small { font-size:.8rem; opacity:.8; }

@@ -37,6 +37,6 @@ export function ChamaDashboardCard() {
       <h2 id="chama-offer-title">Are you the treasurer of a chama?</h2>
       <p>Keep your chama's records here: members with their ID and phone numbers, who has paid and who has not, fines for paying late, excuses, and whose turn it is to receive the money. It stays separate from the shop's money.</p>
     </div>
-    {state.plan_allows ? <Link className="button" to="/admin/chama/setup">Set up a chama</Link> : <Link className="button" to="/admin/subscription">Upgrade to Pro to use it</Link>}
+    {state.plan_allows ? <Link className="button" to="/admin/chama/setup">Set up a chama</Link> : <Link className="button" to="/admin/subscription">{state.plan_with_chama ? `Upgrade to ${state.plan_with_chama} to use it` : "Change plan to use it"}</Link>}
   </section>;
 }

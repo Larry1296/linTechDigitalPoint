@@ -107,7 +107,7 @@ export function ChamaSetupPage({ state: given }) {
     <h1>Set up your chama</h1>
     <p className="muted">If you are the treasurer of a chama, LinTech keeps its records for you: every member, who has paid and who has not, fines for paying late, excuses, and whose turn it is to receive the money.</p>
   </>;
-  if (!state.plan_allows) return <section className="chamaLocked">{intro}<p>Chama management is part of the Pro plan.</p><Link className="button" to="/admin/subscription">Upgrade to Pro</Link></section>;
+  if (!state.plan_allows) return <section className="chamaLocked">{intro}<p>Chama management is not in your plan{state.plan_with_chama ? `; it is part of ${state.plan_with_chama}` : ""}.</p><Link className="button" to="/admin/subscription">{state.plan_with_chama ? `Upgrade to ${state.plan_with_chama}` : "Change plan"}</Link></section>;
   if (!state.enabled && !state.can_turn_on) return <section className="chamaLocked">{intro}<p>Ask the business owner or an administrator to set up the chama.</p></section>;
   if (state.enabled && !state.can_manage) return <section className="chamaLocked">{intro}<p>You don't have permission to set up a chama.</p></section>;
   const save = async (event) => {

@@ -77,8 +77,31 @@ def tokens(text):
     return [_stem(w.replace("-", "")) for w in words if w not in STOPWORDS]
 
 
+def plans_text():
+    """The plans on offer as the platform owner set them, one line each, for "{plans}" in the knowledge articles, so
+    answers about prices and what each plan includes are never out of date."""
+    try:
+        from apps.tenancy.billing import offered
+        from apps.tenancy.billing_api import PLAN_FEATURES
+        from apps.tenancy.models import MODULES
+        rows = list(offered())
+    except Exception:  # no database yet (e.g. while migrating): the article says to check the pricing page
+        rows = []
+    if not rows:
+        return "The current plans and prices are shown in the pricing section of the website and on the Subscription page."
+    period = lambda p: "month" if p.period_days == 30 else f"{p.period_days} days"
+    lines = []
+    for p in rows:
+        limits = ", ".join(x for x in [f"up to {p.user_limit} people" if p.user_limit else "", f"{p.branch_limit} branch{'es' if p.branch_limit != 1 else ''}" if p.branch_limit else ""] if x)
+        tools = ", ".join(PLAN_FEATURES[m] for m in MODULES if m in p.enabled_modules)
+        lines.append(f"- **{p.name}: {p.currency} {p.price:,.0f} per {period(p)}**{' (recommended)' if p.highlighted else ''}. {tools}.{f' Limits: {limits}.' if limits else ''}")
+    return "\n".join(lines)
+
+
 def _fill(text):
     contact = settings.PLATFORM_CONTACT_EMAIL
+    if "{plans}" in text:
+        text = text.replace("{plans}", plans_text())
     return (text.replace("{platform}", settings.PLATFORM_NAME)
                 .replace("{contact}", f"Email the team at {contact}." if contact
                          else "A public support email has not been published yet; please use the contact details on the website."))
@@ -176,7 +199,7 @@ _indexes = {}
 
 
 def _index(audience):
-    key = version(audience)
+    key = (version(audience), plans_text())  # a plan or price the platform owner changes is answered at once
     cached = _indexes.get(audience)
     if cached is None or cached[0] != key:
         content = "\n\n".join(f"# {a['title']}\n{a['body']}" for a in articles(audience) if a["active"])

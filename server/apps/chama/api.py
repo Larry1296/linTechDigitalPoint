@@ -186,11 +186,13 @@ class ChamaInput(serializers.Serializer):
 
 def setup_state(request):
     """Whether this business can add a chama, and why not."""
-    from apps.tenancy.billing import plan_modules
+    from apps.tenancy.billing import lowest_plan_with, plan_modules
     organization = request.organization
     included = plan_modules(organization)
+    with_chama = lowest_plan_with(["chama"])
     return {"enabled": "chama" in organization.enabled_modules and (included is None or "chama" in included),
             "plan_allows": included is None or "chama" in included,
+            "plan_with_chama": with_chama.name if with_chama else "",
             "can_manage": has_business_permission(request.user, "chama.add_chama"),
             "can_turn_on": request.membership.role in {"OWNER", "ADMIN"},
             "chamas": Chama.objects.count(),
@@ -217,7 +219,9 @@ class ChamaSetupView(APIView):
         from apps.tenancy.models import Organization
         state_now = setup_state(request)
         if not state_now["plan_allows"]:
-            return Response({"detail": "Chama management is part of the Pro plan. Upgrade on the Subscription page to use it."}, status=403)
+            from apps.tenancy.billing import lowest_plan_with
+            fits = lowest_plan_with(["chama"])
+            return Response({"detail": f"Chama management is part of the {fits.name if fits else 'a bigger'} plan. Upgrade on the Subscription page to use it."}, status=403)
         if state(request.organization)["ended"]:
             return Response({"detail": "Your subscription has ended, so this is paused. Renew it on the Subscription page to continue."}, status=403)
         if not state_now["enabled"]:

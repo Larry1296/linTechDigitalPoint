@@ -102,18 +102,62 @@ def test_a_mama_mboga_starts_with_her_produce_categories(owner):
         assert not Product.objects.exists()
 
 
-def test_settings_apply_the_same_rules_when_the_business_grows(owner):
+def test_settings_follow_the_tools_when_the_business_grows(owner):
+    """2026-11-13: what a business does follows from the tools it uses, never from a list. A salon that starts selling
+    hair products ticks Products & stock and is now a business with goods and services; it keeps its own name."""
     create(owner, name="Salon", business_model="SERVICES", sector="salon", enabled_modules=["services", "customers"])
-    response = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["services", "inventory"]}, format="json")
-    assert response.status_code == 400 and "Products & stock cannot be used" in str(response.json())
-    # The salon starts selling hair products: it becomes a business that does both.
-    response = owner.patch("/api/v1/tenancy/settings/", {"business_model": "MIXED", "sector": "salon_shop",
-                                                         "enabled_modules": ["services", "inventory", "pos"]}, format="json")
+    response = owner.patch("/api/v1/tenancy/settings/", {"enabled_modules": ["services", "inventory", "pos"]}, format="json")
     assert response.status_code == 200, response.content
-    assert (response.json()["business_model"], response.json()["business_type"]) == ("MIXED", "Salon with beauty products")
-    # Changing the model alone clears a kind of business that belongs to the old model.
+    assert (response.json()["business_model"], response.json()["business_type"]) == ("MIXED", "Beauty salon")
+    # Choosing a listed kind names the business after it unless the owner names it.
+    response = owner.patch("/api/v1/tenancy/settings/", {"sector": "salon_shop", "enabled_modules": ["services", "inventory", "pos"]}, format="json")
+    assert response.status_code == 200 and response.json()["business_type"] == "Salon with beauty products"
+    response = owner.patch("/api/v1/tenancy/settings/", {"business_type": "Anne's hair & beauty", "description": "Hair, nails and products"}, format="json")
+    assert (response.json()["business_type"], response.json()["description"]) == ("Anne's hair & beauty", "Hair, nails and products")
+    # Sent explicitly, the way of making money still has its rules, and changing it clears a kind from the old one.
+    response = owner.patch("/api/v1/tenancy/settings/", {"business_model": "SERVICES", "enabled_modules": ["services", "inventory"]}, format="json")
+    assert response.status_code == 400 and "Products & stock cannot be used" in str(response.json())
     response = owner.patch("/api/v1/tenancy/settings/", {"business_model": "GOODS", "enabled_modules": ["inventory", "pos"]}, format="json")
     assert response.status_code == 200 and response.json()["sector"] == ""
+
+
+def test_any_business_is_created_from_its_own_words_without_choosing_from_a_list(owner):
+    """The owner names and describes the business and ticks what it does; no kind of business or way of making money is
+    picked. The way it makes money follows from the tools, and its own name for its kind is kept and suggested for the list."""
+    from apps.tenancy.models import BusinessKind
+    response = create(owner, name="Wanjiku Car Hire", business_type="Car hire & airport transfers",
+                      description="We hire out cars by the day and drive people to the airport.",
+                      enabled_modules=["services", "pos", "customers", "expenses"], plan="BASIC",
+                      starter_services=[{"name": "Car hire", "selling_price": "4500", "billing_unit": "FIXED"}])
+    assert response.status_code == 201, response.content
+    data = response.json()
+    assert (data["business_model"], data["sector"], data["business_type"]) == ("SERVICES", "", "Car hire & airport transfers")
+    assert data["description"].startswith("We hire out cars")
+    kind = BusinessKind.objects.get(label="Car hire & airport transfers")
+    assert (kind.status, kind.business_model, kind.services[0]["name"]) == ("SUGGESTED", "SERVICES", "Car hire")
+    # A kitchen alone, or rooms with a kitchen, fit too: the way of making money follows.
+    assert create(owner, name="Mama Ntilie", enabled_modules=["menu", "pos"]).json()["business_model"] == "GOODS"
+    assert create(owner, name="Lake Lodge", enabled_modules=["rooms", "menu", "pos"], plan="PRO").json()["business_model"] == "MIXED"
+    # A starting template that no longer matches the tools stays only as the template.
+    started = create(owner, name="Barber & shop", sector="barber", enabled_modules=["services", "inventory", "pos"], plan="PRO")
+    assert started.status_code == 201 and (started.json()["business_model"], started.json()["business_type"]) == ("MIXED", "Barbershop")
+    # Something must earn money.
+    refused = create(owner, name="Nothing to sell", enabled_modules=["expenses", "reports"])
+    assert refused.status_code == 400 and "Turn on" in str(refused.json())
+
+
+def test_the_owners_words_suggest_what_to_tick_and_a_starter_list(client):
+    data = client.get("/api/v1/tenancy/business-profiles/suggest/", {"q": "Cyber with printing, phone accessories and an M-Pesa agent"}).json()
+    assert {"services", "inventory", "mpesa", "pos"} <= set(data["modules"]) and data["template"] == "cyber_shop"
+    assert any(s["name"] == "Printing" for s in data["services"]) and data["categories"]
+    assert client.get("/api/v1/tenancy/business-profiles/suggest/", {"q": "kinyozi", "size": "SOLO"}).json()["modules"] == ["services", "pos", "expenses", "reports"]
+    agent = client.get("/api/v1/tenancy/business-profiles/suggest/", {"q": "Mpesa Agency"}).json()
+    assert "mpesa" in agent["modules"] and "inventory" not in agent["modules"]
+    # Unknown words suggest nothing rather than a wrong kind.
+    unknown = client.get("/api/v1/tenancy/business-profiles/suggest/", {"q": "zzz qqq"}).json()
+    assert (unknown["matches"], unknown["template"]) == ([], "")
+    data = client.get("/api/v1/tenancy/business-profiles/").json()
+    assert [a["id"] for a in data["activities"]] == ["inventory", "services", "menu", "rooms", "mpesa", "mkopa"]
 
 
 def test_the_business_catalogue_is_public_and_every_suggestion_is_valid(client):
@@ -172,7 +216,8 @@ def test_investments_open_only_for_a_business_that_chose_them(owner):
 
 
 def test_the_frontend_test_fixture_matches_the_catalogue():
-    """The client tests run against a copy of the catalogue; regenerate it when the catalogue changes (see docs/business-profiles.md)."""
+    """The client tests run against a copy of the catalogue; regenerate it when the catalogue changes:
+    venv/bin/python manage.py shell -c "import json; from apps.tenancy.business_profiles import catalogue; print(json.dumps(catalogue(), indent=1))" > ../client/src/modules/platform/businessProfiles.fixture.json"""
     import json
     from pathlib import Path
     fixture = Path(__file__).resolve().parents[4] / "client/src/modules/platform/businessProfiles.fixture.json"
@@ -228,7 +273,7 @@ def test_a_business_not_in_the_list_is_created_and_suggested_for_the_list(owner)
     response = create(owner, name="Kuku Bora", business_model="GOODS", sector="other_goods", business_type="Poultry  farm",
         enabled_modules=["inventory", "pos", "customers"], starter_categories=["Eggs", "Broilers"])
     assert response.status_code == 201, response.content
-    assert (response.json()["sector"], response.json()["business_type"]) == ("other_goods", "Poultry  farm")
+    assert (response.json()["sector"], response.json()["business_type"]) == ("other_goods", "Poultry farm")
     from apps.tenancy.models import BusinessKind
     kind = BusinessKind.objects.get()
     assert (kind.label, kind.business_model, kind.status, kind.uses) == ("Poultry farm", "GOODS", "SUGGESTED", 1)

@@ -1,7 +1,7 @@
 # Chama (savings group)
 
 ## What is the Chama tool?
-A Pro tool for a business owner who is also the treasurer (or another leader) of a chama: a group whose members give an agreed amount every day, week or month and usually take turns receiving the money (merry-go-round). Set it up from the dashboard (**Set up a chama**) or the **Chama** menu. The chama's money belongs to its members, so it is kept apart from the shop: it never shows in the shop's sales, profit, money check or reports.
+A tool (in the bigger plans) for a business owner who is also the treasurer (or another leader) of a chama: a group whose members give an agreed amount every day, week or month and usually take turns receiving the money (merry-go-round). Set it up from the dashboard (**Set up a chama**) or the **Chama** menu. The chama's money belongs to its members, so it is kept apart from the shop: it never shows in the shop's sales, profit, money check or reports.
 
 ## How do I record a member's payment?
 Open the chama, find the member on the board and press **Record payment**. Enter the amount, the date it was paid and how (cash, M-Pesa with its code, bank or other). The money pays the member's oldest unpaid contributions first, then any fines, then contributions ahead.

@@ -158,6 +158,7 @@ def business_overview(ctx, args):
     subscription = getattr(org, "subscription", None)
     data = {
         "business": org.name, "business_type": org.business_type or org.get_business_model_display(), "sector": org.sector,
+        "description": org.description,
         "size": org.get_business_size_display(), "country": org.country, "currency": org.currency, "timezone": org.timezone,
         "today": timezone.localdate().isoformat(), "modules_enabled": sorted(ctx.modules),
         "branches": [s.name for s in Store.objects.order_by("name")],

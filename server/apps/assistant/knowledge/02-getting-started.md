@@ -3,20 +3,21 @@
 ## How do I get started / sign up?
 1. Go to [Create an account](/register) and enter a username, your email and a password.
 2. After creating your account you are taken to the business set-up (you can also open it at [/onboarding](/onboarding) once signed in).
-3. Follow the six set-up steps (below). When you finish, you can add your logo, and then you land on your dashboard.
+3. Follow the set-up steps (below). When you finish, you can add your logo, and then you land on your dashboard.
 Creating an account and setting up a business is free to start: new businesses begin on a trial.
 
 ## What are the business set-up steps?
-The guided set-up has six steps, and every choice can be changed later in Settings:
-1. **Your business**: enter the business name, say how the business makes money (**I sell goods**, **I provide services**, or **Both goods and services**) and how many people work in it (just me, 2 – 10, or 11 – 50).
-2. **Kind of business**: pick the closest match from a list that fits your answer, for example mama mboga, duka, hardware or farmer for goods; barbershop, salon, phone repair, tailoring or M-Pesa agent for services; or a cyber that also sells accessories for both. You can search in everyday words such as "kinyozi" or "fundi simu", If your business is not listed, choose "Other products", "Other service provider" or "Other mix of goods and services" (or tap "Create … as my kind of business" under the search) and name it. You start with the usual tools for that way of making money and pick your own. Once the platform team reviews it, your kind of business joins the list so others like you find it.
-3. **Tools & starter list**: {platform} suggests the usual tools for your kind of business; tick or untick any of them. A business that only provides services never sees stock or shelves. Service businesses can enter prices for a starter price list (for example Haircut 200); leave a price blank to skip a service. Shops can choose starter product categories. The point of sale works with products, services or both.
-4. **Location & contacts**: name your first branch or shop (for example "Main branch"), add a phone, email and address, and confirm your country, currency and time zone.
-5. **Opening money**: optionally enter the cash in the till and the bank balance your business already holds today. Leave them blank if unsure; an accountant can add verified opening balances later.
-6. **Review**: check everything and create the business.
+Any business can be set up: you describe it in your own words and choose exactly what it does. Nothing has to be picked from a list. Every choice can be changed later in Settings.
+1. **Your business**: enter the business name, describe what it does in your own words (for example "A cyber with printing and typing, we sell phone accessories and run an M-Pesa agency"), and say how many people work in it (just me, 2 – 10, or 11 – 50).
+2. **What it does**: from your description {platform} ticks the usual tools for a business like yours. Say what you call your kind of business (for example "Car hire" or "Poultry farm"), then tick what it does to earn money (sell products you keep in stock, do work or services for customers, cook and sell food or drinks, rent rooms by the night, run an M-Pesa agency, sell M-KOPA phones), the tools to run it (point of sale, customers, expenses, reports, shelves, staff, branches), and anything else you look after (a chama, investments). Untick anything that is not how you work.
+3. **Your starter list**: your services, menu or kinds of room with their prices, and product categories, suggested from your description. Remove what you do not offer and add your own; leave a price blank to skip one.
+4. **Your plan**: the first plan with everything you ticked is chosen for you, and each plan shows what it does not include. The first month is free.
+5. **Your chama** (only if you look after one): its name, contribution, members and turns.
+6. **Location & money**: your first branch or shop, phone, email and address, country, currency and time zone, the cash and bank money the business holds today, and, when it has more than one part (for example a shop and an M-Pesa agency), whether it is one business or several under one name and how the money is kept.
+7. **Review**: check everything and create the business.
 
 ## My business started selling products too (or stopped). What do I change?
-Go to Settings → Business details and change **How the business makes money**, for example from "I provide services" to "Both goods and services" when a salon starts selling hair products. Then choose the new kind of business and turn on Products & stock. Tools that no longer fit are switched off, but your past records are kept.
+Go to Settings → Business details and tick or untick what the business does, for example tick **Sell products I keep in stock** when a salon starts selling hair products. You can also change what you call your kind of business and its description. Your past records are kept.
 
 ## Is {platform} for big companies and supermarkets?
 {platform} is built for small and medium businesses (up to about 50 people). Support for large companies and supermarkets is planned for later.

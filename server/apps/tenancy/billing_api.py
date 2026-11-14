@@ -31,6 +31,7 @@ def plan_data(plan, organization=None, sector=None):
             "standard_price": str(plan.price), "price_from": str(min([plan.price, *kind_prices])),
             "prices_vary": any(value != plan.price for value in kind_prices), "currency": plan.currency,
             "period_days": plan.period_days, "description": plan.description, "active": plan.active,
+            "highlighted": plan.highlighted, "sort_order": plan.sort_order, "user_limit": plan.user_limit, "branch_limit": plan.branch_limit,
             "enabled_modules": plan.enabled_modules, "features": [PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules],
             "feature_names": {m: PLAN_FEATURES[m] for m in MODULES if m in plan.enabled_modules}}
 
@@ -43,7 +44,7 @@ def payment_data(payment):
 
 
 def plans():
-    return SubscriptionPlan.objects.filter(active=True).exclude(code="").prefetch_related("prices").order_by("sort_order", "price")
+    return billing.offered().prefetch_related("prices")
 
 
 def _owner_or_admin(request):
@@ -74,7 +75,9 @@ def subscription(request):
     if denied:
         return denied
     payments = SubscriptionPayment.objects.filter(organization=request.organization).select_related("plan")[:20]
-    return Response({"subscription": billing.state(request.organization), "plans": [plan_data(p, request.organization) for p in plans()],
+    upgrade = billing.upgrade_for(request.organization)
+    return Response({"subscription": {**billing.state(request.organization), "upgrade_to": {"code": upgrade.code, "name": upgrade.name} if upgrade else None},
+                     "plans": [plan_data(p, request.organization) for p in plans()],
                      "payments": [payment_data(p) for p in payments], "payment_methods": ["MPESA"] if billing.mpesa_configured() else [],
                      "simulated_payments": billing.mpesa_mode() == "simulate" and billing.mpesa_configured(),
                      "phone": _default_phone(request)})
@@ -234,6 +237,7 @@ def platform_summary(rows):
             "complimentary": count(lambda s: s["complimentary"]),
             "switched_off": sum(1 for row in rows if not row["active"]),
             "by_plan": {p.code: count(lambda s, code=p.code: s["plan"] == code and not s["ended"]) for p in plans()},
+            "plan_names": {p.code: p.name for p in SubscriptionPlan.objects.exclude(code="")},
             "revenue_this_month": str(paid.filter(paid_at__gte=month_start).aggregate(v=Sum("amount"))["v"] or Decimal("0")),
             "revenue_total": str(paid.aggregate(v=Sum("amount"))["v"] or Decimal("0")),
             "currency": "KES", "mpesa_mode": billing.mpesa_mode(), "mpesa_ready": billing.mpesa_configured()}
@@ -404,10 +408,17 @@ def _delete_business(request, organization):
 
 
 class PlanInput(serializers.Serializer):
+    """A plan as the platform owner sets it: its name, what it costs and for how long, the tools it includes, how many
+    people and branches it allows (blank for no limit), its place in the list and whether it is the recommended one."""
     name = serializers.CharField(max_length=100, required=False)
     price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("1"), required=False)
+    period_days = serializers.IntegerField(min_value=1, max_value=366, required=False)
     description = serializers.CharField(max_length=255, allow_blank=True, required=False)
     active = serializers.BooleanField(required=False)
+    highlighted = serializers.BooleanField(required=False)
+    sort_order = serializers.IntegerField(min_value=0, max_value=1000, required=False)
+    user_limit = serializers.IntegerField(min_value=1, allow_null=True, required=False)
+    branch_limit = serializers.IntegerField(min_value=1, allow_null=True, required=False)
     enabled_modules = serializers.ListField(child=serializers.ChoiceField(choices=MODULES), required=False, allow_empty=False)
     # The price for each kind of business, by kind id; null goes back to the standard price.
     kind_prices = serializers.DictField(child=serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("1"), allow_null=True), required=False)
@@ -418,8 +429,74 @@ class PlanInput(serializers.Serializer):
             raise serializers.ValidationError(f"Unknown kind of business: {', '.join(unknown)}.")
         return value
 
+    def validate_enabled_modules(self, value):
+        return [module for module in MODULES if module in set(value)]
 
-@api_view(["PATCH"])
+
+def _plan_code(name):
+    """A short code for a new plan from its name ("Business plus" → BUSINESS_PLUS), never one already used."""
+    import re
+    base = (re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_") or "PLAN")[:16]
+    code, n = base, 2
+    while SubscriptionPlan.objects.filter(code=code).exists():
+        code, n = f"{base}_{n}"[:20], n + 1
+    return code
+
+
+def _save_plan(plan, values, user):
+    """Apply the platform owner's changes to a plan, refusing what would leave businesses without a plan to choose or
+    offer a plan nobody has priced."""
+    kind_prices = values.pop("kind_prices", {})
+    for field, value in values.items():
+        setattr(plan, field, value)
+    if not plan.active:
+        plan.highlighted = False  # a plan nobody can choose is never the one the pricing pages recommend
+    if plan.active and (plan.price or 0) <= 0:
+        return Response({"price": ["Set what this plan costs before offering it to businesses."]}, status=400)
+    if not plan.active and plan.pk and not SubscriptionPlan.objects.filter(active=True).exclude(code="").exclude(pk=plan.pk).exists():
+        return Response({"active": ["Keep at least one plan on offer, or new businesses cannot sign up."]}, status=400)
+    with transaction.atomic():
+        plan.save()
+        if plan.highlighted:
+            # One recommended plan at a time.
+            SubscriptionPlan.objects.exclude(pk=plan.pk).update(highlighted=False)
+        for sector, price in kind_prices.items():
+            if price is None:
+                PlanPrice.objects.filter(plan=plan, sector=sector, organization__isnull=True).delete()
+            else:
+                PlanPrice.objects.update_or_create(plan=plan, sector=sector, organization=None, defaults={"price": price})
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def platform_plans(request):
+    """A new plan. It starts switched off unless it has a price and the platform owner offers it straight away."""
+    denied = _platform_admin(request)
+    if denied:
+        return denied
+    form = PlanInput(data=request.data)
+    form.is_valid(raise_exception=True)
+    values = dict(form.validated_data)
+    name = " ".join(str(values.get("name") or "").split())
+    if not name:
+        return Response({"name": ["Name the plan."]}, status=400)
+    if SubscriptionPlan.objects.filter(name__iexact=name).exists():
+        return Response({"name": ["Another plan already has this name."]}, status=400)
+    if not values.get("enabled_modules"):
+        return Response({"enabled_modules": ["Choose the tools this plan includes."]}, status=400)
+    last = SubscriptionPlan.objects.exclude(code="").order_by("-sort_order").first()
+    plan = SubscriptionPlan(code=_plan_code(name), name=name, price=0, currency=last.currency if last else "KES", active=False,
+                            sort_order=(last.sort_order + 1) if last else 1)
+    values["name"] = name
+    values.setdefault("active", False)
+    refused = _save_plan(plan, values, request.user)
+    if refused:
+        return refused
+    return Response(admin_plan_data(SubscriptionPlan.objects.prefetch_related("prices").get(pk=plan.pk)), status=201)
+
+
+@api_view(["PATCH", "DELETE"])
 @permission_classes([permissions.IsAuthenticated])
 def platform_plan(request, pk):
     denied = _platform_admin(request)
@@ -428,18 +505,24 @@ def platform_plan(request, pk):
     plan = SubscriptionPlan.objects.filter(pk=pk).first()
     if not plan:
         return Response({"detail": "Plan not found."}, status=404)
+    if request.method == "DELETE":
+        # A plan any business is or was on stays, so its subscriptions and payments keep their plan; it can be switched off.
+        if OrganizationSubscription.objects.filter(plan=plan).exists() or SubscriptionPayment.objects.filter(plan=plan).exists():
+            return Response({"detail": "Businesses are on this plan or paid for it. Stop offering it instead: they keep it, and nobody new can choose it."}, status=400)
+        if plan.active and not SubscriptionPlan.objects.filter(active=True).exclude(code="").exclude(pk=plan.pk).exists():
+            return Response({"detail": "Keep at least one plan on offer, or new businesses cannot sign up."}, status=400)
+        plan.delete()
+        return Response(status=204)
     form = PlanInput(data=request.data, partial=True)
     form.is_valid(raise_exception=True)
     values = dict(form.validated_data)
-    kind_prices = values.pop("kind_prices", {})
-    for field, value in values.items():
-        setattr(plan, field, value)
-    plan.save()
-    for sector, price in kind_prices.items():
-        if price is None:
-            PlanPrice.objects.filter(plan=plan, sector=sector, organization__isnull=True).delete()
-        else:
-            PlanPrice.objects.update_or_create(plan=plan, sector=sector, organization=None, defaults={"price": price})
+    if "name" in values:
+        values["name"] = " ".join(values["name"].split())
+        if SubscriptionPlan.objects.filter(name__iexact=values["name"]).exclude(pk=plan.pk).exists():
+            return Response({"name": ["Another plan already has this name."]}, status=400)
+    refused = _save_plan(plan, values, request.user)
+    if refused:
+        return refused
     return Response(admin_plan_data(SubscriptionPlan.objects.prefetch_related("prices").get(pk=plan.pk)))
 
 

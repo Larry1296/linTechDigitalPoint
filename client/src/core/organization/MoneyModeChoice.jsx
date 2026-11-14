@@ -32,7 +32,7 @@ export const STRUCTURES = [
 // A part's usual name, as the server gives it when the owner has not named it.
 const HOTEL_SECTORS = ["hotel", "hotel_rooms", "lodging"];
 export const defaultPartName = (key, sector = "") => (HOTEL_SECTORS.includes(sector) && !["MPESA", "MKOPA"].includes(key) ? { SHOP: "Restaurant & bar", CYBER: "Rooms" }[key]
-  : key === "CYBER" && sector && !sector.includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa", MKOPA: "M-KOPA" }[key]);
+  : key === "CYBER" && !String(sector || "").includes("cyber") ? "Services" : { SHOP: "Shop", CYBER: "Cyber", MPESA: "M-Pesa", MKOPA: "M-KOPA" }[key]);
 const ROLES = { SHOP: "Products you sell", CYBER: "Services you offer", MPESA: "M-Pesa agency", MKOPA: "M-KOPA phones you sell" };
 
 export const MONEY_MODES = [

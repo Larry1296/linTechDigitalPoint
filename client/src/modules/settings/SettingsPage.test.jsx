@@ -54,11 +54,12 @@ it("lets the owner save business details and add an employee with the pages they
   renderAs("OWNER");
   const business = (await screen.findByRole("heading", { name: "Business details" })).closest("form");
   fireEvent.change(within(business).getByLabelText("Business name"), { target: { value: "Alpha Traders" } });
-  fireEvent.click(within(business).getByLabelText("M-Pesa agency"));
+  fireEvent.click(within(business).getByLabelText(/^Run an M-Pesa agency/));
   fireEvent.click(within(business).getByRole("button", { name: "Save business details" }));
   await screen.findByText("Business settings saved.");
   const saved = JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/settings/" && o?.method === "PATCH")[1].body);
-  expect(saved).toMatchObject({ name: "Alpha Traders", business_model: "GOODS", sector: "duka", enabled_modules: ["inventory", "pos", "mpesa"] });
+  expect(saved).toMatchObject({ name: "Alpha Traders", business_type: "Duka / general shop", enabled_modules: ["inventory", "pos", "mpesa"] });
+  expect(saved).not.toHaveProperty("business_model");  // follows from the tools on the server
 
   const staffForm = screen.getByRole("heading", { name: "Add an employee" }).closest("form");
   expect(screen.queryByRole("combobox", { name: "Account for owner" })).toBeNull();
@@ -165,27 +166,26 @@ it("shows a refused delete as a clear error directly below the branch list", asy
   expect(alert.previousElementSibling).toHaveClass("tableWrap");
 });
 
-it("keeps only the tools that fit when the business changes how it makes money", async () => {
+it("lets the owner describe the business in their own words and tick any tool", async () => {
   renderAs("OWNER");
   const business = (await screen.findByRole("heading", { name: "Business details" })).closest("form");
-  expect(within(business).getByLabelText("Shelves & locations")).toBeInTheDocument();
-  fireEvent.change(within(business).getByLabelText("How the business makes money"), { target: { value: "SERVICES" } });
-  expect(within(business).queryByLabelText("Shelves & locations")).not.toBeInTheDocument();
-  expect(within(business).queryByLabelText("Products & stock")).not.toBeInTheDocument();
-  expect(within(business).getByRole("status")).toHaveTextContent("Products & stock, Point of sale turned off");
-  fireEvent.change(within(business).getByLabelText("Kind of business"), { target: { value: "barber" } });
-  fireEvent.click(within(business).getByLabelText("Services & jobs"));
-  fireEvent.click(within(business).getByLabelText("Point of sale"));
+  expect(within(business).queryByLabelText("How the business makes money")).not.toBeInTheDocument();
+  expect(within(business).queryByLabelText("Kind of business")).not.toBeInTheDocument();
+  fireEvent.change(within(business).getByLabelText("What you call your kind of business"), { target: { value: "Duka & barber" } });
+  fireEvent.change(within(business).getByLabelText("What your business does, in your own words"), { target: { value: "A duka with a barber's chair at the back" } });
+  // A shop that also cuts hair ticks services alongside its stock; nothing is switched off.
+  fireEvent.click(within(business).getByLabelText(/^Do work or services for customers/));
   fireEvent.click(within(business).getByRole("button", { name: "Save business details" }));
   await screen.findByText("Business settings saved.");
   const saved = JSON.parse(api.mock.calls.find(([path, o]) => path === "/api/v1/tenancy/settings/" && o?.method === "PATCH")[1].body);
-  expect(saved).toMatchObject({ business_model: "SERVICES", sector: "barber", business_type: "Barbershop" });
-  expect(saved.enabled_modules.sort()).toEqual(["pos", "services"]);
+  expect(saved).toMatchObject({ business_type: "Duka & barber", description: "A duka with a barber's chair at the back" });
+  expect(saved.enabled_modules.sort()).toEqual(["inventory", "pos", "services"]);
 });
 
 it("shows tools outside a Basic plan as locked instead of letting the owner tick them", async () => {
   const basic = { ...settings, enabled_modules: ["inventory", "pos", "reports"], plan_modules: ["customers", "expenses", "inventory", "mpesa", "pos", "services"],
-    plan: { code: "BASIC", name: "Basic", complimentary: false, ended: false, includes: ["inventory", "services", "pos", "customers", "expenses", "mpesa"], waiting: ["reports"] } };
+    plan: { code: "BASIC", name: "Basic", complimentary: false, ended: false, includes: ["inventory", "services", "pos", "customers", "expenses", "mpesa"], waiting: ["reports"],
+      unlocked_by: { reports: "Business", staff: "Business", locations: "Business", branches: "Pro" } } };
   const usual = api.getMockImplementation();
   api.mockImplementation(async (path, options = {}) => (path === "/api/v1/tenancy/settings/" && !options.method ? basic : usual(path, options)));
   renderAs("OWNER");
@@ -195,13 +195,15 @@ it("shows tools outside a Basic plan as locked instead of letting the owner tick
     expect(box).toBeDisabled();
     expect(box).not.toBeChecked();   // even Reports, which was chosen at set-up
   }
+  // Each locked tool names the first plan that has it.
+  expect(within(business).getByRole("checkbox", { name: /^Reports/ }).closest("label")).toHaveTextContent("Reports · Business plan");
+  expect(within(business).getByRole("checkbox", { name: /^Branches/ }).closest("label")).toHaveTextContent("Branches · Pro plan");
   expect(within(business).getByRole("checkbox", { name: "Customers" })).toBeEnabled();
-  expect(within(business).getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/admin/subscription");
   // The plan the business is on, what it includes, and what was chosen but waits for Pro.
   const plan = within(business).getByRole("region", { name: "Your plan" });
   expect(within(plan).getByRole("heading", { name: "Plan: Basic" })).toBeInTheDocument();
   expect(plan).toHaveTextContent("Includes: Products & stock, Services & jobs, Point of sale, Customers, Expenses, M-Pesa agency.");
-  expect(plan).toHaveTextContent("switched off until you are on Pro: Reports");
+  expect(plan).toHaveTextContent("switched off until you change plan: Reports");
   expect(within(plan).getByRole("link", { name: "Change plan" })).toHaveAttribute("href", "/admin/subscription");
 });
 

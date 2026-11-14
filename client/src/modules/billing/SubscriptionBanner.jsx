@@ -48,12 +48,13 @@ export function SubscriptionStatus({ subscription }) {
 }
 
 // A one-line reminder at the top of every workspace page with the time left ticking down: free month, renewal due,
-// ended, or an invitation to Pro.
+// ended, or an invitation to the next plan up, by its name.
 export function SubscriptionBanner({ organization, canManage }) {
   const { refresh } = useAuth() || {};
   const subscription = organization?.subscription;
   if (!subscription || subscription.complimentary || subscription.status === "UNCONFIGURED") return null;
-  const action = canManage ? <Link to="/admin/subscription">{subscription.ended ? "Renew now" : subscription.plan === "BASIC" ? "Upgrade to Pro" : "Renew"}</Link> : null;
+  const upgrade = subscription.upgrade_to;
+  const action = canManage ? <Link to="/admin/subscription">{subscription.ended ? "Renew now" : upgrade && !subscription.expiring_soon ? `Upgrade to ${upgrade.name}` : "Renew"}</Link> : null;
   if (subscription.ended) return <div className="subscriptionBanner ended" role="alert"><AlertTriangle size={18} aria-hidden="true" />
     <span>Your subscription has ended. Sales still work, but accounting, stock receiving and other tools are paused until you renew.{!canManage && " Ask the business owner to renew."}</span>{action}</div>;
   if (!subscription.ends_at) return null;
@@ -62,7 +63,7 @@ export function SubscriptionBanner({ organization, canManage }) {
     <small className="subscriptionEnds"> (ends {endText(subscription.ends_at)})</small>.</>;
   if (subscription.expiring_soon) return <div className="subscriptionBanner warn" role="status"><Clock size={18} aria-hidden="true" />
     <span>{lead} Renew before it ends to keep every tool working.</span>{action}</div>;
-  if (subscription.plan === "BASIC") return <div className="subscriptionBanner info" role="status"><Crown size={18} aria-hidden="true" />
-    <span>{lead} Upgrade to Pro to unlock reports, shelves, staff accounts and branches.</span>{action}</div>;
+  if (upgrade) return <div className="subscriptionBanner info" role="status"><Crown size={18} aria-hidden="true" />
+    <span>{lead} Upgrade to {upgrade.name} for more tools.</span>{action}</div>;
   return <div className="subscriptionBanner info" role="status"><Clock size={18} aria-hidden="true" /><span>{lead}</span>{action}</div>;
 }

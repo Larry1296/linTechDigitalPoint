@@ -21,11 +21,12 @@ def logo_path(instance, filename):
 class Organization(models.Model):
     name = models.CharField(max_length=160)
     slug = models.SlugField(unique=True)
-    # How the business makes money and what kind it is; see business_profiles.py. business_type is the display label.
+    # How the business makes money (follows from its tools) and the kind it started from, if any; see business_profiles.py.
     business_model = models.CharField(max_length=10, choices=[("GOODS", "Sells goods"), ("SERVICES", "Provides services"), ("MIXED", "Goods and services")], default="MIXED")
     sector = models.CharField(max_length=40, blank=True)
     business_size = models.CharField(max_length=10, choices=[("SOLO", "Just me"), ("SMALL", "2 – 10 people"), ("MEDIUM", "11 – 50 people")], default="SMALL")
-    business_type = models.CharField(max_length=100, blank=True)
+    business_type = models.CharField(max_length=100, blank=True)  # what the owner calls their kind of business, in their words
+    description = models.TextField(blank=True)  # what the business does, in the owner's own words
     logo_url = models.URLField(blank=True)
     logo = models.ImageField(upload_to=logo_path, blank=True)  # for light surfaces: receipts, email
     logo_dark = models.ImageField(upload_to=logo_path, blank=True)  # for the dark navigation bar
@@ -146,6 +147,8 @@ class SubscriptionPlan(models.Model):
     reporting_level = models.CharField(max_length=40, blank=True)
     billing_period = models.CharField(max_length=30, blank=True)
     usage_limits = models.JSONField(default=dict, blank=True)
+    # Shown as the recommended plan on the pricing pages; the platform owner chooses it.
+    highlighted = models.BooleanField(default=False)
 
 class OrganizationSubscription(models.Model):
     organization = models.OneToOneField(Organization, related_name="subscription", on_delete=models.PROTECT)

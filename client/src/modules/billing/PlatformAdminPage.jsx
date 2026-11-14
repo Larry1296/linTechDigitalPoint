@@ -8,8 +8,10 @@ import { ErrorState, Loading } from "../../components/States";
 import "./billing.css";
 import { TextBox } from "../../components/forms/TextBox";
 
-const MODULE_LABELS = { inventory: "Products & stock", locations: "Shelves & locations", services: "Services & jobs", pos: "Point of sale",
-  customers: "Customers", expenses: "Expenses", mpesa: "M-Pesa agency", reports: "Reports", branches: "Branches", staff: "Staff", chama: "Chama" };
+// Every tool a plan can include, in the order businesses see them.
+const MODULE_LABELS = { inventory: "Products & stock", services: "Services & jobs", menu: "Menu & kitchen", rooms: "Rooms & guests",
+  mpesa: "M-Pesa agency", mkopa: "M-KOPA phones", pos: "Point of sale", customers: "Customers", expenses: "Expenses", reports: "Reports",
+  locations: "Shelves & locations", staff: "Staff", branches: "Branches", chama: "Chama", investments: "Investments" };
 const MODEL_LABELS = { GOODS: "Sells goods", SERVICES: "Provides services", MIXED: "Goods and services" };
 const money = (amount, currency = "KES") => `${currency} ${Number(amount || 0).toLocaleString()}`;
 const dateText = (value) => (value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -55,7 +57,7 @@ export function PlatformAdminPage() {
       <div><strong>{summary.expiring_soon}</strong><span>Ending within 5 days</span></div>
       <div><strong>{summary.ended}</strong><span>Ended or suspended</span></div>
       <div><strong>{summary.switched_off}</strong><span>Switched off</span></div>
-      {Object.entries(summary.by_plan).map(([code, count]) => <div key={code}><strong>{count}</strong><span>On {code === "PRO" ? "Pro" : "Basic"}</span></div>)}
+      {Object.entries(summary.by_plan).map(([code, count]) => <div key={code}><strong>{count}</strong><span>On {summary.plan_names?.[code] || code}</span></div>)}
       <div><strong>{money(summary.revenue_this_month, summary.currency)}</strong><span>Paid this month</span></div>
       <div><strong>{money(summary.revenue_total, summary.currency)}</strong><span>Paid in total</span></div>
     </div>
@@ -105,9 +107,10 @@ export function PlatformAdminPage() {
     </table></div>}</Paged> : <p className="muted">No payments yet.</p>}
 
     <h2>Plans</h2>
-    <p className="muted">Each plan has a standard price. Set a different price for a kind of business (a kibanda pays less than a hardware shop),
-      or for one business from its details above. A business pays its own price first, then its kind's, then the standard price.</p>
+    <p className="muted">You decide what each plan costs, what it includes, how many people and branches it allows, and which one is recommended.
+      A plan is offered only once it has a price. A business pays its own price first (set from its details above), then the price for its kind of business, then the plan's price.</p>
     <div className="platformPlans">{data.plans.map((item) => <PlanEditor key={item.id} plan={item} kinds={data.kinds || []} onSaved={load} />)}</div>
+    <NewPlan onSaved={load} />
 
     <BusinessKinds />
   </section>;
@@ -258,40 +261,68 @@ function BusinessDetail({ id, plans, kinds, onChanged, onClose, onDeleted }) {
   </article>;
 }
 
+// The number in a box, or null when it is left empty (no limit).
+const limit = (value) => (value === "" || value == null ? null : Number(value));
+
 function PlanEditor({ plan, kinds, onSaved }) {
   const [modules, setModules] = useState(new Set(plan.enabled_modules));
   const [busy, setBusy] = useState(false);
   const kindPrices = plan.kind_prices || {};
   const save = async (event) => {
     event.preventDefault();
-    const { name, price, description, active, ...typed } = Object.fromEntries(new FormData(event.currentTarget));
-    const form = { name, price, description, active };
-    // Only the kinds whose price changed; an emptied box goes back to the standard price.
+    const { name, price, period_days, description, user_limit, branch_limit, sort_order, active, highlighted, ...typed } = Object.fromEntries(new FormData(event.currentTarget));
+    // Only the kinds whose price changed; an emptied box goes back to the plan's price.
     const kind_prices = Object.fromEntries(kinds.map((kind) => [kind.id, typed[`kind_${kind.id}`] || null])
       .filter(([id, value]) => value !== (kindPrices[id] ? String(Number(kindPrices[id])) : null)));
-    if (!(await confirmAction({ title: `Save the ${plan.name} plan?`, text: "Changes apply to every business on this plan straight away. Prices apply to the next payment.", confirmButtonText: "Save plan" }))) return;
+    if (!modules.size) { await showError("Could not save the plan", "Choose the tools this plan includes."); return; }
+    if (!(await confirmAction({ title: `Save the ${plan.name} plan?`, text: "Tools and limits apply to every business on this plan straight away. Prices apply to the next payment.", confirmButtonText: "Save plan" }))) return;
     setBusy(true);
     try {
-      await api(`/api/v1/tenancy/platform-admin/plans/${plan.id}/`, { method: "PATCH", body: JSON.stringify({ ...form, active: form.active === "on", enabled_modules: [...modules], kind_prices }) });
+      await api(`/api/v1/tenancy/platform-admin/plans/${plan.id}/`, { method: "PATCH", body: JSON.stringify({
+        name, description, ...(price ? { price } : {}), period_days: Number(period_days), sort_order: Number(sort_order),
+        user_limit: limit(user_limit), branch_limit: limit(branch_limit), active: active === "on", highlighted: highlighted === "on",
+        enabled_modules: [...modules], kind_prices }) });
       await onSaved();
-      await showSuccess("Plan saved", `${form.name} is updated.`);
+      await showSuccess("Plan saved", `${name} is updated.`);
     } catch (e) {
       await showError("Could not save the plan", e.message);
     } finally {
       setBusy(false);
     }
   };
+  const remove = async () => {
+    if (!(await confirmAction({ title: `Remove the ${plan.name} plan?`, text: "Only a plan no business has ever been on can be removed. Otherwise stop offering it.", confirmButtonText: "Remove plan" }))) return;
+    setBusy(true);
+    try {
+      await api(`/api/v1/tenancy/platform-admin/plans/${plan.id}/`, { method: "DELETE" });
+      await onSaved();
+    } catch (e) {
+      await showError("Could not remove the plan", e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const toggle = (id) => setModules((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const priced = Number(plan.price) > 0;
   return <form onSubmit={(event) => void save(event)} aria-label={`${plan.name} plan`}>
-    <h3>{plan.name} <small className="muted">({plan.code})</small></h3>
+    <h3>{plan.name} <small className="muted">({plan.code}){plan.highlighted ? " · recommended" : ""}{plan.active ? "" : " · not offered"}</small></h3>
+    {!priced && <p className="billingNote">Set what this plan costs, then tick “Offered to businesses”.</p>}
     <label>Name<TextBox name="name" defaultValue={plan.name} required maxLength={100} /></label>
-    <label>Standard price ({plan.currency} per {plan.period_days} days)<input name="price" type="number" min="1" step="1" defaultValue={Number(plan.price)} required /></label>
+    <div className="planEditorRow">
+      <label>Price ({plan.currency})<input name="price" type="number" min="1" step="1" defaultValue={priced ? Number(plan.price) : ""} required={priced} placeholder="Set a price" /></label>
+      <label>For how many days<input name="period_days" type="number" min="1" max="366" step="1" defaultValue={plan.period_days} required /></label>
+    </div>
+    <div className="planEditorRow">
+      <label>People allowed<input name="user_limit" type="number" min="1" step="1" defaultValue={plan.user_limit ?? ""} placeholder="No limit" /></label>
+      <label>Branches allowed<input name="branch_limit" type="number" min="1" step="1" defaultValue={plan.branch_limit ?? ""} placeholder="No limit" /></label>
+      <label>Place in the list<input name="sort_order" type="number" min="0" max="1000" step="1" defaultValue={plan.sort_order} required /></label>
+    </div>
     <details className="kindPrices">
       <summary>Price for each kind of business ({Object.keys(kindPrices).length} set{plan.business_prices ? ` · ${plan.business_prices} ${plan.business_prices === 1 ? "business has" : "businesses have"} its own` : ""})</summary>
-      <p className="muted">Leave a box empty for the standard price.</p>
+      <p className="muted">Leave a box empty for the plan's price.</p>
       {MODEL_ORDER.map((model) => <fieldset key={model}><legend>{MODEL_LABELS[model]}</legend>
         {kinds.filter((kind) => kind.model === model).map((kind) => <label key={kind.id}>{kind.label}{kind.listed ? "" : " (not listed)"}
-          <input name={`kind_${kind.id}`} type="number" min="1" step="1" defaultValue={kindPrices[kind.id] ? Number(kindPrices[kind.id]) : ""} placeholder={String(Number(plan.price))} /></label>)}
+          <input name={`kind_${kind.id}`} type="number" min="1" step="1" defaultValue={kindPrices[kind.id] ? Number(kindPrices[kind.id]) : ""} placeholder={priced ? String(Number(plan.price)) : ""} /></label>)}
       </fieldset>)}
     </details>
     <label>Description<TextBox name="description" defaultValue={plan.description} maxLength={255} /></label>
@@ -299,13 +330,62 @@ function PlanEditor({ plan, kinds, onSaved }) {
       {Object.entries(MODULE_LABELS).map(([id, label]) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {label}</label>)}
     </fieldset>
     <label className="inline"><input type="checkbox" name="active" defaultChecked={plan.active} /> Offered to businesses</label>
-    <button disabled={busy}>{busy ? "Saving…" : "Save plan"}</button>
+    <label className="inline"><input type="checkbox" name="highlighted" defaultChecked={plan.highlighted} /> Recommended plan</label>
+    <div className="planEditorActions">
+      <button disabled={busy}>{busy ? "Saving…" : "Save plan"}</button>
+      <button type="button" className="secondary" disabled={busy} onClick={() => void remove()}>Remove</button>
+    </div>
   </form>;
+}
+
+// A new plan: named, priced and given its tools. It is added switched off; offer it from its card once it looks right.
+function NewPlan({ onSaved }) {
+  const [modules, setModules] = useState(new Set(["inventory", "services", "pos", "customers", "expenses"]));
+  const [busy, setBusy] = useState(false);
+  const save = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const { name, price, period_days, description, user_limit, branch_limit } = Object.fromEntries(new FormData(form));
+    if (!modules.size) { await showError("Could not add the plan", "Choose the tools this plan includes."); return; }
+    setBusy(true);
+    try {
+      await api("/api/v1/tenancy/platform-admin/plans/", { method: "POST", body: JSON.stringify({
+        name, description, ...(price ? { price } : {}), period_days: Number(period_days || 30), user_limit: limit(user_limit), branch_limit: limit(branch_limit),
+        enabled_modules: [...modules] }) });
+      form.reset();
+      await onSaved();
+      await showSuccess("Plan added", `${name} is added but not offered yet. Check it, then tick “Offered to businesses” on its card.`);
+    } catch (e) {
+      await showError("Could not add the plan", e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (id) => setModules((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  return <details className="newPlan">
+    <summary>Add a plan</summary>
+    <form onSubmit={(event) => void save(event)} aria-label="New plan">
+      <label>Name<TextBox name="name" required maxLength={100} placeholder="e.g. Starter, Enterprise" /></label>
+      <div className="planEditorRow">
+        <label>Price (KES)<input name="price" type="number" min="1" step="1" placeholder="Set later" /></label>
+        <label>For how many days<input name="period_days" type="number" min="1" max="366" step="1" defaultValue={30} /></label>
+      </div>
+      <div className="planEditorRow">
+        <label>People allowed<input name="user_limit" type="number" min="1" step="1" placeholder="No limit" /></label>
+        <label>Branches allowed<input name="branch_limit" type="number" min="1" step="1" placeholder="No limit" /></label>
+      </div>
+      <label>Description<TextBox name="description" maxLength={255} /></label>
+      <fieldset className="checkList"><legend>Tools included</legend>
+        {Object.entries(MODULE_LABELS).map(([id, label]) => <label key={id}><input type="checkbox" checked={modules.has(id)} onChange={() => toggle(id)} /> {label}</label>)}
+      </fieldset>
+      <button disabled={busy}>{busy ? "Adding…" : "Add plan"}</button>
+    </form>
+  </details>;
 }
 
 const KIND_STATUS = { SUGGESTED: { label: "Waiting for review", tone: "warn" }, LISTED: { label: "Listed", tone: "active" }, HIDDEN: { label: "Not listed", tone: "ended" } };
 
-// Kinds of business owners created under "Other". Listing one adds it to the set-up list for every new owner.
+// Kinds of business owners named in their own words at set-up. Listing one lets later owners' descriptions match it.
 export function BusinessKinds() {
   const [kinds, setKinds] = useState();
   const [error, setError] = useState("");
@@ -313,7 +393,7 @@ export function BusinessKinds() {
   useEffect(() => { void load(); }, [load]);
   return <>
     <h2>Kinds of business added by owners</h2>
-    <p className="muted">When an owner's business is not in the list, they name it under “Other”. List it here and the next owner finds it, with the tools and starter list the first one chose.</p>
+    <p className="muted">Owners name their kind of business in their own words when they set it up. A name not seen before appears here with the tools and starter list that owner chose. List it, and later owners who describe a business like it get those suggested.</p>
     {error && !kinds && <ErrorState message={error} retry={load} />}
     {kinds && !kinds.length && <p className="muted">No owner has added a kind of business yet.</p>}
     {kinds && kinds.length > 0 && <div className="platformPlans">{kinds.map((kind) => <KindEditor key={`${kind.id}-${kind.status}`} kind={kind} onSaved={load} />)}</div>}

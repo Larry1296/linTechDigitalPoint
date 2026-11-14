@@ -226,13 +226,13 @@ function PublicPricing() {
     <h2 id="pricing-title">Simple monthly plans. First month free.</h2>
     <p className="homeSectionIntro">Start with {data?.trial_days || 30} days free on the plan you choose, then pay monthly by M-Pesa. Change plan any time.</p>
     <div className="publicPlans">
-      {(data?.plans || []).map((plan) => <article key={plan.code} className={`publicPlan${plan.code === "PRO" ? " pro" : ""}`}>
-        <h3>{plan.name}</h3>
-        <p className="publicPlanPrice">{plan.prices_vary && "From "}<strong>{plan.currency} {Number(plan.prices_vary ? plan.price_from : plan.price).toLocaleString()}</strong> / month</p>
+      {(data?.plans || []).map((plan) => <article key={plan.code} className={`publicPlan${plan.highlighted ? " pro" : ""}`}>
+        <h3>{plan.name}{plan.highlighted && <small className="publicPlanTag"> · Recommended</small>}</h3>
+        <p className="publicPlanPrice">{plan.prices_vary && "From "}<strong>{plan.currency} {Number(plan.prices_vary ? plan.price_from : plan.price).toLocaleString()}</strong> / {plan.period_days === 30 ? "month" : `${plan.period_days} days`}</p>
         {plan.prices_vary && <p className="muted">The price depends on your kind of business.</p>}
         <p>{plan.description}</p>
         <ul>{plan.features.map((feature) => <li key={feature}><CircleCheck size={16} aria-hidden="true" /> {feature}</li>)}</ul>
-        <Link className={`button${plan.code === "PRO" ? "" : " secondary"}`} to="/register">Start free</Link>
+        <Link className={`button${plan.highlighted ? "" : " secondary"}`} to="/register">Start free</Link>
       </article>)}
     </div>
   </section>;

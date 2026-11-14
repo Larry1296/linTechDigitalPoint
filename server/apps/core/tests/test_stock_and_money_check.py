@@ -104,6 +104,7 @@ def test_money_check_counts_commission_paid_to_the_owner_never_the_agency_cash_o
 def test_separate_drawers_expect_and_count_each_parts_cash_on_its_own(owner_shop):
     client, org, charger = owner_shop
     org.enabled_modules = ["inventory", "pos", "services", "reports", "expenses"]
+    org.sector = "cyber_shop"  # a cyber's services part is called "Cyber"; any other business's is "Services"
     org.settings = {"money_mode": "SEPARATE_CASH"}
     org.save()
     for unit, amount in (("SHOP", "1000"), ("CYBER", "200")):
