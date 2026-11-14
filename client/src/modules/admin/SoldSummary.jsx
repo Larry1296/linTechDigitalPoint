@@ -40,37 +40,46 @@ function lineNote(line, money) {
   }
 }
 
-// The steps from the total sold and earned to the business's money now, in plain words (added, or taken away below 0).
-const BRIDGE = {
-  not_received: ["Received for sales recorded later (deposits and the like)", "Sold but not paid yet (customers still owe it)"],
-  starting: ["Money the business started with"], own_for_suppliers: ["Your own money put in to pay suppliers"],
-  found: ["Business money that was already in the investment (the app had not seen it)", "Counted in the drawer, till or bank but already in the investment"],
-  agency: ["Moved in from the M-Pesa agency's cash", "Moved to the M-Pesa agency"],
-  suppliers: ["Supplier refunds", "Paid to suppliers for stock"], expenses: ["Running costs refunded", "Spent on running costs"],
-  loans: ["Loans repaid", "Money lent out, less what was repaid"], other: ["Other money in", "Other money out"],
-};
-const stepLabel = (line) => BRIDGE[line.key]?.[Number(line.amount) < 0 && BRIDGE[line.key].length > 1 ? 1 : 0] || line.key;
+// Each step of the cash book in a few plain words, as money that came in from elsewhere (above 0) or was paid out (below).
+const CAME_IN = { starting: "the money it started with", found: "already in the investment before the app saw it", agency: "moved in from the M-Pesa agency",
+  suppliers: "supplier refunds", expenses: "running costs refunded", loans: "loans repaid", other: "other money in", not_received: "paid ahead for later sales" };
+const PAID_OUT = { suppliers: "paid to suppliers", expenses: "running costs", loans: "money lent out", agency: "moved to the M-Pesa agency",
+  other: "other money out", found: "counted twice: already in the investment" };
 
-// Why the business's money is not the total: every step from one to the other, from the cash book, and where it is now.
-function MoneyBridge({ bridge, total, money }) {
-  const signed = (value) => `${Number(value) < 0 ? "−" : "+"} ${money(Math.abs(Number(value)))}`;
-  return <details className="soldBridge">
-    <summary>Why the business's money now ({money(bridge.money_now)}{!Number(bridge.in_places) && Number(bridge.in_investments) ? ", all of it in investments"
-      : Number(bridge.in_investments) ? `, ${money(bridge.in_investments)} of it in investments` : ""}) is not this total</summary>
-    <p>The total above is what was sold and earned. The business's money is what it holds. They differ because money also came in and
-      went out without being a sale, and some sales are not paid yet:</p>
+// The simple sum from what was earned to the money the business has: earned, plus money that came from elsewhere, less
+// what was paid out, less what customers still owe. Stock the owner paid for from their own pocket never came out of the
+// business's money, so it is said in a note, not added and taken away. Every amount is the cash book's (money_bridge).
+function MoneySum({ bridge, total, money }) {
+  const amount = (key) => Number(bridge.lines.find((line) => line.key === key)?.amount || 0);
+  const own = amount("own_for_suppliers");
+  const owed = amount("not_received");
+  // In the cash book's order; suppliers less what the owner paid them from their own pocket.
+  const steps = bridge.lines.filter((line) => line.key !== "own_for_suppliers" && (line.key !== "not_received" || owed > 0))
+    .map((line) => ({ key: line.key, amount: line.key === "suppliers" ? Number(line.amount) + own : Number(line.amount) }))
+    .filter((step) => Math.abs(step.amount) > 0.004);
+  const cameIn = steps.filter((step) => step.amount > 0);
+  const paidOut = steps.filter((step) => step.amount < 0);
+  const sum = (rows) => rows.reduce((all, row) => all + row.amount, 0);
+  const which = (rows, words) => rows.map((row) => `${money(Math.abs(row.amount))} ${words[row.key] || row.key}`).join(" · ");
+  const funds = bridge.funds?.length === 1 ? bridge.funds[0] : "investments";
+  const inPlaces = Number(bridge.in_places);
+  const invested = Number(bridge.in_investments);
+  return <section className="soldSum" aria-labelledby="sold-sum-title">
+    <h3 id="sold-sum-title">From what was earned to the money you have</h3>
     <dl className="soldSteps">
-      <div className="first"><dt>Total sold and earned</dt><dd>{money(total)}</dd></div>
-      {bridge.lines.map((line) => <div key={line.key}><dt>{stepLabel(line)}</dt><dd>{signed(line.amount)}</dd></div>)}
-      <div className="last"><dt>The business's money now</dt><dd>{money(bridge.money_now)}</dd></div>
+      <div className="first"><dt>Earned from sales and work<small>The total above</small></dt><dd>{money(total)}</dd></div>
+      {cameIn.length > 0 && <div><dt>+ Money that came from elsewhere<small>{which(cameIn, CAME_IN)}</small></dt><dd>+ {money(sum(cameIn))}</dd></div>}
+      {paidOut.length > 0 && <div><dt>− Paid out<small>{which(paidOut, PAID_OUT)}</small></dt><dd>− {money(-sum(paidOut))}</dd></div>}
+      {owed < 0 && <div><dt>− Still owed by customers<small>Sold, not paid yet</small></dt><dd>− {money(-owed)}</dd></div>}
+      <div className="last"><dt>= The business's money now<small>
+        {invested ? <><a href="/admin/investments">{money(invested)} in {funds}</a>{Number(bridge.interest) ? `, with the ${money(bridge.interest)} interest it earned there` : ""}</> : null}
+        {invested && inPlaces ? " · " : null}
+        {inPlaces ? <a href="/admin/money-check">{money(inPlaces)} in the drawer, till and bank: sold, not invested yet</a>
+          : invested ? " · nothing in the drawer, till or bank" : null}
+      </small></dt><dd>{money(bridge.money_now)}</dd></div>
     </dl>
-    {!Number(bridge.in_places) && Number(bridge.in_investments)
-      ? <p className="soldWhere">Where it is: all of it, <a href="/admin/investments">{money(bridge.in_investments)}, is kept in investments</a>
-        {Number(bridge.interest) ? `, including the ${money(bridge.interest)} interest it earned there` : ""}. Nothing is left in the drawer, till or bank.</p>
-      : <p className="soldWhere">Where it is: <a href="/admin/money-check">{money(bridge.in_places)} in the drawer, till and bank</a>
-        {Number(bridge.in_investments) ? <> and <a href="/admin/investments">{money(bridge.in_investments)} kept in investments</a>
-          {Number(bridge.interest) ? `, including the ${money(bridge.interest)} interest it earned there` : ""}</> : null}.</p>}
-  </details>;
+    {own > 0 && <p className="soldWhere">You paid suppliers {money(own)} from your own pocket, so it never came out of the business's money.</p>}
+  </section>;
 }
 
 export function SoldSummary({ sold, since, owedSales, bridge, money }) {
@@ -98,7 +107,7 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
         <span>The business's money now</span>
         <strong>{money(bridge.money_now)}</strong>
         <small>{!Number(bridge.in_places) && Number(bridge.in_investments) ? "All of it kept in investments"
-          : Number(bridge.in_investments) ? `${money(bridge.in_places)} in the drawer, till and bank · ${money(bridge.in_investments)} in investments`
+          : Number(bridge.in_investments) ? `${money(bridge.in_investments)} in ${bridge.funds?.length === 1 ? bridge.funds[0] : "investments"} · ${money(bridge.in_places)} sold, not invested yet`
           : "In the drawer, till and bank"}</small>
       </a>}
     </div>
@@ -136,6 +145,6 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
       <p><b>{sold.groups.map((group) => group.name).join(" + ")} = total sold and earned</b> <span>{sold.groups.map((group) => money(group.amount)).join(" + ")} = <b>{money(total)}</b></span></p>
       {Number(owedSales || 0) > 0 && <p className="muted">Includes {money(owedSales)} sold on credit that customers have not paid yet. <a href="/admin/sales-history">See who owes</a></p>}
     </footer>
-    {bridge && <MoneyBridge bridge={bridge} total={total} money={money} />}
+    {bridge && <MoneySum bridge={bridge} total={total} money={money} />}
   </section>;
 }

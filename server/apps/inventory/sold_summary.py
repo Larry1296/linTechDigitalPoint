@@ -117,7 +117,7 @@ def money_bridge(sold_total, interest):
 
     Interest is earned inside the investment, never through a place; what was sold but not received yet is what was
     brought in less what was received and less that interest. {"lines": [{"key", "amount"}], "money_now", "in_places",
-    "in_investments", "interest"}; a line's amount is added (negative takes away)."""
+    "in_investments", "interest", "funds": [names of the investments holding it]}; a line's amount is added (negative takes away)."""
     from apps.accounting.models import CashEntry
     from apps.accounting.money_check import kept_in_investments
     entries = CashEntry.objects.filter(account__payment_method__in=OWNER_PLACES)
@@ -133,6 +133,8 @@ def money_bridge(sold_total, interest):
              ("expenses", by_kind.get("EXPENSE", ZERO)), ("loans", by_kind.get("LOAN", ZERO)),
              ("other", sum((v for k, v in by_kind.items() if k not in {"INCOME", "OPENING", "TRANSFER", "PURCHASE", "EXPENSE", "LOAN", "INVESTMENT"}), ZERO))]
     in_places = sum(by_kind.values(), ZERO)
-    invested = kept_in_investments()["total"]
+    kept = kept_in_investments()
+    invested = kept["total"]
     return {"lines": [{"key": key, "amount": amount} for key, amount in lines if amount],
-            "money_now": in_places + invested, "in_places": in_places, "in_investments": invested, "interest": interest}
+            "money_now": in_places + invested, "in_places": in_places, "in_investments": invested, "interest": interest,
+            "funds": [row["name"] for row in kept["accounts"]]}

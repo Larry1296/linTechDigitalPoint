@@ -269,10 +269,13 @@ def test_money_check_follows_only_the_businesss_money_put_into_or_taken_out_of_a
         from apps.accounting.money_check import expected
         total, parts = expected("MPESA")
     assert total == D("80000") and parts["invested"] == 0  # the owner's own money: the till is untouched
-    assert _move(client, mmf, "DEPOSIT", "30000", "BUSINESS", "biz", place="MPESA").status_code == 201
+    # The business's money put in empties the till: never less than it holds.
+    short = _move(client, mmf, "DEPOSIT", "30000", "BUSINESS", "biz-short", place="MPESA")
+    assert short.status_code == 400 and "at least 80,000.00" in str(short.json())
+    assert _move(client, mmf, "DEPOSIT", "80000", "BUSINESS", "biz", place="MPESA").status_code == 201
     with organization_context(org):
         total, parts = expected("MPESA")
-    assert (total, parts["invested"]) == (D("50000"), D("-30000"))
+    assert (total, parts["invested"]) == (D("0"), D("-80000"))
 
 
 def _stock(org, store):
@@ -504,27 +507,28 @@ def test_the_business_money_moves_from_its_place_into_the_investment_and_stays_t
     before = shop_money()
     # Whose money it is must be said, with the place for the business's.
     assert _move(client, mmf, "DEPOSIT", "100", "BUSINESS", "no-place").status_code == 400
-    put = _move(client, mmf, "DEPOSIT", "10000", "BUSINESS", "biz-in", place="MPESA")
+    assert _move(client, mmf, "DEPOSIT", "10000", "BUSINESS", "biz-short", place="MPESA").status_code == 400  # less than the till holds
+    put = _move(client, mmf, "DEPOSIT", "12000", "BUSINESS", "biz-in", place="MPESA")
     assert put.status_code == 201, put.content
     _move(client, mmf, "DEPOSIT", "5000", "OWNER", "own-in")
-    row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "15300", "idempotency_key": "st"}, format="json").json()
-    # The till went down; the business's money in the investment is what it put in plus all the interest.
-    assert money()["MPESA"] == D("2000")
+    row = client.post(f"/api/v1/accounting/investments/{mmf}/statement/", {"balance": "17300", "idempotency_key": "st"}, format="json").json()
+    # The till is empty; the business's money in the investment is what it put in plus all the interest.
+    assert money()["MPESA"] == D("0")
     kept = client.get("/api/v1/accounting/money-check/").json()["investments"]
-    assert D(str(kept["total"])) == D("10300") and [row["name"] for row in kept["accounts"]] == ["Sanlam MMF"]
-    assert (D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("10300"), D("5000"))
+    assert D(str(kept["total"])) == D("12300") and [row["name"] for row in kept["accounts"]] == ["Sanlam MMF"]
+    assert (D(str(row["shop_value"])), D(str(row["owner_value"]))) == (D("12300"), D("5000"))
     listed = client.get("/api/v1/accounting/investments/").json()
-    assert (D(str(listed["shop_value"])), D(str(listed["owner_value"]))) == (D("10300"), D("5000"))
+    assert (D(str(listed["shop_value"])), D(str(listed["owner_value"]))) == (D("12300"), D("5000"))
     assert row["movements"][-1]["whose"] == "BUSINESS"
     accounts, _, pl = _books(org)
-    assert (accounts["1400"]["balance"], pl["net_profit_before_tax"]) == (D("10300"), D("300"))
+    assert (accounts["1400"]["balance"], pl["net_profit_before_tax"]) == (D("12300"), D("300"))
     # The shop's own money is the same: it is only kept somewhere else.
     assert shop_money() == before
     # Taking out: no more than each one holds.
     assert _move(client, mmf, "WITHDRAWAL", "6000", "OWNER", "own-too-much").status_code == 400
-    assert _move(client, mmf, "WITHDRAWAL", "11000", "BUSINESS", "biz-too-much", place="CASH").status_code == 400
+    assert _move(client, mmf, "WITHDRAWAL", "13000", "BUSINESS", "biz-too-much", place="CASH").status_code == 400
     back = _move(client, mmf, "WITHDRAWAL", "3000", "BUSINESS", "biz-out", place="CASH").json()
-    assert money()["CASH"] == D("3000") and D(str(back["shop_value"])) == D("7300")
+    assert money()["CASH"] == D("3000") and D(str(back["shop_value"])) == D("9300")
     # Undone: the money goes back where it was.
     biz_in = next(m for m in back["movements"] if m["kind"] == "DEPOSIT" and m["whose"] == "BUSINESS")["id"]
     blocked = client.post(f"/api/v1/accounting/investments/movements/{biz_in}/undo/", {"reason": "x"}, format="json")
@@ -783,3 +787,33 @@ def test_the_businesss_money_shows_which_part_it_came_from_and_the_shops_cost_of
     assert _move(client, mmf, "WITHDRAWAL", "500", "BUSINESS", "back", place="CASH", unit="CYBER", speed="STANDARD").status_code == 201
     parts = {p["unit"]: D(str(p["amount"])) for p in client.get("/api/v1/accounting/investments/").json()["business_breakdown"]["parts"]}
     assert parts == {"SHOP": D("10000"), "CYBER": D("1500"), "MPESA": D("1500")}
+
+
+def test_the_businesss_money_put_in_is_never_less_than_its_place_held_that_day(shop):
+    """2026-11-14, owner: what was sold and not invested yet sits in the drawer; putting the business's money in empties it."""
+    from datetime import timedelta
+    from django.utils import timezone
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("700"), kind="INCOME", reference="Sales", key="old-sales", user=owner,
+             occurred_at=timezone.now() - timedelta(days=1))
+        post(unit="SHOP", method="CASH", amount=D("300"), kind="INCOME", reference="Sales", key="new-sales", user=owner)
+    money = lambda: {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    # Yesterday the drawer held 700: a deposit dated then needs at least that, not today's sales too.
+    assert _move(client, mmf, "DEPOSIT", "600", "BUSINESS", "y-short", place="CASH", occurred_on=str(yesterday)).status_code == 400
+    assert _move(client, mmf, "DEPOSIT", "700", "BUSINESS", "y-all", place="CASH", occurred_on=str(yesterday)).status_code == 201
+    assert money()["CASH"] == D("300")  # only what was sold since
+    # More than it holds is fine: the extra is business money the app had not seen, and the drawer stops at zero.
+    assert _move(client, mmf, "DEPOSIT", "450", "BUSINESS", "t-more", place="CASH").status_code == 201
+    assert money()["CASH"] == D("0")
+    # From several places at once, each place is emptied too.
+    with organization_context(org):
+        post(unit="SHOP", method="MPESA", amount=D("200"), kind="INCOME", reference="Sales", key="till-sales", user=owner)
+    short = client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"MPESA": "150"}, "idempotency_key": "many-short"}, format="json")
+    assert short.status_code == 400 and "at least 200.00" in str(short.json())
+    assert client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"MPESA": "200"}, "idempotency_key": "many"}, format="json").status_code in (200, 201)
+    assert money()["MPESA"] == D("0")

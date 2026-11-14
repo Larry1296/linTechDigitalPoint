@@ -205,6 +205,14 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     if charge < 0:
         raise ValidationError("The instant withdrawal charge cannot be below zero.")
     unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
+    # The business's money put in empties its place (2026-11-14, owner: what was sold and not yet invested sits in the
+    # drawer, and putting money in can never be less than it, so what is left in the drawer is only money sold since).
+    if business and putting_in:
+        held = max(held_on(place, unit, day), Decimal("0"))
+        if amount < held:
+            raise ValidationError(f"{PLACE_WORDS[place][0].upper()}{PLACE_WORDS[place][1:]} held {held:,.2f} of the business's money on "
+                                  f"{day:%-d %b %Y} that was not invested yet. Put in at least {held:,.2f}: all of it goes into "
+                                  f"{investment.name}, and more is fine if you also sent money the app has not seen.")
     # The business's money put in may be more than the app expects in its place (2026-11-05, owner: business money
     # the app has not seen yet, e.g. collected elsewhere). The extra is that money, recorded as it goes in, so the place
     # stops at zero and never shows below it (2026-11-13, owner: investing is not spending).
@@ -504,6 +512,15 @@ def _held(method, unit):
     from .money_check import expected
     from .money_mode import separate_cash
     return expected(method, unit if method == "CASH" and separate_cash() else None)[0]
+
+
+def held_on(method, unit, day):
+    """What the app expects the place held at the end of ``day``: the business's money in it not invested yet."""
+    from .money_check import _entries
+    from .money_mode import separate_cash
+    end = timezone.make_aware(datetime.combine(day, time.max)) if day != timezone.localdate() else None
+    rows = _entries(method, unit if method == "CASH" and separate_cash() else None)
+    return (rows.filter(occurred_at__lte=end) if end else rows).aggregate(v=Sum("amount"))["v"] or Decimal("0")
 
 
 def cover(*, method, unit, amount, fund, key, user, occurred_at=None):

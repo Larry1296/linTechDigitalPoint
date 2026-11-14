@@ -39,32 +39,33 @@ test("shows nothing when the viewer may see no part of the business", () => {
   expect(container).toBeEmptyDOMElement();
 });
 
-test("explains, step by step, why the business's money is not the total sold and earned", () => {
-  // LinTech's own figures on 14 Nov 2026: 25,234.08 of the business's money is in the CIC fund.
-  const bridge = { money_now: "29529.08", in_places: "4295.00", in_investments: "25234.08", interest: "911.08", lines: [
-    { key: "not_received", amount: "-180.00" }, { key: "starting", amount: "800.00" }, { key: "own_for_suppliers", amount: "6909.60" },
-    { key: "found", amount: "4900.00" }, { key: "agency", amount: "1800.00" }, { key: "suppliers", amount: "-6909.60" }] };
-  render(<SoldSummary sold={{ ...sold, total: "22209.08" }} bridge={bridge} money={money} />);
-  const fold = screen.getByText("Why the business's money now (KES 29,529.08, KES 25,234.08 of it in investments) is not this total").closest("details");
-  const steps = [...fold.querySelectorAll(".soldSteps > div")].map((row) => row.textContent);
-  expect(steps).toEqual(["Total sold and earnedKES 22,209.08", "Sold but not paid yet (customers still owe it)− KES 180.00",
-    "Money the business started with+ KES 800.00", "Your own money put in to pay suppliers+ KES 6,909.60",
-    "Business money that was already in the investment (the app had not seen it)+ KES 4,900.00", "Moved in from the M-Pesa agency's cash+ KES 1,800.00",
-    "Paid to suppliers for stock− KES 6,909.60", "The business's money nowKES 29,529.08"]);
-  expect(within(fold).getByRole("link", { name: "KES 4,295.00 in the drawer, till and bank" })).toHaveAttribute("href", "/admin/money-check");
-  expect(within(fold).getByRole("link", { name: "KES 25,234.08 kept in investments" })).toHaveAttribute("href", "/admin/investments");
+test("shows in a simple sum how what was earned became the business's money now", () => {
+  // LinTech's own figures on 14 Nov 2026: 23,009.08 earned; 25,234.08 in CIC and 500 sold today, not invested yet.
+  const bridge = { money_now: "25734.08", in_places: "500.00", in_investments: "25234.08", interest: "911.08", funds: ["CIC"], lines: [
+    { key: "not_received", amount: "-480.00" }, { key: "starting", amount: "800.00" }, { key: "own_for_suppliers", amount: "6909.60" },
+    { key: "found", amount: "605.00" }, { key: "agency", amount: "1800.00" }, { key: "suppliers", amount: "-6909.60" }] };
+  render(<SoldSummary sold={{ ...sold, total: "23009.08" }} bridge={bridge} money={money} />);
+  const sum = screen.getByRole("region", { name: "From what was earned to the money you have" });
+  const steps = [...sum.querySelectorAll(".soldSteps > div")].map((row) => row.textContent);
+  expect(steps).toEqual(["Earned from sales and workThe total aboveKES 23,009.08",
+    "+ Money that came from elsewhereKES 800.00 the money it started with · KES 605.00 already in the investment before the app saw it · KES 1,800.00 moved in from the M-Pesa agency+ KES 3,205.00",
+    "− Still owed by customersSold, not paid yet− KES 480.00",
+    "= The business's money nowKES 25,234.08 in CIC, with the KES 911.08 interest it earned there · KES 500.00 in the drawer, till and bank: sold, not invested yetKES 25,734.08"]);
+  // Stock paid from the owner's own pocket is a note, not added and taken away.
+  expect(within(sum).getByText(/You paid suppliers KES 6,909.60 from your own pocket/)).toBeInTheDocument();
+  expect(within(sum).getByRole("link", { name: "KES 500.00 in the drawer, till and bank: sold, not invested yet" })).toHaveAttribute("href", "/admin/money-check");
+  expect(within(sum).getByRole("link", { name: "KES 25,234.08 in CIC" })).toHaveAttribute("href", "/admin/investments");
+  expect(screen.getByRole("link", { name: /The business's money now/ })).toHaveTextContent("KES 25,234.08 in CIC · KES 500.00 sold, not invested yet");
 });
 
 test("says all of the business's money is in investments when the drawer, till and bank hold none", () => {
-  // LinTech after the drawer's 4,295 was recorded as already in CIC: the money now is exactly the investment.
-  const bridge = { money_now: "25234.08", in_places: "0.00", in_investments: "25234.08", interest: "911.08", lines: [
-    { key: "not_received", amount: "-180.00" }, { key: "starting", amount: "800.00" }, { key: "own_for_suppliers", amount: "6909.60" },
-    { key: "found", amount: "605.00" }, { key: "agency", amount: "1800.00" }, { key: "suppliers", amount: "-6909.60" }] };
-  render(<SoldSummary sold={{ ...sold, total: "22209.08" }} bridge={bridge} money={money} />);
-  const fold = screen.getByText("Why the business's money now (KES 25,234.08, all of it in investments) is not this total").closest("details");
-  expect(within(fold).getByText(/Business money that was already in the investment/).nextSibling).toHaveTextContent("+ KES 605.00");
-  expect(within(fold).getByRole("link", { name: "KES 25,234.08, is kept in investments" })).toHaveAttribute("href", "/admin/investments");
-  expect(within(fold).getByText(/Nothing is left in the drawer, till or bank/)).toBeInTheDocument();
+  const bridge = { money_now: "25234.08", in_places: "0.00", in_investments: "25234.08", interest: "0", funds: ["CIC"], lines: [
+    { key: "starting", amount: "800.00" }, { key: "suppliers", amount: "-1000.00" }, { key: "expenses", amount: "-200.00" }] };
+  render(<SoldSummary sold={{ ...sold, total: "25634.08" }} bridge={bridge} money={money} />);
+  const sum = screen.getByRole("region", { name: "From what was earned to the money you have" });
+  const paid = within(sum).getByText("− Paid out").closest("div");
+  expect(paid).toHaveTextContent("− Paid outKES 1,000.00 paid to suppliers · KES 200.00 running costs− KES 1,200.00");
+  expect(within(sum).getByText(/nothing in the drawer, till or bank/)).toBeInTheDocument();
   // The dashboard shows the money the business holds at a glance, next to the total sold and earned.
   const now = screen.getByRole("link", { name: /The business's money now/ });
   expect(now).toHaveTextContent("The business's money nowKES 25,234.08All of it kept in investments");

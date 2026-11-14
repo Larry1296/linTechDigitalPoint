@@ -194,6 +194,11 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
   const holds = business ? investment.shop_value : investment.owner_value;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Math.max(Number(holds) || 0, 0))));
   const [place, setPlace] = useState("MPESA");
+  const [part, setPart] = useState(parts[0]?.key);
+  // The business's money put in empties its place: never less than what the place holds that was not invested yet.
+  const from = business && putIn ? places.find((p) => p.method === place && (!p.unit || p.unit === part)) : null;
+  const least = Math.max(Number(from?.expected) || 0, 0);
+  useEffect(() => { if (least > 0) setAmount((now) => (Number(now) < least ? String(least) : now)); }, [least]);
   // Money taken out: standard (to the bank, free) or instant (straight away, for a charge that leaves the fund too).
   const [speed, setSpeed] = useState("");
   const [charge, setCharge] = useState("100");
@@ -211,8 +216,6 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
     const title = business
       ? (putIn ? `Move ${sum} of the business's money from the ${placeName(place)} into ${investment.name}?` : `Take ${sum} of the business's money out of ${investment.name} back to the ${placeName(place)}?`)
       : (putIn ? `Add ${sum} of your own money to ${investment.name}?` : `Take ${sum} of your own money out of ${investment.name} to you?`);
-    const part = values.unit || parts[0]?.key;
-    const from = business && putIn && places.find((p) => p.method === place && (!p.unit || p.unit === part));
     const text = (business
       ? `It stays the business's money${putIn ? ", kept in the investment" : ""}: the ${placeName(place)} ${putIn ? "goes down" : "goes up"} by ${sum}, and the business's money, sales and profit stay as they are.`
         + (from ? beyond(from.label, from.expected, values.amount) : "")
@@ -248,10 +251,12 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
           </select>
         </FormField>}
         {business && parts.length > 1 && <FormField label="Which part's money">
-          <select name="unit" defaultValue={parts[0].key}>{parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select>
+          <select name="unit" value={part} onChange={(event) => setPart(event.target.value)}>{parts.map((part) => <option key={part.key} value={part.key}>{part.name}</option>)}</select>
         </FormField>}
-        <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min="0.01" step="0.01"
+        <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min={least > 0 ? String(least) : "0.01"} step="0.01"
           max={putIn ? undefined : Math.max(Number(holds) || 0, 0)} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+        {least > 0 && <p className="muted">{from.label} holds {money(least)} sold and not invested yet. Put in at least that, so it is emptied:
+          what is left there is only money sold after this.</p>}
         <p className="muted">{business
           ? `Still the business's money while it is in the investment, so its money and each part's figures stay the same. ${APART}`
           : `Not the business's money: nothing in the business changes. ${APART}`}</p>
@@ -566,9 +571,10 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="Put in the business's money">
       <h4 className="investFormTitle">Put in the business's money</h4>
       <p className="muted">The business's money (what it sold and earned, less what it spent) you are sending to {investment.name}. Each place shows
-        what the app expects there; keep it, or enter how much you sent from it, even more than it expects.</p>
+        what it holds that is not invested yet: a place you put in from is emptied, so enter at least that, or more if you also sent money the app has not seen.</p>
       <fieldset disabled={busy} className="loanFields">
-        {places.map((p) => <FormField key={p.key} label={`From ${p.label.toLowerCase()} (expects ${money(p.expected)})`} type="number" min="0" step="0.01"
+        {places.map((p) => <FormField key={p.key} label={`From ${p.label.toLowerCase()} (holds ${money(p.expected)})`} type="number"
+          min={Number(p.expected) > 0 ? String(Number(p.expected)) : "0"} step="0.01"
           value={amounts[p.key]} onChange={(event) => setAmounts({ ...amounts, [p.key]: event.target.value })} />)}
         <FormField label="Date" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
       </fieldset>
