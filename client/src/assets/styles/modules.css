@@ -3379,3 +3379,57 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .pagerGap { color: var(--muted); padding: 0 2px; }
 .jobsHeading { margin: 16px 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 @media (max-width: 600px) { .pager { justify-content: center; } .pagerCount { width: 100%; text-align: center; } }
+
+/* What the business has brought in (dashboard, first row). Each kind of income keeps one colour (validated categorical
+   slots, light and dark), shown only beside its written name and share, so colour is never the only key. */
+.soldSummary {
+  --sold-goods: #2a78d6; --sold-services: #eb6834; --sold-commission: #1baf7a; --sold-interest: #eda100; --sold-other: #e87ba4;
+  display: grid; gap: 18px; padding: clamp(16px, 2.6vw, 26px); border: 1px solid var(--line); border-radius: 18px;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+[data-theme="dark"] .soldSummary { --sold-goods: #3987e5; --sold-services: #d95926; --sold-commission: #199e70; --sold-interest: #c98500; --sold-other: #d55181; }
+.soldSummary .goods { --sold: var(--sold-goods); }
+.soldSummary .services { --sold: var(--sold-services); }
+.soldSummary .commission { --sold: var(--sold-commission); }
+.soldSummary .interest { --sold: var(--sold-interest); }
+.soldSummary .other { --sold: var(--sold-other); }
+.soldHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 28px; }
+.soldHead > div:first-child { flex: 1 1 320px; min-width: 0; }
+.soldHead h2 { margin: 4px 0 6px; font-size: clamp(1.15rem, 2vw, 1.45rem); }
+.soldHead p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.soldTotal { display: grid; gap: 2px; justify-items: end; text-align: right; }
+.soldTotal span { color: var(--muted); font-size: 13px; font-weight: 650; }
+.soldTotal strong { font-size: clamp(1.7rem, 4.2vw, 2.6rem); line-height: 1.1; letter-spacing: -0.02em; }
+.soldTotal small { color: var(--muted); font-size: 12.5px; }
+/* One whole, split into parts: thin, rounded, a 2px surface gap between parts. */
+.soldBar { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); }
+.soldSeg { flex: 1 1 0; min-width: 4px; background: var(--sold); }
+.soldGroups { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
+.soldGroup { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 14px 16px 12px; border: 1px solid var(--line);
+  border-top: 4px solid var(--sold); border-radius: 14px; background: color-mix(in srgb, var(--sold) 5%, var(--surface)); }
+.soldGroup > header { display: flex; align-items: center; gap: 8px; }
+.soldDot { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: var(--sold); }
+.soldGroup h3 { flex: 1 1 auto; margin: 0; font-size: 15px; }
+.soldShare { padding: 2px 8px; border-radius: 999px; background: var(--primary2); color: var(--text); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.soldGroup > strong { font-size: clamp(1.15rem, 2vw, 1.4rem); overflow-wrap: anywhere; }
+.soldGroup .soldWhat { margin: 0 0 4px; color: var(--muted); font-size: 12.5px; }
+.soldGroup ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.soldGroup li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.soldGroup li > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; }
+.soldGroup li a { color: var(--text); font-weight: 600; text-decoration: none; }
+.soldGroup li a:hover, .soldGroup li a:focus-visible { color: var(--primary); text-decoration: underline; }
+.soldGroup li b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.soldGroup li small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.soldSummary .loss { color: var(--danger, #b42318); }
+.soldFoot { display: grid; gap: 4px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+.soldFoot p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 0; }
+.soldFoot span { font-variant-numeric: tabular-nums; }
+.soldFoot .muted { display: block; font-size: 13px; }
+@media (max-width: 520px) {
+  .soldTotal { justify-items: start; text-align: left; }
+  .soldFoot p { justify-content: flex-start; }
+}
+.soldOne { display: grid; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.soldOne small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.soldOne a { justify-self: start; color: var(--primary); font-size: 13px; font-weight: 700; text-decoration: none; }
+.soldOne a:hover, .soldOne a:focus-visible { text-decoration: underline; }

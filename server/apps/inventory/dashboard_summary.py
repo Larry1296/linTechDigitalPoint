@@ -11,6 +11,8 @@ from decimal import Decimal
 from django.db.models import F, Sum
 from django.utils import timezone
 
+from .sold_summary import sold_since_start
+
 ZERO = Decimal('0')
 # The agency counts by its commission and costs, never its cash or float; M-KOPA by the commission M-KOPA paid. Both
 # commissions, like interest on investments, are the business's profit.
@@ -92,7 +94,7 @@ def _customers_owe():
     return JournalLine.objects.filter(account__code__in=['1100', '1150']).aggregate(v=Sum(F('debit') - F('credit')))['v'] or ZERO
 
 
-def owner_summary(*, visible_units, profit_visible, permits):
+def owner_summary(*, visible_units, profit_visible, permits, enabled=()):
     from .dashboard import pnl_rows, whole
     units = [unit for unit in UNITS if unit in visible_units]
     if not units:
@@ -110,6 +112,8 @@ def owner_summary(*, visible_units, profit_visible, permits):
             'today': _figures([row for row in rows if row['date'] == today], units, profit_visible),
             'all_time': {**_figures(rows, units, profit_visible), 'count': sold.count(),
                          'items_sold': SaleItem.objects.filter(sale__in=sold).aggregate(v=Sum('quantity'))['v'] or ZERO},
+            # What was brought in since the start, by goods, services, commission and interest, from the same rows.
+            'sold': sold_since_start(rows, units=units, enabled=set(enabled), profit_visible=profit_visible),
             'money': _money() if money_allowed else None,
             'agency': agency_money() if money_allowed and 'MPESA' in units else None,
             'customers_owe': _customers_owe() if money_allowed else None}

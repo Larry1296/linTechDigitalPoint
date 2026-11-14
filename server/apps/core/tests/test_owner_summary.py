@@ -85,3 +85,54 @@ def test_m_pesa_card_shows_the_last_shift_closed_with_between_shifts():
     assert mpesa["open_sessions"] == 0 and mpesa["live"] is False and mpesa["as_of"]
     assert (D(str(mpesa["cash"])), D(str(mpesa["float"])), D(str(mpesa["in_operation"]))) == (D("6000"), D("19000"), D("25000"))
     assert D(str(mpesa["commission_balance"])) >= D("100")
+
+
+def test_what_was_sold_since_the_start_is_goods_services_commission_and_interest_adding_to_the_total():
+    """The dashboard's "What the business has brought in" card: the books' amounts by what they were, the counts beside
+    them, and a total that is every line added up. A tool the business uses shows even before anything is recorded."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.catalog.models import Category, Product, ProductVariant
+    from apps.inventory.services import complete_stock_receipt
+    owner = User.objects.create_user("sold-owner", password="Safe-pass-1848")
+    org = Organization.objects.create(name="Sold shop", slug="sold", owner=owner,
+                                      enabled_modules=["inventory", "pos", "services", "mpesa", "investments", "reports", "expenses"])
+    Membership.objects.create(user=owner, organization=org, role="OWNER")
+    OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
+    client = APIClient()
+    client.force_login(owner)
+    today = timezone.localdate()
+    last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    with organization_context(org):
+        from apps.accounting.investments import move, open_investment, record_statement
+        from apps.cyber.services import create_service
+        from apps.mpesa.models import MpesaOutlet
+        from apps.mpesa.services import open_session
+        store = Store.objects.create(name="Main")
+        category = Category.objects.create(name="Chargers", slug="chargers")
+        charger = ProductVariant.objects.create(product=Product.objects.create(name="Charger", slug="charger", category=category),
+                                                name="Standard", sku="CHG-S", selling_price=300, minimum_price=250)
+        complete_stock_receipt(supplier_name="Supplier", external_reference="INV-S", received_at=timezone.now() - timedelta(hours=1),
+                               lines=[{"variant_id": charger.pk, "received_quantity": "10", "unit_cost": "160"}], user=owner)
+        charging = create_service(owner, "Phone charging", "10")
+        outlet = MpesaOutlet.objects.create(store=store, display_name="Agent till")
+        open_session(outlet=outlet, operator=owner, opening_cash="5000", opening_float="20000")
+        fund = open_investment(user=owner, name="CIC MMF")
+        move(investment=fund, user=owner, kind="DEPOSIT", amount="1000", source="OWNER", key="dep")
+        record_statement(investment=fund, user=owner, balance="1250", key="stmt")
+    assert client.post("/api/v1/commerce/pos/complete/", {"items": [{"variant_id": charger.pk, "quantity": 2}]}, format="json").status_code == 201
+    assert client.post(f"/api/v1/cyber/income/{charging.variant.product_id}/", {"option_id": charging.pk, "quantity": "2",
+                       "payment_method": "CASH", "idempotency_key": "c1"}, format="json").status_code == 201
+    assert client.post("/api/v1/mpesa/commission/", {"outlet": outlet.pk, "period": str(last_month), "amount": "700", "reference": "SOLD01",
+                       "settlement_method": "MPESA", "idempotency_key": "SOLD01"}, format="json").status_code == 201
+    sold = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["sold"]
+    groups = {group["key"]: group for group in sold["groups"]}
+    assert [group["key"] for group in sold["groups"]] == ["GOODS", "SERVICES", "COMMISSION", "INTEREST"]
+    line = lambda key, code: next(row for row in groups[key]["lines"] if row["code"] == code)
+    assert (D(line("GOODS", "4000")["amount"]), line("GOODS", "4000")["sales"], D(line("GOODS", "4000")["quantity"])) == (D("600"), 1, D("2"))
+    assert (D(line("SERVICES", "4020")["amount"]), D(line("SERVICES", "4020")["quantity"])) == (D("20"), D("2"))
+    assert (D(line("COMMISSION", "4010")["amount"]), line("COMMISSION", "4010")["months_paid"]) == (D("700"), 1)
+    assert D(groups["INTEREST"]["amount"]) == D("250")
+    # The menu, rooms and M-KOPA are not used, so they are not shown; the total is every line added up.
+    assert {row["code"] for group in sold["groups"] for row in group["lines"]} == {"4000", "4020", "4010", "4910"}
+    assert D(sold["total"]) == D("1570") == sum(D(group["amount"]) for group in sold["groups"])
