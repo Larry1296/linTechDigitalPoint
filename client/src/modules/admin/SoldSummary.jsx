@@ -84,14 +84,24 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
         <span className="eyebrow">Since you started{started ? ` · ${started}` : ""}</span>
         <h2 id="sold-summary-title">Everything sold and earned</h2>
         <p>All the money the business's sales, services, commission and interest have made since you started. Nothing is taken off yet:
-          what the goods cost you and the money you spent come off in the profit below. It is not the money you have now.</p>
+          what the goods cost you and the money you spent come off in the profit below. It is not the money you have now{bridge ? ", which is shown with it" : ""}.</p>
       </div>
+    </header>
+    {/* The two figures owners ask about: what was sold and earned, and the money the business holds now. */}
+    <div className="soldFigures">
       <div className="soldTotal">
         <span>Total sold and earned</span>
         <strong>{money(total)}</strong>
-        {sold.groups.length > 1 && <small>{sold.groups.map((group) => group.name.toLowerCase()).join(" + ")}</small>}
+        <small>{sold.groups.length > 1 ? sold.groups.map((group) => group.name.toLowerCase()).join(" + ") : "Since you started"}</small>
       </div>
-    </header>
+      {bridge && <a className="soldTotal soldMoney" href={Number(bridge.in_places) ? "/admin/money-check" : "/admin/investments"}>
+        <span>The business's money now</span>
+        <strong>{money(bridge.money_now)}</strong>
+        <small>{!Number(bridge.in_places) && Number(bridge.in_investments) ? "All of it kept in investments"
+          : Number(bridge.in_investments) ? `${money(bridge.in_places)} in the drawer, till and bank · ${money(bridge.in_investments)} in investments`
+          : "In the drawer, till and bank"}</small>
+      </a>}
+    </div>
 
     {/* Each part's share of the total. Every share is also written in its card below, so colour is never the only key. */}
     {total > 0 && <div className="soldBar" role="img" aria-label={`Share of the total: ${parts.map((group) => `${group.name} ${percent(share(group.amount, total))}`).join(", ")}`}>

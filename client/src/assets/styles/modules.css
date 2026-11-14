@@ -3397,9 +3397,12 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .soldHead > div:first-child { flex: 1 1 320px; min-width: 0; }
 .soldHead h2 { margin: 4px 0 6px; font-size: clamp(1.15rem, 2vw, 1.45rem); }
 .soldHead p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.soldTotal { display: grid; gap: 2px; justify-items: end; text-align: right; }
+.soldFigures { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.soldTotal { display: grid; align-content: start; gap: 2px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); text-decoration: none; }
 .soldTotal span { color: var(--muted); font-size: 13px; font-weight: 650; }
-.soldTotal strong { font-size: clamp(1.7rem, 4.2vw, 2.6rem); line-height: 1.1; letter-spacing: -0.02em; }
+.soldTotal strong { font-size: clamp(1.6rem, 3.6vw, 2.4rem); line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.soldMoney { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); background: var(--primary2); transition: border-color .15s ease, transform .15s ease; }
+.soldMoney:hover, .soldMoney:focus-visible { border-color: var(--primary); transform: translateY(-1px); }
 .soldTotal small { color: var(--muted); font-size: 12.5px; }
 /* One whole, split into parts: thin, rounded, a 2px surface gap between parts. */
 .soldBar { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); }
@@ -3426,7 +3429,6 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .soldFoot span { font-variant-numeric: tabular-nums; }
 .soldFoot .muted { display: block; font-size: 13px; }
 @media (max-width: 520px) {
-  .soldTotal { justify-items: start; text-align: left; }
   .soldFoot p { justify-content: flex-start; }
 }
 .soldOne { display: grid; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }

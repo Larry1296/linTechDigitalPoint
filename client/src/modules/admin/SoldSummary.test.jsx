@@ -65,4 +65,8 @@ test("says all of the business's money is in investments when the drawer, till a
   expect(within(fold).getByText(/Business money that was already in the investment/).nextSibling).toHaveTextContent("+ KES 605.00");
   expect(within(fold).getByRole("link", { name: "KES 25,234.08, is kept in investments" })).toHaveAttribute("href", "/admin/investments");
   expect(within(fold).getByText(/Nothing is left in the drawer, till or bank/)).toBeInTheDocument();
+  // The dashboard shows the money the business holds at a glance, next to the total sold and earned.
+  const now = screen.getByRole("link", { name: /The business's money now/ });
+  expect(now).toHaveTextContent("The business's money nowKES 25,234.08All of it kept in investments");
+  expect(now).toHaveAttribute("href", "/admin/investments");
 });
