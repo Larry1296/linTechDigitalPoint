@@ -1,4 +1,3 @@
-html { scroll-behavior: smooth; }
 .saasSite { --saas-ink:var(--text); --saas-blue:var(--primary); color:var(--saas-ink); background:var(--bg); min-height:100vh; }
 .saasSite > main { width:100%; max-width:none; margin:0; padding:0; }
 .saasSite a { color:inherit; }.saasSite .button { background:var(--saas-blue); color:var(--on-primary); border-radius:8px; display:inline-flex; align-items:center; gap:10px; text-decoration:none; padding:14px 21px; }.saasSite .secondary { background:transparent; color:var(--saas-ink); border:1px solid var(--line); }
@@ -38,7 +37,6 @@ html { scroll-behavior: smooth; }
 .admin main { min-width:0; }.saasSite * { box-sizing:border-box; }.saasSite :focus-visible { outline:3px solid var(--primary); outline-offset:4px; }
 @media(max-width:1000px) { .saasHero { gap:35px; }.saasFeatureGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) { .saasHero { grid-template-columns:minmax(0, 1fr); padding-top:45px; padding-bottom:60px; }.saasOverview { padding:25px; box-shadow:7px 9px 0 var(--line); }.saasFeatureGrid,.saasSplit { grid-template-columns:minmax(0, 1fr); }.saasFooter { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }.businessHeader { padding-top:60px; }.businessHeader label { margin-left:0; } }
-@media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
 
 .saasNav > .theme { margin-left:auto; flex-shrink:0; }
 .saasNav .theme { color:var(--chrome-muted); }

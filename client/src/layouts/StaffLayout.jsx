@@ -239,7 +239,7 @@ export function StaffLayout() {
         <main inert={drawerOpen ? true : undefined}>
           {!(["/admin/products", "/admin/product-lookup", "/admin/categories"].includes(pathname)) && <BackLink />}
           <SubscriptionBanner organization={organization} canManage={["OWNER", "ADMIN"].includes(user.roles?.[0])} />
-          <Outlet />
+          <div className="pageBody"><Outlet /></div>
         </main>
       </div>
       {/* The assistant answers about the business's records and money, which are the owner's: not an employee's. */}

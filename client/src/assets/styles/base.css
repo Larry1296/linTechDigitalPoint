@@ -87,6 +87,26 @@ body {
   overflow-x: clip;
   overscroll-behavior-x: none;
 }
+/* Scrolling glides on every page (jumps to a section, "back to top", a form brought into view), except for people who
+   asked their device for less motion. In the workspace a jump stops below the sticky top bar instead of under it. */
+html { scroll-behavior: smooth; }
+html:has(.workspaceTopbar) { scroll-padding-top: calc(var(--workspace-topbar-height) + 12px); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Every page sits in the middle of the screen while it fits, and starts at the top once it is taller, then scrolls.
+   The page body takes the screen below the bars; its auto margins share the room left above and below it and fall to
+   zero when the page is taller, so the top of a long page is never pushed out of reach. The back link and the
+   subscription banner stay at the top. */
+.workspaceTopbar ~ .admin > main { display: flex; flex-direction: column; box-sizing: border-box;
+  min-height: calc(100dvh - var(--workspace-topbar-height)); }
+.customerDashboard > main { display: flex; flex-direction: column; box-sizing: border-box; }
+:is(.admin, .customerDashboard) > main > .pageBackLink { align-self: flex-start; }
+.pageBody { width: 100%; min-width: 0; margin-block: auto; }
+/* Pages without the app's bars (sign-in, set-up, choosing a business, a receipt link) do the same on the whole screen:
+   the page grows to its own width limit and is centred across, and centred down until it is taller than the screen.
+   (.sessionWorkspace is display: contents, so its page is laid out as #root's own child.) */
+#root:has(> .sessionWorkspace > main) { display: flex; min-height: 100dvh; }
+.sessionWorkspace > main { flex: 1 1 auto; min-width: 0; align-self: safe center; }
 body {
   @apply tw:[margin:0];
   background: var(--bg);

@@ -111,7 +111,7 @@ export function CustomerLayout() {
           <SidebarAccount>{isMobile && <ThemePicker />}</SidebarAccount>
         </aside>
         <main inert={sidebarOpen}>
-          <Outlet />
+          <div className="pageBody"><Outlet /></div>
         </main>
       </div>
       <AppFooter />
