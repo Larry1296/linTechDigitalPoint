@@ -44,7 +44,7 @@ function lineNote(line, money) {
 const BRIDGE = {
   not_received: ["Received for sales recorded later (deposits and the like)", "Sold but not paid yet (customers still owe it)"],
   starting: ["Money the business started with"], own_for_suppliers: ["Your own money put in to pay suppliers"],
-  found: ["Business money the app had not seen, found when you invested it"],
+  found: ["Business money that was already in the investment (the app had not seen it)", "Counted in the drawer, till or bank but already in the investment"],
   agency: ["Moved in from the M-Pesa agency's cash", "Moved to the M-Pesa agency"],
   suppliers: ["Supplier refunds", "Paid to suppliers for stock"], expenses: ["Running costs refunded", "Spent on running costs"],
   loans: ["Loans repaid", "Money lent out, less what was repaid"], other: ["Other money in", "Other money out"],
@@ -55,7 +55,8 @@ const stepLabel = (line) => BRIDGE[line.key]?.[Number(line.amount) < 0 && BRIDGE
 function MoneyBridge({ bridge, total, money }) {
   const signed = (value) => `${Number(value) < 0 ? "−" : "+"} ${money(Math.abs(Number(value)))}`;
   return <details className="soldBridge">
-    <summary>Why the business's money now ({money(bridge.money_now)}{Number(bridge.in_investments) ? `, ${money(bridge.in_investments)} of it in investments` : ""}) is not this total</summary>
+    <summary>Why the business's money now ({money(bridge.money_now)}{!Number(bridge.in_places) && Number(bridge.in_investments) ? ", all of it in investments"
+      : Number(bridge.in_investments) ? `, ${money(bridge.in_investments)} of it in investments` : ""}) is not this total</summary>
     <p>The total above is what was sold and earned. The business's money is what it holds. They differ because money also came in and
       went out without being a sale, and some sales are not paid yet:</p>
     <dl className="soldSteps">
@@ -63,9 +64,12 @@ function MoneyBridge({ bridge, total, money }) {
       {bridge.lines.map((line) => <div key={line.key}><dt>{stepLabel(line)}</dt><dd>{signed(line.amount)}</dd></div>)}
       <div className="last"><dt>The business's money now</dt><dd>{money(bridge.money_now)}</dd></div>
     </dl>
-    <p className="soldWhere">Where it is: <a href="/admin/money-check">{money(bridge.in_places)} in the drawer, till and bank</a>
-      {Number(bridge.in_investments) ? <> and <a href="/admin/investments">{money(bridge.in_investments)} kept in investments</a>
-        {Number(bridge.interest) ? `, including the ${money(bridge.interest)} interest it earned there` : ""}</> : null}.</p>
+    {!Number(bridge.in_places) && Number(bridge.in_investments)
+      ? <p className="soldWhere">Where it is: all of it, <a href="/admin/investments">{money(bridge.in_investments)}, is kept in investments</a>
+        {Number(bridge.interest) ? `, including the ${money(bridge.interest)} interest it earned there` : ""}. Nothing is left in the drawer, till or bank.</p>
+      : <p className="soldWhere">Where it is: <a href="/admin/money-check">{money(bridge.in_places)} in the drawer, till and bank</a>
+        {Number(bridge.in_investments) ? <> and <a href="/admin/investments">{money(bridge.in_investments)} kept in investments</a>
+          {Number(bridge.interest) ? `, including the ${money(bridge.interest)} interest it earned there` : ""}</> : null}.</p>}
   </details>;
 }
 

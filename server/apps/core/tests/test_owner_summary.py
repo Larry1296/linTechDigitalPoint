@@ -144,3 +144,42 @@ def test_what_was_sold_since_the_start_is_goods_services_commission_and_interest
     assert {line["key"]: D(line["amount"]) for line in bridge["lines"]} == {"starting": D("1000")}
     assert (D(bridge["in_places"]), D(bridge["in_investments"]), D(bridge["money_now"])) == (D("2320"), D("250"), D("2570"))
     assert D(sold["total"]) + sum(D(line["amount"]) for line in bridge["lines"]) == D(bridge["money_now"])
+
+
+def test_money_the_owner_says_is_already_invested_leaves_the_drawer_and_nothing_else_changes():
+    """An owner who keeps all the business's money in an investment: the drawer the app still counts is brought to zero,
+    recorded as money already in the investment. The investment, what was sold and the profit stay the same."""
+    from django.core.management import call_command
+    from io import StringIO
+    owner = User.objects.create_user("already-owner", password="Safe-pass-1848")
+    org = Organization.objects.create(name="Already shop", slug="already", owner=owner, enabled_modules=["services", "investments", "reports", "expenses"])
+    Membership.objects.create(user=owner, organization=org, role="OWNER")
+    OrganizationSubscription.objects.create(organization=org, status="ACTIVE")
+    client = APIClient()
+    client.force_login(owner)
+    with organization_context(org):
+        from apps.accounting.investments import move, open_investment
+        from apps.cyber.services import create_service
+        Store.objects.create(name="Main")
+        charging = create_service(owner, "Phone charging", "100")
+        fund = open_investment(user=owner, name="CIC MMF")
+        move(investment=fund, user=owner, kind="DEPOSIT", amount="5000", source="OWNER", key="dep")
+    client.post("/api/v1/accounting/money-check/starting/", {"method": "CASH", "amount": "1000", "idempotency_key": "start"}, format="json")
+    client.post(f"/api/v1/cyber/income/{charging.variant.product_id}/", {"option_id": charging.pk, "quantity": "3", "payment_method": "CASH", "idempotency_key": "c1"}, format="json")
+    before = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]
+    assert D(before["money_bridge"]["in_places"]) == D("1300")
+    # Shown first, recorded only with --apply.
+    out = StringIO()
+    call_command("record_already_invested", business=org.pk, place="CASH", fund="CIC MMF", stdout=out)
+    assert "Nothing recorded" in out.getvalue() and D(client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["money_bridge"]["in_places"]) == D("1300")
+    call_command("record_already_invested", business=org.pk, place="CASH", fund="CIC MMF", apply=True, stdout=StringIO())
+    after = client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]
+    bridge = after["money_bridge"]
+    assert (D(bridge["in_places"]), D(bridge["in_investments"]), D(bridge["money_now"])) == (D("0"), D(before["money_bridge"]["in_investments"]), D(before["money_bridge"]["in_investments"]))
+    assert (after["sold"]["total"], after["all_time"]["profit"]) == (before["sold"]["total"], before["all_time"]["profit"])
+    assert D(after["sold"]["total"]) + sum(D(line["amount"]) for line in bridge["lines"]) == D(bridge["money_now"])
+    places = {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+    assert places["CASH"] == 0
+    # Running it again finds nothing to move.
+    call_command("record_already_invested", business=org.pk, place="CASH", fund="CIC MMF", apply=True, stdout=StringIO())
+    assert D(client.get("/api/v1/inventory/dashboard/").json()["owner_summary"]["money_bridge"]["in_places"]) == 0

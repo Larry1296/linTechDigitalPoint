@@ -49,8 +49,20 @@ test("explains, step by step, why the business's money is not the total sold and
   const steps = [...fold.querySelectorAll(".soldSteps > div")].map((row) => row.textContent);
   expect(steps).toEqual(["Total sold and earnedKES 22,209.08", "Sold but not paid yet (customers still owe it)− KES 180.00",
     "Money the business started with+ KES 800.00", "Your own money put in to pay suppliers+ KES 6,909.60",
-    "Business money the app had not seen, found when you invested it+ KES 4,900.00", "Moved in from the M-Pesa agency's cash+ KES 1,800.00",
+    "Business money that was already in the investment (the app had not seen it)+ KES 4,900.00", "Moved in from the M-Pesa agency's cash+ KES 1,800.00",
     "Paid to suppliers for stock− KES 6,909.60", "The business's money nowKES 29,529.08"]);
   expect(within(fold).getByRole("link", { name: "KES 4,295.00 in the drawer, till and bank" })).toHaveAttribute("href", "/admin/money-check");
   expect(within(fold).getByRole("link", { name: "KES 25,234.08 kept in investments" })).toHaveAttribute("href", "/admin/investments");
+});
+
+test("says all of the business's money is in investments when the drawer, till and bank hold none", () => {
+  // LinTech after the drawer's 4,295 was recorded as already in CIC: the money now is exactly the investment.
+  const bridge = { money_now: "25234.08", in_places: "0.00", in_investments: "25234.08", interest: "911.08", lines: [
+    { key: "not_received", amount: "-180.00" }, { key: "starting", amount: "800.00" }, { key: "own_for_suppliers", amount: "6909.60" },
+    { key: "found", amount: "605.00" }, { key: "agency", amount: "1800.00" }, { key: "suppliers", amount: "-6909.60" }] };
+  render(<SoldSummary sold={{ ...sold, total: "22209.08" }} bridge={bridge} money={money} />);
+  const fold = screen.getByText("Why the business's money now (KES 25,234.08, all of it in investments) is not this total").closest("details");
+  expect(within(fold).getByText(/Business money that was already in the investment/).nextSibling).toHaveTextContent("+ KES 605.00");
+  expect(within(fold).getByRole("link", { name: "KES 25,234.08, is kept in investments" })).toHaveAttribute("href", "/admin/investments");
+  expect(within(fold).getByText(/Nothing is left in the drawer, till or bank/)).toBeInTheDocument();
 });

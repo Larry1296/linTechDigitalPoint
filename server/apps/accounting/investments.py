@@ -552,6 +552,29 @@ def settle_covers():
                      reason="Put into investments before 13 Nov 2026: more than the app had seen in this place", branch=resolve_branch())
     Organization.objects.filter(pk=org.pk).update(settings={**(org.settings or {}), COVERS_SETTLED: True})
 
+ALREADY = f"{COVER}already:"
+
+
+@transaction.atomic
+def already_invested(*, method, fund, user=None, day=None):
+    """The owner says the money the app expects in a place (all of it) is not there: it is already in an investment,
+    whose business money is already right. Each part's share of the place is brought to zero, recorded as business money
+    already in the investment that the app had counted in the place as well. It only takes away what was counted twice:
+    the investment, sales and profit do not change. Returns the entries made ([] when the place already holds nothing)."""
+    from .money_check import _entries
+    lock_business()
+    day = day or timezone.localdate()
+    made = []
+    rows = _entries(method).values_list("business_unit").annotate(v=Sum("amount"))
+    for unit, held in sorted(rows):
+        if not held:
+            continue
+        made.append(post(unit=unit, method=method, amount=-held, kind="OPENING", key=f"{ALREADY}{day}:{method}:{unit}"[:180], user=user,
+                         reference=f"Money in {PLACE_WORDS[method]} that was already in {fund}"[:160],
+                         reason=f"Already in {fund}: the owner says {PLACE_WORDS[method]} holds none of it", branch=resolve_branch()))
+    return made
+
+
 SWITCH = "business-money-in"
 
 
