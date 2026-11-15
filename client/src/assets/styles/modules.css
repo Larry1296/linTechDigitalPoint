@@ -2698,7 +2698,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .incomeTable th, .incomeTable td { padding: 10px 8px; border-bottom: 1px solid var(--line, #8883); text-align: left; vertical-align: top; }
 .incomeTable small { display: block; }
 .incomeTotal { font-size: 18px; margin: 12px 0; }
-.incomeEntry { margin: 16px 0 24px; }
+.incomeEntry { margin: 16px auto 24px; }
 .incomeEntry #income-rule { margin: 0; }
 .incomeSearch { display: grid; gap: 4px; max-width: 360px; margin: 8px 0; }
 .incomeTable td small { display: block; }
