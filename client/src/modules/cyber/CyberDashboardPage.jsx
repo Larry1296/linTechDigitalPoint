@@ -3,7 +3,9 @@ import { MetricCard } from "../../components/dashboard/MetricCard";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Empty, ErrorState, Loading } from "../../components/States";
-import { PAGE_SIZE, Pager } from "../../components/Pager";
+import { Pager } from "../../components/Pager";
+
+const DONE_PAGE_SIZE = 5;
 import { useAuth } from "../../core/auth/AuthContext";
 import { FormError } from "../../components/forms/FormNotice";
 import {
@@ -76,7 +78,7 @@ export function CyberDashboardPage() {
   const [jobs, setJobs] = useState([]);
   // Finished jobs grow every day: they come a page at a time, newest first.
   const [donePage, setDonePage] = useState(1);
-  const [done, setDone] = useState({ rows: [], page: 1, pages: 1, count: 0, size: PAGE_SIZE });
+  const [done, setDone] = useState({ rows: [], page: 1, pages: 1, count: 0, size: DONE_PAGE_SIZE });
   const [version, setVersion] = useState(0);
   const [services, setServices] = useState([]);
   const [error, setError] = useState("");
@@ -112,8 +114,8 @@ export function CyberDashboardPage() {
   useEffect(() => {
     if (!version) return undefined;
     let live = true;
-    getCyberDoneJobs(donePage, PAGE_SIZE).then((body) => {
-      if (live) setDone({ rows: body.results || [], page: body.page || 1, pages: body.pages || 1, count: body.count || 0, size: PAGE_SIZE });
+    getCyberDoneJobs(donePage, DONE_PAGE_SIZE).then((body) => {
+      if (live) setDone({ rows: body.results || [], page: body.page || 1, pages: body.pages || 1, count: body.count || 0, size: DONE_PAGE_SIZE });
     }).catch(() => {});
     return () => { live = false; };
   }, [donePage, version]);
@@ -286,34 +288,33 @@ export function CyberDashboardPage() {
           {businessCurrency()} {Number(dashboard.all_time?.average || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
         </MetricCard>
       </div>
-      <div className="deskGrid">
-        <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
-          title="Record a service done" />
-        <section>
-          <div className="sectionHeading">
-            <h2>Jobs</h2>
-            {!takingJob && <button type="button" className="secondary" onClick={() => setTakingJob(true)}>+ Take in a job for later</button>}
-          </div>
-          {takingJob && <>
-            <CyberJobForm
-              services={services.filter((service) => service.active)}
-              onSave={async (data) => {
-                const job = await createCyberJob(data);
-                await load();
-                return job;
-              }}
-            />
-            <button type="button" className="secondary" onClick={() => setTakingJob(false)}>Close</button>
-          </>}
-          <h3 className="jobsHeading">Still to do</h3>
-          {!jobs.length ? <Empty>No jobs waiting. Jobs taken in for later show here until they are paid for.</Empty>
-            : <div className="list">{jobs.map(jobRow)}</div>}
-          <h3 className="jobsHeading" id="cyber-done-jobs">Done</h3>
-          {!done.count ? <Empty>No finished jobs yet.</Empty>
-            : <><div className="list" aria-labelledby="cyber-done-jobs">{done.rows.map(jobRow)}</div>
-              <Pager {...done} onPage={setDonePage} noun="jobs done" /></>}
-        </section>
-      </div>
+      <RecordIncome services={income.services || []} groups={income.groups || []} onSaved={load} onServicesChanged={load}
+        title="Record a service done" />
+      <section aria-labelledby="cyber-waiting-jobs">
+        <div className="sectionHeading">
+          <h2 id="cyber-waiting-jobs">Jobs still to do</h2>
+          {!takingJob && <button type="button" className="secondary" onClick={() => setTakingJob(true)}>+ Take in a job for later</button>}
+        </div>
+        {takingJob && <>
+          <CyberJobForm
+            services={services.filter((service) => service.active)}
+            onSave={async (data) => {
+              const job = await createCyberJob(data);
+              await load();
+              return job;
+            }}
+          />
+          <button type="button" className="secondary" onClick={() => setTakingJob(false)}>Close</button>
+        </>}
+        {!jobs.length ? <Empty>No jobs waiting. Jobs taken in for later show here until they are paid for.</Empty>
+          : <div className="list">{jobs.map(jobRow)}</div>}
+      </section>
+      <section aria-labelledby="cyber-done-jobs">
+        <h2 id="cyber-done-jobs">Jobs done</h2>
+        {!done.count ? <Empty>No finished jobs yet.</Empty>
+          : <><div className="list" aria-labelledby="cyber-done-jobs">{done.rows.map(jobRow)}</div>
+            <Pager {...done} onPage={setDonePage} noun="jobs done" /></>}
+      </section>
       <section aria-labelledby="your-services">
         <div className="sectionHeading">
           <h2 id="your-services">Your services</h2>

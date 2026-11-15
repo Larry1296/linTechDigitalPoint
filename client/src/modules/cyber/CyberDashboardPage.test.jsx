@@ -81,17 +81,17 @@ it("deletes a paid job recorded wrongly, with a reason, so it can be recorded ag
   expect(cyber.deleteCyberSale).toHaveBeenCalledWith(40, "Recorded wrongly");
 });
 
-it("keeps jobs still to do on top and pages the finished ones, 10 at a time", async () => {
+it("keeps jobs still to do on top and pages the finished ones, 5 at a time", async () => {
   cyber.getCyberJobs.mockResolvedValue([job(1, "QUEUED")]);
-  const done = Array.from({ length: 10 }, (_, i) => job(100 + i, "COMPLETED", { sale: 100 + i }));
-  cyber.getCyberDoneJobs.mockImplementation(async (page) => ({ results: page === 1 ? done : [job(200, "COMPLETED", { sale: 200 })], count: 11, page, pages: 2 }));
+  const done = Array.from({ length: 5 }, (_, i) => job(100 + i, "COMPLETED", { sale: 100 + i }));
+  cyber.getCyberDoneJobs.mockImplementation(async (page) => ({ results: page === 1 ? done : [job(200, "COMPLETED", { sale: 200 })], count: 6, page, pages: 2 }));
   await renderDesk();
-  expect(cyber.getCyberDoneJobs).toHaveBeenCalledWith(1, 10);
-  expect(screen.getByText("1–10 of 11 jobs done")).toBeInTheDocument();
+  expect(cyber.getCyberDoneJobs).toHaveBeenCalledWith(1, 5);
+  expect(screen.getByText("1–5 of 6 jobs done")).toBeInTheDocument();
   expect(screen.getByText(/CYB-1 ·/)).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Next ›" })); });
-  expect(cyber.getCyberDoneJobs).toHaveBeenLastCalledWith(2, 10);
-  expect(screen.getByText("11–11 of 11 jobs done")).toBeInTheDocument();
+  expect(cyber.getCyberDoneJobs).toHaveBeenLastCalledWith(2, 5);
+  expect(screen.getByText("6–6 of 6 jobs done")).toBeInTheDocument();
   expect(screen.getByText(/CYB-200 ·/)).toBeInTheDocument();
   expect(screen.queryByText(/CYB-100 ·/)).toBeNull();
 });
