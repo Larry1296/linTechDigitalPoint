@@ -2170,9 +2170,10 @@ form a:not(.button, .pageBackLink),
     padding: 18px 14px;
   }
 }
-/* Printing shows only the receipt, sized for paper or a till printer. */
+/* Printing a receipt shows only the receipt, sized for paper or a till printer. Only on a page with a receipt: other
+   pages (the To buy list) print themselves. */
 @media print {
-  body * {
+  body:has(.receiptDocument) * {
     visibility: hidden !important;
   }
   .receiptDocument,
@@ -3346,7 +3347,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuyEditButtons { display: flex; gap: 6px; align-items: end; }
 .toBuyEditButtons button { min-width: 0; }
 @media (max-width: 1100px) { .toBuyFields { grid-template-columns: repeat(4, minmax(0, 1fr)); } .toBuyFields .toBuyName { grid-column: 1 / -1; } }
-@media (max-width: 900px) {
+/* Screens only: on paper the list keeps one line per item, whatever the paper's width. */
+@media screen and (max-width: 900px) {
   .toBuyStats { grid-template-columns: minmax(0, 1fr); }
   .toBuyFields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .toBuyFields .toBuyName, .toBuyFields .toBuyNote, .toBuyFields button { grid-column: 1 / -1; }
@@ -3365,9 +3367,24 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .toBuyFields .toBuyEditButtons { grid-column: 1 / -1; order: 2; }
   .toBuyFoot { padding-right: 0; }
 }
+/* Printing the list gives just the list on paper: no browser date or web address (the page has no margin for them to
+   sit in, so the list keeps its own), and nothing of the app around it (top bar, menu, footer, back link, banner). */
+@page toBuyList { margin: 0; }
 @media print {
-  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyActions, .toBuyHave { display: none !important; }
+  body:has(.toBuyPage) :is(.appFooter, .businessAssistant, .subscriptionStatus, main > :not(.pageBody)) { display: none !important; }
+  body:has(.toBuyPage) .admin, body:has(.toBuyPage) main, body:has(.toBuyPage) .pageBody { display: block; padding: 0 !important; margin: 0 !important; }
+  .toBuyPage { page: toBuyList; padding: 14mm 14mm 12mm; }
+  .toBuyPage header.toBuyHead { display: block !important; margin: 0 0 6mm; }
+  .toBuyPage header.toBuyHead h1 { margin: 0; font-size: 20pt; }
+  .toBuyPage header.toBuyHead p, .toBuyPage .toBuyStats .toBuyStat:not(.need) { display: none !important; }
+  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyActions, .toBuyHave, .toBuyColumns span:last-child { display: none !important; }
   .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
+  .toBuyStats { display: block; margin: 0 0 4mm; }
+  .toBuyList li { break-inside: avoid; }
+  .toBuyColumns, .toBuyList li { grid-template-columns: minmax(0, 1fr) 150px 110px 120px; }
+  .toBuyFoot { padding-right: 0; }
+  body:has(.toBuyPage) :is(.admin, main) { min-height: 0 !important; }
+  .toBuyCard, .toBuyStat { background: none; }
 }
 
 /* Pager: long lists come a page at a time ("21–30 of 340 jobs", Previous, page numbers, Next). */
