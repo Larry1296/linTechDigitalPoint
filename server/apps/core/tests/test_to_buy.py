@@ -31,9 +31,9 @@ def test_the_list_works_out_each_lines_total_and_the_money_to_carry_without_touc
                  {"name": "Screen protectors", "count": "20", "unit_price": "40", "note": "Tecno and Samsung"}]:
         assert client.post("/api/v1/to-buy/", item, format="json").status_code == 201
     data = client.get("/api/v1/to-buy/").json()
-    assert [(i["name"], i["total"] and Decimal(str(i["total"]))) for i in data["items"]] == [("Type-C cables", 1500), ("Printing paper", None), ("Screen protectors", 800)]
+    assert [(i["name"], i["total"] and Decimal(str(i["total"]))) for i in data["items"]] == [("Screen protectors", 800), ("Printing paper", None), ("Type-C cables", 1500)]  # newest first
     assert data["left"] == 3 and Decimal(data["left_total"]) == 2300 and data["unpriced"] == 1
-    cables = data["items"][0]["id"]
+    cables = data["items"][-1]["id"]
     data = client.patch(f"/api/v1/to-buy/{cables}/", {"count": "12"}, format="json").json()  # changing how many works it out again
     assert Decimal(data["left_total"]) == 2600
     data = client.patch(f"/api/v1/to-buy/{cables}/", {"bought": True}, format="json").json()
@@ -41,7 +41,7 @@ def test_the_list_works_out_each_lines_total_and_the_money_to_carry_without_touc
     assert client.post("/api/v1/to-buy/", {"name": " "}, format="json").status_code == 400
     assert client.post("/api/v1/to-buy/", {"name": "Glue", "count": "0"}, format="json").status_code == 400
     data = client.delete("/api/v1/to-buy/").json()
-    assert [i["name"] for i in data["items"]] == ["Printing paper", "Screen protectors"] and Decimal(data["bought_total"]) == 0
+    assert [i["name"] for i in data["items"]] == ["Screen protectors", "Printing paper"] and Decimal(data["bought_total"]) == 0
     with organization_context(org):
         assert not CashEntry.objects.exists() and not JournalEntry.objects.exists()
     other_org, other = business()
@@ -60,11 +60,11 @@ def test_a_line_leaves_the_list_once_the_item_is_received_into_stock():
     client.post("/api/v1/to-buy/", {"name": "charger", "count": "5"}, format="json")  # typed, no product picked
     client.post("/api/v1/to-buy/", {"name": "Printing paper"}, format="json")
     data = client.get("/api/v1/to-buy/").json()
-    assert data["items"][0]["product"] == "Type-C cable"
+    assert data["items"][-1]["product"] == "Type-C cable"  # added first, so last
     with organization_context(org):
         Movement.objects.create(variant=cable, quantity=10, movement_type="PURCHASE_RECEIPT", reference="R1")
         Movement.objects.create(variant=charger, quantity=-1, movement_type="SALE", reference="S1")  # a sale clears nothing
-    assert [i["name"] for i in client.get("/api/v1/to-buy/").json()["items"]] == ["charger", "Printing paper"]
+    assert [i["name"] for i in client.get("/api/v1/to-buy/").json()["items"]] == ["Printing paper", "charger"]
     with organization_context(org):
         Movement.objects.create(variant=charger, quantity=5, movement_type="OPENING_STOCK", reference="O1")
     assert [i["name"] for i in client.get("/api/v1/to-buy/").json()["items"]] == ["Printing paper"]

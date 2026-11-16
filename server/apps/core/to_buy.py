@@ -53,8 +53,12 @@ def clear_received(sender, instance, created, **kwargs):
         cleared_by(instance.variant).delete()
 
 
+NEWEST_FIRST = ("bought", "-position", "-pk")
+
+
 def listing():
-    items = list(ToBuyItem.objects.select_related("variant__product"))
+    # Newest first: the item just added is at the top. Bought ones follow, also newest first.
+    items = list(ToBuyItem.objects.select_related("variant__product").order_by(*NEWEST_FIRST))
     left = [item for item in items if not item.bought]
     bought = [item for item in items if item.bought]
     add = lambda rows: sum((item.total for item in rows if item.total is not None), Decimal("0"))
@@ -147,7 +151,7 @@ def list_pdf(organization):
             self.canv.setLineWidth(0.8)
             self.canv.rect(0, 0, 3.6 * mm, 3.6 * mm)
 
-    items = [item for item in ToBuyItem.objects.select_related("variant__product") if not item.bought]
+    items = list(ToBuyItem.objects.select_related("variant__product").filter(bought=False).order_by(*NEWEST_FIRST))
     made = timezone.localtime()
     currency = "KSh" if (organization.currency or "KES") == "KES" else organization.currency
     buffer = BytesIO()
