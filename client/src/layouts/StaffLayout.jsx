@@ -4,7 +4,8 @@ import { ThemePicker } from "../components/ThemePicker";
 import "./workspace.css";
 import { useMediaQuery } from "../core/ui/useMediaQuery";
 import { switchBusiness, switchBranch } from "../modules/platform/Onboarding";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { setOutcomeNavigate } from "../core/ui/outcome";
 import { SidebarNavigation } from "../components/navigation/SidebarNavigation";
 import { SidebarAccount } from "../components/navigation/SidebarAccount";
 import {
@@ -136,6 +137,9 @@ export function StaffLayout() {
   const { locale } = useTranslation();
   const { pathname } = useLocation();
   const { user, lock } = useAuth();
+  // After a save, a page goes to its own main view through the router (see core/ui/outcome).
+  const navigate = useNavigate();
+  useEffect(() => { setOutcomeNavigate(navigate); return () => setOutcomeNavigate(null); }, [navigate]);
   // Large screens: the sidebar is always open beside the page. Phones and tablets: it is hidden until the topbar's menu
   // button opens it over the page; it remembers the page it was opened on, so choosing a link hides it again.
   const [openOn, setOpenOn] = useState(null);

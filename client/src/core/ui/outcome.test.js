@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Swal from "sweetalert2";
-import { beginAction, mutationFinished, mutationStarted, setOutcomeOverlays, showOutcome } from "./outcome";
+import { beginAction, mutationFinished, mutationStarted, pageRoot, setOutcomeNavigate, setOutcomeOverlays, showOutcome } from "./outcome";
 
 let form;
 beforeEach(() => {
@@ -68,34 +68,44 @@ it("counts a confirmed dialog as a save, but not reading data or signing in", as
   expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success", title: "Saved" }));
 });
 
-const saveOn = async (path, idx = 3) => {
-  window.history.replaceState({ idx }, "", path);
+const saveOn = async (path) => {
+  window.history.replaceState({ idx: 3 }, "", path);
   const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+  const go = vi.fn();
+  setOutcomeNavigate(go);
   submit();
   mutationStarted("/api/v1/anything/");
   mutationFinished(true);
   await vi.advanceTimersByTimeAsync(1000);
-  return back;
+  setOutcomeNavigate(null);
+  expect(back).not.toHaveBeenCalled();  // never back to whatever page was open before
+  return go;
 };
 
-it("closes the page after a save and returns to the page it was opened from", async () => {
-  expect(await saveOn("/admin/expenses")).toHaveBeenCalledTimes(1);
+it("after a save goes to the page's own main view, never the page open before", async () => {
+  expect(await saveOn("/admin/products?edit=5")).toHaveBeenCalledWith("/admin/products");
+  expect(await saveOn("/admin/receipts/12")).toHaveBeenCalledWith("/admin/receipts");
+  expect(await saveOn("/admin/quick-receive?variant=9")).toHaveBeenCalledWith("/admin/quick-receive");
 });
 
-it("keeps the till, the M-Pesa agency and other entry-after-entry screens open", async () => {
-  expect(await saveOn("/admin/pos")).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
-  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
-  expect(await saveOn("/admin/mpesa/transactions")).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
-  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
-  expect(await saveOn("/admin/to-buy")).not.toHaveBeenCalled();  // adding or editing a line keeps you on the list
+it("stays on a page that is already its own main view, ready for the next entry", async () => {
+  expect(await saveOn("/admin/quick-receive")).not.toHaveBeenCalled();
+  expect(await saveOn("/admin/investments")).not.toHaveBeenCalled();
 });
 
-it("stays when the page was opened directly, or the form is in a dialog", async () => {
-  expect(await saveOn("/admin/expenses", 0)).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
-  vi.spyOn(Swal, "fire").mockResolvedValue({ isConfirmed: true });
+it("keeps the till, the M-Pesa agency and other entry-after-entry screens as they are", async () => {
+  expect(await saveOn("/admin/pos?sale=3")).not.toHaveBeenCalled();
+  expect(await saveOn("/admin/mpesa/transactions?x=1")).not.toHaveBeenCalled();
+  expect(await saveOn("/admin/to-buy?x=1")).not.toHaveBeenCalled();
+});
+
+it("leaves a form in a dialog where it is", async () => {
   form.setAttribute("role", "dialog");
-  expect(await saveOn("/admin/expenses")).not.toHaveBeenCalled();
+  expect(await saveOn("/admin/expenses?edit=2")).not.toHaveBeenCalled();
+});
+
+it("finds a page's main view", () => {
+  expect(pageRoot("/admin/rooms/stays/5")).toBe("/admin/rooms");
+  expect(pageRoot("/admin/cyber/income/4")).toBe("/admin/cyber/income");
+  expect(pageRoot("/admin/chama/setup")).toBe("/admin/chama/setup");
 });

@@ -7,9 +7,11 @@ import Swal from "sweetalert2";
 // When all of them have finished without an error, the success overlay shows: the page's own success message if it
 // shows one (FormSuccess, showSuccess), otherwise a plain "Saved". Errors come from the request, FormError or showError.
 //
-// Once a staff page's form has saved, the page is done: it closes and returns to the page it was opened from. Screens
-// where many entries are made one after another stay open for the next (STAY), as does a form in a dialog (closing
-// the dialog is its close) or one marked data-stay; a page that has already moved on by itself is left where it went.
+// Once a staff page's form has saved, the page goes back to its own main view: an item, record or form opened inside
+// it (a record's own address, or one picked through the address's ?…) closes, and the page shows from its top. It
+// never jumps to whatever page was open before, which may be a different part of the business. Screens where many
+// entries are made one after another stay as they are (STAY), as does a form in a dialog (closing the dialog is its
+// close) or one marked data-stay; a page that has already moved on by itself is left where it went.
 
 let enabled = true;
 let pending = null; // { form: HTMLFormElement | null, at: time, where: the page's address when submitted }
@@ -26,12 +28,28 @@ export function setOutcomeOverlays(on) { enabled = on; pending = null; inflight 
 const STAY = [/^\/admin\/pos\b/, /^\/admin\/to-buy\b/, /^\/admin\/mpesa\b/, /^\/admin\/stock-check\b/, /^\/admin\/chama\/\d+/, /^\/admin\/cyber\/jobs\b/];
 const address = () => (typeof window === "undefined" ? "" : window.location.pathname + window.location.search);
 
-export function returnToPrevious(form, where) {
+// The router's navigate, set by the staff layout, so the page changes without reloading the app.
+let go = null;
+export function setOutcomeNavigate(navigate) { go = navigate; }
+
+// A page's main view: its address without the ?… that opened something in it, and without a record's own number
+// (/admin/receipts/12 → /admin/receipts, /admin/rooms/stays/5 → /admin/rooms).
+export function pageRoot(path) {
+  const parts = path.split("?")[0].replace(/\/+$/, "").split("/");
+  while (parts.length > 3 && /^\d+$/.test(parts[parts.length - 1])) parts.pop();
+  if (parts[parts.length - 1] === "stays") parts.pop();
+  return parts.join("/");
+}
+
+export function goToPageRoot(form, where) {
   if (!form || form.closest("[data-stay], [role='dialog'], dialog")) return false;
   const path = window.location.pathname;
   if (address() !== where || !path.startsWith("/admin/") || STAY.some((stay) => stay.test(path))) return false;
-  if (!(window.history.state?.idx > 0)) return false; // opened directly: there is no page of this app to go back to
-  window.history.back();
+  const root = pageRoot(path);
+  if (root !== address()) {
+    if (go) go(root); else window.history.pushState({}, "", root);
+  }
+  window.scrollTo?.({ top: 0, behavior: "smooth" });
   return true;
 }
 
@@ -75,7 +93,7 @@ async function succeed(title, text) {
   if (form?.isConnected) {
     form.reset();
     form.dispatchEvent(new Event("outcome-reset"));
-    returnToPrevious(form, where);
+    goToPageRoot(form, where);
   }
 }
 
