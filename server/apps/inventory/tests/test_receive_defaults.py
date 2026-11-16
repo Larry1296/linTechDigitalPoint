@@ -122,3 +122,24 @@ def test_item_search_forgives_spelling(receiver):
     found = client.get("/api/v1/inventory/variants/search/", {"q": slip}).json()
     assert variant.pk in [row["id"] for row in found]
     assert client.get("/api/v1/inventory/variants/search/", {"q": "zzqqxx"}).json() == []
+
+
+@pytest.mark.django_db
+def test_an_unplanned_crash_answers_plainly_and_is_kept_for_the_platform_owner(receiver, monkeypatch):
+    from apps.core.models import AuditLog
+    from apps.tenancy.context import organization_context
+    user, variant, shelves = receiver
+    def boom(**kwargs):
+        raise RuntimeError("the thing that broke")
+    monkeypatch.setattr("apps.inventory.api.complete_stock_receipt", boom)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post("/api/v1/inventory/receipts/", {"lines": []}, format="json")
+    assert response.status_code == 500 and "nothing was saved" in response.json()["detail"]
+    reference = response.json()["reference"]
+    from apps.tenancy.models import Organization
+    found = None
+    for organization in Organization.objects.all():
+        with organization_context(organization):
+            found = found or AuditLog.objects.filter(action="SERVER_ERROR", object_id=reference).first()
+    assert found is not None and "the thing that broke" in found.after["error"] and found.user_id == user.pk

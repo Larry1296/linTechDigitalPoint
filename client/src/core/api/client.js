@@ -44,6 +44,7 @@ export async function refreshAccess() {
 // What the person sees when the server sends nothing usable back (it is off, restarting or the connection dropped),
 // instead of a browser error such as "Unexpected end of JSON input".
 export const SERVER_UNREACHABLE = "Can't reach the LinTech server right now. Check your internet connection, or that the server is running, then try again.";
+export const SERVER_FAILED = "The server had a problem with this and nothing was saved. Try again; if it keeps happening, tell support what you were doing.";
 async function send(path, options) {
   try {
     return await fetch(apiUrl(path), options);
@@ -57,6 +58,9 @@ async function readJson(response) {
     return await response.json();
   } catch {
     if (response.ok) return {};
+    // The server answered, but with a broken page instead of data: it is up, this one request failed there.
+    if (response.status >= 500 && response.status !== 502 && response.status !== 503 && response.status !== 504)
+      throw new ApiError(response.status, SERVER_FAILED);
     throw new ApiError(response.status, SERVER_UNREACHABLE);
   }
 }

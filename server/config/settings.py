@@ -85,6 +85,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.accounts.session_lock.IdleSessionMiddleware",
     "apps.tenancy.middleware.TenantMiddleware",
+    "apps.tenancy.exceptions.ServerErrorLog",  # keeps an unplanned crash's details once its transaction is over
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
