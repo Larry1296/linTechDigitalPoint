@@ -3446,3 +3446,12 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .soldSteps .first { font-weight: 700; }
 .soldSteps > .last { margin-top: 2px; padding-top: 10px; border-top: 2px solid var(--line); font-weight: 800; }
 .soldSum .soldWhere { margin: 4px 16px 6px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+/* To buy: your products suggested under the item name as you type. */
+.toBuyName { position: relative; }
+.toBuySuggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  max-height: 280px; overflow-y: auto; }
+.toBuySuggest li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-weight: 400; color: var(--text); }
+.toBuySuggest li strong { font-weight: 600; }
+.toBuySuggest li span { font-size: 12px; }
+.toBuySuggest li:hover, .toBuySuggest li[aria-selected="true"] { background: color-mix(in srgb, var(--line) 45%, transparent); }

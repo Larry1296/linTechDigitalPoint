@@ -96,3 +96,26 @@ class ToBuyItemView(APIView):
     def delete(self, request, pk):
         get_object_or_404(ToBuyItem, pk=pk).delete()
         return Response(listing())
+
+
+class ToBuyFillView(APIView):
+    """What a line for one of the business's products is filled with once it is picked, so only how many is typed:
+    the price each from its last purchase (a pack's price when sold in packs), its unit, and who it was bought from."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = {"GET": "core.add_tobuyitem"}
+
+    def get(self, request, variant_id):
+        from apps.catalog.models import ProductVariant
+        from apps.inventory.api import last_purchase
+        variant = get_object_or_404(ProductVariant.objects.select_related("product"), pk=variant_id)
+        _, supplier, unit_cost = last_purchase(variant)
+        # The unit the product is kept in: one by one, or packs of so many pieces. A unit written for it on an earlier
+        # line of the list (say cartons) is how this business buys it, so that comes first.
+        size = variant.pack_size or 1
+        piece = (variant.piece_name or "piece").strip().lower().rstrip("s") + "s"
+        unit = f"packs of {size} {piece}" if size > 1 else "pcs"
+        earlier = ToBuyItem.objects.filter(variant=variant).exclude(unit="").order_by("-id").values_list("unit", flat=True).first()
+        unit = earlier or unit
+        return Response({"variant": variant.id, "name": variant_label(variant), "unit": unit,
+                         "unit_price": None if unit_cost is None else round(Decimal(unit_cost), 2),
+                         "note": f"from {supplier}" if supplier else ""})

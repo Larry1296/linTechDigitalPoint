@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency } from "../../core/organization/presentation";
@@ -31,6 +31,40 @@ function useProductSuggestions(text, enabled) {
   return found;
 }
 
+// The item's name with your products suggested under it as you type (misspellings found too). Picking one links the
+// line to it and fills in the rest from its last purchase.
+function ItemNameField({ value, onType, found, onPick, inputRef, autoFocus, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const listId = useId();
+  const shown = open && found.length > 0;
+  const pick = (row) => { setOpen(false); setActive(-1); onPick(row); };
+  return (
+    <div className="toBuyName"><label>Item
+      <input ref={inputRef} value={value} required maxLength={160} autoComplete="off" autoFocus={autoFocus} placeholder={placeholder}
+        role="combobox" aria-expanded={shown} aria-controls={listId} aria-autocomplete="list"
+        onChange={(event) => { onType(event.target.value); setOpen(true); setActive(-1); }}
+        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(event) => {
+          if (!shown) return;
+          if (event.key === "ArrowDown") { event.preventDefault(); setActive((i) => Math.min(i + 1, found.length - 1)); }
+          else if (event.key === "ArrowUp") { event.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+          else if (event.key === "Enter" && active >= 0) { event.preventDefault(); pick(found[active]); }
+          else if (event.key === "Escape") { event.stopPropagation(); setOpen(false); }
+        }} /></label>
+      {shown && <ul className="toBuySuggest" id={listId} role="listbox" aria-label="Your products">
+        {found.map((v, i) => <li key={v.id} role="option" aria-selected={i === active}
+          onMouseDown={(event) => { event.preventDefault(); pick(v); }}>
+          <strong>{label(v)}</strong><span className="muted">{v.category}{v.available != null ? ` · ${Number(v.available)} in stock` : ""}</span>
+        </li>)}
+      </ul>}
+    </div>
+  );
+}
+
+// What a picked product fills in: the price each from its last purchase, its unit and who it was bought from.
+const loadFill = (variantId) => api(`/api/v1/to-buy/fill/${variantId}/`).catch(() => null);
+
 // An item: what, how many of what, at what price each; its total is worked out as you type.
 function AddItem({ canSearch, onAdded }) {
   const [name, setName] = useState("");
@@ -42,6 +76,7 @@ function AddItem({ canSearch, onAdded }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const first = useRef(null);
+  const howMany = useRef(null);
   const found = useProductSuggestions(variant ? "" : name, canSearch);
   const total = lineTotal(count, price);
   const submit = async (event) => {
@@ -60,17 +95,17 @@ function AddItem({ canSearch, onAdded }) {
   return (
     <form className="toBuyAdd" onSubmit={(event) => void submit(event)} aria-label="Add to the list">
       <div className="toBuyFields">
-        <label className="toBuyName">Item
-          <input ref={first} value={name} required maxLength={160} autoComplete="off" placeholder="e.g. Type-C cables" list="to-buy-products"
-            onChange={(event) => {
-              const typed = event.target.value;
-              const match = found.find((v) => label(v) === typed);
-              setName(typed);
-              setVariant(match ? { id: match.id, label: label(match) } : null);
-            }} />
-        </label>
-        <datalist id="to-buy-products">{found.map((v) => <option key={v.id} value={label(v)}>{v.category}</option>)}</datalist>
-        <label>How many<input type="number" min="0.001" step="any" inputMode="decimal" required value={count} onChange={(event) => setCount(event.target.value)} /></label>
+        <ItemNameField value={name} inputRef={first} found={found} placeholder="e.g. Type-C cables"
+          onType={(typed) => { const match = found.find((v) => label(v) === typed); setName(typed); setVariant(match ? { id: match.id, label: label(match) } : null); }}
+          onPick={(row) => {
+            setName(label(row)); setVariant({ id: row.id, label: label(row) }); setCount("");
+            setTimeout(() => howMany.current?.focus(), 0);
+            void loadFill(row.id).then((fill) => {
+              if (!fill) return;
+              setUnit(fill.unit || ""); setPrice(fill.unit_price == null ? "" : plain(fill.unit_price)); setNote(fill.note || "");
+            });
+          }} />
+        <label>How many<input ref={howMany} type="number" min="0.001" step="any" inputMode="decimal" required value={count} onChange={(event) => setCount(event.target.value)} /></label>
         <label>Unit<input value={unit} maxLength={30} autoComplete="off" placeholder="pcs, cartons" onChange={(event) => setUnit(event.target.value)} /></label>
         <label>Price each ({businessCurrency()})<input type="number" min="0" step="0.01" inputMode="decimal" value={price} placeholder="If you know it"
           onChange={(event) => setPrice(event.target.value)} /></label>
@@ -96,7 +131,6 @@ function EditItem({ item, canSearch, onSave, onCancel }) {
   const [busy, setBusy] = useState(false);
   const found = useProductSuggestions(variant && name === item.name ? "" : name, canSearch);
   const total = lineTotal(count, price);
-  const listId = `to-buy-edit-${item.id}`;
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
@@ -107,17 +141,21 @@ function EditItem({ item, canSearch, onSave, onCancel }) {
     <li className="toBuyEditing">
       <form className="toBuyFields" onSubmit={(event) => void submit(event)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}
         aria-label={`Change ${item.name}`}>
-        <label className="toBuyName">Item
-          <input value={name} required maxLength={160} autoComplete="off" autoFocus list={listId}
-            onChange={(event) => {
-              const typed = event.target.value;
-              const match = found.find((v) => label(v) === typed);
-              setName(typed);
-              if (match) setVariant({ id: match.id, label: label(match) });
-              else if (!variant || typed !== variant.label) setVariant(typed === item.name && item.variant ? { id: item.variant, label: item.product } : null);
-            }} />
-        </label>
-        <datalist id={listId}>{found.map((v) => <option key={v.id} value={label(v)}>{v.category}</option>)}</datalist>
+        <ItemNameField value={name} found={found} autoFocus
+          onType={(typed) => {
+            const match = found.find((v) => label(v) === typed);
+            setName(typed);
+            if (match) setVariant({ id: match.id, label: label(match) });
+            else if (!variant || typed !== variant.label) setVariant(typed === item.name && item.variant ? { id: item.variant, label: item.product } : null);
+          }}
+          onPick={(row) => {
+            setName(label(row)); setVariant({ id: row.id, label: label(row) });
+            // A different product: its own price, unit and supplier replace the old ones.
+            void loadFill(row.id).then((fill) => {
+              if (!fill) return;
+              setUnit(fill.unit || ""); setPrice(fill.unit_price == null ? "" : plain(fill.unit_price)); setNote(fill.note || "");
+            });
+          }} />
         <label>How many<input type="number" min="0.001" step="any" inputMode="decimal" required value={count} onChange={(event) => setCount(event.target.value)} /></label>
         <label>Unit<input value={unit} maxLength={30} autoComplete="off" placeholder="pcs, cartons" onChange={(event) => setUnit(event.target.value)} /></label>
         <label>Price each ({businessCurrency()})<input type="number" min="0" step="0.01" inputMode="decimal" value={price} placeholder="If you know it"

@@ -318,6 +318,16 @@ def _search_row(v, on_hand):
     return {"id":v.id,"product_id":v.product_id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":on_hand or Decimal("0")}
 
 
+def last_purchase(v):
+    """The item's last delivery bought from a supplier, its supplier and buying price for one unit (pack). With no
+    purchase recorded, the newest stock lot's supplier and price; none at all gives no price."""
+    line=(StockReceiptLine.objects.filter(variant=v,uncosted=False).exclude(receipt__document_status=StockReceipt.OPENING_BALANCE)
+          .select_related("receipt").order_by("-receipt__received_at","-id").first())
+    lot=None if line else StockLot.objects.filter(variant=v,cost_status=StockLot.COSTED).order_by("-received_at","-id").first()
+    supplier=line.receipt.supplier_name if line else (lot.supplier_name if lot else "")
+    unit_cost=line.unit_cost if line else (lot.unit_cost-(lot.landed_unit_cost or 0) if lot else None)
+    return line,supplier,unit_cost
+
 @api_view(["GET"])
 @permission_classes([HasLinTechPermission])
 def receive_defaults(request, pk):
@@ -328,11 +338,7 @@ def receive_defaults(request, pk):
     v=ProductVariant.objects.select_related("product","product__category","product__brand").filter(pk=pk,active=True,product__active=True,product__product_type="STOCK_ITEM").first()
     if not v:return Response({"detail":"Item not found."},status=404)
     on_hand=StockBalance.objects.filter(lot__variant=v).aggregate(q=Sum(F("quantity")-F("reserved")))["q"]
-    line=(StockReceiptLine.objects.filter(variant=v,uncosted=False).exclude(receipt__document_status=StockReceipt.OPENING_BALANCE)
-          .select_related("receipt").order_by("-receipt__received_at","-id").first())
-    lot=StockLot.objects.filter(variant=v).order_by("-received_at","-id").first()
-    supplier=line.receipt.supplier_name if line else (lot.supplier_name if lot else "")
-    unit_cost=line.unit_cost if line else (lot.unit_cost-(lot.landed_unit_cost or 0) if lot else None)
+    line,supplier,unit_cost=last_purchase(v)
     # Never bought before: the document and payment follow the shop's last purchase of anything (its habit), the
     # supplier and price are asked once.
     last=line.receipt if line else StockReceipt.objects.exclude(document_status=StockReceipt.OPENING_BALANCE).order_by("-received_at","-id").first()

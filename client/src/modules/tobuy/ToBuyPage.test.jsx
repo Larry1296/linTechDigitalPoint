@@ -53,7 +53,7 @@ it("adds an item linked to a product, its total worked out from how many and the
   render(<ToBuyPage />);
   const form = await screen.findByRole("form", { name: "Add to the list" });
   fireEvent.change(within(form).getByLabelText("Item"), { target: { value: "Char" } });
-  await waitFor(() => expect(form.querySelector("datalist option")).not.toBeNull());
+  await waitFor(() => expect(within(form).getByRole("option", { name: /Charger/ })).toBeInTheDocument());
   fireEvent.change(within(form).getByLabelText("Item"), { target: { value: "Charger" } });
   expect(within(form).getByText(/Linked to your product Charger/)).toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText("How many"), { target: { value: "5" } });
@@ -62,6 +62,22 @@ it("adds an item linked to a product, its total worked out from how many and the
   fireEvent.click(within(form).getByRole("button", { name: "Add" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/", expect.objectContaining({ method: "POST" })));
   expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body)).toEqual({ name: "Charger", variant: 9, count: "5", unit: "", unit_price: "350", note: "" });
+});
+
+it("picking a product from the suggestions fills its unit, price and supplier, leaving only how many", async () => {
+  api.mockImplementation(async (path) => (path.includes("variants/search") ? [{ id: 9, product_name: "Charger", variant_name: "Standard", category: "Phones" }]
+    : path.includes("to-buy/fill/9") ? { variant: 9, name: "Charger", unit: "pcs", unit_price: "350.00", note: "from Luthuli Covers" } : list));
+  render(<ToBuyPage />);
+  const form = await screen.findByRole("form", { name: "Add to the list" });
+  fireEvent.change(within(form).getByLabelText("Item"), { target: { value: "chargr" } });
+  fireEvent.mouseDown(await within(form).findByRole("option", { name: /Charger/ }));
+  await waitFor(() => expect(within(form).getByLabelText(/Price each/)).toHaveValue(350));
+  expect(within(form).getByLabelText("Item")).toHaveValue("Charger");
+  expect(within(form).getByLabelText("Unit")).toHaveValue("pcs");
+  expect(within(form).getByLabelText("Note")).toHaveValue("from Luthuli Covers");
+  expect(within(form).getByLabelText("How many")).toHaveValue(null);
+  fireEvent.change(within(form).getByLabelText("How many"), { target: { value: "4" } });
+  expect(within(form).getByText("Total").nextSibling).toHaveTextContent("KSh 1,400");
 });
 
 it("ticks an item as bought and clears the bought ones", async () => {

@@ -68,3 +68,26 @@ def test_a_line_leaves_the_list_once_the_item_is_received_into_stock():
     with organization_context(org):
         Movement.objects.create(variant=charger, quantity=5, movement_type="OPENING_STOCK", reference="O1")
     assert [i["name"] for i in client.get("/api/v1/to-buy/").json()["items"]] == ["Printing paper"]
+
+
+def test_picking_a_product_fills_its_price_unit_and_supplier_from_its_last_purchase():
+    from django.utils import timezone
+    from apps.catalog.models import Category, Product, ProductVariant
+    from apps.inventory.models import StockLot
+    org, client = business()
+    with organization_context(org):
+        category = Category.objects.create(name="Cables", slug="cables")
+        cable = ProductVariant.objects.create(product=Product.objects.create(name="Type-C cable", slug="type-c", category=category), sku="TC1")
+        paper = ProductVariant.objects.create(product=Product.objects.create(name="A4 paper", slug="a4", category=category), sku="A4", pack_size=2)
+    assert client.get(f"/api/v1/to-buy/fill/{cable.pk}/").json() == {"variant": cable.pk, "name": "Type-C cable", "unit": "pcs", "unit_price": None, "note": ""}
+    with organization_context(org):
+        StockLot.objects.create(variant=cable, reference="R1", received_quantity=10, remaining_quantity=10, unit_cost=Decimal("150"),
+                                supplier_name="Luthuli Covers", received_at=timezone.now())
+    data = client.get(f"/api/v1/to-buy/fill/{cable.pk}/").json()
+    assert Decimal(data["unit_price"]) == 150 and data["note"] == "from Luthuli Covers"
+    assert client.get(f"/api/v1/to-buy/fill/{paper.pk}/").json()["unit"] == "packs of 2 pieces"
+    with organization_context(org):
+        paper.piece_name = "SHEET"; paper.save()
+    assert client.get(f"/api/v1/to-buy/fill/{paper.pk}/").json()["unit"] == "packs of 2 sheets"
+    client.post("/api/v1/to-buy/", {"name": "Type-C cable", "variant": cable.pk, "unit": "cartons"}, format="json")
+    assert client.get(f"/api/v1/to-buy/fill/{cable.pk}/").json()["unit"] == "cartons"  # how this business buys it
