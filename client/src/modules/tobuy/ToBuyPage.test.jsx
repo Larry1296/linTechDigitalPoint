@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-vi.mock("../../core/api/client", () => ({ api: vi.fn() }));
+vi.mock("../../core/api/client", () => ({ api: vi.fn(), apiBlob: vi.fn(async () => new Blob(["%PDF"])) }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { organization: { enabled_modules: ["inventory"] },
   permissions: ["core.view_tobuyitem", "core.add_tobuyitem", "core.change_tobuyitem", "core.delete_tobuyitem", "catalog.view_product"] } }) }));
 import { api } from "../../core/api/client";
@@ -107,4 +107,27 @@ it("edits everything on a line, a bought one too, and removes any line", async (
   expect(screen.queryByRole("form", { name: "Change Glue" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Remove Glue" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/3/", { method: "DELETE" }));
+});
+
+it("downloads the list as a PDF", async () => {
+  const { apiBlob } = await import("../../core/api/client");
+  URL.createObjectURL = vi.fn(() => "blob:list"); URL.revokeObjectURL = vi.fn();
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  render(<ToBuyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Download PDF" }));
+  await waitFor(() => expect(click).toHaveBeenCalled());
+  expect(apiBlob).toHaveBeenCalledWith("/api/v1/to-buy/pdf/");
+});
+
+it("adds something not in stock yet as a new item", async () => {
+  api.mockImplementation(async (path) => (path.includes("variants/search") ? [] : list));
+  render(<ToBuyPage />);
+  const form = await screen.findByRole("form", { name: "Add to the list" });
+  fireEvent.change(within(form).getByLabelText("Item"), { target: { value: "Ring light" } });
+  fireEvent.mouseDown(within(form).getByRole("option", { name: /Add “Ring light” as a new item/ }));
+  expect(within(form).getByText(/New item, not in your products yet/)).toBeInTheDocument();
+  fireEvent.change(within(form).getByLabelText("How many"), { target: { value: "2" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/", expect.objectContaining({ method: "POST" })));
+  expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body)).toMatchObject({ name: "Ring light", variant: null, count: "2" });
 });

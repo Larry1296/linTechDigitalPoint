@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { api } from "../../core/api/client";
+import { api, apiBlob } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
 import { Empty, ErrorState, Loading } from "../../components/States";
@@ -33,12 +33,16 @@ function useProductSuggestions(text, enabled) {
 
 // The item's name with your products suggested under it as you type (misspellings found too). Picking one links the
 // line to it and fills in the rest from its last purchase.
-function ItemNameField({ value, onType, found, onPick, inputRef, autoFocus, placeholder }) {
+function ItemNameField({ value, onType, found, onPick, onNew, inputRef, autoFocus, placeholder }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const listId = useId();
-  const shown = open && found.length > 0;
-  const pick = (row) => { setOpen(false); setActive(-1); onPick(row); };
+  // Something not in stock yet is bought too: the name as typed is always offered, last, as a new item.
+  const typed = value.trim();
+  const fresh = typed.length >= 2 && !found.some((v) => label(v).toLowerCase() === typed.toLowerCase());
+  const options = [...found, ...(fresh ? [null] : [])];
+  const shown = open && options.length > 0;
+  const choose = (row) => { setOpen(false); setActive(-1); if (row) onPick(row); else onNew(typed); };
   return (
     <div className="toBuyName"><label>Item
       <input ref={inputRef} value={value} required maxLength={160} autoComplete="off" autoFocus={autoFocus} placeholder={placeholder}
@@ -47,15 +51,16 @@ function ItemNameField({ value, onType, found, onPick, inputRef, autoFocus, plac
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(event) => {
           if (!shown) return;
-          if (event.key === "ArrowDown") { event.preventDefault(); setActive((i) => Math.min(i + 1, found.length - 1)); }
+          if (event.key === "ArrowDown") { event.preventDefault(); setActive((i) => Math.min(i + 1, options.length - 1)); }
           else if (event.key === "ArrowUp") { event.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
-          else if (event.key === "Enter" && active >= 0) { event.preventDefault(); pick(found[active]); }
+          else if (event.key === "Enter" && active >= 0) { event.preventDefault(); choose(options[active]); }
           else if (event.key === "Escape") { event.stopPropagation(); setOpen(false); }
         }} /></label>
       {shown && <ul className="toBuySuggest" id={listId} role="listbox" aria-label="Your products">
-        {found.map((v, i) => <li key={v.id} role="option" aria-selected={i === active}
-          onMouseDown={(event) => { event.preventDefault(); pick(v); }}>
-          <strong>{label(v)}</strong><span className="muted">{v.category}{v.available != null ? ` · ${Number(v.available)} in stock` : ""}</span>
+        {options.map((v, i) => <li key={v ? v.id : "new"} role="option" aria-selected={i === active} className={v ? undefined : "toBuyNewItem"}
+          onMouseDown={(event) => { event.preventDefault(); choose(v); }}>
+          {v ? <><strong>{label(v)}</strong><span className="muted">{v.category}{v.available != null ? ` · ${Number(v.available)} in stock` : ""}</span></>
+            : <><strong>+ Add “{typed}” as a new item</strong><span className="muted">Not in your products yet. Type how many and the price if you know it.</span></>}
         </li>)}
       </ul>}
     </div>
@@ -96,6 +101,7 @@ function AddItem({ canSearch, onAdded }) {
     <form className="toBuyAdd" onSubmit={(event) => void submit(event)} aria-label="Add to the list">
       <div className="toBuyFields">
         <ItemNameField value={name} inputRef={first} found={found} placeholder="e.g. Type-C cables"
+          onNew={(typed) => { setName(typed); setVariant(null); setTimeout(() => howMany.current?.focus(), 0); }}
           onType={(typed) => { const match = found.find((v) => label(v) === typed); setName(typed); setVariant(match ? { id: match.id, label: label(match) } : null); }}
           onPick={(row) => {
             setName(label(row)); setVariant({ id: row.id, label: label(row) }); setCount("");
@@ -114,7 +120,8 @@ function AddItem({ canSearch, onAdded }) {
         <label className="toBuyNote">Note<input value={note} maxLength={200} autoComplete="off" placeholder="e.g. from the Luthuli supplier" onChange={(event) => setNote(event.target.value)} /></label>
       </div>
       <p className="muted toBuyHint">{variant ? `Linked to your product ${variant.label}: it leaves the list when you receive it into stock.`
-        : "Pick one of your products from the suggestions to link it, or type anything new: it leaves the list when you receive a product of that name."}</p>
+        : name.trim() ? "New item, not in your products yet. It leaves the list once you add it as a product and receive it. To use one you already have, pick it from the suggestions."
+          : "Type a name: pick one of your products to fill in its price, unit and supplier, or add something new you don't stock yet."}</p>
       <FormError title="Could not add it." message={error} />
     </form>
   );
@@ -141,7 +148,7 @@ function EditItem({ item, canSearch, onSave, onCancel }) {
     <li className="toBuyEditing">
       <form className="toBuyFields" onSubmit={(event) => void submit(event)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}
         aria-label={`Change ${item.name}`}>
-        <ItemNameField value={name} found={found} autoFocus
+        <ItemNameField value={name} found={found} autoFocus onNew={(typed) => { setName(typed); setVariant(null); }}
           onType={(typed) => {
             const match = found.find((v) => label(v) === typed);
             setName(typed);
@@ -246,7 +253,7 @@ function usePrintWithoutBrowserHeaders() {
     window.addEventListener("beforeprint", before);
     return () => { style.remove(); window.removeEventListener("beforeprint", before); };
   }, []);
-  return [stamp, setStamp];
+  return [stamp];
 }
 
 export function ToBuyPage() {
@@ -257,7 +264,19 @@ export function ToBuyPage() {
   const [error, setError] = useState("");
   const [problem, setProblem] = useState("");
   const [editing, setEditing] = useState(null);  // the line open for changing everything on it
-  const [stamp, setStamp] = usePrintWithoutBrowserHeaders();
+  const [stamp] = usePrintWithoutBrowserHeaders();
+  const [saving, setSaving] = useState(false);
+  // The list as a PDF file, dated, to keep on the phone, send, or print from any printer.
+  const downloadPdf = async () => {
+    setSaving(true); setProblem("");
+    try {
+      const url = URL.createObjectURL(await apiBlob("/api/v1/to-buy/pdf/"));
+      const link = Object.assign(document.createElement("a"), { href: url, download: `to-buy-${new Date().toISOString().slice(0, 10)}.pdf` });
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { setProblem(err.message); }
+    setSaving(false);
+  };
   const load = async () => {
     try {
       setData(await api("/api/v1/to-buy/"));
@@ -306,7 +325,8 @@ export function ToBuyPage() {
           <p className="muted">A scratch list of what you are about to buy, and what it comes to. It never changes your stock or money; each item
             leaves the list by itself once you receive it into stock.</p>
         </div>
-        {left.length > 0 && <button type="button" className="secondary" onClick={() => { setStamp(printedAt()); setTimeout(() => window.print(), 0); }}>Print the list</button>}
+        {left.length > 0 && <button type="button" className="secondary" disabled={saving} onClick={() => void downloadPdf()}>
+          {saving ? "Preparing PDF…" : "Download PDF"}</button>}
       </header>
 
       <dl className="toBuyStats">

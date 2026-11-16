@@ -91,3 +91,13 @@ def test_picking_a_product_fills_its_price_unit_and_supplier_from_its_last_purch
     assert client.get(f"/api/v1/to-buy/fill/{paper.pk}/").json()["unit"] == "packs of 2 sheets"
     client.post("/api/v1/to-buy/", {"name": "Type-C cable", "variant": cable.pk, "unit": "cartons"}, format="json")
     assert client.get(f"/api/v1/to-buy/fill/{cable.pk}/").json()["unit"] == "cartons"  # how this business buys it
+
+
+def test_the_list_downloads_as_a_pdf_of_what_is_still_to_buy():
+    org, client = business()
+    client.post("/api/v1/to-buy/", {"name": "Type-C cables", "count": "10", "unit": "pcs", "unit_price": "150", "note": "from Luthuli"}, format="json")
+    client.post("/api/v1/to-buy/", {"name": "Printing paper", "count": "2", "unit": "reams"}, format="json")
+    response = client.get("/api/v1/to-buy/pdf/")
+    assert response.status_code == 200 and response["Content-Type"] == "application/pdf"
+    assert response["Content-Disposition"].startswith('attachment; filename="to-buy-')
+    assert response.content.startswith(b"%PDF")

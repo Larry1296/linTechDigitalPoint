@@ -119,3 +119,88 @@ class ToBuyFillView(APIView):
         return Response({"variant": variant.id, "name": variant_label(variant), "unit": unit,
                          "unit_price": None if unit_cost is None else round(Decimal(unit_cost), 2),
                          "note": f"from {supplier}" if supplier else ""})
+
+
+def _amount(value):
+    return f"{value:,.2f}".rstrip("0").rstrip(".") if value is not None else "—"
+
+
+def list_pdf(organization):
+    """The items still to buy as an A4 PDF, to keep on a phone or print anywhere: the date it was made at the top, each
+    item with a box to tick, how many of what, the price each and its total, and the money to carry at the bottom."""
+    from io import BytesIO
+    from django.utils import timezone
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape
+
+    class TickBox(Flowable):
+        """An empty square to tick by hand once the item is bought."""
+        def wrap(self, *_):
+            return 3.6 * mm, 3.6 * mm
+
+        def draw(self):
+            self.canv.setStrokeColor(colors.HexColor("#5b6b82"))
+            self.canv.setLineWidth(0.8)
+            self.canv.rect(0, 0, 3.6 * mm, 3.6 * mm)
+
+    items = [item for item in ToBuyItem.objects.select_related("variant__product") if not item.bought]
+    made = timezone.localtime()
+    currency = "KSh" if (organization.currency or "KES") == "KES" else organization.currency
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
+                            title="To buy", author=organization.name)
+    styles = getSampleStyleSheet()
+    small = styles["BodyText"].clone("small", fontSize=9, leading=12, textColor=colors.HexColor("#5b6b82"))
+    cell = styles["BodyText"].clone("cell", fontSize=10, leading=13)
+
+    def page_number(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.grey)
+        canvas.drawRightString(A4[0] - 16 * mm, 9 * mm, f"Page {doc.page}")
+        canvas.restoreState()
+
+    story = [Paragraph("To buy", styles["Title"].clone("t", alignment=0, spaceAfter=2)),
+             Paragraph(f"{escape(organization.name)} · Made {made:%a %d %b %Y, %I:%M %p}".replace(" 0", " "), small), Spacer(0, 6 * mm)]
+    if not items:
+        story.append(Paragraph("Nothing left to buy.", cell))
+    else:
+        rows = [["", "Item", "How many", f"Price each ({currency})", f"Total ({currency})"]]
+        for item in items:
+            what = escape(item.name) + (f"<br/><font size=8 color='#5b6b82'>{escape(item.note)}</font>" if item.note else "")
+            count = f"{item.count:f}".rstrip("0").rstrip(".") + (f" {item.unit}" if item.unit else "")
+            rows.append([TickBox(), Paragraph(what, cell), Paragraph(escape(count), cell), _amount(item.unit_price), _amount(item.total)])
+        need = sum((item.total for item in items if item.total is not None), Decimal("0"))
+        unpriced = sum(1 for item in items if item.total is None)
+        rows.append(["", "", "", "Money to carry", _amount(need)])
+        table = Table(rows, colWidths=[8 * mm, 78 * mm, 32 * mm, 30 * mm, 30 * mm], repeatRows=1, hAlign="LEFT")
+        table.setStyle(TableStyle([
+            ("FONT", (0, 0), (-1, -1), "Helvetica", 10), ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 9),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#5b6b82")),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.4, colors.HexColor("#d6e1f0")),
+            ("LINEABOVE", (0, -1), (-1, -1), 1.2, colors.HexColor("#10213d")),
+            ("FONT", (3, -1), (-1, -1), "Helvetica-Bold", 11),
+            ("ALIGN", (3, 0), (-1, -1), "RIGHT"), ("FONT", (4, 1), (4, -2), "Helvetica-Bold", 10),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+        story.append(table)
+        if unpriced:
+            story += [Spacer(0, 2 * mm), Paragraph(f"{unpriced} {'item has' if unpriced == 1 else 'items have'} no price yet and "
+                                                   f"{'is' if unpriced == 1 else 'are'} not counted in the money to carry.", small)]
+    doc.build(story, onFirstPage=page_number, onLaterPages=page_number)
+    return buffer.getvalue()
+
+
+class ToBuyPdfView(APIView):
+    permission_classes = [HasLinTechPermission]
+    permission_required = {"GET": "core.view_tobuyitem"}
+
+    def get(self, request):
+        from django.http import HttpResponse
+        from django.utils import timezone
+        response = HttpResponse(list_pdf(request.organization), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="to-buy-{timezone.localdate():%Y-%m-%d}.pdf"'
+        return response
