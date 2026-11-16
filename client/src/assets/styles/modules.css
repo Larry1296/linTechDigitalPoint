@@ -3369,13 +3369,13 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 }
 /* Printing the list gives just the list on paper: no browser date or web address (the page has no margin for them to
    sit in, so the list keeps its own), and nothing of the app around it (top bar, menu, footer, back link, banner). */
-@page toBuyList { margin: 0; }
 @media print {
   body:has(.toBuyPage) :is(.appFooter, .businessAssistant, .subscriptionStatus, main > :not(.pageBody)) { display: none !important; }
   body:has(.toBuyPage) .admin, body:has(.toBuyPage) main, body:has(.toBuyPage) .pageBody { display: block; padding: 0 !important; margin: 0 !important; }
-  .toBuyPage { page: toBuyList; padding: 14mm 14mm 12mm; }
+  .toBuyPage { padding: 14mm 14mm 12mm; }
   .toBuyPage header.toBuyHead { display: block !important; margin: 0 0 6mm; }
   .toBuyPage header.toBuyHead h1 { margin: 0; font-size: 20pt; }
+  .toBuyPage header.toBuyHead p.toBuyPrinted { display: block !important; margin: 2mm 0 0; color: var(--muted); font-size: 11pt; }
   .toBuyPage header.toBuyHead p, .toBuyPage .toBuyStats .toBuyStat:not(.need) { display: none !important; }
   .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyActions, .toBuyHave, .toBuyColumns span:last-child { display: none !important; }
   .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
@@ -3463,6 +3463,8 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .soldSteps .first { font-weight: 700; }
 .soldSteps > .last { margin-top: 2px; padding-top: 10px; border-top: 2px solid var(--line); font-weight: 800; }
 .soldSum .soldWhere { margin: 4px 16px 6px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+/* The printed date shows only on paper. */
+.toBuyPrinted { display: none; }
 /* To buy: your products suggested under the item name as you type. */
 .toBuyName { position: relative; }
 .toBuySuggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none;

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
-import { businessCurrency } from "../../core/organization/presentation";
+import { businessCurrency, businessTimeZone } from "../../core/organization/presentation";
 import { Empty, ErrorState, Loading } from "../../components/States";
 import { FormError } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
@@ -228,6 +228,27 @@ function MoneyCheck({ need, unpriced }) {
 }
 
 // A scratch list of what you are about to buy, with what it comes to. Only notes: it never changes stock, money or the books.
+// The date and time the list is printed, where the business is: "Printed Mon 16 Nov 2026, 9:40 am".
+const printedAt = () => new Intl.DateTimeFormat("en-GB", { timeZone: businessTimeZone(), weekday: "short", day: "numeric", month: "short",
+  year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date());
+
+// While this page is open, printed pages have no margin, so the browser has nowhere to put its own date and web
+// address; the list keeps its own margin inside. Set on the page itself (not a named page rule), which every browser
+// honours, and removed on leaving so receipts and other pages print as before.
+function usePrintWithoutBrowserHeaders() {
+  const [stamp, setStamp] = useState(printedAt);
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.dataset.toBuyPrint = "";
+    style.textContent = "@page { margin: 0; }";
+    document.head.appendChild(style);
+    const before = () => setStamp(printedAt());
+    window.addEventListener("beforeprint", before);
+    return () => { style.remove(); window.removeEventListener("beforeprint", before); };
+  }, []);
+  return [stamp, setStamp];
+}
+
 export function ToBuyPage() {
   const { user } = useAuth();
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
@@ -236,6 +257,7 @@ export function ToBuyPage() {
   const [error, setError] = useState("");
   const [problem, setProblem] = useState("");
   const [editing, setEditing] = useState(null);  // the line open for changing everything on it
+  const [stamp, setStamp] = usePrintWithoutBrowserHeaders();
   const load = async () => {
     try {
       setData(await api("/api/v1/to-buy/"));
@@ -280,10 +302,11 @@ export function ToBuyPage() {
       <header className="toBuyHead">
         <div>
           <h1>To buy</h1>
+          <p className="toBuyPrinted">Printed {stamp}</p>
           <p className="muted">A scratch list of what you are about to buy, and what it comes to. It never changes your stock or money; each item
             leaves the list by itself once you receive it into stock.</p>
         </div>
-        {left.length > 0 && <button type="button" className="secondary" onClick={() => window.print()}>Print the list</button>}
+        {left.length > 0 && <button type="button" className="secondary" onClick={() => { setStamp(printedAt()); setTimeout(() => window.print(), 0); }}>Print the list</button>}
       </header>
 
       <dl className="toBuyStats">
