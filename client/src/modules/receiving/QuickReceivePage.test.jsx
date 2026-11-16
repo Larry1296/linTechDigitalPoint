@@ -10,7 +10,7 @@ vi.mock("../storefront/components/ProductSearch", () => ({
   ProductSearch: ({ onSelect }) => <button type="button" onClick={() => onSelect({ id: 7, product_name: "Omo", variant_name: "500g", sku: "OMO500" })}>Pick Omo</button>,
 }));
 beforeEach(() => vi.clearAllMocks());
-const sent = () => JSON.parse(api.mock.calls[0][1].body);
+const sent = () => JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body);
 const add = async () => { await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add to my stock" })); }); };
 
 it("adds stock already in the shop as opening stock: no supplier, and an unknown price is cost pending", async () => {

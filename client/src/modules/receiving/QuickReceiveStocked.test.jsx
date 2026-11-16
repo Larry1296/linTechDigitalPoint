@@ -22,7 +22,7 @@ it("says an item's existing stock is added to, and records nothing if the user c
   fireEvent.change(screen.getByLabelText("How many more to add"), { target: { value: "3" } });
   await add();
   expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("This will make it 5") }));
-  expect(api).not.toHaveBeenCalled();
+  expect(api).not.toHaveBeenCalledWith("/api/v1/inventory/receipts/", expect.anything());
 });
 
 it("adds the extra stock once the user confirms", async () => {
@@ -31,5 +31,5 @@ it("adds the extra stock once the user confirms", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Pick Amaya" }));
   fireEvent.change(screen.getByLabelText("How many more to add"), { target: { value: "3" } });
   await add();
-  expect(JSON.parse(api.mock.calls[0][1].body).lines[0]).toMatchObject({ variant_id: 6, received_quantity: "3" });
+  expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body).lines[0]).toMatchObject({ variant_id: 6, received_quantity: "3" });
 });

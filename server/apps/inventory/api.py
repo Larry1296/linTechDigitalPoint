@@ -102,9 +102,13 @@ def receipt_detail(request,pk):
 def variant_search(request):
     q=(request.query_params.get("q") or "").strip()
     qs=ProductVariant.objects.select_related("product","product__category","product__brand").filter(active=True,product__active=True,product__product_type="STOCK_ITEM")
-    if q:qs=qs.filter(Q(name__icontains=q)|Q(product__name__icontains=q)|Q(sku__icontains=q)|Q(barcode__icontains=q)|Q(product__brand__name__icontains=q)|Q(product__category__name__icontains=q))
     # Live stock, limited to the balances this user's branch can see.
     qs=qs.annotate(on_hand=Sum(F("lots__balances__quantity")-F("lots__balances__reserved"),filter=Q(lots__balances__in=StockBalance.objects.all()))).order_by("product__name","name","id")
+    if q:
+        # The name typed need not be spelt exactly: close matches are suggested too, the closest first.
+        from apps.core.fuzzy import fuzzy_score
+        scored=[(fuzzy_score(q,v.product.name,v.name,v.sku,v.barcode,v.product.brand.name if v.product.brand else "",v.product.category.name),v) for v in qs]
+        qs=[v for s,v in sorted(((s,v) for s,v in scored if s is not None),key=lambda p:-p[0])]
     return Response([{"id":v.id,"product_name":v.product.name,"variant_name":v.name,"sku":v.sku,"barcode":v.barcode,"brand":v.product.brand.name if v.product.brand else "","category":v.product.category.name,"category_id":v.product.category_id,"selling_price":v.selling_price,"pack_size":v.pack_size,"piece_name":v.piece_name,"available":v.on_hand or Decimal("0")} for v in qs[:50]])
 
 @api_view(["GET"])

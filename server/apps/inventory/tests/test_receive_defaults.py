@@ -108,3 +108,17 @@ def test_names_the_top_of_the_items_category(receiver):
     variant.product.category = Category.objects.create(name="Tecno", slug="tecno-soft", parent=covers)
     variant.product.save()
     assert defaults(user, variant).json()["root_category_id"] == top.pk
+
+
+@pytest.mark.django_db
+def test_item_search_forgives_spelling(receiver):
+    user, variant, _ = receiver
+    client = APIClient()
+    client.force_authenticate(user=user)
+    name = variant.product.name
+    # Two neighbouring letters swapped in the first long word of the name still finds the item.
+    word = next(w for w in name.split() if len(w) >= 4)
+    slip = word[0] + word[2] + word[1] + word[3:]
+    found = client.get("/api/v1/inventory/variants/search/", {"q": slip}).json()
+    assert variant.pk in [row["id"] for row in found]
+    assert client.get("/api/v1/inventory/variants/search/", {"q": "zzqqxx"}).json() == []

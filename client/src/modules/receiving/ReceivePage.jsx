@@ -13,6 +13,7 @@ import { NEW_RECEIPT_COSTS, ReceiptCostFields, ReceiptDocumentFields, paymentSum
 import { FormError } from "../../components/forms/FormNotice";
 import { SupplierPicker } from "./SupplierPicker";
 import { TextArea, TextBox } from "../../components/forms/TextBox";
+import { fuzzyScore } from "../../core/text/fuzzy";
 
 const emptyLine = () => ({
   variant_id: "",
@@ -124,26 +125,13 @@ export function ReceivePage() {
       })
       .catch((err) => setError(err.message));
   }, []);
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return variants
-      .filter(
-        (item) =>
-          (!categoryId || categoryFamily(categories, categoryId).includes(item.category_id)) &&
-          (!q ||
-            [
-              item.product_name,
-              item.variant_name,
-              item.sku,
-              item.barcode,
-              item.brand,
-              item.category,
-            ].some((value) =>
-              String(value || "")
-                .toLowerCase()
-                .includes(q),
-            )),
-      );
+  // Spelling need not be exact: close matches are listed too, the closest first.
+  const filtered = useMemo(() => { return variants
+    .filter((item) => !categoryId || categoryFamily(categories, categoryId).includes(item.category_id))
+    .map((item) => [item, fuzzyScore(query, item.product_name, item.variant_name, item.sku, item.barcode, item.brand, item.category)])
+    .filter(([, score]) => score !== null)
+    .sort((x, y) => y[1] - x[1])
+    .map(([item]) => item);
   }, [variants, query, categoryId, categories]);
   const eligibleZones = useMemo(
     () =>
@@ -170,6 +158,22 @@ export function ReceivePage() {
     setLines((old) =>
       old.map((line, i) => (i === index ? { ...line, ...patch } : line)),
     );
+  // Choosing an item fills what its last delivery had: the buying price per unit and the compartment it is kept in.
+  // Anything already typed on the line is kept; every filled value can still be changed.
+  const chooseItem = (index, variant_id) => {
+    updateLine(index, { variant_id });
+    if (!variant_id) return;
+    api(`/api/v1/inventory/variants/${variant_id}/receive-defaults/`).then((data) => {
+      setLines((old) => old.map((line, i) => {
+        if (i !== index || String(line.variant_id) !== String(variant_id)) return line;
+        const patch = {};
+        if (line.unit_cost === "" && data.unit_cost != null) patch.unit_cost = String(Math.round(Number(data.unit_cost) * 100) / 100);
+        if (data.shelf && line.placements.length === 1 && !line.placements[0].shelf_id)
+          patch.placements = [{ ...line.placements[0], shelf_id: data.shelf.id }];
+        return { ...line, ...patch };
+      }));
+    }).catch(() => {});
+  };
   const validate = () => {
     const documents = receiptCostsProblem(details);
     if (documents) return documents;
@@ -398,9 +402,7 @@ export function ReceivePage() {
                   Item
                   <select
                     value={line.variant_id}
-                    onChange={(e) =>
-                      updateLine(index, { variant_id: e.target.value })
-                    }
+                    onChange={(e) => chooseItem(index, e.target.value)}
                     // While typing, open into a list so every match shows at once.
                     size={query.trim() ? Math.min(filtered.length + 1, 10) : undefined}
                     required

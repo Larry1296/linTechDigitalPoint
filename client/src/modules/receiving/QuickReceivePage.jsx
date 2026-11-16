@@ -31,21 +31,42 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
   const [details, setDetails] = useState({ ...NEW_RECEIPT_COSTS, supplier_name: "", external_reference: "" });
   const [quantity, setQuantity] = useState(""), [cost, setCost] = useState("");
   const opening = source === "OPENING";
-  useEffect(() => {
-    if (!variantId) return undefined;
-    let live = true;
-    api(`/api/v1/inventory/variants/${variantId}/receive-defaults/`).then((data) => {
-      if (!live) return;
+  // Fill everything a new delivery repeats from the item's last one. From a product page the item came in the link;
+  // otherwise it was just picked by name, so after receiving the screen starts again for the next item.
+  const loadDefaults = (id, picked, isLive = () => true) =>
+    api(`/api/v1/inventory/variants/${id}/receive-defaults/`).then((data) => {
+      if (!isLive()) return;
       const packOf = Math.max(1, Number(data.item.pack_size || 1));
       setItem(data.item); setQuery(data.item.product_name); setShelf(data.shelf);
       setCost(data.unit_cost == null ? "" : String(Math.round(Number(data.unit_cost) / packOf * 100) / 100));
       setDetails((old) => ({ ...old, supplier_name: data.supplier_name || "", document_status: data.document_status || "NO_DOCUMENT",
         payment_method: data.payment_method || "" }));
-      setPrefilled(data); setEditing(false);
+      setPrefilled(picked ? { ...data, root_category_id: null, picked: true } : data); setEditing(false);
       setTimeout(() => quantityBox.current?.focus(), 0);
-    }).catch((e) => { if (live) setError(e.message); });
+    // A lookup that fails for an item picked by name leaves its fields to fill in by hand.
+    }).catch((e) => { if (isLive() && !picked) setError(e.message); });
+  useEffect(() => {
+    if (!variantId) return undefined;
+    let live = true;
+    loadDefaults(variantId, false, () => live);
     return () => { live = false; };
   }, [variantId]);
+  const startOver = () => {
+    setItem(null); setQuery(""); setCost(""); setShelf(null); setPrefilled(null); setEditing(false);
+    setDetails({ ...NEW_RECEIPT_COSTS, supplier_name: "", external_reference: "" });
+  };
+  const pick = (value) => {
+    setItem(value); setQuery(value.product_name); setError("");
+    // Opening stock asks only the count, so only its known buying price is filled in.
+    if (opening) {
+      api(`/api/v1/inventory/variants/${value.id}/receive-defaults/`).then((data) => {
+        const packOf = Math.max(1, Number(data.item.pack_size || 1));
+        // Kept only if nothing was typed meanwhile.
+        if (data.unit_cost != null) setCost((old) => (old === "" ? String(Math.round(Number(data.unit_cost) / packOf * 100) / 100) : old));
+        setTimeout(() => quantityBox.current?.focus(), 0);
+      }).catch(() => {});
+    } else loadDefaults(value.id, true);
+  };
   // This screen always ADDS to what is recorded; it never replaces the count. Say so when the item already has stock.
   const already = item ? Number(item.available || 0) : 0;
   // An item sold in packs (paper 2 sheets for 5) is counted here in pieces and kept as packs.
@@ -85,7 +106,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       setReceipt(done);
       setKey(crypto.randomUUID()); setQuantity('');
       // From a product page the same item stays ready for its next delivery; otherwise the form starts again.
-      if (!prefilled) { setItem(null); setQuery(''); setCost(''); setShelf(null); }
+      if (!prefilled || prefilled.picked) { startOver(); return; }
       else setPrefilled({ ...prefilled, supplier_name: details.supplier_name, unit_cost: packCost });
       setDetails({ ...(prefilled ? details : NEW_RECEIPT_COSTS), supplier_name: details.supplier_name, external_reference: "", payment_amount: "" });
     } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -114,6 +135,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
         setEditing(true);
         if (details.payment_method && !details.payment_amount) setDetails({ ...details, payment_amount: String(goodsTotal || "") });
       }}>Change</button>
+      {prefilled.picked && <button type="button" className="secondary" onClick={startOver}>Choose another item</button>}
     </div> : <>
     <fieldset className="choiceGroup stockSource">
       <legend>Where is this stock from?</legend>
@@ -126,7 +148,7 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
     </fieldset>
     <p>{opening ? "Find the item, then count how many you have now. Repeat for each item." : "Choose an item, enter how many arrived and the buying price for one. You can assign shelves later."}</p>
     <p><Link to="/admin/products">Item not listed? Add it first</Link>{!opening && <> · <Link to="/admin/receive">Receive several items or choose shelves</Link></>}</p>
-    <ProductSearch value={query} onChange={setQuery} endpoint="/api/v1/inventory/variants/search/" minLength={1} limit={50} onSelect={value => { setItem(value); setQuery(value.product_name); }} renderResult={row => <span>{row.product_name} — {row.variant_name} · {row.sku} · {Number(row.available)} in stock</span>} placeholder="Find item by name or barcode" />
+    <ProductSearch value={query} onChange={setQuery} endpoint="/api/v1/inventory/variants/search/" minLength={1} limit={50} onSelect={pick} renderResult={row => <span>{row.product_name} — {row.variant_name} · {row.sku} · {Number(row.available)} in stock</span>} placeholder="Find item by name or barcode" />
     </>}
     {item && !quick && <p>Selected: {item.product_name} {item.variant_name} · {item.sku}{item.available != null && <> · <strong>{already} already in stock</strong></>}</p>}
     {item && opening && already > 0 && <p className="notice warning" role="note">

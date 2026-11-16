@@ -92,3 +92,20 @@ it("picks the supplier from the suppliers already in the system", async () => {
   fireEvent.blur(typed);
   expect(typed).toHaveValue("Oraimo shop");
 });
+
+it("an item picked by name fills its buying price and supplier from last time, then starts again", async () => {
+  api.mockImplementation(async (url) => (url.includes("receive-defaults") ? DEFAULTS
+    : url.includes("variants/search") ? [DEFAULTS.item] : { id: 4, receipt_number: "RCV-1" }));
+  await act(async () => { render(<MemoryRouter initialEntries={["/admin/quick-receive"]}><QuickReceivePage /></MemoryRouter>); });
+  await act(async () => { fireEvent.change(screen.getByPlaceholderText("Find item by name or barcode"), { target: { value: "tecmo" } }); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+  await act(async () => { fireEvent.click(await screen.findByText(/TEC-SP40-HARD-M/)); });
+  expect(api).toHaveBeenCalledWith("/api/v1/inventory/variants/9/receive-defaults/");
+  expect(screen.getByText(/As last time/)).toHaveTextContent("Luthuli Covers");
+  expect(screen.queryByLabelText(/Buying price/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Quantity received"), { target: { value: "2" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Receive stock" })); });
+  const body = JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body);
+  expect(body).toMatchObject({ supplier_name: "Luthuli Covers", lines: [{ variant_id: 9, unit_cost: "120" }] });
+  expect(screen.getByPlaceholderText("Find item by name or barcode")).toHaveValue("");
+});

@@ -19,5 +19,5 @@ it("counts paper sold in packs of 2 in sheets: a ream of 500 at 0.90 a sheet is 
   fireEvent.change(screen.getByLabelText(/Buying price for one sheet/), { target: { value: "0.90" } });
   expect(screen.getByRole("status")).toHaveTextContent("= 250 packs of 2, bought at 1.8 a pack.");
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add to my stock" })); });
-  expect(JSON.parse(api.mock.calls[0][1].body).lines[0]).toEqual({ variant_id: 9, received_quantity: "250", unit_cost: "1.8", placements: [] });
+  expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body).lines[0]).toEqual({ variant_id: 9, received_quantity: "250", unit_cost: "1.8", placements: [] });
 });
