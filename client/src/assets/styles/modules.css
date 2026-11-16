@@ -3291,6 +3291,7 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuyHead h1 { margin: 0 0 6px; }
 .toBuyHead p { margin: 0; max-width: 70ch; }
 .toBuyHead button { margin: 0; }
+.toBuyHeadButtons { display: flex; flex-wrap: wrap; gap: 8px; }
 .toBuyStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
 .toBuyStat { display: grid; align-content: start; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line);
   border-radius: 12px; background: var(--surface); }
@@ -3377,7 +3378,7 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
   .toBuyPage header.toBuyHead h1 { margin: 0; font-size: 20pt; }
   .toBuyPage header.toBuyHead p.toBuyPrinted { display: block !important; margin: 2mm 0 0; color: var(--muted); font-size: 11pt; }
   .toBuyPage header.toBuyHead p, .toBuyPage .toBuyStats .toBuyStat:not(.need) { display: none !important; }
-  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyActions, .toBuyHave, .toBuyColumns span:last-child { display: none !important; }
+  .toBuyAdd, .toBuyDone, .toBuyHead button, .toBuyHeadButtons, .toBuyActions, .toBuyHave, .toBuyColumns span:last-child { display: none !important; }
   .toBuyCard, .toBuyStat { border: 0; box-shadow: none; padding: 0; }
   .toBuyStats { display: block; margin: 0 0 4mm; }
   .toBuyList li { break-inside: avoid; }

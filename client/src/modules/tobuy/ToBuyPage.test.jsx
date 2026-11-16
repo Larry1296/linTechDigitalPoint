@@ -131,3 +131,11 @@ it("adds something not in stock yet as a new item", async () => {
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/to-buy/", expect.objectContaining({ method: "POST" })));
   expect(JSON.parse(api.mock.calls.find(([, o]) => o?.method === "POST")[1].body)).toMatchObject({ name: "Ring light", variant: null, count: "2" });
 });
+
+it("prints the list as well as downloading it", async () => {
+  window.print = vi.fn();
+  render(<ToBuyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Print the list" }));
+  await waitFor(() => expect(window.print).toHaveBeenCalled());
+  expect(screen.getByRole("button", { name: "Download PDF" })).toBeInTheDocument();
+});

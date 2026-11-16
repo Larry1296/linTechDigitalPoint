@@ -253,7 +253,7 @@ function usePrintWithoutBrowserHeaders() {
     window.addEventListener("beforeprint", before);
     return () => { style.remove(); window.removeEventListener("beforeprint", before); };
   }, []);
-  return [stamp];
+  return [stamp, setStamp];
 }
 
 export function ToBuyPage() {
@@ -264,7 +264,7 @@ export function ToBuyPage() {
   const [error, setError] = useState("");
   const [problem, setProblem] = useState("");
   const [editing, setEditing] = useState(null);  // the line open for changing everything on it
-  const [stamp] = usePrintWithoutBrowserHeaders();
+  const [stamp, setStamp] = usePrintWithoutBrowserHeaders();
   const [saving, setSaving] = useState(false);
   // The list as a PDF file, dated, to keep on the phone, send, or print from any printer.
   const downloadPdf = async () => {
@@ -325,8 +325,10 @@ export function ToBuyPage() {
           <p className="muted">A scratch list of what you are about to buy, and what it comes to. It never changes your stock or money; each item
             leaves the list by itself once you receive it into stock.</p>
         </div>
-        {left.length > 0 && <button type="button" className="secondary" disabled={saving} onClick={() => void downloadPdf()}>
-          {saving ? "Preparing PDF…" : "Download PDF"}</button>}
+        {left.length > 0 && <div className="toBuyHeadButtons">
+          <button type="button" className="secondary" onClick={() => { setStamp(printedAt()); setTimeout(() => window.print(), 0); }}>Print the list</button>
+          <button type="button" className="secondary" disabled={saving} onClick={() => void downloadPdf()}>{saving ? "Preparing PDF…" : "Download PDF"}</button>
+        </div>}
       </header>
 
       <dl className="toBuyStats">
