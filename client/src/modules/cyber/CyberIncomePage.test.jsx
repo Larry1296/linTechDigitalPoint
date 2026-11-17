@@ -227,3 +227,26 @@ it("lets the owner delete a service from its page and goes back to the list; sta
   await screen.findByRole("heading", { name: kra.name });
   expect(screen.queryByRole("button", { name: "Delete service" })).toBeNull();
 });
+
+it("lets the owner make a different amount typed at charging the price from now on (Designing 30 → 50); staff are never offered it", async () => {
+  perms.list = OWNER;
+  const form = await overview();
+  fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "9" } });
+  fireEvent.change(within(form).getByLabelText("Price option"), { target: { value: "91" } });
+  fireEvent.change(within(form).getByLabelText("How many items"), { target: { value: "2" } });
+  fireEvent.change(within(form).getByLabelText(/Amount charged/), { target: { value: "100" } });
+  fireEvent.click(within(form).getByLabelText("Make KSh 50 per item the price for Lamination (ID card) from now on"));
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Charge KSh 100" })); });
+  const posts = api.mock.calls.filter(([, o]) => o?.method === "POST");
+  expect(posts.map(([path]) => path)).toEqual(["/api/v1/cyber/income/options/91/", "/api/v1/cyber/income/checkout/"]);
+  expect(JSON.parse(posts[0][1].body)).toEqual({ name: "ID card", billing_unit: "PER_ITEM", price: "50", minimum_price: "0", price_varies: false, active: true });
+});
+
+it("charges a one-off different amount without changing the price when the box is left unticked", async () => {
+  perms.list = OWNER;
+  const form = await overview();
+  fireEvent.change(within(form).getByLabelText("Service"), { target: { value: "9" } });
+  fireEvent.change(within(form).getByLabelText(/Amount charged/), { target: { value: "40" } });
+  await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Charge KSh 40" })); });
+  expect(api.mock.calls.filter(([, o]) => o?.method === "POST").map(([path]) => path)).toEqual(["/api/v1/cyber/income/checkout/"]);
+});

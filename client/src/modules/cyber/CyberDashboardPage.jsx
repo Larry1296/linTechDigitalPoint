@@ -330,7 +330,7 @@ export function CyberDashboardPage() {
               <small>{service.options.filter((o) => o.active).map((o) => `${service.options.length > 1 ? `${o.name}: ` : ""}${o.price_varies || Number(o.price) <= 0 ? "amount varies" : `${businessCurrency()} ${Number(o.price).toLocaleString()}${o.billing_unit === "FIXED" ? "" : ` per ${o.billing_unit.replace("PER_", "").toLowerCase()}`}`}`).join(" · ")}
                 {!service.active && " · Hidden"}</small>
               <div className="actionRow">
-                {canChangeServices && <Link className="button secondary" to={`/admin/cyber/income/${service.id}`} aria-label={`Edit ${service.name}`}>Edit</Link>}
+                {canChangeServices && <Link className="button secondary" to={`/admin/cyber/income/${service.id}`} aria-label={`Edit ${service.name}`}>Edit or change price</Link>}
                 {canChangeServices && <button type="button" className="secondary" onClick={() => void toggleService(service)}>{service.active ? "Hide" : "Show again"}</button>}
                 {canDeleteServices && <button type="button" className="danger" aria-label={`Delete ${service.name}`} onClick={() => void removeService(service)}>Delete</button>}
               </div>

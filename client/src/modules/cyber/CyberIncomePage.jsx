@@ -94,11 +94,14 @@ function lineState(line, services, fixedService, isManager) {
   const tooLow = Boolean(checked && (lowest === null ? total < listed : total < lowest));
   const tooHigh = Boolean(checked && total > listed);
   const ready = Boolean(option && Number(line.quantity) > 0 && total > 0 && !tooLow && !tooHigh);
-  return { service, options, option, listed, mustType, canEdit, total, lowest, tooLow, tooHigh, ready };
+  // A different amount typed for a set price can become the price from now on: its price each, when it divides evenly.
+  const each = Number(line.quantity) > 0 ? cents(total / Number(line.quantity)) : 0;
+  const newPrice = option && !mustType && line.typed !== "" && ready && total !== listed && cents(each * Number(line.quantity)) === cents(total) ? each : null;
+  return { service, options, option, listed, mustType, canEdit, total, lowest, tooLow, tooHigh, ready, newPrice, keep: Boolean(newPrice && line.keep) };
 }
 
-function IncomeLine({ line, state, sections, fixedService, number, onChange, onRemove, onAddService, onEditService }) {
-  const { options, option, listed, mustType, canEdit, total, lowest, tooLow, tooHigh } = state;
+function IncomeLine({ line, state, sections, fixedService, number, onChange, onRemove, onAddService, onEditService, canChangePrice }) {
+  const { options, option, listed, mustType, canEdit, total, lowest, tooLow, tooHigh, newPrice } = state;
   const id = (name) => `${name}-${line.key}`;
   return (
     <fieldset className="incomeLine">
@@ -107,7 +110,7 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
         // Every service in one list (under its group when there are groups); the last choice creates a new one.
         <FormField label="Service">
           <select value={line.serviceId} required onChange={(event) => (event.target.value === NEW_SERVICE ? onAddService?.()
-            : onChange({ serviceId: event.target.value, optionId: "", typed: "", quantity: "1" }))}>
+            : onChange({ serviceId: event.target.value, optionId: "", typed: "", quantity: "1", keep: false }))}>
             <option value="" disabled>Choose the service done</option>
             {sections.map((section) => {
               const options = section.parts.flatMap((part) => part.services.map((s) => (
@@ -125,7 +128,7 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
       )}
       {options.length > 1 && (
         <FormField label="Price option">
-          <select value={String(option?.id || "")} onChange={(event) => onChange({ optionId: event.target.value, typed: "" })}>
+          <select value={String(option?.id || "")} onChange={(event) => onChange({ optionId: event.target.value, typed: "", keep: false })}>
             {options.map((o) => <option key={o.id} value={o.id}>{o.name} · {o.price_varies || Number(o.price) <= 0 ? "amount varies" : `${money(o.price)}${per(o.billing_unit)}`}</option>)}
           </select>
         </FormField>
@@ -142,6 +145,10 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
               : tooHigh ? `The price for this is ${money(listed)}. Charging more needs a manager.` : priceRule(option)}
             {total > 0 && !tooLow && !tooHigh && Number(line.quantity) > 1 && ` · ${money(total)} in all`}
           </p>
+          {canChangePrice && newPrice !== null && (
+            <label className="checkLabel"><input type="checkbox" checked={Boolean(line.keep)} onChange={(event) => onChange({ keep: event.target.checked })} />
+              Make {money(newPrice)}{per(option.billing_unit)} the price for {state.service.name}{options.length > 1 ? ` (${option.name})` : ""} from now on</label>
+          )}
         </>
       )}
       {onRemove && <button type="button" className="linkButton" onClick={onRemove}>Remove this service</button>}
@@ -152,13 +159,14 @@ function IncomeLine({ line, state, sections, fixedService, number, onChange, onR
 /** One customer's visit: each service done (group, service, price option, how many, amount charged), then it is charged
  * and paid at the same checkout as the till (cash, M-Pesa, bank, a mix, or owed by a named customer), one receipt for the
  * lot. On a service's own page the service is already chosen. */
-export function RecordIncome({ services, groups = [], fixedService, onSaved, onServicesChanged, title = "Record income" }) {
+export function RecordIncome({ services, groups = [], fixedService, onSaved, onServicesChanged, onPricesChanged, title = "Record income" }) {
   const { user } = useAuth();
   const can = (p) => Boolean(user?.permissions?.includes(p));
   const canRecord = can("cyber.add_cyberjob") && can("cyber.complete_cyber_job");
   const isManager = can("cyber.change_cyberjobline");
   const canAddService = !fixedService && Boolean(onServicesChanged) && can("cyber.add_cyberserviceprofile") && can("catalog.add_product");
   const canEditService = !fixedService && Boolean(onServicesChanged) && can("cyber.change_cyberserviceprofile") && can("catalog.change_product");
+  const canChangePrice = can("cyber.change_cyberserviceprofile") && can("catalog.change_productvariant");
   // Adding or editing a service from a line's dropdowns: { lineKey, serviceId } (no serviceId when adding).
   const [managing, setManaging] = useState(null);
   const panel = useRef(null);
@@ -197,6 +205,13 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
     setError("");
     setDone("");
     try {
+      // Amounts ticked to become the price from now on are saved first, so this sale and the next both use them.
+      const kept = states.filter((state) => canChangePrice && state.keep);
+      for (const { option, newPrice } of kept) {
+        await api(`/api/v1/cyber/income/options/${option.id}/`, { method: "POST", body: JSON.stringify({ name: option.name, billing_unit: option.billing_unit,
+          price: String(newPrice), minimum_price: String(Math.min(Number(option.minimum_price || 0), newPrice)), price_varies: false, active: option.active }) });
+      }
+      if (kept.length) await (onServicesChanged || onPricesChanged)?.();
       setCheckout(await api("/api/v1/cyber/income/checkout/", { method: "POST", body: JSON.stringify({ lines: payload, customer_name: values.customer_name || "",
         ...(fixedService ? { service_id: fixedService.id } : {}), ...(customerId ? { customer_id: customerId } : {}), idempotency_key: crypto.randomUUID() }) }));
     } catch (err) {
@@ -259,7 +274,7 @@ export function RecordIncome({ services, groups = [], fixedService, onSaved, onS
           <IncomeLine key={line.key} line={line} state={states[index]} sections={sections} fixedService={fixedService} number={index + 1}
             onChange={(values) => change(line.key, values)} onRemove={lines.length > 1 ? () => setLines((rows) => rows.filter((row) => row.key !== line.key)) : null}
             onAddService={canAddService ? () => setManaging({ lineKey: line.key }) : null}
-            onEditService={canEditService ? (serviceId) => setManaging({ lineKey: line.key, serviceId }) : null} />
+            onEditService={canEditService ? (serviceId) => setManaging({ lineKey: line.key, serviceId }) : null} canChangePrice={canChangePrice} />
         ))}
       </div>
       {!fixedService && <button type="button" className="secondary" disabled={busy} onClick={() => setLines((rows) => [...rows, newLine()])}>+ Another item for this customer</button>}
@@ -358,7 +373,7 @@ function PriceOptions({ service, onSaved }) {
             <td>{o.name}{!o.active && <small> · hidden</small>}</td>
             <td>{priceRule(o)}{canSeeCost && Number(o.cost) > 0 && <small className="muted"> · costs you {money(o.cost)}{per(o.billing_unit)}</small>}</td>
             <td>{money(o.month.amount)}<small className="muted"> · {Number(o.month.units).toLocaleString()} {unit(o.billing_unit)[2]}</small></td>
-            <td>{canEdit && <button type="button" className="secondary" onClick={() => setEditing(o.id)} aria-label={`Edit ${o.name}`}>Edit</button>}</td>
+            <td>{canEdit && <button type="button" className="secondary" onClick={() => setEditing(o.id)} aria-label={`Edit ${o.name}`}>Change price</button>}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -607,9 +622,9 @@ export function CyberServiceIncomePage() {
       <p className="muted">{[data.group ? [data.group.name, data.subgroup?.name].filter(Boolean).join(" › ") : "No group", data.notes].filter(Boolean).join(" · ")}</p>
       {canEditService && <ServiceDetails service={data} onSaved={(saved) => setData(saved)} />}
       {canDelete && <DeleteService service={data} onDeleted={() => navigate("/admin/cyber/income")} />}
-      <Totals totals={data} unitCode={single} />
-      <RecordIncome key={data.id} services={[data]} fixedService={data} onSaved={() => load()} />
       <PriceOptions service={data} onSaved={(saved) => setData(saved)} />
+      <Totals totals={data} unitCode={single} />
+      <RecordIncome key={data.id} services={[data]} fixedService={data} onSaved={() => load()} onPricesChanged={() => load()} />
       <section aria-labelledby="income-history">
         <h2 id="income-history">History</h2>
         <FormError title="Could not delete the receipt." message={deleteError} />

@@ -2716,6 +2716,8 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .incomeLine { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line, #8883); border-radius: 10px; }
 .incomeLine legend { font-weight: 700; padding: 0 6px; }
 .incomeLine p { margin: 0; }
+.incomeLine .checkLabel { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; }
+.incomeLine .checkLabel input { width: auto; flex: none; }
 .incomeSummary { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 4px; }
 .incomeSummary li { display: flex; justify-content: space-between; gap: 12px; }
 .incomeSummaryTotal { border-top: 1px solid var(--line, #8883); padding-top: 6px; font-weight: 700; font-size: 18px; }
