@@ -116,7 +116,7 @@ def variant_summary(v, balances=None):
     return {"id": v.id, "product_id": v.product_id, "product_name": v.product.name, "description": v.product.description,
             "variant_name": v.name, "category_id": v.product.category_id,
             "category_name": v.product.category.name, "sku": v.sku, "barcode": v.barcode,
-            "product_type": v.product.product_type, "selling_price": v.selling_price, "minimum_price": v.minimum_price,
+            "product_type": v.product.product_type, "selling_price": v.selling_price, "minimum_price": v.minimum_price, "sold_by": v.sold_by,
             "buying_price": latest.unit_cost if latest else v.service_cost, "available": available,
             "locations": [{"branch":row["shelf__zone__store__name"],"zone": row["shelf__zone__name"], "shelf_code": row["shelf__code"],
                            "shelf_name": row["shelf__display_name"], "quantity": row["quantity"]} for row in locations]}

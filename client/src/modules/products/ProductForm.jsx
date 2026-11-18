@@ -26,6 +26,9 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
   const [inPacks, setInPacks] = useState(Number(defaults.pack_size) > 1);
   const [packSize, setPackSize] = useState(Number(defaults.pack_size) > 1 ? String(defaults.pack_size) : "2");
   const [pieceName, setPieceName] = useState(defaults.piece_name || "piece");
+  // Or measured: by the metre, kilogram or litre, which the till may sell in parts (half a metre of cable).
+  const [measure, setMeasure] = useState(defaults.sold_by && defaults.sold_by !== "PIECE" ? defaults.sold_by : "");
+  const measureName = { METRE: "metre", KG: "kilogram", LITRE: "litre" }[measure];
   const [openingPieces, setOpeningPieces] = useState("0");
   const [pieceCost, setPieceCost] = useState("0");
   const size = inPacks ? Math.max(1, Math.floor(Number(packSize) || 1)) : 1;
@@ -80,6 +83,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
     if (displayImage) data.set("display_image", displayImage);
     data.set("pack_size", String(size));
     data.set("piece_name", inPacks ? pieceName.trim() : "");
+    data.set("sold_by", type === "STOCK_ITEM" && measure ? measure : "PIECE");
     if (inPacks && type === "STOCK_ITEM") {
       // Counted in pieces here; kept as packs (e.g. 500 sheets = 250 packs of 2, 0.90 a sheet = 1.80 a pack).
       data.set("opening_quantity", String(Math.round((Number(openingPieces) || 0) / size * 1000) / 1000));
@@ -164,8 +168,19 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       </label>
       {type === "STOCK_ITEM" && <fieldset className="packChoice">
         <legend>How is it sold?</legend>
-        <label className="checkRow"><input type="radio" name="sold_as" checked={!inPacks} onChange={() => choosePacks(false)} /> One at a time (e.g. a charger, a mouse)</label>
-        <label className="checkRow"><input type="radio" name="sold_as" checked={inPacks} onChange={() => choosePacks(true)} /> In packs: several pieces for one price (e.g. paper 2 sheets for 5, cable clips 10 for 20)</label>
+        <label className="checkRow"><input type="radio" name="sold_as" checked={!inPacks && !measure} onChange={() => { setMeasure(""); choosePacks(false); }} /> One at a time (e.g. a charger, a mouse)</label>
+        <label className="checkRow"><input type="radio" name="sold_as" checked={inPacks} onChange={() => { setMeasure(""); choosePacks(true); }} /> In packs: several pieces for one price (e.g. paper 2 sheets for 5, cable clips 10 for 20)</label>
+        <label className="checkRow"><input type="radio" name="sold_as" checked={Boolean(measure)} onChange={() => { setMeasure("METRE"); choosePacks(false); }} /> By the metre, kilogram or litre: can be sold in parts (e.g. cable per metre, half a metre)</label>
+        {measure && <div className="packFields">
+          <label>Sold by
+            <select value={measure} onChange={(event) => setMeasure(event.target.value)}>
+              <option value="METRE">Metre</option>
+              <option value="KG">Kilogram</option>
+              <option value="LITRE">Litre</option>
+            </select>
+          </label>
+          <small className="muted">The price and your stock are per {measureName}; the till can sell 0.5, 1.5 and so on.</small>
+        </div>}
         {inPacks && <div className="packFields">
           <FormField label="Pieces in one pack" type="number" min="2" step="1" required value={packSize}
             onChange={(event) => { setPackSize(event.target.value); choosePacks(true, event.target.value, pieceName); }} />
@@ -192,7 +207,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
       {type === "STOCK_ITEM" && <FormField label="Barcode" name="barcode" />}
       <DisplayImageInput file={displayImage} onChange={setDisplayImage} />
       <FormField
-        label={inPacks && type === "STOCK_ITEM" ? `Selling price for one ${packLabel}` : "Selling price"}
+        label={inPacks && type === "STOCK_ITEM" ? `Selling price for one ${packLabel}` : measure && type === "STOCK_ITEM" ? `Selling price for one ${measureName}` : "Selling price"}
         name="selling_price"
         type="number"
         min="0"

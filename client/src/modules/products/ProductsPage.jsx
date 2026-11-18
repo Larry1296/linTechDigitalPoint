@@ -397,7 +397,7 @@ export function ProductsPage() {
       setAdding({ similarTo: row.name, name: row.name, description: row.description, category: row.category ? String(row.category) : "",
         brand: row.brand ? String(row.brand) : "", product_type: row.product_type, variant_name: v.name, selling_price: v.selling_price,
         minimum_price: v.minimum_price, minimum_stock: v.minimum_stock, target_stock: v.target_stock, pack_size: v.pack_size,
-        piece_name: v.piece_name, shelf: row.locations?.find((l) => l.variant_id === v.id)?.preferred_shelf?.id || "" });
+        piece_name: v.piece_name, sold_by: v.sold_by, shelf: row.locations?.find((l) => l.variant_id === v.id)?.preferred_shelf?.id || "" });
       setParams((current) => { current.delete("similar"); return current; }, { replace: true });
     }).catch((e) => setError(e.message));
   }, [similarId]);

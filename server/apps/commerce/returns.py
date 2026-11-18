@@ -105,6 +105,8 @@ def return_items(*, sale, lines, reason, user, refund=None, idempotency_key=None
         if not item:
             raise ValidationError({f"lines[{index}]": "Choose a line from this sale."})
         left = item.quantity - item.returned_quantity
+        if item.variant.quantity_problem(quantity):
+            raise ValidationError({f"lines[{index}].quantity": item.variant.quantity_problem(quantity)})
         if quantity <= 0 or quantity > left:
             raise ValidationError({f"lines[{index}].quantity": f"Only {left} unit(s) of this line can still be returned."})
         restock = bool(raw.get("restock", True)) and item.variant.product.product_type == "STOCK_ITEM"

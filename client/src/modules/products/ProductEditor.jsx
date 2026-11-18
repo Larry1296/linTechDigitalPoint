@@ -26,7 +26,9 @@ const labels = {
   service_cost: "Service cost",
   minimum_stock: "Minimum stock",
   target_stock: "Target stock",
+  sold_by: "Sold by (metre, kg or litre can be sold in parts, e.g. half a metre)",
 };
+export const SOLD_BY = [["PIECE", "Piece (whole numbers)"], ["METRE", "Metre"], ["KG", "Kilogram"], ["LITRE", "Litre"]];
 const productFields = ["name", "category", "brand", "product_type", "description", "active", "ecommerce_visible", "online_orderable"];
 const numeric = ["selling_price", "minimum_price", "service_cost", "minimum_stock", "target_stock"];
 const checkboxes = ["active", "ecommerce_visible", "online_orderable"];
@@ -34,7 +36,7 @@ const checkboxes = ["active", "ecommerce_visible", "online_orderable"];
 const variantFields = (variant, isService) => [
   "name", "sku", "barcode", "selling_price", "minimum_price",
   ...(isService && "service_cost" in variant ? ["service_cost"] : []),
-  ...(isService ? [] : ["minimum_stock", "target_stock"]),
+  ...(isService ? [] : ["sold_by", "minimum_stock", "target_stock"]),
   "active",
 ];
 // A product with one type has one Active box: the product's. Its type follows it, so the till never hides a product
@@ -221,6 +223,12 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
         <select id={id} value={value || "STOCK_ITEM"} onChange={(e) => set(e.target.value)}>
           <option value="STOCK_ITEM">Stock item</option>
           <option value="SERVICE">Billable service</option>
+        </select>
+      );
+    if (field === "sold_by")
+      return (
+        <select id={id} value={value || "PIECE"} onChange={(e) => set(e.target.value)}>
+          {SOLD_BY.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
         </select>
       );
     if (field === "description") return <TextArea id={id} value={value ?? ""} onChange={(e) => set(e.target.value)} />;

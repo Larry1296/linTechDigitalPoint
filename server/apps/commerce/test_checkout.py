@@ -257,8 +257,10 @@ def test_an_unpaid_basket_left_alone_expires(shop):
         assert Checkout.objects.get(pk=checkout["id"]).status == "EXPIRED"
 
 
-def test_part_of_one_sells_at_its_share_of_price_cost_and_stock(shop):
-    """Half a metre of cable: the till sells 0.5 of the item, at half its price and half its cost."""
+def test_part_of_a_metre_sells_at_its_share_of_price_cost_and_stock(shop):
+    """Half a metre of cable: the till sells 0.5 of an item sold by the metre, at half its price and half its cost."""
+    with organization_context(shop.org):
+        ProductVariant.objects.filter(pk=shop.charger.pk).update(sold_by=ProductVariant.METRE)
     checkout = charge(shop.owner, shop, quantity=0.5)
     assert D(checkout["total"]) == D("150.00")
     assert pay(shop.owner, checkout, method="CASH", cash_given="150").status_code == 201
@@ -266,3 +268,21 @@ def test_part_of_one_sells_at_its_share_of_price_cost_and_stock(shop):
         item = Sale.objects.get().items.get()
     assert (item.quantity, item.cost) == (D("0.500"), D("80.00"))
     assert in_stock(shop) == D("9.500")
+
+
+def test_an_item_sold_by_the_piece_is_sold_in_whole_numbers(shop):
+    response = shop.owner.post(CHECKOUTS, {"items": [{"variant_id": shop.charger.pk, "quantity": 0.5}], "idempotency_key": uuid4().hex}, format="json")
+    assert response.status_code == 400 and "sold by the piece" in str(response.content)
+    assert in_stock(shop) == D("10.000")
+
+
+def test_items_named_per_metre_start_out_sold_by_the_metre():
+    import importlib
+    measures = importlib.import_module("apps.catalog.migrations.0012_variant_sold_by").MEASURES
+    import re
+    found = lambda text: next((measure for measure, pattern in measures if re.search(pattern, text, re.IGNORECASE)), "PIECE")
+    assert found("2.5MM TWIN & EARTH CABLE (PER METRE) PER METRE") == "METRE"
+    assert found("SPEAKER WIRE 500 GAUGE (per meter)") == "METRE"
+    assert found("SUGAR PER KG") == "KG"
+    assert found("JACK - JACK CABLE(1.5M) 1.5M") == "PIECE"
+    assert found("AIRTIME PER MONTH") == "PIECE"

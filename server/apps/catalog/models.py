@@ -30,6 +30,18 @@ class ProductVariant(TimeStamped):
     # pack of ``pack_size`` pieces. Stock coming in can be counted in pieces and is turned into packs.
     pack_size=models.PositiveIntegerField(default=1)
     piece_name=models.CharField(max_length=40,blank=True)
+    # How it is measured when sold: by the piece (whole numbers only), or by the metre, kilogram or litre, which the till
+    # may sell in parts (half a metre of cable, 0.25 kg). Price and stock are per one of that measure.
+    PIECE, METRE, KILOGRAM, LITRE = "PIECE", "METRE", "KG", "LITRE"
+    SOLD_BY = [(PIECE, "Piece"), (METRE, "Metre"), (KILOGRAM, "Kilogram"), (LITRE, "Litre")]
+    sold_by=models.CharField(max_length=8,choices=SOLD_BY,default=PIECE)
+    @property
+    def sells_in_parts(self): return self.sold_by != self.PIECE
+    def quantity_problem(self, quantity):
+        """Why ``quantity`` cannot be sold or returned, or None: an item sold by the piece goes in whole numbers only."""
+        if self.product.product_type == "STOCK_ITEM" and not self.sells_in_parts and quantity != quantity.to_integral_value():
+            return f"{self.product.name} is sold by the piece: enter a whole number. To sell it in parts, set it to be sold by the metre, kilogram or litre."
+        return None
     def __str__(self): return f"{self.product} — {self.name}"
     class Meta:
         base_manager_name = "objects"

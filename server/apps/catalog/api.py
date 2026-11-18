@@ -103,6 +103,14 @@ class ImageSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+def sold_by(value):
+    """How an item is measured when sold (see ProductVariant.sold_by); by the piece unless one of the others is chosen."""
+    value = str(value or ProductVariant.PIECE).strip().upper()
+    if value not in dict(ProductVariant.SOLD_BY):
+        raise serializers.ValidationError({"sold_by": "Choose piece, metre, kilogram or litre."})
+    return value
+
+
 def pack_size(value):
     """Pieces sold together for one price (1 = sold one at a time)."""
     try:
@@ -515,6 +523,7 @@ class ProductViewSet(SecuredModelViewSet):
                 "target_stock": request.data.get("target_stock", 0),
                 "pack_size": pack_size(request.data.get("pack_size")),
                 "piece_name": " ".join(str(request.data.get("piece_name") or "").split())[:40],
+                "sold_by": sold_by(request.data.get("sold_by")),
             },
             preferred_shelf=shelf,
             opening_quantity=request.data.get("opening_quantity", 0),

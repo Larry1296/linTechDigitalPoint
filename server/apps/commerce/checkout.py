@@ -87,6 +87,8 @@ def read_basket(user, organization, data):
     below_floor = []
     for line in lines:
         variant, quantity = line["variant"], _quantity(line["quantity"])
+        if variant.quantity_problem(quantity):
+            raise ValidationError(variant.quantity_problem(quantity))
         price = line.get("unit_price", variant.selling_price)
         effective = price - (line.get("discount") or 0) / quantity if quantity > 0 else price
         if variant.minimum_price and effective < variant.minimum_price:

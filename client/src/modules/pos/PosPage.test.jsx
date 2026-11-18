@@ -11,7 +11,8 @@ vi.mock("../storefront/components/ProductSearch", () => ({ ProductSearch: () => 
 
 const item = (id, name, price, category) => ({ id, product_name: name, variant_name: "Standard", sku: `S${id}`, selling_price: price,
   available: "10", product_type: "STOCK_ITEM", category_name: category });
-const catalog = [item(1, "Charger", "300.00", "Power"), item(2, "Earphones", "450.00", "Audio"), item(3, "Cable", "150.00", "Power")];
+const catalog = [item(1, "Charger", "300.00", "Power"), item(2, "Earphones", "450.00", "Audio"), item(3, "Cable", "150.00", "Power"),
+  { ...item(4, "Twin cable", "120.00", "Wiring"), sold_by: "METRE" }];
 const payment = (code, amount, name, at = "2026-10-16T10:15:00+03:00") => ({ id: code.length, code, amount, paid_at: at, payer_name: name, payer_phone: "25470****149" });
 
 // A stand-in for the server's checkout: nothing is sold until the payments cover the amount.
@@ -183,20 +184,28 @@ it("opens the checkout only when asked, and going back to the products keeps the
   expect(panel()).toBeInTheDocument();
 });
 
-it("sells part of one, such as half a metre of cable, at its share of the price", async () => {
+it("sells part of a metre of an item sold by the metre, at its share of the price", async () => {
   render(<MemoryRouter><PosPage /></MemoryRouter>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Cable/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Twin cable/ }));
   review();
-  fireEvent.change(within(cart()).getByLabelText("Quantity of Cable"), { target: { value: "0.5" } });
-  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("75.00");
+  fireEvent.change(within(cart()).getByLabelText("Quantity of Twin cable (m)"), { target: { value: "0.5" } });
+  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("60.00");
   expect(within(cart()).getByText("1 item")).toBeInTheDocument();
-  fireEvent.click(within(cart()).getByRole("button", { name: "One more Cable" }));
-  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("225.00");  // 1.5 metres
-  fireEvent.click(within(cart()).getByRole("button", { name: "One less Cable" }));
-  expect(within(cart()).getByRole("button", { name: "One less Cable" })).toBeDisabled();  // 0.5 is the least − leaves
+  fireEvent.click(within(cart()).getByRole("button", { name: "One more Twin cable" }));
+  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("180.00");  // 1.5 metres
+  fireEvent.click(within(cart()).getByRole("button", { name: "One less Twin cable" }));
+  expect(within(cart()).getByRole("button", { name: "One less Twin cable" })).toBeDisabled();  // 0.5 is the least − leaves
   await charge();
-  expect(posted("/api/v1/commerce/pos/checkouts/")[0].items).toEqual([expect.objectContaining({ variant_id: 3, quantity: 0.5 })]);
+  expect(posted("/api/v1/commerce/pos/checkouts/")[0].items).toEqual([expect.objectContaining({ variant_id: 4, quantity: 0.5 })]);
 }, 20000);
+
+it("sells an item sold by the piece in whole numbers only", async () => {
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));
+  review();
+  fireEvent.change(within(cart()).getByLabelText("Quantity of Charger"), { target: { value: "0.5" } });
+  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("300.00");  // still one charger
+});
 
 it("changes the sale without leaving the products: − on a tile, and quantities or removing from the bar", async () => {
   render(<MemoryRouter><PosPage /></MemoryRouter>);

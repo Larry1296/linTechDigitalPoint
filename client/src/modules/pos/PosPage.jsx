@@ -45,8 +45,9 @@ function Tile({ p, inCart, onAdd, onLess, user }) {
   </article>;
 }
 
-// A line of the sale: quantity with − and +, the agreed price (customers bargain) and its total. The quantity may be a
-// part of one (half a metre of cable, 0.25 kg): any amount above zero, to 3 decimal places; − and + move by one.
+// A line of the sale: quantity with − and +, the agreed price (customers bargain) and its total. An item sold by the
+// metre, kilogram or litre may be sold in parts (half a metre of cable): any amount above zero, to 3 decimal places.
+// Everything else goes in whole numbers. − and + move by one.
 function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
   const limit = stockLimit(x.p);
   const floor = Number(x.p.minimum_price || 0);
@@ -55,6 +56,8 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
   const belowFloor = floor > 0 && price - Number(x.discount || 0) / x.q < floor;
   const given = (asking - price) * x.q;
   const bargain = canChangePrice || floor > 0;
+  const parts = Boolean(x.p.sold_by && x.p.sold_by !== "PIECE");
+  const unit = { METRE: "m", KG: "kg", LITRE: "L" }[x.p.sold_by];
   const step = (by) => {
     const next = Math.round((x.q + by) * 1000) / 1000;
     if (next > 0) setLine(x.p.id, { q: Math.min(limit, next), qText: undefined });
@@ -67,20 +70,21 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
     <div className="posLineRow">
       <div className="posStepper">
         <button type="button" onClick={() => step(-1)} disabled={x.q <= 1} aria-label={`One less ${x.p.product_name}`}><Minus size={15} /></button>
-        <input type="number" min="0.001" step="any" inputMode="decimal" max={Number.isFinite(limit) ? limit : undefined} aria-label={`Quantity of ${x.p.product_name}`}
+        <input type="number" min={parts ? "0.001" : "1"} step={parts ? "any" : "1"} inputMode={parts ? "decimal" : "numeric"}
+          max={Number.isFinite(limit) ? limit : undefined} aria-label={`Quantity of ${x.p.product_name}${unit ? ` (${unit})` : ""}`}
           // The box may be emptied while typing a new number; the sale keeps the last valid quantity.
           value={x.qText ?? x.q}
           onChange={(e) => {
             const text = e.target.value;
             const typed = Math.round(Number(text) * 1000) / 1000;
-            // More than is in stock shows the stock limit straight away.
-            setLine(x.p.id, text.trim() === "" || !(typed > 0) ? { qText: text }
+            // More than is in stock shows the stock limit straight away; a part of one only for items sold in parts.
+            setLine(x.p.id, text.trim() === "" || !(typed > 0) || (!parts && !Number.isInteger(typed)) ? { qText: text }
               : typed > limit ? { qText: undefined, q: limit } : { qText: text, q: typed });
           }}
           onBlur={() => setLine(x.p.id, { qText: undefined })} />
         <button type="button" onClick={() => step(1)} disabled={x.q >= limit} aria-label={`One more ${x.p.product_name}`}><Plus size={15} /></button>
       </div>
-      <span className="posLineEach">× {money(price)}</span>
+      <span className="posLineEach">{unit ? `${unit} × ${money(price)} a ${{ m: "metre", kg: "kg", L: "litre" }[unit]}` : `× ${money(price)}`}</span>
       <strong className="posLineTotal">{money(lineAmount(x))}</strong>
     </div>
     {bargain && <div className="lineAdjust">

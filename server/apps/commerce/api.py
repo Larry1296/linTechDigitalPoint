@@ -171,6 +171,7 @@ def pos_complete(request):
         variant=ProductVariant.objects.select_related("product").filter(pk=raw.get("variant_id"),active=True,product__active=True).first()
         if not variant:return Response({"detail":"Invalid product variant."},status=400)
         line={"variant":variant,"quantity":raw.get("quantity")}
+        if variant.quantity_problem(_quantity(raw.get("quantity"))):return Response({"detail":variant.quantity_problem(_quantity(raw.get("quantity")))},status=400)
         if raw.get("unit_price") not in (None,""):
             line["unit_price"]=serializers.DecimalField(max_digits=14,decimal_places=2,min_value=0).run_validation(raw.get("unit_price"))
         if raw.get("discount") not in (None,"",0,"0"):
