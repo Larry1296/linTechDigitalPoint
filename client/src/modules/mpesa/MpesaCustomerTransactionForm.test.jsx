@@ -125,6 +125,28 @@ it("drops the commission balance box once the app has learned the amount", async
   expect(screen.queryByLabelText("Commission balance after (KSh, optional)")).not.toBeInTheDocument();
 });
 
+it("asks for one reading at the yearly check of a learned rate", async () => {
+  getCommissionAdvice.mockResolvedValue({ earned: "12.00", ask: true, reason: "yearly", matched: 2, needed: 5 });
+  render(<MpesaWithdrawalForm sessionId={4} onPosted={vi.fn()} />);
+  fill("Amount (KSh)", "1000");
+  expect(await screen.findByText(/Yearly check of Safaricom's rates: the app works this out as KSh 12.*2 of 5 in a row have matched/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Commission balance after (KSh, optional)")).toBeInTheDocument();
+});
+
+it("asks now and then to check the learned rates are on track", async () => {
+  getCommissionAdvice.mockResolvedValue({ earned: "12.00", ask: true, reason: "spot", matched: null, needed: 5 });
+  render(<MpesaWithdrawalForm sessionId={4} onPosted={vi.fn()} />);
+  fill("Amount (KSh)", "1000");
+  expect(await screen.findByText(/Quick check that the app is on track: it works this out as KSh 12/)).toBeInTheDocument();
+});
+
+it("asks after each transaction once the rates may have changed", async () => {
+  getCommissionAdvice.mockResolvedValue({ earned: "12.00", ask: true, reason: "changed", matched: 0, needed: 5 });
+  render(<MpesaWithdrawalForm sessionId={4} onPosted={vi.fn()} />);
+  fill("Amount (KSh)", "1000");
+  expect(await screen.findByText(/Safaricom's rates may have changed: two checks in a row did not match/)).toBeInTheDocument();
+});
+
 it("asks for the commission balance while the app is still learning the amount", async () => {
   render(<MpesaDepositForm sessionId={4} onPosted={vi.fn()} />);
   expect(screen.queryByLabelText("Commission balance after (KSh, optional)")).not.toBeInTheDocument();

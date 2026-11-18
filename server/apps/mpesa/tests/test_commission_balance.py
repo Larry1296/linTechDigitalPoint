@@ -188,16 +188,16 @@ def test_the_form_asks_a_few_times_then_the_box_goes_away(shift):
     from apps.mpesa.commission_learning import advice
     _, session = shift
     outlet = session.outlet_id
-    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": None, "ask": True, "reason": "new"}
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "1000") == (None, True, "new")
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q1", "100")
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q2", "112")  # one measurement: not trusted yet
     assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000"))["ask"] is True
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "q3", "124")  # the same again: learned
-    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("12.00"), "ask": False, "reason": None}
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "1000") == (Decimal("12.00"), False, None)
     assert advice(outlet, "CUSTOMER_DEPOSIT", Decimal("1000"))["ask"] is True  # deposits not learned yet
-    for n in range(30):
+    for n in range(7):
         record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"q-{n}")
-    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000"))["ask"] is False  # never asks again for a learned amount
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000"))["ask"] is False  # a learned amount: only a spot check now and then
 
 
 def test_one_misread_balance_does_not_become_a_rate(shift):
@@ -208,6 +208,106 @@ def test_one_misread_balance_does_not_become_a_rate(shift):
     record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x4", "160")  # misread: 36
     unread = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "x5")
     assert learned(session)[unread.pk] == (None, None)  # 12 then 36: not trusted until two agree again
+
+
+def test_a_new_rate_leaves_earlier_transactions_at_the_old_rate(shift):
+    _, session = shift
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r1", "100")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r2", "112")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r3", "124")  # 12, twice: the rate
+    before = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r4")  # not read: 12
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r5", "151")  # 151 - 124 - 12 = 15: Safaricom changed it?
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r6", "166")  # 15 again: the new rate, from the 151 reading
+    after = record(shift, "CUSTOMER_WITHDRAWAL", "1000", "r7")
+    found = learned(session)
+    assert found[before.pk] == (Decimal("12.00"), "learned")  # what was earned before the change stays as it was
+    assert found[after.pk] == (Decimal("15.00"), "learned")
+
+
+def asked(outlet, kind, amount):
+    from apps.mpesa.commission_learning import advice
+    found = advice(outlet, kind, Decimal(amount))
+    return found["earned"], found["ask"], found["reason"]
+
+
+def learn_1000(shift, key, back=None):
+    """1,000 withdrawals earn 12, read three times; ``back`` days ago if given."""
+    from datetime import timedelta
+    from django.core.cache import cache
+    from django.utils import timezone
+    from apps.mpesa.models import MpesaTransaction
+    _, session = shift
+    rows = [record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"{key}{n}", reading) for n, reading in enumerate(("100", "112", "124"))]
+    rows.append(record(shift, "CUSTOMER_WITHDRAWAL", "3000", f"{key}-high", "136"))  # 3,000 earns 12 too: one band
+    if back:
+        start = timezone.now() - timedelta(days=back)
+        for n, row in enumerate(rows):
+            MpesaTransaction.objects.filter(pk=row.pk).update(occurred_at=start + timedelta(minutes=n))
+        cache.clear()
+    return rows
+
+
+def test_a_year_on_the_rates_are_checked_and_five_matching_readings_end_it(shift):
+    from apps.mpesa.commission_learning import advice
+    _, session = shift
+    outlet = session.outlet_id
+    learn_1000(shift, "y", back=400)
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("2000")) == {"earned": Decimal("12.00"), "ask": True, "reason": "yearly", "matched": 0, "needed": 5}
+    for n in range(4):
+        record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"y-check{n}", str(148 + 12 * n))  # 12 each: the same as before
+        assert asked(outlet, "CUSTOMER_WITHDRAWAL", "2000") == (Decimal("12.00"), True, "yearly")
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("2000"))["matched"] == 4
+    record(shift, "CUSTOMER_WITHDRAWAL", "3000", "y-check5", "196")  # the fifth: Safaricom has not changed its rates
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "2000") == (Decimal("12.00"), False, None)
+
+
+def test_a_year_on_a_new_rate_is_learned_and_last_year_keeps_the_old_one(shift):
+    from apps.mpesa.commission_learning import advice
+    _, session = shift
+    outlet = session.outlet_id
+    old = learn_1000(shift, "n", back=400)
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "n-check1", "163")  # 163 - 136 = 27: Safaricom raised it?
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "1000") == (None, True, "new")  # read once: asked again
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "n-check2", "190")  # 27 again: the new rate, matching from now
+    assert advice(outlet, "CUSTOMER_WITHDRAWAL", Decimal("1000")) == {"earned": Decimal("27.00"), "ask": True, "reason": "yearly", "matched": 1, "needed": 5}
+    for n in range(4):
+        record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"n-more{n}", str(217 + 27 * n))
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "1000") == (Decimal("27.00"), False, None)
+    found = learned(session)
+    assert found[old[2].pk] == (Decimal("12.00"), "measured")  # last year's figures stay as they were
+
+
+def test_a_learned_table_is_spot_checked_now_and_then(shift):
+    _, session = shift
+    outlet = session.outlet_id
+    learn_1000(shift, "s")
+    reasons = []
+    for n in range(21):
+        reasons.append(asked(outlet, "CUSTOMER_WITHDRAWAL", "1000")[2])
+        record(shift, "CUSTOMER_WITHDRAWAL", "1000", f"s-{n}")
+    assert reasons[0] is None and "spot" in reasons
+    assert 8 <= reasons.index("spot") <= 20  # at random, once every 8 to 20 transactions
+
+
+def test_two_spot_checks_in_a_row_that_do_not_match_start_learning_again(shift):
+    from apps.mpesa.commission_shared import tariff
+    _, session = shift
+    outlet = session.outlet_id
+    learn_1000(shift, "c")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "c-spot1", "151")  # 15, not 12
+    assert tariff()["mode"] == "learned"  # one could be a misread
+    record(shift, "CUSTOMER_WITHDRAWAL", "3000", "c-spot2", "166")  # 15 again, at another amount: rates changed
+    assert tariff()["mode"] == "checking" and tariff()["reason"] == "changed"
+    assert asked(outlet, "CUSTOMER_WITHDRAWAL", "2000")[1:] == (True, "changed")
+
+
+def test_one_spot_check_that_does_not_match_then_one_that_does_is_a_misread(shift):
+    from apps.mpesa.commission_shared import tariff
+    learn_1000(shift, "m")
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "m-spot1", "160")  # 24: misread
+    record(shift, "CUSTOMER_WITHDRAWAL", "3000", "m-spot2", "172")  # 12: on track
+    record(shift, "CUSTOMER_WITHDRAWAL", "1000", "m-spot3", "190")  # 18: another misread, not in a row with the first
+    assert tariff()["mode"] == "learned"
 
 
 def test_the_advice_endpoint(shift):

@@ -109,5 +109,7 @@ def test_the_learned_table_marks_what_came_from_other_agents():
     org, _, session = newcomer
     with organization_context(org):
         bands = learn([session.outlet_id])[2].bands()
+    checked = bands[0].pop("checked")
+    assert checked is not None  # when the rate was last seen on the line, for the yearly check
     assert bands == [{"kind": "CUSTOMER_DEPOSIT", "label": "Deposits", "from": Decimal("1000.00"), "to": Decimal("1000.00"),
-                      "earned": Decimal("7.20"), "seen": 1, "confirmed": True, "shared": True}]
+                      "earned": Decimal("7.20"), "seen": 1, "confirmed": True, "since": None, "shared": True}]

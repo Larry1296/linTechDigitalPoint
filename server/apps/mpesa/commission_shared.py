@@ -7,8 +7,9 @@ for any amount it has not learned itself. A new business starts with everything 
 Only the table is shared: a kind of transaction, an amount and what it earned. Never balances, transactions, customers
 or which business measured what. It is trusted by the same rule as a business's own readings, wherever they came from:
 an amount that earned the same twice in a row, or next to an amount that earned the same. Once an amount is confirmed it
-stays so until a different figure is confirmed there (Safaricom changed its rates), so one misread balance anywhere never
-spreads or undoes what is known. A business's own readings come first: its own learned figures win, and where its own
+stays so until a different figure is confirmed there (Safaricom changed its rates, which starts a new period and leaves
+earlier transactions at the old rate), so one misread balance anywhere never spreads or undoes what is known. A reading
+by any business checks the rates for everybody: whether they still hold or are being checked is one state for all. A business's own readings come first: its own learned figures win, and where its own
 reading at an amount disagrees with the shared table, the app asks again instead of using either.
 """
 from collections import defaultdict
@@ -16,9 +17,9 @@ from collections import defaultdict
 from django.core.cache import cache
 from django.db.models.query import QuerySet
 
-from .commission_learning import EARNING, Rates, confirm_neighbours
+from .commission_learning import EARNING, Rates, build_table, tariff_state
 
-CACHE_KEY = "mpesa:shared-commission-table"
+CACHE_KEY = "mpesa:shared-commission-table:v3"  # v3: rates kept with the day they came into force, and the check state
 CACHE_SECONDS = 10 * 60
 
 
@@ -48,28 +49,26 @@ def _pooled():
     return pool(Rates.from_points(build_table(pool())))
 
 
-def _settled(readings):
-    """(earned, confirmed) at one amount: the newest figure read twice in a row, or else the latest reading, unconfirmed."""
-    readings = [earned for _, earned in sorted(readings, key=lambda reading: reading[0])]
-    for i in range(len(readings) - 1, 0, -1):
-        if readings[i] == readings[i - 1]:
-            return readings[i], True
-    return readings[-1], False
-
-
-def build_table(found):
-    """{kind: [(amount, earned, confirmed)]} from every business's measurements together."""
-    return {kind: confirm_neighbours([[amount, *_settled(amounts[amount])] for amount in sorted(amounts)])
-            for kind, amounts in found.items()}
+def _worked_out():
+    """{"table", "state"}: the shared table and whether its rates still hold (one state for every agent, since the
+    rates are Safaricom's); worked out again every few minutes and after every new reading."""
+    found = cache.get(CACHE_KEY)
+    if found is None:
+        pooled = _pooled()
+        table = build_table(pooled)
+        found = {"table": table, "state": tariff_state(pooled, table)}
+        cache.set(CACHE_KEY, found, CACHE_SECONDS)
+    return found
 
 
 def shared_rates():
-    """The shared table as Rates; worked out again every few minutes."""
-    table = cache.get(CACHE_KEY)
-    if table is None:
-        table = build_table(_pooled())
-        cache.set(CACHE_KEY, table, CACHE_SECONDS)
-    return Rates.from_points(table)
+    """The shared table as Rates."""
+    return Rates.from_points(_worked_out()["table"])
+
+
+def tariff():
+    """Whether the learned rates still hold or are being checked (see commission_learning.tariff_state)."""
+    return _worked_out()["state"]
 
 
 def forget(instance=None, **_):
@@ -86,13 +85,13 @@ class WithShared:
         self.own, self.shared = own, shared
         self.points = own.points  # what this business measured itself; its own readings decide measuring
 
-    def predict(self, kind, value):
-        mine = self.own.predict(kind, value)
+    def predict(self, kind, value, at=None):
+        mine = self.own.predict(kind, value, at)
         if mine is not None:
             return mine
-        theirs = self.shared.predict(kind, value)
-        exact = [point for point in self.own.points.get(kind, []) if point[0] == value]
-        if exact and exact[0][1] != theirs:
+        theirs = self.shared.predict(kind, value, at)
+        exact = self.own.point(kind, value)
+        if exact and self.own.latest(exact) != theirs:
             return None  # this business read something else here: ask again rather than choose
         return theirs
 

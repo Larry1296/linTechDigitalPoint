@@ -216,7 +216,7 @@ function PaidCheck({ label, check }) {
 
 // What the app works out from the commission balance read after each transaction: the month so far, set against what
 // Safaricom paid, and the rates it has learned so they can be checked.
-function Learned({ estimates, learned, forecast }) {
+function Learned({ estimates, learned, forecast, rates }) {
   return (
     <section className="panel">
       <h2>Commission worked out from your readings</h2>
@@ -229,7 +229,14 @@ function Learned({ estimates, learned, forecast }) {
         transaction earned, and the app learns from it. Once an amount has earned the same twice, the box stops showing for it and its
         commission is worked out by itself. Amounts other agents using the app have already confirmed are worked out from the start, so
         the box only shows for amounts nobody has learned yet; only what each amount earns is shared, never your balances or transactions.
-        If Safaricom changes its rates, the month's figure here stops matching what Safaricom paid.</p>
+        Safaricom's rates are not forever, so once learned the box still shows now and then, at random, to check them. If two checks in a row
+        do not match, or a year has passed since the rates were confirmed, the box shows after every transaction until five readings in a row
+        match: the rates as they were, or the new ones once learned. A new rate counts from the day it was first read, and earlier
+        transactions keep the rate of their own day.</p>
+      {rates && <p className="commissionForecast"><b>{rates.mode === "learned" ? "Rates learned" : rates.reason === "yearly" ? "Yearly check of the rates" : "Rates may have changed: learning again"}</b>{" "}
+        <span className="muted">{rates.mode === "learned"
+          ? `${rates.confirmed ? `Confirmed ${date(rates.confirmed)}; next yearly check after a year. ` : ""}Spot checks now and then keep them on track.`
+          : `The box shows after every transaction: ${rates.matched} of ${rates.needed} readings in a row have matched so far.`}</span></p>}
       <div className="trendTable"><table className="loanRepayments">
         <caption>What the app worked out, next to what Safaricom paid</caption>
         <thead><tr><th scope="col">Month</th><th scope="col">Worked out by the app</th><th scope="col">Safaricom paid</th><th scope="col">Difference</th></tr></thead>
@@ -244,12 +251,14 @@ function Learned({ estimates, learned, forecast }) {
       {estimates.filter((m) => m.check).map((m) => <PaidCheck key={m.month} label={m.label} check={m.check} />)}
       {learned.length ? <div className="trendTable"><table className="loanRepayments">
         <caption>What the app has learned</caption>
-        <thead><tr><th scope="col">Transaction</th><th scope="col">Amounts seen</th><th scope="col">Commission each</th></tr></thead>
+        <thead><tr><th scope="col">Transaction</th><th scope="col">Amounts seen</th><th scope="col">Commission each</th><th scope="col">Last checked</th></tr></thead>
         <tbody>{learned.map((band) => (
           <tr key={`${band.kind}-${band.from}`}>
             <th scope="row">{band.label}</th>
             <td>{band.from === band.to ? money(band.from) : `${money(band.from)} to ${money(band.to)}`}</td>
-            <td>{money(band.earned)}{band.shared ? <small className="muted"> · confirmed by other agents</small> : !band.confirmed && <small className="muted"> · still learning</small>}</td>
+            <td>{money(band.earned)}{band.shared ? <small className="muted"> · confirmed by other agents</small> : !band.confirmed && <small className="muted"> · still learning</small>}
+              {band.since && <small className="muted"> · new rate since {date(band.since)}</small>}</td>
+            <td>{band.checked ? date(band.checked) : "—"}</td>
           </tr>))}</tbody>
       </table></div> : <p className="muted">Nothing learned yet: it starts with the first two readings in a row.</p>}
     </section>
@@ -309,7 +318,7 @@ export function MpesaCommissionPage() {
       </div>
       {adding && <RecordForm data={data} canSpend={can("accounting.add_expense")} onCancel={() => setAdding(false)} onSaved={async () => { setAdding(false); await load(); }} />}
       {data.outlets.length === 0 && <Empty>Add an M-Pesa agency outlet on the Agent desk first.</Empty>}
-      {data.estimates && <Learned estimates={data.estimates} learned={data.learned || []} forecast={data.forecast} />}
+      {data.estimates && <Learned estimates={data.estimates} learned={data.learned || []} forecast={data.forecast} rates={data.rates_check} />}
       <section className="panel"><MonthlyProfit months={data.months} /></section>
       <section className="panel">
         <h2>Commission recorded</h2>

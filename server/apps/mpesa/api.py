@@ -380,6 +380,12 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request):
         from .commission import PLACES, due_month, monthly_profit, opening_room
+        from .commission_learning import CHECK_RUN, state_now
+        from .commission_shared import tariff
+
+        def rates_check():
+            state = state_now(tariff())
+            return {"mode": state["mode"], "reason": state["reason"], "confirmed": state["confirmed"], "matched": state["matched"], "needed": CHECK_RUN}
         from .commission_learning import forecast, learn
         from .commission_check import payout_share
         due = due_month()
@@ -395,7 +401,7 @@ class CommissionViewSet(viewsets.ReadOnlyModelViewSet):
                          "due_month": due, "due_label": due.strftime("%B %Y") if due else None, "places": PLACES,
                          "outlets": [{"id": o.pk, "name": o.display_name, "open_session": o.sessions.filter(status=MpesaSession.OPEN).values_list("pk", flat=True).first(),
                                       "opening_shifts": opening_shifts(o, opening_room)} for o in MpesaOutlet.objects.all()],
-                         "estimates": estimates, "learned": learn()[2].bands(), "forecast": month,
+                         "estimates": estimates, "learned": learn()[2].bands(), "forecast": month, "rates_check": rates_check(),
                          "payout_share": share})
 
     @action(detail=False)
