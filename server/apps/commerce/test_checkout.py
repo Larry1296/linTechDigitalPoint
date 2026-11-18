@@ -255,3 +255,14 @@ def test_an_unpaid_basket_left_alone_expires(shop):
     assert shop.amina.get(CHECKOUTS).json()["checkouts"] == []
     with organization_context(shop.org):
         assert Checkout.objects.get(pk=checkout["id"]).status == "EXPIRED"
+
+
+def test_part_of_one_sells_at_its_share_of_price_cost_and_stock(shop):
+    """Half a metre of cable: the till sells 0.5 of the item, at half its price and half its cost."""
+    checkout = charge(shop.owner, shop, quantity=0.5)
+    assert D(checkout["total"]) == D("150.00")
+    assert pay(shop.owner, checkout, method="CASH", cash_given="150").status_code == 201
+    with organization_context(shop.org):
+        item = Sale.objects.get().items.get()
+    assert (item.quantity, item.cost) == (D("0.500"), D("80.00"))
+    assert in_stock(shop) == D("9.500")

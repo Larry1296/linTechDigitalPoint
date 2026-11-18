@@ -183,6 +183,21 @@ it("opens the checkout only when asked, and going back to the products keeps the
   expect(panel()).toBeInTheDocument();
 });
 
+it("sells part of one, such as half a metre of cable, at its share of the price", async () => {
+  render(<MemoryRouter><PosPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole("button", { name: /^Cable/ }));
+  review();
+  fireEvent.change(within(cart()).getByLabelText("Quantity of Cable"), { target: { value: "0.5" } });
+  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("75.00");
+  expect(within(cart()).getByText("1 item")).toBeInTheDocument();
+  fireEvent.click(within(cart()).getByRole("button", { name: "One more Cable" }));
+  expect(within(cart()).getByRole("button", { name: /^Charge/ })).toHaveTextContent("225.00");  // 1.5 metres
+  fireEvent.click(within(cart()).getByRole("button", { name: "One less Cable" }));
+  expect(within(cart()).getByRole("button", { name: "One less Cable" })).toBeDisabled();  // 0.5 is the least − leaves
+  await charge();
+  expect(posted("/api/v1/commerce/pos/checkouts/")[0].items).toEqual([expect.objectContaining({ variant_id: 3, quantity: 0.5 })]);
+}, 20000);
+
 it("changes the sale without leaving the products: − on a tile, and quantities or removing from the bar", async () => {
   render(<MemoryRouter><PosPage /></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: /^Charger/ }));

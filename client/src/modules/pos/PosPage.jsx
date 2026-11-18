@@ -45,7 +45,8 @@ function Tile({ p, inCart, onAdd, onLess, user }) {
   </article>;
 }
 
-// A line of the sale: quantity with − and +, the agreed price (customers bargain) and its total.
+// A line of the sale: quantity with − and +, the agreed price (customers bargain) and its total. The quantity may be a
+// part of one (half a metre of cable, 0.25 kg): any amount above zero, to 3 decimal places; − and + move by one.
 function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
   const limit = stockLimit(x.p);
   const floor = Number(x.p.minimum_price || 0);
@@ -54,7 +55,10 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
   const belowFloor = floor > 0 && price - Number(x.discount || 0) / x.q < floor;
   const given = (asking - price) * x.q;
   const bargain = canChangePrice || floor > 0;
-  const step = (by) => setLine(x.p.id, { q: Math.min(limit, Math.max(1, x.q + by)), qText: undefined });
+  const step = (by) => {
+    const next = Math.round((x.q + by) * 1000) / 1000;
+    if (next > 0) setLine(x.p.id, { q: Math.min(limit, next), qText: undefined });
+  };
   return <article className="posLine">
     <div className="posLineHead">
       <b>{x.p.product_name}</b>
@@ -63,14 +67,14 @@ function CartLine({ x, setLine, remove, canChangePrice, lineAmount }) {
     <div className="posLineRow">
       <div className="posStepper">
         <button type="button" onClick={() => step(-1)} disabled={x.q <= 1} aria-label={`One less ${x.p.product_name}`}><Minus size={15} /></button>
-        <input type="number" min="1" max={Number.isFinite(limit) ? limit : undefined} aria-label={`Quantity of ${x.p.product_name}`}
+        <input type="number" min="0.001" step="any" inputMode="decimal" max={Number.isFinite(limit) ? limit : undefined} aria-label={`Quantity of ${x.p.product_name}`}
           // The box may be emptied while typing a new number; the sale keeps the last valid quantity.
           value={x.qText ?? x.q}
           onChange={(e) => {
             const text = e.target.value;
-            const typed = Number(text);
+            const typed = Math.round(Number(text) * 1000) / 1000;
             // More than is in stock shows the stock limit straight away.
-            setLine(x.p.id, text.trim() === "" || !(typed >= 1) ? { qText: text }
+            setLine(x.p.id, text.trim() === "" || !(typed > 0) ? { qText: text }
               : typed > limit ? { qText: undefined, q: limit } : { qText: text, q: typed });
           }}
           onBlur={() => setLine(x.p.id, { qText: undefined })} />
@@ -197,7 +201,8 @@ export function PosPage() {
   const groups = useMemo(() => Object.entries(Object.groupBy(rows, groupOf)).sort(([a], [b]) => byGroup(a, b)), [rows]);
   const shown = category === ALL ? groups : groups.filter(([name]) => name === category);
   const counts = Object.fromEntries(cart.map((x) => [x.p.id, x.q]));
-  const items = cart.reduce((sum, x) => sum + x.q, 0);
+  // Half a metre of cable is one item in the count; whole quantities count each piece.
+  const items = cart.reduce((sum, x) => sum + (Number.isInteger(x.q) ? x.q : Math.max(1, Math.ceil(x.q))), 0);
   const subtotal = cart.reduce((sum, x) => sum + lineAmount(x), 0);
   const total = Math.max(0, subtotal - Number(discount || 0));
   const clear = () => { setShowLines(false); setCart([]); setDiscount(""); setDiscountReason(""); setCustomerId(""); setError(""); setLastAdded(""); };
