@@ -28,6 +28,7 @@ class AddressViewSet(viewsets.ModelViewSet):
         profile,_=CustomerProfile.objects.get_or_create(user=self.request.user); serializer.save(profile=profile)
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([])  # never rate limited: without the token nobody can sign in (signing in has its own limit)
 def csrf(request):
     from django.middleware.csrf import get_token
     return Response({"csrfToken":get_token(request)})

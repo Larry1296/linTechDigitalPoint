@@ -77,6 +77,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # MIDDLEWARE
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # first, so its headers reach every API answer (also errors and preflights)
+    "apps.accounts.client_ip.ClientAddressMiddleware",  # the visitor's own address behind Cloudflare, for rate limits
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -173,7 +174,12 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {"anon": "100/hour", "user": "2000/hour", "auth": "10/minute", "unlock": "5/minute"},
+    # Rate limits count by the visitor's address (REMOTE_ADDR, set from CLIENT_IP_HEADER below), never by the
+    # X-Forwarded-For chain, which a visitor can make up.
+    "NUM_PROXIES": 0,
 }
+# Where the proxy in front puts the visitor's real address (Cloudflare: CF-Connecting-IP). Empty to use REMOTE_ADDR as is.
+CLIENT_IP_HEADER = config("CLIENT_IP_HEADER", default="HTTP_CF_CONNECTING_IP")
 SPECTACULAR_SETTINGS = {"TITLE": config("PLATFORM_NAME", default="DukaFlow") + " API", "VERSION": "1.0.0"}
 
 # CORS / CSRF
