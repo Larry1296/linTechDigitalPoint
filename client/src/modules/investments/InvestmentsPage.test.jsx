@@ -103,8 +103,8 @@ it("puts in the business's money from the place chosen, or the owner's own money
   const form = within(card).getByRole("form", { name: "Add money" });
   // The business's money is the default: it comes from one of its places, never the M-Pesa agency.
   expect(within(form).getByLabelText(/The business's money/)).toBeChecked();
-  expect([...within(form).getByLabelText("Taken from").options].map((o) => o.value)).toEqual(["MPESA", "CASH", "BANK", "OTHER"]);
-  fireEvent.change(within(form).getByLabelText("Taken from"), { target: { value: "BANK" } });
+  expect([...within(form).getByLabelText("Sent from").options].map((o) => o.value)).toEqual(["MPESA", "CASH", "BANK", "OTHER"]);
+  fireEvent.change(within(form).getByLabelText("Sent from"), { target: { value: "BANK" } });
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "5000" } });
   await act(async () => { fireEvent.click(within(form).getByRole("button", { name: "Record money added" })); });
   const [, options] = api.mock.calls.find(([p]) => p === "/api/v1/accounting/investments/3/move/");
@@ -117,7 +117,7 @@ it("puts in the owner's own money without touching any of the business's places"
   fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
   const form = within(card).getByRole("form", { name: "Add money" });
   fireEvent.click(within(form).getByLabelText(/My own money/));
-  expect(within(form).queryByLabelText("Taken from")).toBeNull();
+  expect(within(form).queryByLabelText("Sent from")).toBeNull();
   expect(within(form).getByText(/Not the business's money: nothing in the business changes/)).toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText(/Amount/), { target: { value: "900000" } });
   fireEvent.change(within(form).getByLabelText("Date the money went in"), { target: { value: "2026-08-15" } });
@@ -430,4 +430,21 @@ it("keeps the card short: only the latest five entries until all the history is 
   expect(within(history).getAllByRole("row")).toHaveLength(6);  // the header and five entries
   fireEvent.click(within(card).getByRole("button", { name: "Show all history (8)" }));
   expect(within(history).getAllByRole("row")).toHaveLength(9);
+});
+
+it("puts in everything sold and not invested yet from the drawer, till and bank together, whichever it is sent from", async () => {
+  const listed = listing(mmf);
+  api.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/accounting/investments/") return { ...listed,
+      business_places: [{ key: "MPESA", method: "MPESA", label: "Lipa na M-Pesa till", expected: "0.00" }, { key: "CASH", method: "CASH", label: "Cash in the drawer", expected: "3290.00" }, { key: "BANK", method: "BANK", label: "Bank", expected: "200.00" }] };
+    return options?.method === "POST" ? listed.investments[0] : {};
+  });
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  fireEvent.click(within(card).getByRole("button", { name: "Add money" }));
+  const form = within(card).getByRole("form", { name: "Add money" });
+  expect(within(form).getByLabelText("Sent from")).toHaveValue("MPESA");
+  expect(within(form).getByLabelText(/Amount/)).toHaveValue(3490);
+  expect(within(form).getByLabelText(/Amount/)).toHaveAttribute("min", "3490");
+  expect(within(form).getByText(/cash in the drawer KSh 3,290, bank KSh 200, KSh 3,490 in all/)).toBeInTheDocument();
 });

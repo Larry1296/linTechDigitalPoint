@@ -139,6 +139,11 @@ def _day(occurred_on):
     return day
 
 
+def _day_end(day):
+    """The end of ``day`` (None for today: everything so far)."""
+    return None if day == timezone.localdate() else timezone.make_aware(datetime.combine(day, time.max))
+
+
 def _moment(day):
     return timezone.now() if day == timezone.localdate() else timezone.make_aware(datetime.combine(day, time(12)))
 
@@ -169,14 +174,17 @@ def own_value(investment):
 
 @transaction.atomic
 def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None, key, occurred_on=None, reference="", note="",
-         session_id=None, purchase=None, speed="", charge=None):
+         session_id=None, purchase=None, speed="", charge=None, alone=False):
     """Money put in (DEPOSIT) or taken out (WITHDRAWAL). source BUSINESS: the business's money, from or back to ``place``
     (CASH, MPESA, BANK or OTHER), moved in the books between that place and Investments (1400). source OWNER: the
     owner's own money, which never reaches the books. A withdrawal may name the stock purchase it paid for.
 
     A withdrawal says how it was paid (``speed``): STANDARD, to the bank for free, or INSTANT, for a ``charge`` (CIC's is
     100) that leaves the fund too. The charge is recorded with it, linked, as the owner's own money taken out: it is the
-    owner's own cost, as the owner chose on 2026-11-02."""
+    owner's own cost, as the owner chose on 2026-11-02.
+
+    The business's money put in takes all it holds that was not invested yet, from every place (see gather());
+    ``alone`` puts in from that place only, for several places put in at once, each one named."""
     from .ledger import cash_code
     from .money_check import _drawer
     lock_business()
@@ -207,12 +215,18 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     unit = (_drawer(place, unit) or (unit if unit else "SHOP")) if business else None
     # The business's money put in empties its place (2026-11-14, owner: what was sold and not yet invested sits in the
     # drawer, and putting money in can never be less than it, so what is left in the drawer is only money sold since).
+    # All of the business's money goes in together (2026-11-18, owner: "when i mean shop i mean till, bank and drawer all
+    # combined, everything is invested"): what the drawer, till and bank hold that was not invested yet goes in with it,
+    # whichever place it was sent from, so putting in can never be less than all of it.
+    others = []
     if business and putting_in:
-        held = max(held_on(place, unit, day), Decimal("0"))
+        others = [] if alone else _others(place, unit, _day_end(day))
+        here = max(held_on(place, unit, day), Decimal("0"))
+        held = here + sum((v for *_, v in others), Decimal("0"))
         if amount < held:
-            raise ValidationError(f"{PLACE_WORDS[place][0].upper()}{PLACE_WORDS[place][1:]} held {held:,.2f} of the business's money on "
-                                  f"{day:%-d %b %Y} that was not invested yet. Put in at least {held:,.2f}: all of it goes into "
-                                  f"{investment.name}, and more is fine if you also sent money the app has not seen.")
+            spread = _spread([(place, unit, here), *others])
+            raise ValidationError(f"The business held {held:,.2f} sold and not invested yet on {day:%-d %b %Y} ({spread}). Put in at least "
+                                  f"{held:,.2f}: all of it goes into {investment.name}, and more is fine if you also sent money the app has not seen.")
     # The business's money put in may be more than the app expects in its place (2026-11-05, owner: business money
     # the app has not seen yet, e.g. collected elsewhere). The extra is that money, recorded as it goes in, so the place
     # stops at zero and never shows below it (2026-11-13, owner: investing is not spending).
@@ -231,6 +245,7 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     if business:
         from .services import post as post_cash
         if putting_in:
+            gather(rows=others, place=place, unit=unit, key=key, fund=investment.name, user=user, occurred_at=_moment(day))
             cover(method=place, unit=unit, amount=amount, fund=investment.name, key=key, user=user, occurred_at=_moment(day))
         entry = post_cash(unit=unit, method=place, amount=-amount if putting_in else amount, kind="INVESTMENT",
                           reference=f"{words}{' from' if putting_in else ' to'} {PLACE_WORDS[place]}"[:160], key=f"investment:{key}",
@@ -451,7 +466,9 @@ def undo(*, movement, user, reason):
     # The business's money goes back where it was, and interest or fees leave profit, in the month they were counted.
     if movement.whose == BUSINESS_MONEY and movement.entry_id and not CashEntry.objects.filter(reversal_of=movement.entry).exists():
         reverse_cash(entry=movement.entry, user=user, reason=reason, allow_investment=True)
-    uncover([movement.idempotency_key, f"claim:{movement.pk}"], user, reason)
+    if movement.whose == BUSINESS_MONEY:
+        ungather(movement.idempotency_key, user, reason)
+    uncover([movement.idempotency_key, f"claim:{movement.pk}", f"{movement.idempotency_key}{GATHERED}"], user, reason)
     for prefix in (MOVED, EARNED, OWNER_HELD):
         _reverse(f"{prefix}:{movement.pk}", user, reason, f"{prefix}-undo:{movement.pk}")
     movement.refresh_from_db()
@@ -521,6 +538,113 @@ def held_on(method, unit, day):
     end = timezone.make_aware(datetime.combine(day, time.max)) if day != timezone.localdate() else None
     rows = _entries(method, unit if method == "CASH" and separate_cash() else None)
     return (rows.filter(occurred_at__lte=end) if end else rows).aggregate(v=Sum("amount"))["v"] or Decimal("0")
+
+
+GATHER = "investment-gathered:"
+GATHERED = ":gathered"
+
+
+def _places_held(at=None):
+    """{(method, unit): amount} the business's places held at ``at`` (now when None), each part's share."""
+    rows = CashEntry.objects.filter(account__payment_method__in=BUSINESS)
+    if at:
+        rows = rows.filter(occurred_at__lte=at)
+    return {(m, u): v for m, u, v in rows.order_by().values_list("account__payment_method", "business_unit").annotate(v=Sum("amount")) if v}
+
+
+def _others(place, unit, at=None):
+    """What every place other than ``place`` (the one the money is sent from) holds that was not invested yet:
+    [(method, unit, amount)], each part's share of it. A place counts only when it holds money, its parts together
+    (each part's own drawer is its own place when parts keep separate drawers); taking all of it brings each part's
+    share to zero."""
+    from .money_mode import separate_cash
+    separate = separate_cash()
+    groups = {}
+    for (m, u), v in _places_held(at).items():
+        groups.setdefault((m, u if m == "CASH" and separate else None), []).append((m, u, v))
+    sent = (place, (unit if place == "CASH" and separate else None)) if place else None
+    order = ["CASH", "MPESA", "BANK", "OTHER"]
+    return [row for group, rows in sorted(groups.items(), key=lambda g: (order.index(g[0][0]), g[0][1] or ""))
+            if group != sent and sum(v for *_, v in rows) > 0 for row in sorted(rows, key=lambda r: r[1])]
+
+
+def _spread(rows):
+    """"the cash drawer 3,290.00, the bank 500.00": how much of the business's money each place held."""
+    by = {}
+    for m, _, v in rows:
+        by[m] = by.get(m, Decimal("0")) + v
+    return ", ".join(f"{PLACE_WORDS[m]} {v:,.2f}" for m, v in by.items() if v > 0) or "nothing"
+
+
+def _capped(rows, cap):
+    """Only up to ``cap``, from the places' money in order (a part's share below zero is left as it is)."""
+    left, out = money(cap), []
+    for m, u, v in rows:
+        take = min(v, left)
+        if take > 0:
+            out.append((m, u, take))
+            left -= take
+    return out
+
+
+def gather(*, rows, place, unit, key, fund, user, occurred_at=None):
+    """The business's money in its other places (``rows``, from _others()) goes into the investment with the money
+    sent from ``place``: it is brought into that place as it goes in, so the drawer, till and bank are all emptied by
+    one deposit. Each part's share leaves its own place, so each part still shows its own money. Returns the total."""
+    from .ledger import cash_code
+    from .services import post as post_cash
+    total = sum((v for *_, v in rows), Decimal("0"))
+    if total <= 0:
+        return Decimal("0")
+    branch, net = resolve_branch(), {}
+    for m, u, v in rows:
+        post_cash(unit=u, method=m, amount=-v, kind="INVESTMENT", key=f"investment:{key}:from:{m}:{u}"[:180], user=user, occurred_at=occurred_at,
+                  reference=f"Put into {fund} with the rest of the business's money, sent from {PLACE_WORDS[place]}"[:160], branch=branch, journal=False)
+        net[cash_code(m)] = net.get(cash_code(m), Decimal("0")) - v
+    post_cash(unit=unit or "SHOP", method=place, amount=total, kind="INVESTMENT", key=f"investment:{key}{GATHERED}"[:180], user=user, occurred_at=occurred_at,
+              reference=f"The business's money from its other places, sent to {fund} from here"[:160], branch=branch, journal=False)
+    net[cash_code(place)] = net.get(cash_code(place), Decimal("0")) + total
+    lines = [(code, v, 0) if v > 0 else (code, 0, -v) for code, v in net.items() if v]
+    if lines:
+        post_journal(key=f"{GATHER}{key}"[:180], description=f"The business's money brought together to put into {fund}"[:255], lines=lines,
+                     branch=branch, date=timezone.localtime(occurred_at or timezone.now()).date(), user=user)
+    return total
+
+
+def ungather(key, user, reason):
+    """Undoing the business's money put in puts what it took from the other places back where it was."""
+    for entry in CashEntry.objects.filter(source_key__startswith=f"investment:{key}:", kind="INVESTMENT", reversal_of__isnull=True):
+        if not CashEntry.objects.filter(reversal_of=entry).exists():
+            reverse_cash(entry=entry, user=user, reason=reason, allow_investment=True)
+    _reverse(f"{GATHER}{key}"[:180], user, reason, f"{GATHER}undo:{key}"[:180])
+
+
+@transaction.atomic
+def gather_earlier(*, since, user=None):
+    """Business money put in from one place while the business's other places held money not invested yet, recorded
+    before every place went in together (2026-11-18): the money the app recorded as unseen in the place it was sent
+    from was really the other places' money. Each such deposit since ``since``, in order, takes that money from the
+    other places instead (as much as they held then, never more than the unseen money), so the drawer no longer counts
+    money already in the investment. The investment, sales and profit do not change. Returns [(movement, amount)]."""
+    from .services import post as post_cash
+    lock_business()
+    done = []
+    deposits = InvestmentMovement.objects.filter(kind=InvestmentMovement.DEPOSIT, whose=BUSINESS_MONEY, reversed_at__isnull=True,
+                                                 occurred_on__gte=since).select_related("investment", "entry").order_by("entry__occurred_at", "pk")
+    for movement in deposits:
+        key = movement.idempotency_key
+        covered = CashEntry.objects.filter(source_key=f"{COVER}{key}"[:180], reversal_of__isnull=True).first()
+        if not covered or not movement.entry or CashEntry.objects.filter(source_key__startswith=f"investment:{key}:").exists():
+            continue
+        at, place, unit = movement.entry.occurred_at, movement.entry.account.payment_method, movement.entry.business_unit
+        rows = _capped(_others(place, unit, at), covered.amount)
+        taken = gather(rows=rows, place=place, unit=unit, key=key, fund=movement.investment.name, user=user, occurred_at=at)
+        if taken:
+            post_cash(unit=covered.business_unit, method=place, amount=-taken, kind="OPENING", key=f"{COVER}{key}{GATHERED}"[:180], user=user,
+                      occurred_at=at, reference=f"Not unseen money after all: the business's other places' money, put into {movement.investment.name}"[:160],
+                      reason="All the business's money goes in together", branch=resolve_branch())
+            done.append((movement, taken))
+    return done
 
 
 def cover(*, method, unit, amount, fund, key, user, occurred_at=None):
@@ -632,10 +756,17 @@ def business_money_in(*, investment, user, amounts, key, occurred_on=None):
         place, unit = place_key(name)
         if place not in BUSINESS:
             raise ValidationError("Choose the cash drawer, Lipa na M-Pesa till, bank or other money.")
+    # Every place holding the business's money not invested yet is put in from, so all of it goes in.
+    named = {(place, unit if place == "CASH" else None) for place, unit in (place_key(name) for name, _ in rows)}
+    from .money_mode import separate_cash
+    for m, u, _ in _others(None, None, _day_end(_day(occurred_on))):
+        group = (m, u if m == "CASH" and separate_cash() else None)
+        if group not in named and (m, None) not in named:
+            raise ValidationError(f"Put in from {PLACE_WORDS[m]} too: everything sold and not invested yet goes in together.")
     for place_name, amount in rows:
         place, unit = place_key(place_name)
         move(investment=investment, user=user, kind=InvestmentMovement.DEPOSIT, amount=amount, source=BUSINESS_MONEY, place=place, unit=unit,
-             key=f"{PUT}:{key}:{place_name}", occurred_on=occurred_on)
+             key=f"{PUT}:{key}:{place_name}", occurred_on=occurred_on, alone=True)
     return investment
 
 

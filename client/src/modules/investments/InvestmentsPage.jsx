@@ -195,9 +195,10 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Math.max(Number(holds) || 0, 0))));
   const [place, setPlace] = useState("MPESA");
   const [part, setPart] = useState(parts[0]?.key);
-  // The business's money put in empties its place: never less than what the place holds that was not invested yet.
-  const from = business && putIn ? places.find((p) => p.method === place && (!p.unit || p.unit === part)) : null;
-  const least = Math.max(Number(from?.expected) || 0, 0);
+  // The business's money put in is all of it: everything the drawer, till and bank hold that was not invested yet goes
+  // in together, whichever place it is sent from, so it is never less than that (2026-11-18, owner).
+  const holding = business && putIn ? places.filter((p) => Number(p.expected) > 0) : [];
+  const least = holding.reduce((sum, p) => sum + Number(p.expected), 0);
   useEffect(() => { if (least > 0) setAmount((now) => (Number(now) < least ? String(least) : now)); }, [least]);
   // Money taken out: standard (to the bank, free) or instant (straight away, for a charge that leaves the fund too).
   const [speed, setSpeed] = useState("");
@@ -217,8 +218,10 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
       ? (putIn ? `Move ${sum} of the business's money from the ${placeName(place)} into ${investment.name}?` : `Take ${sum} of the business's money out of ${investment.name} back to the ${placeName(place)}?`)
       : (putIn ? `Add ${sum} of your own money to ${investment.name}?` : `Take ${sum} of your own money out of ${investment.name} to you?`);
     const text = (business
-      ? `It stays the business's money${putIn ? ", kept in the investment" : ""}: the ${placeName(place)} ${putIn ? "goes down" : "goes up"} by ${sum}, and the business's money, sales and profit stay as they are.`
-        + (from ? beyond(from.label, from.expected, values.amount) : "")
+      ? (putIn
+        ? `It stays the business's money, kept in the investment: ${least > 0 ? `${holding.map((p) => `the ${p.label.toLowerCase()} (${money(p.expected)})`).join(", ")} ${holding.length > 1 ? "are" : "is"} emptied` : "nothing was waiting in the drawer, till or bank"}, and the business's money, sales and profit stay as they are.`
+          + (Number(values.amount) > least ? ` The other ${money(Number(values.amount) - least)} is recorded as business money the app had not seen, so nothing shows below zero.` : "")
+        : `It stays the business's money: the ${placeName(place)} goes up by ${sum}, and the business's money, sales and profit stay as they are.`)
       : "It is not the business's money, so nothing in the business changes.")
       + (instant ? ` Instant: the ${money(charge)} charge also leaves ${investment.name}, from your own money, so it goes down by ${money(Number(values.amount) + Number(charge))}.`
         : !putIn ? " Standard, to the bank: no charge." : "");
@@ -245,7 +248,7 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
           <label><input type="radio" name="whose" checked={!business} onChange={() => choose(OWNER)} /> My own money
             {!putIn && <small> · {money(investment.owner_value)} in it</small>}</label>
         </fieldset>
-        {business && <FormField label={putIn ? "Taken from" : "Put back into"}>
+        {business && <FormField label={putIn ? "Sent from" : "Put back into"}>
           <select value={place} onChange={(event) => setPlace(event.target.value)}>
             {PLACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
@@ -255,8 +258,10 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
         </FormField>}
         <FormField label={`Amount (${businessCurrency()})`} name="amount" type="number" min={least > 0 ? String(least) : "0.01"} step="0.01"
           max={putIn ? undefined : Math.max(Number(holds) || 0, 0)} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        {least > 0 && <p className="muted">{from.label} holds {money(least)} sold and not invested yet. Put in at least that, so it is emptied:
-          what is left there is only money sold after this.</p>}
+        {business && putIn && <p className="muted">{least > 0
+          ? <>Everything sold and not invested yet goes in together: {holding.map((p) => `${p.label.toLowerCase()} ${money(p.expected)}`).join(", ")}, {money(least)} in all.
+            Put in at least that; the drawer, till and bank are all emptied, so what shows there later is only money sold after this.</>
+          : "The drawer, till and bank hold nothing that is not invested yet: anything you put in is business money the app had not seen."}</p>}
         <p className="muted">{business
           ? `Still the business's money while it is in the investment, so its money and each part's figures stay the same. ${APART}`
           : `Not the business's money: nothing in the business changes. ${APART}`}</p>
@@ -571,7 +576,7 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="Put in the business's money">
       <h4 className="investFormTitle">Put in the business's money</h4>
       <p className="muted">The business's money (what it sold and earned, less what it spent) you are sending to {investment.name}. Each place shows
-        what it holds that is not invested yet: a place you put in from is emptied, so enter at least that, or more if you also sent money the app has not seen.</p>
+        what it holds that is not invested yet: everything goes in together, so every place holding money is included and emptied. Enter at least what each holds, or more if you also sent money the app has not seen.</p>
       <fieldset disabled={busy} className="loanFields">
         {places.map((p) => <FormField key={p.key} label={`From ${p.label.toLowerCase()} (holds ${money(p.expected)})`} type="number"
           min={Number(p.expected) > 0 ? String(Number(p.expected)) : "0"} step="0.01"

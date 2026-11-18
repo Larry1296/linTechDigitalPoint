@@ -817,3 +817,106 @@ def test_the_businesss_money_put_in_is_never_less_than_its_place_held_that_day(s
     assert short.status_code == 400 and "at least 200.00" in str(short.json())
     assert client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": {"MPESA": "200"}, "idempotency_key": "many"}, format="json").status_code in (200, 201)
     assert money()["MPESA"] == D("0")
+
+
+def _places(client):
+    return {p["method"]: D(str(p["expected"])) for p in client.get("/api/v1/accounting/money-check/").json()["places"]}
+
+
+def _parts(org, method):
+    with organization_context(org):
+        from apps.accounting.money_check import by_part
+        return {row["unit"]: row["amount"] for row in by_part(method) if row["amount"]}
+
+
+def test_the_businesss_money_put_in_takes_everything_from_the_drawer_till_and_bank_together(shop):
+    """2026-11-18, owner: "when i mean shop i mean till, bank and drawer all combined, everything is invested". Sales sat
+    in the drawer while the money was sent from the till: all of it goes in, the drawer is emptied too, nothing is
+    recorded as money the till had that the app had not seen, and each part's share leaves its own place."""
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("2600"), kind="INCOME", reference="Sales", key="shop-cash", user=owner)
+        post(unit="CYBER", method="CASH", amount=D("400"), kind="INCOME", reference="Services", key="cyber-cash", user=owner)
+        post(unit="SHOP", method="BANK", amount=D("500"), kind="INCOME", reference="Sales", key="bank", user=owner)
+    short = _move(client, mmf, "DEPOSIT", "3000", "BUSINESS", "short", place="MPESA")
+    assert short.status_code == 400
+    assert "3,500.00" in str(short.json()) and "the cash drawer 3,000.00" in str(short.json()) and "the bank 500.00" in str(short.json())
+    put = _move(client, mmf, "DEPOSIT", "3500", "BUSINESS", "all", place="MPESA")
+    assert put.status_code == 201, put.content
+    row = put.json()
+    assert (D(str(row["value"])), D(str(row["shop_value"]))) == (D("3500"), D("3500"))
+    assert _places(client) == {"CASH": 0, "MPESA": 0, "BANK": 0}
+    assert _parts(org, "CASH") == {} and _parts(org, "MPESA") == {}
+    starting = client.get("/api/v1/accounting/money-check/").json()["starting"]
+    assert not starting  # nothing was unseen: it was the drawer's and the bank's money
+    accounts, checks, pl = _books(org)
+    assert accounts["1400"]["balance"] == D("3500") and pl["net_profit_before_tax"] == 0
+    assert all(c["reconciled"] for c in checks if c["key"] in {"investments", "cash"})
+    # More than everything is still fine: only the extra is money the app had not seen.
+    with organization_context(org):
+        post(unit="SHOP", method="CASH", amount=D("100"), kind="INCOME", reference="Sales", key="later", user=owner)
+    assert _move(client, mmf, "DEPOSIT", "250", "BUSINESS", "more", place="MPESA").status_code == 201
+    assert _places(client) == {"CASH": 0, "MPESA": 0, "BANK": 0}
+    assert [D(str(e["amount"])) for e in client.get("/api/v1/accounting/money-check/").json()["starting"]] == [D("150")]
+    # Undone, the money goes back to each place it came from.
+    first = next(m for m in client.get("/api/v1/accounting/investments/").json()["investments"][0]["movements"] if D(str(m["amount"])) == D("3500"))
+    undone = client.post(f"/api/v1/accounting/investments/movements/{first['id']}/undo/", {"reason": "Mistake"}, format="json")
+    assert undone.status_code == 200, undone.content
+    assert _places(client) == {"CASH": D("3000"), "MPESA": 0, "BANK": D("500")}
+    assert _parts(org, "CASH") == {"SHOP": D("2600"), "CYBER": D("400")}
+    accounts, checks, _ = _books(org)
+    assert accounts["1400"]["balance"] == D("250") and all(c["reconciled"] for c in checks if c["key"] in {"investments", "cash"})
+
+
+def test_several_places_at_once_must_include_every_place_holding_money(shop):
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("800"), kind="INCOME", reference="Sales", key="cash", user=owner)
+    sweep = lambda amounts, key: client.post(f"/api/v1/accounting/investments/{mmf}/business-money/", {"amounts": amounts, "idempotency_key": key}, format="json")
+    missed = sweep({"MPESA": "800"}, "missed")
+    assert missed.status_code == 400 and "the cash drawer too" in str(missed.json())
+    assert sweep({"CASH": "800", "MPESA": "100"}, "both").status_code in (200, 201)
+    assert _places(client) == {"CASH": 0, "MPESA": 0}
+
+
+def test_money_put_in_earlier_from_the_till_while_the_drawer_held_sales_is_taken_from_the_drawer(shop):
+    """Before 2026-11-18 a deposit took only its own place: sent from the empty till while the drawer held the sales, the
+    app recorded it as unseen till money and kept counting the drawer. gather_earlier() takes it from the drawer instead."""
+    from io import StringIO
+    from django.core.management import call_command
+    client, org, owner, *_ = shop
+    mmf = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.investments import move
+        from apps.accounting.models import Investment, InvestmentMovement
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("900"), kind="INCOME", reference="Sales", key="day1", user=owner,
+             occurred_at=timezone.now() - timedelta(hours=3))
+        investment = Investment.objects.get(pk=mmf)
+        move(investment=investment, user=owner, kind=InvestmentMovement.DEPOSIT, amount=D("1100"), source="BUSINESS", place="MPESA", key="old-1", alone=True)
+        post(unit="CYBER", method="CASH", amount=D("300"), kind="INCOME", reference="Services", key="day2", user=owner)
+        move(investment=investment, user=owner, kind=InvestmentMovement.DEPOSIT, amount=D("200"), source="BUSINESS", place="MPESA", key="old-2", alone=True)
+        post(unit="SHOP", method="CASH", amount=D("50"), kind="INCOME", reference="Sales", key="after", user=owner)
+    assert _places(client)["CASH"] == D("1250")
+    shown = StringIO()
+    call_command("gather_earlier_deposits", business=org.pk, since=str(timezone.localdate() - timedelta(days=1)), stdout=shown)
+    assert "900.00" in shown.getvalue() and _places(client)["CASH"] == D("1250")  # shown, nothing recorded
+    call_command("gather_earlier_deposits", business=org.pk, since=str(timezone.localdate() - timedelta(days=1)), apply=True, stdout=StringIO())
+    # 900 went in with the first, 200 of the cyber's 300 with the second; only the 50 sold since and 100 cyber stay.
+    assert _places(client) == {"CASH": D("150"), "MPESA": 0}
+    assert _parts(org, "CASH") == {"SHOP": D("50"), "CYBER": D("100")}
+    unseen = sorted(D(str(e["amount"])) for e in client.get("/api/v1/accounting/money-check/").json()["starting"])
+    assert sum(unseen) == D("200")  # 1100 - 900 of the first was money the app had not seen
+    accounts, checks, _ = _books(org)
+    assert accounts["1400"]["balance"] == D("1300") and all(c["reconciled"] for c in checks if c["key"] in {"investments", "cash"})
+    call_command("gather_earlier_deposits", business=org.pk, since=str(timezone.localdate() - timedelta(days=1)), apply=True, stdout=StringIO())
+    assert _places(client) == {"CASH": D("150"), "MPESA": 0}  # once only
+    # Undoing one still puts everything back where it was.
+    with organization_context(org):
+        from apps.accounting.investments import undo
+        undo(movement=InvestmentMovement.objects.get(idempotency_key="old-2"), user=owner, reason="test")
+    assert _places(client) == {"CASH": D("350"), "MPESA": 0}
