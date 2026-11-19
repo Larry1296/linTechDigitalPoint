@@ -17,7 +17,10 @@
 }
 
 .chartGrid2 + .chartGrid2 { margin-top: 16px; }
-.chartGrid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+/* Two charts a row at most (one on narrow screens). A chart left alone on the last row takes the whole row, so no
+   empty space is left beside it, whichever charts a business has. */
+.chartGrid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(420px, calc(50% - 8px))), 1fr)); gap: 16px; }
+.chartGrid2 > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .chartCard { min-width: 0; margin: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .chartCard figcaption h3 { margin: 0; font-size: 16px; color: var(--text); }
 .chartCard figcaption p { margin: 3px 0 0; font-size: 13px; }
