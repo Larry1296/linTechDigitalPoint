@@ -2993,8 +2993,11 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 /* Short tables show in full; only long ones (latest money, month by month) scroll inside their box. */
 .businessDashboard .ownerSummary .trendTable, .businessDashboard .financialTrend .trendTable, .businessDashboard .dashSide .trendTable { max-height: none; }
 .dashMain { container-type: inline-size; }
+.dashWide { display: grid; gap: 20px; min-width: 0; container-type: inline-size; }
+.dashWide > * { min-width: 0; margin: 0; }
+.dashWide:empty { display: none; }
 .businessDashboard .accountingKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-@container (min-width: 620px) { .dashMain .accountingKpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (min-width: 620px) { .dashMain .accountingKpis, .dashWide .accountingKpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .businessDashboard .accountingKpis article { padding: 14px; gap: 6px; }
 .businessDashboard .accountingKpis strong { font-size: clamp(1rem, 1.5vw, 1.35rem); white-space: nowrap; }
 .businessDashboard .ownerSummary .trendTable th:first-child { white-space: normal; text-align: left; }

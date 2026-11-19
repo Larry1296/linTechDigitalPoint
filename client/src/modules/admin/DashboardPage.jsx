@@ -213,9 +213,6 @@ function BusinessDashboard() {
         </section>}
         {can("commerce.view_sale") && can("accounting.view_profit") && <SalesProfits money={money} timezone={organization.timezone}
           refreshKey={`${today.sales}-${today.revenue}`} />}
-        <PeriodComparison data={data} money={money} />
-        <BusinessAnalysis data={data} money={money} />
-        {data.performance && <CollectionsPanel data={data} money={money} />}
       </div>
 
       <aside className="dashSide" aria-label="Money and stock now">
@@ -240,6 +237,13 @@ function BusinessDashboard() {
         </section>}
         <ChamaDashboardCard />
       </aside>
+    </div>
+
+    {/* Below both columns, across the whole width: beside the side cards they left empty space on the right. */}
+    <div className="dashWide">
+      <PeriodComparison data={data} money={money} />
+      <BusinessAnalysis data={data} money={money} />
+      {data.performance && <CollectionsPanel data={data} money={money} />}
     </div>
 
     <section className="dashMore" aria-labelledby="dash-more-title">
