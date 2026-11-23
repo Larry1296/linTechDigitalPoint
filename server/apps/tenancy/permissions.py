@@ -29,8 +29,10 @@ PAGES = {
 # settings, commission, staff) is never an employee's, whatever is ticked. Investments only if the owner ticks them.
 WORK_PAGES = ("sales", "products", "services", "rooms", "mpesa", "mkopa", "investments")
 CUSTOMERS = {"accounts.view_customerprofile", "accounts.add_customerprofile", "accounts.change_customerprofile"}
+# Promises made to customers at the counter (call them back about something not in stock): whoever serves them.
+PROMISES = {"core.view_customerpromise", "core.add_customerpromise", "core.change_customerpromise"}
 WORK_NEEDS = {
-    "sales": lambda app, code: f"{app}.{code}" in CUSTOMERS or app in {"catalog", "inventory"} and code.startswith("view_"),
+    "sales": lambda app, code: f"{app}.{code}" in CUSTOMERS | PROMISES or app in {"catalog", "inventory"} and code.startswith("view_"),
     "services": lambda app, code: f"{app}.{code}" in CUSTOMERS,
     "rooms": lambda app, code: f"{app}.{code}" in CUSTOMERS,
 }
@@ -101,7 +103,7 @@ def _business_permissions(user):
             result.add(key)
         elif membership.role == "ACCOUNTANT" and app == "accounting":
             result.add(key)
-        elif membership.role == "CASHIER" and key in {"commerce.add_sale", "commerce.view_sale", "commerce.add_payment", "commerce.view_payment", "accounts.view_customerprofile", "accounts.add_customerprofile", "catalog.view_product", "catalog.view_productvariant", "hotel.view_stay"}:
+        elif membership.role == "CASHIER" and key in {"commerce.add_sale", "commerce.view_sale", "commerce.add_payment", "commerce.view_payment", "accounts.view_customerprofile", "accounts.add_customerprofile", "catalog.view_product", "catalog.view_productvariant", "hotel.view_stay"} | PROMISES:
             result.add(key)
         elif membership.role == "SERVICE_ATTENDANT" and (app == "hotel" and code.endswith(("_stay", "_staydeposit", "_room")) or key in {"cyber.view_cyberserviceprofile", "cyber.view_cyberjob", "cyber.add_cyberjob", "cyber.change_cyberjob", "cyber.complete_cyber_job"}):
             result.add(key)

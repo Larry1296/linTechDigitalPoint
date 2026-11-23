@@ -3482,3 +3482,69 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .toBuySuggest li.toBuyNewItem:first-child { border-top: 0; }
 .toBuySuggest li span { font-size: 12px; }
 .toBuySuggest li:hover, .toBuySuggest li[aria-selected="true"] { background: color-mix(in srgb, var(--line) 45%, transparent); }
+
+/* Customer promises: the red reminder on the dashboard, and the page where promises are written and closed. */
+.promiseReminder { margin: 14px 0; padding: 14px 16px; border-radius: 12px; color: #fff; background: #b42318; border: 1px solid #912018; }
+[data-theme="dark"] .promiseReminder { background: #912018; border-color: #f97066; }
+.promiseReminder a { color: #fff; text-decoration: underline; }
+.promiseReminderHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.promiseReminderHead b { font-size: 16px; }
+.promiseReminder .button { margin: 0; color: #b42318; background: #fff; border-color: #fff; text-decoration: none; }
+.promiseReminder ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.promiseReminder li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: rgb(255 255 255 / 12%); overflow-wrap: anywhere; }
+.promiseReminder li.late { background: rgb(0 0 0 / 18%); }
+.promiseReminder small { opacity: .95; }
+.promiseReminder p { margin: 8px 0 0; }
+
+.promisesPage { display: grid; gap: 18px; min-width: 0; }
+.promisesPage > * { margin: 0; min-width: 0; }
+.promisesHead h1 { margin: 0 0 6px; }
+.promisesHead p { margin: 0; max-width: 72ch; }
+.promiseStats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 10px; margin: 0; }
+.promiseStats > div { padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.promiseStats dt { font-size: 13px; color: var(--muted); }
+.promiseStats dd { margin: 2px 0 0; font-size: 24px; font-weight: 700; }
+.promiseStats .late, .promiseStats .soon { border-color: var(--danger, #b42318); }
+.promiseStats .late dd, .promiseStats .soon dd { color: var(--danger, #b42318); }
+[data-theme="dark"] .promiseStats :is(.late, .soon) { --danger: #f97066; }
+.promiseNew { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.promiseNew h2 { margin: 0 0 10px; }
+.promiseForm { display: grid; gap: 10px; }
+.promiseFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.promiseFields label { display: grid; gap: 4px; min-width: 0; }
+.promiseFields input { width: 100%; min-width: 0; }
+.promiseWide, .promiseDue { grid-column: 1 / -1; }
+.promiseDue { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.promiseDue label { flex: 0 1 260px; }
+.promisePicks { display: flex; flex-wrap: wrap; gap: 6px; }
+.promisePicks button { margin: 0; padding: 6px 10px; font-size: 14px; }
+.promiseFormButtons { display: flex; flex-wrap: wrap; gap: 8px; }
+.promiseFormButtons button { margin: 0; }
+.promiseList { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.promiseCard { display: grid; align-content: start; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: 12px; background: var(--surface); min-width: 0; overflow-wrap: anywhere; }
+.promiseCard.editing { grid-column: 1 / -1; }
+.promiseCard p { margin: 0; }
+.promiseCard.late { border-color: #b42318; background: color-mix(in srgb, #b42318 10%, var(--surface)); }
+.promiseCard.soon { border-color: #b42318; border-left-color: #b42318; }
+.promiseCard.later { border-left-color: var(--primary); }
+.promiseCard.met { border-left-color: #12b76a; opacity: .9; }
+.promiseCard.notMet { border-left-color: var(--muted); opacity: .9; }
+.promiseTop { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.promiseWanted { font-size: 16px; }
+.promiseTag { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.promiseCard:is(.late, .soon) .promiseTag { color: #fff; background: #b42318; }
+.promiseCard.met .promiseTag { color: #067647; background: color-mix(in srgb, #12b76a 16%, transparent); }
+[data-theme="dark"] .promiseCard.met .promiseTag { color: #75e0a7; }
+.promiseCard.notMet .promiseTag { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.promiseWho { display: flex; flex-wrap: wrap; gap: 4px 10px; font-weight: 600; }
+.promiseTimes { margin: 0; display: grid; gap: 2px; font-size: 14px; }
+.promiseTimes > div { display: flex; flex-wrap: wrap; gap: 0 6px; }
+.promiseTimes dt { color: var(--muted); }
+.promiseTimes dt::after { content: ":"; }
+.promiseTimes dd { margin: 0; }
+.promiseCard:is(.late, .soon) .promiseTimes b { color: var(--danger, #b42318); }
+[data-theme="dark"] .promiseCard:is(.late, .soon) .promiseTimes b { color: #f97066; }
+.promiseActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.promiseActions button { margin: 0; padding: 6px 10px; font-size: 14px; }
+@media (max-width: 560px) { .promiseFields { grid-template-columns: minmax(0, 1fr); } }

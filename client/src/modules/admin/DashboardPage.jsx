@@ -8,6 +8,7 @@ import { ErrorState, Loading } from "../../components/States";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { InvestmentReminder } from "../investments/InvestmentReminder";
 import { CommissionReminder } from "../mpesa/CommissionReminder";
+import { PromiseReminder } from "../promises/PromiseReminder";
 import { RecordsSummary } from "./RecordsSummary";
 import { PartsProfit } from "./PartsProfit";
 import { SoldSummary } from "./SoldSummary";
@@ -178,6 +179,7 @@ function BusinessDashboard() {
     </header>
     {error && <ErrorState message={error} retry={() => refresh.current()} />}
     {on("inventory") && can("catalog.view_product") && <StockQuickSearch />}
+    <PromiseReminder />
     <InvestmentReminder />
     <CommissionReminder />
     {user?.roles?.[0] === "OWNER" && <StaffUndos />}

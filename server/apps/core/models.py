@@ -61,3 +61,27 @@ class ToBuyItem(TenantModel):
         ordering = ["bought", "position", "pk"]
         base_manager_name = "objects"
         default_manager_name = "objects"
+
+
+class CustomerPromise(TenantModel):
+    """A promise made to a customer who asked for something the business did not have: what they wanted, what they
+    were promised, and by when they will be answered, with their phone to call them back. Only a note: it never touches
+    stock, money or the books. It stays open (and is reminded on the dashboard as its time comes) until it is closed
+    as met (they got it) or not met (it could not be found), which archives it."""
+    OPEN, MET, NOT_MET = "OPEN", "MET", "NOT_MET"
+    STATUSES = [(OPEN, "Open"), (MET, "Met"), (NOT_MET, "Not met")]
+    customer_name = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=30)
+    wanted = models.CharField(max_length=300)
+    promised = models.CharField(max_length=300)
+    due_at = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=STATUSES, default=OPEN)
+    outcome = models.CharField(max_length=300, blank=True)  # how it ended: "called, they came for it", "not in town"
+    closed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["due_at", "pk"]
+        base_manager_name = "objects"
+        default_manager_name = "objects"

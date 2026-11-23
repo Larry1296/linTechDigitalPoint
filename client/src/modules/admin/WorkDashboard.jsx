@@ -5,6 +5,7 @@ import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { StockQuickSearch } from "./StockQuickSearch";
+import { PromiseReminder } from "../promises/PromiseReminder";
 
 // Where each work page starts, and what it is called on the dashboard.
 const START = {
@@ -47,6 +48,7 @@ export function WorkDashboard() {
       </nav>}
     </header>
     {!data.pages.length && <p className="formNotice" role="status">The business owner has not given you any pages yet. Ask them to tick the pages you work on.</p>}
+    <PromiseReminder />
     {data.low_stock && <StockQuickSearch />}
     {cards.length > 0 && <section className="dashKpis" aria-label="Your work today">
       {cards.map(([label, value, detail, href, tone]) => {

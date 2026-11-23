@@ -37,6 +37,7 @@ import { MpesaDashboardPage } from "../modules/mpesa/MpesaDashboardPage";
 import { MpesaCommissionPage } from "../modules/mpesa/MpesaCommissionPage";
 import { MkopaPage } from "../modules/mkopa/MkopaPage";
 import { ToBuyPage } from "../modules/tobuy/ToBuyPage";
+import { PromisesPage } from "../modules/promises/PromisesPage";
 import { ChamaDetailPage, ChamaHomePage, ChamaSetupPage } from "../modules/chama/ChamaPages";
 import { FrontDeskPage, GuestsPage } from "../modules/hotel/FrontDeskPage";
 import { StayPage } from "../modules/hotel/StayPage";
@@ -68,6 +69,7 @@ export function AppRoutes() {
         <Route path="money-lent" element={<MoneyLentPage />} />
         <Route path="mkopa" element={<MkopaPage />} />
         <Route path="to-buy" element={<ToBuyPage />} />
+        <Route path="promises" element={<PromisesPage />} />
         <Route element={<ProtectedPages />}>
           <Route path="investments" element={<InvestmentsPage />} />
           <Route path="mpesa" element={<MpesaDashboardPage />} />
