@@ -3548,3 +3548,10 @@ a.dashKpi:hover, a.dashKpi:focus-visible { border-color: var(--primary); transfo
 .promiseActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .promiseActions button { margin: 0; padding: 6px 10px; font-size: 14px; }
 @media (max-width: 560px) { .promiseFields { grid-template-columns: minmax(0, 1fr); } }
+
+/* Not invested yet: the business's money in the drawer, till and bank, beside the money in investments. */
+.notInvested .notInvestedWhy { display: block; margin-top: 4px; }
+.notInvested.below { border-color: var(--danger, #b42318); }
+.notInvested.below strong, .notInvested.below .notInvestedWhy { color: var(--danger, #b42318); }
+[data-theme="dark"] .notInvested.below { --danger: #f97066; }
+a.notInvested.soldTotal:hover, a.notInvested.soldTotal:focus-visible { border-color: var(--primary); }

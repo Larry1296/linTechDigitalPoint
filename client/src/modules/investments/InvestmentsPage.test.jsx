@@ -410,6 +410,8 @@ it("puts the business's money in from several places in one step, filled in from
   });
   render(<InvestmentsPage />);
   const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  // Beside the money in investments: the business's money not invested yet, place by place.
+  expect(screen.getByRole("article", { name: "Not invested yet: KSh 9,000" })).toHaveTextContent("Lipa na M-Pesa till KSh 6,000 · Cash in the drawer KSh 3,000");
   expect(screen.queryByRole("status", { name: "Business money not marked" })).not.toBeInTheDocument();
   fireEvent.click(within(card).getByRole("button", { name: "Put in the business's money" }));
   const form = within(card).getByRole("form", { name: "Put in the business's money" });

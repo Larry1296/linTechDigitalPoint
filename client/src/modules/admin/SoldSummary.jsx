@@ -1,3 +1,4 @@
+import { NotInvested } from "../investments/NotInvested";
 // What the business has brought in since it started, by what it was: goods, services, commission and interest, and the
 // total. It leads the dashboard, before the profit: first what came in, then what is left of it. The amounts are the
 // books' own (the same as the profit card's), with the counts behind them; the bar shows each one's share of the total.
@@ -110,6 +111,8 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
           : Number(bridge.in_investments) ? `${money(bridge.in_investments)} in ${bridge.funds?.length === 1 ? bridge.funds[0] : "investments"} · ${money(bridge.in_places)} sold, not invested yet`
           : "In the drawer, till and bank"}</small>
       </a>}
+      {bridge && Number(bridge.in_investments) !== 0 && <NotInvested as="a" href="/admin/money-check" className="soldTotal" total={bridge.in_places}
+        places={bridge.places} money={money} />}
     </div>
 
     {/* Each part's share of the total. Every share is also written in its card below, so colour is never the only key. */}

@@ -144,6 +144,8 @@ def test_what_was_sold_since_the_start_is_goods_services_commission_and_interest
     assert {line["key"]: D(line["amount"]) for line in bridge["lines"]} == {"starting": D("1000")}
     assert (D(bridge["in_places"]), D(bridge["in_investments"]), D(bridge["money_now"])) == (D("2320"), D("250"), D("2570"))
     assert D(sold["total"]) + sum(D(line["amount"]) for line in bridge["lines"]) == D(bridge["money_now"])
+    # Not invested yet, place by place, adds up to the drawer, till and bank together.
+    assert sum(D(place["amount"]) for place in bridge["places"]) == D(bridge["in_places"])
 
 
 def test_money_the_owner_says_is_already_invested_leaves_the_drawer_and_nothing_else_changes():

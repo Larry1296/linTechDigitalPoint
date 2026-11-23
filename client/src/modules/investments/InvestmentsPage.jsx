@@ -1,4 +1,5 @@
 import { Pager, usePages } from "../../components/Pager";
+import { NotInvested } from "./NotInvested";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
@@ -811,6 +812,8 @@ export function InvestmentsPage() {
           <article><span>Your own money</span><strong>{money(data.owner_value)}</strong>
             <small>Kept out of the business's books</small></article>
         </>}
+        {data.business_in_places != null && <NotInvested total={data.business_in_places}
+          places={(data.business_places || []).map((place) => ({ label: place.label, amount: place.expected }))} money={money} />}
       </div>
       {Number(data.shop_value) > 0 && <BusinessSources total={data.shop_value} breakdown={data.business_breakdown} />}
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">

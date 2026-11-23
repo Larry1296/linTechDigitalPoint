@@ -71,3 +71,26 @@ test("says all of the business's money is in investments when the drawer, till a
   expect(now).toHaveTextContent("The business's money nowKES 25,234.08All of it kept in investments");
   expect(now).toHaveAttribute("href", "/admin/investments");
 });
+
+test("shows the money not invested yet beside the business's money, and says why when it is below zero", () => {
+  // LinTech on 23 Nov 2026: everything went into CIC, then 100 was lent from the cash drawer.
+  const bridge = { money_now: "31384.00", in_places: "-100.00", in_investments: "31484.00", interest: "0", funds: ["CIC MMF"],
+    lines: [{ key: "loans", amount: "-100.00" }],
+    places: [{ label: "Cash drawer", amount: "-100.00" }, { label: "Lipa na M-Pesa till", amount: "0.00" }, { label: "Bank", amount: "0.00" }] };
+  render(<SoldSummary sold={{ ...sold, total: "31484.00" }} bridge={bridge} money={money} />);
+  const tile = screen.getByRole("link", { name: "Not invested yet: − KES 100.00" });
+  expect(tile).toHaveAttribute("href", "/admin/money-check");
+  expect(tile).toHaveClass("below");
+  expect(tile).toHaveTextContent("Cash drawer − KES 100.00");
+  expect(tile).not.toHaveTextContent("Bank");  // places holding nothing are not listed
+  expect(tile).toHaveTextContent(/more was paid out of the cash drawer than the app saw come in, such as money lent/);
+});
+
+test("shows nothing is left to invest when every place is empty", () => {
+  const bridge = { money_now: "31484.00", in_places: "0.00", in_investments: "31484.00", interest: "0", funds: ["CIC MMF"], lines: [],
+    places: [{ label: "Cash drawer", amount: "0.00" }] };
+  render(<SoldSummary sold={{ ...sold, total: "31484.00" }} bridge={bridge} money={money} />);
+  const tile = screen.getByRole("link", { name: "Not invested yet: KES 0.00" });
+  expect(tile).not.toHaveClass("below");
+  expect(tile).toHaveTextContent("Everything is invested");
+});
