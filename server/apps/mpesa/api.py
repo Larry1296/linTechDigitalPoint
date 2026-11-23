@@ -252,7 +252,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         session = MpesaSession.objects.get(pk=request.data.get("session"))
         entry, created = post_transaction(session=session, transaction_type=request.data.get("transaction_type"), transaction_amount=request.data.get("amount"), user=request.user, idempotency_key=request.data.get("idempotency_key"), provider_reference=request.data.get("provider_reference"), customer_reference=request.data.get("customer_reference", ""), notes=request.data.get("notes", ""), cash_delta=request.data.get("cash_delta"), float_delta=request.data.get("float_delta"),
             customer_name=request.data.get("customer_name", ""), customer_phone=request.data.get("customer_phone", ""), customer_id_number=request.data.get("customer_id_number", ""), paid_by=request.data.get("paid_by", ""),
-            commission_balance=request.data.get("commission_balance"))
+            commission_balance=request.data.get("commission_balance"), return_from=request.data.get("return_from", ""),
+            already_in_float=request.data.get("already_in_float", False))
         return Response(self.get_serializer(entry).data, status=201 if created else 200)
 
     @action(detail=False, methods=["get"], url_path="commission-advice")
@@ -461,14 +462,14 @@ def dashboard(request):
     # Only the agency's own money, even with one drawer: the shop's and cyber's money is on their own pages.
     in_operation = {"total": cash + electronic_float, "opening": (session.opening_cash + session.opening_float) if session else 0}
     from .commission_learning import for_shift, forecast
-    from .services import agency_sources
+    from .services import agency_sources, owed_rows
     if is_employee(request.user):
         # An employee records the shift's customer transactions; the agency's money, its commission, topping up the
         # float or bringing in cash are the owner's.
         return Response({"employee": True,
                          "session": SessionSerializer(session, context={"request": request}).data if session else None,
                          "transaction_count": entries.count()})
-    return Response({"sources": agency_sources(), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
+    return Response({"sources": agency_sources(), "owed_to_parts": owed_rows(), "commission_shift": for_shift(session) if session else None, "commission_month": forecast(), "in_operation": in_operation, "session": SessionSerializer(session).data if session else None, "cash": cash, "float": electronic_float, "deposits": deposits, "withdrawals": withdrawals, "airtime": airtime, "transaction_count": entries.count(), "commission": commission, "principal_revenue": 0, "transaction_volume": deposits + withdrawals})
 
 
 def _can_report(request):

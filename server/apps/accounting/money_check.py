@@ -22,7 +22,7 @@ PLACES = [("CASH", "Cash in the drawer"), ("MPESA", "Lipa na M-Pesa till"), ("BA
 PARTS = [("OPENING", "starting", "Starting money"), ("INCOME", "received", "Received from customers (less refunds)"),
          ("EXPENSE", "expenses", "Spent on running costs"), ("PURCHASE", "suppliers", "Paid to suppliers"),
          ("LOAN", "loans", "Money lent, less repayments"),
-         ("TRANSFER", "to_agency", "Moved to the M-Pesa agency (float or cash)"),
+         ("TRANSFER", "to_agency", "Moved to the M-Pesa agency, less returned"),
          ("INVESTMENT", "invested", "Kept in investments, less taken back")]
 ZERO = Decimal("0")
 

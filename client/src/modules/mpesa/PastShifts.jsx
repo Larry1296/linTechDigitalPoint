@@ -107,7 +107,7 @@ export function PastShifts() {
                 {shownOthers.rows.map((entry) => (
                   <div key={entry.id} role="row">
                     <span role="rowheader">{clock(entry.occurred_at)}</span>
-                    <span role="cell">{entry.transaction_type.replaceAll("_", " ").toLowerCase()}</span>
+                    <span role="cell">{entry.transaction_type === "PART_RETURN" ? "money returned" : entry.transaction_type.replaceAll("_", " ").toLowerCase()}</span>
                     <span role="cell">{businessCurrency()} {figure(entry.amount)}</span>
                     <span role="cell">{signed(entry.cash_delta)}</span>
                     <span role="cell">{signed(entry.float_delta)}</span>

@@ -89,6 +89,7 @@ class MpesaTransaction(TenantModel):
             "ADJUSTMENT",
             "INVESTMENT",  # owner moving money to or from an investment such as an MMF (Investments page)
             "COMMISSION",  # Safaricom's commission paid into the agency float or cash (Commission page)
+            "PART_RETURN",  # another part's money paid back out of the agency's cash or float (e.g. shop money lent when float was low)
         ]
     ]
     POSTED = "POSTED"
@@ -108,6 +109,7 @@ class MpesaTransaction(TenantModel):
     customer_id_number = models.CharField(max_length=20, blank=True)
     # How the customer paid for airtime: cash, M-Pesa into this agent line, or M-Pesa to another number (till or phone).
     # For a float top-up, where the money came from: cash out of the agency drawer, or new money from outside the agency.
+    # For money returned to another part ("PART_RETURN"), the part's place it went back to, e.g. "SHOP:CASH".
     paid_by = models.CharField(max_length=12, blank=True, choices=[("CASH", "Cash"), ("MPESA_FLOAT", "M-Pesa to this agent line"),
                                                                    ("MPESA_OTHER", "M-Pesa to another number"),
                                                                    ("DRAWER", "Cash from the agency drawer"),

@@ -15,7 +15,7 @@ from .models import MpesaOutlet, MpesaSession, MpesaTransaction
 
 ZERO = Decimal("0")
 TYPE_LABELS = {"CUSTOMER_DEPOSIT": "Deposit", "CUSTOMER_WITHDRAWAL": "Withdrawal", "AIRTIME_SALE": "Airtime sale", "FLOAT_TOPUP": "Float top-up",
-               "CASH_REBALANCE": "Cash rebalance", "ADJUSTMENT": "Adjustment", "REVERSAL": "Reversal"}
+               "CASH_REBALANCE": "Cash rebalance", "PART_RETURN": "Returned to another part", "ADJUSTMENT": "Adjustment", "REVERSAL": "Reversal"}
 
 PAID_BY = {"CASH": "Cash", "MPESA_FLOAT": "M-Pesa (agent line)", "MPESA_OTHER": "M-Pesa (other number)"}
 TOPUP_SOURCE = {"DRAWER": "Agency drawer", "OUTSIDE": "Outside the agency"}

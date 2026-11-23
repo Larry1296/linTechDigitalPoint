@@ -382,13 +382,15 @@ export function MpesaDashboardPage() {
     const values = await askForm({
       title: topUp ? "Record float top-up" : "Record cash rebalance",
       text: topUp
-        ? "Electronic float added to the agent line. Say where the money came from: the agency's own drawer cash turned into float lowers its cash; another part's money goes down by the same amount; money from outside the business is the owner's money put in."
-        : "Cash brought into the agency drawer. Say where it came from: another part's money goes down by the same amount; money from outside the business is the owner's money put in.",
+        ? "Electronic float added to the agent line. Say where the money came from: the agency's own drawer cash turned into float lowers its cash; another part's money, such as the shop's, is lent to the agency and owed back to it until you return it; money from outside the business is the owner's money put in. If the shop's money went onto the line before it was recorded and is already in the float, say so: the float stays as it is and only whose money it is gets recorded."
+        : "Cash brought into the agency drawer. Say where it came from: another part's money, such as the shop's, is lent to the agency and owed back to it until you return it; money from outside the business is the owner's money put in.",
       confirmButtonText: "Record transaction",
       fields: [
         { name: "source", label: "Where the money came from", type: "select", required: true,
           options: sourceChoices(dashboard.sources, amount, { withDrawer: topUp }) },
         { name: "amount", label: topUp ? "Float bought" : "Cash received", type: "number", required: true },
+        ...(topUp ? [{ name: "already", label: "Is this money already in the float?", type: "select", value: "NO",
+          options: [["NO", "No, it goes onto the agent line now"], ["YES", "Yes, it is already in the float that was counted"]] }] : []),
         { name: "reference", label: "Reference, e.g. the M-Pesa code" },
         { name: "notes", label: "Notes", placeholder: topUp ? "e.g. bought from the bank agent" : "e.g. brought from the shop" },
       ],
@@ -400,12 +402,42 @@ export function MpesaDashboardPage() {
         transaction_type: type,
         amount: values.amount,
         paid_by: values.source,
+        already_in_float: topUp && values.already === "YES",
         provider_reference: values.reference || undefined,
         notes: values.notes,
         idempotency_key: crypto.randomUUID(),
       });
     } catch (err) {
       await showError(topUp ? "Could not record the float top-up." : "Could not record the cash rebalance.", err.message);
+      return;
+    }
+    await load();
+  };
+  // Another part's money lent to the agency (e.g. the shop's, when the float was low) goes back to it here.
+  const owedParts = dashboard.owed_to_parts || [];
+  const returnMoney = async () => {
+    if (!dashboard.session || !owedParts.length) return;
+    const values = await askForm({
+      title: owedParts.length === 1 ? `Return money to ${owedParts[0].label}` : "Return money to another part",
+      text: `The agency owes ${owedParts.map((row) => `${row.label} ${amount(row.amount)}`).join(" and ")}. Return all of it or part of it now, out of the agency's cash or its float, into the place it goes back to. The rest stays owed.`,
+      confirmButtonText: "Record the return",
+      fields: [
+        { name: "to", label: "Goes back to", type: "select", required: true, value: `${owedParts[0].part}:CASH`,
+          options: owedParts.flatMap((row) => [["CASH", "cash in the drawer"], ["MPESA", "M-Pesa till"], ["BANK", "bank"], ["OTHER", "other place"]]
+            .map(([place, words]) => [`${row.part}:${place}`, `${row.label}'s money: ${words}`])) },
+        { name: "from", label: "Out of the agency's", type: "select", required: true, value: "CASH",
+          options: [["CASH", `cash (${amount(dashboard.cash)} now)`], ["FLOAT", `float (${amount(dashboard.float)} now)`]] },
+        { name: "amount", label: "Amount returned", type: "number", required: true, value: owedParts.length === 1 ? String(owedParts[0].amount) : "",
+          max: String(Math.max(...owedParts.map((row) => Number(row.amount)))) },
+        { name: "notes", label: "Notes", placeholder: "e.g. float enough again" },
+      ],
+    });
+    if (!values) return;
+    try {
+      await postMpesaTransaction({ session: dashboard.session.id, transaction_type: "PART_RETURN", amount: values.amount, paid_by: values.to,
+        return_from: values.from, notes: values.notes, idempotency_key: crypto.randomUUID() });
+    } catch (err) {
+      await showError("Could not record the return.", err.message);
       return;
     }
     await load();
@@ -435,6 +467,10 @@ export function MpesaDashboardPage() {
           {dashboard.session && <small className="muted"> · opened with {amount(dashboard.in_operation.opening)}</small>}
         </MetricCard>
         <MetricCard label="Current cash">{amount(dashboard.cash)}</MetricCard>
+        {(dashboard.owed_to_parts || []).map((row) => <MetricCard key={row.part} label={`Owed to ${row.label}`}>
+          {amount(row.amount)}
+          <small className="muted"> · {row.label}'s money in the agency, to return when the float is enough</small>
+        </MetricCard>)}
         <MetricCard label="Current float">{amount(dashboard.float)}</MetricCard>
         {commissionNow && <MetricCard label="Commission balance">
           {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
@@ -556,6 +592,9 @@ export function MpesaDashboardPage() {
               <button onClick={() => void rebalance("CASH_REBALANCE")}>
                 Cash rebalance
               </button>
+              {owedParts.length > 0 && <button onClick={() => void returnMoney()}>
+                {owedParts.length === 1 ? `Return money to ${owedParts[0].label}` : "Return money to another part"}
+              </button>}
             </>}
             {canCorrect && !employee && <button className="secondary" onClick={() => setCorrecting(true)}>
               Correct money in operation
@@ -614,7 +653,7 @@ export function MpesaDashboardPage() {
                 <span>
                   {entry.provider_reference || entry.internal_reference}
                 </span>
-                <span>{entry.transaction_type.replaceAll("_", " ")}</span>
+                <span>{entry.transaction_type === "PART_RETURN" ? "MONEY RETURNED" : entry.transaction_type.replaceAll("_", " ")}</span>
                 <span>{businessCurrency()} {figure(entry.amount)}</span>
                 <span>{signedFigure(entry.cash_delta)}</span>
                 <span>{signedFigure(entry.float_delta)}</span>

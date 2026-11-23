@@ -13,8 +13,9 @@ from apps.core.models import AuditLog
 from .models import MpesaCommissionEntry, MpesaReconciliation, MpesaSession, MpesaTransaction
 
 
-# Float top-ups and cash rebalances move the business's money into the agency: only the owner records them.
-OWNERS_MOVES = {"FLOAT_TOPUP", "CASH_REBALANCE"}
+# Float top-ups and cash rebalances move the business's money into the agency, and money returned to another part moves
+# it back out: only the owner records them.
+OWNERS_MOVES = {"FLOAT_TOPUP", "CASH_REBALANCE", "PART_RETURN"}
 
 
 def on_shift(user, session):
@@ -194,11 +195,44 @@ def agency_sources():
             for key, value in sorted(found.items(), key=lambda item: (parts.index(item[0].split(":")[0]), list(PLACE_WORDS).index(item[0].split(":")[1])))]
 
 
+# Another part's money brought into the agency (a float top-up or cash from "SHOP:CASH", ...) is that part's money lent
+# to the agency, for when the float was low: the agency owes it back, and pays it back with PART_RETURN, out of its cash
+# or its float, into any of that part's places. Owed = brought in less returned, leaving out anything reversed.
+BORROWED = {"FLOAT_TOPUP", "CASH_REBALANCE"}
+
+
+def owed_to_parts():
+    """What the agency owes each other part for its money brought in: {"SHOP": Decimal, ...}, only parts owed something."""
+    rows = MpesaTransaction.objects.filter(status=MpesaTransaction.POSTED, reversal__isnull=True,
+                                           transaction_type__in=[*BORROWED, "PART_RETURN"]).exclude(paid_by="")
+    owed = {}
+    for kind, paid_by, value in rows.values_list("transaction_type", "paid_by", "amount"):
+        if paid_by in PART_SOURCES:
+            part = paid_by.split(":")[0]
+            owed[part] = owed.get(part, Decimal("0")) + (value if kind in BORROWED else -value)
+    return {part: value for part, value in owed.items() if value > 0}
+
+
+def owed_rows():
+    """For the M-Pesa desk: [{"part", "label", "amount", "moves": [...]}], each part owed and the moves behind it, newest first."""
+    from apps.accounting.money_mode import part_names
+    names, owed = part_names(), owed_to_parts()
+    rows = []
+    for part, value in owed.items():
+        moves = MpesaTransaction.objects.filter(status=MpesaTransaction.POSTED, reversal__isnull=True, paid_by__startswith=f"{part}:",
+                                                transaction_type__in=[*BORROWED, "PART_RETURN"]).order_by("-occurred_at", "-pk")[:20]
+        rows.append({"part": part, "label": names.get(part, part.title()), "amount": value,
+                     "moves": [{"id": m.pk, "type": m.transaction_type, "amount": m.amount, "occurred_at": m.occurred_at,
+                                "place": PLACE_WORDS[m.paid_by.split(":")[1]], "returned": m.transaction_type == "PART_RETURN",
+                                "agency_side": "float" if m.float_delta else "cash", "notes": m.notes} for m in moves]})
+    return rows
+
+
 def _source_available(source):
     return next((row["available"] for row in agency_sources() if row["value"] == source), Decimal("0"))
 
 
-def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privileged=False, paid_by=""):
+def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privileged=False, paid_by="", return_from="", already_in=False):
     if transaction_type == "AIRTIME_SALE":
         if paid_by not in AIRTIME_PAYMENTS:
             raise ValidationError("Choose how the customer paid for the airtime: cash or M-Pesa.")
@@ -209,10 +243,19 @@ def deltas(transaction_type, value, *, cash_delta=None, float_delta=None, privil
         return -value, value
     if transaction_type == "FLOAT_TOPUP":
         if paid_by in PART_SOURCES:
-            return Decimal("0"), value
+            # Already in the float that was counted (it went in before it was recorded): only whose money it is changes.
+            return Decimal("0"), Decimal("0") if already_in else value
         if paid_by not in TOPUP_SOURCES:
             raise ValidationError("Say where the float money came from: the agency's own drawer cash, another part's money, or outside the business.")
         return TOPUP_SOURCES[paid_by](value)
+    if transaction_type == "PART_RETURN":
+        if paid_by not in PART_SOURCES:
+            raise ValidationError("Say which part the money goes back to, and into which of its places.")
+        if return_from == "FLOAT":
+            return Decimal("0"), -value
+        if return_from == "CASH":
+            return -value, Decimal("0")
+        raise ValidationError("Say whether the money goes back out of the agency's cash or its float.")
     if transaction_type == "CASH_REBALANCE":
         if paid_by not in PART_SOURCES | {"OUTSIDE"}:
             raise ValidationError("Say where the cash came from: another part's money, or outside the business.")
@@ -265,7 +308,7 @@ def record_commission_balance(*, session, user, value):
 
 @transaction.atomic
 def post_transaction(*, session, transaction_type, transaction_amount, user, idempotency_key, provider_reference=None, customer_reference="", notes="", cash_delta=None, float_delta=None,
-                     customer_name="", customer_phone="", customer_id_number="", paid_by="", commission_balance=None):
+                     customer_name="", customer_phone="", customer_id_number="", paid_by="", commission_balance=None, return_from="", already_in_float=False):
     lock_business()
     if not idempotency_key:
         raise ValidationError("An idempotency key is required.")
@@ -280,19 +323,27 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         raise ValidationError("You can only post to your assigned M-Pesa session.")
     if transaction_type in OWNERS_MOVES and is_employee(user):
         # Bringing float or cash into the agency moves the business's money between its places: the owner's to do.
-        raise ValidationError("Only the business owner tops up the float or brings in cash. Ask them to record it.")
+        raise ValidationError("Only the business owner tops up the float, brings in cash or returns another part's money. Ask them to record it.")
     value = amount(transaction_amount)
     customer = customer_details(transaction_type, customer_name, customer_phone, customer_id_number)
     provider_reference = (provider_reference or "").strip().upper() or None
     commission_balance = commission_reading(transaction_type, commission_balance)
-    if transaction_type in ["FLOAT_TOPUP", "CASH_REBALANCE", "ADJUSTMENT", "INVESTMENT", "COMMISSION"] and not privileged:
+    if transaction_type in ["FLOAT_TOPUP", "CASH_REBALANCE", "PART_RETURN", "ADJUSTMENT", "INVESTMENT", "COMMISSION"] and not privileged:
         raise ValidationError("Manager or Owner permission is required for balance adjustments.")
     # A correction to the money in operation: the reason is required, a reference only if there is one.
     if transaction_type == "ADJUSTMENT" and not notes.strip():
         raise ValidationError("Say why the money in operation is being corrected.")
     if transaction_type == "ADJUSTMENT" and (cash_delta is None or float_delta is None):
         raise ValidationError("Adjustments require explicit cash and float effects.")
-    paid_by = str(paid_by or "").upper() if transaction_type in {"AIRTIME_SALE", "FLOAT_TOPUP", "CASH_REBALANCE"} else ""
+    paid_by = str(paid_by or "").upper() if transaction_type in {"AIRTIME_SALE", "FLOAT_TOPUP", "CASH_REBALANCE", "PART_RETURN"} else ""
+    if transaction_type == "PART_RETURN" and paid_by in PART_SOURCES:
+        from apps.accounting.money_mode import part_names
+        owed = owed_to_parts().get(paid_by.split(":")[0], Decimal("0"))
+        name = part_names().get(paid_by.split(":")[0], paid_by.split(":")[0].title())
+        if not owed:
+            raise ValidationError(f"The agency owes {name} nothing: none of {name}'s money is in the agency.")
+        if value > owed:
+            raise ValidationError(f"The agency owes {name} {owed:,.2f}, less than {value:,.2f}. Return {owed:,.2f} or less.")
     if transaction_type == "CASH_REBALANCE" and not paid_by:
         paid_by = "OUTSIDE"  # recorded before the source was asked
     if paid_by in PART_SOURCES and transaction_type in {"FLOAT_TOPUP", "CASH_REBALANCE"}:
@@ -302,8 +353,13 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
             if is_employee(user):  # the other parts' money is the owner's to see
                 raise ValidationError(f"{label} does not have that much. Choose another source, or ask the business owner.")
             raise ValidationError(f"{label} is only {available:,.2f}, less than {value:,.2f}. Choose another source, or record the money that came in first.")
-    cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged, paid_by=paid_by)
+    cash_effect, float_effect = deltas(transaction_type, value, cash_delta=cash_delta, float_delta=float_delta, privileged=privileged, paid_by=paid_by,
+                                       return_from=str(return_from or "").upper(), already_in=already_in_float is True or str(already_in_float).lower() == "true")
     current_cash, current_float = session_balances(session)
+    if transaction_type == "PART_RETURN" and (current_cash + cash_effect < 0 or current_float + float_effect < 0):
+        side, has = ("cash", current_cash) if cash_effect else ("float", current_float)
+        raise ValidationError(f"The agency's {side} is only {has:,.2f}, less than {value:,.2f}. Return less now, or return it from the "
+                              f"{'float' if side == 'cash' else 'cash'}.")
     if current_cash + cash_effect < 0:
         raise ValidationError("Insufficient physical cash for this operation.")
     if current_float + float_effect < 0 or (transaction_type == "AIRTIME_SALE" and current_float < value):
@@ -344,7 +400,13 @@ def post_transaction(*, session, transaction_type, transaction_amount, user, ide
         part, place = paid_by.split(":")
         post(unit=part, method=place, amount=-value, kind="TRANSFER", reference=f"To the M-Pesa agency ({entry.internal_reference})",
              key=f"agency-source:{entry.pk}", user=user, occurred_at=entry.occurred_at, branch=session.outlet.store)
-    action = {"CUSTOMER_DEPOSIT": "MPESA_DEPOSIT_POSTED", "CUSTOMER_WITHDRAWAL": "MPESA_WITHDRAWAL_POSTED", "FLOAT_TOPUP": "MPESA_FLOAT_TOPUP", "ADJUSTMENT": "MPESA_ADJUSTMENT", "INVESTMENT": "MPESA_INVESTMENT_TRANSFER", "COMMISSION": "MPESA_COMMISSION_RECEIVED", "AIRTIME_SALE": "MPESA_AIRTIME_SOLD"}.get(transaction_type, "MPESA_REBALANCE")
+    if transaction_type == "PART_RETURN":
+        # The part the money goes back to has that much more, in the place it went into.
+        from apps.accounting.services import post
+        part, place = paid_by.split(":")
+        post(unit=part, method=place, amount=value, kind="TRANSFER", reference=f"Returned from the M-Pesa agency ({entry.internal_reference})",
+             key=f"agency-source:{entry.pk}", user=user, occurred_at=entry.occurred_at, branch=session.outlet.store)
+    action = {"CUSTOMER_DEPOSIT": "MPESA_DEPOSIT_POSTED", "CUSTOMER_WITHDRAWAL": "MPESA_WITHDRAWAL_POSTED", "FLOAT_TOPUP": "MPESA_FLOAT_TOPUP", "ADJUSTMENT": "MPESA_ADJUSTMENT", "INVESTMENT": "MPESA_INVESTMENT_TRANSFER", "COMMISSION": "MPESA_COMMISSION_RECEIVED", "AIRTIME_SALE": "MPESA_AIRTIME_SOLD", "PART_RETURN": "MPESA_PART_RETURN"}.get(transaction_type, "MPESA_REBALANCE")
     audit(action, entry, user, after={"amount": str(value), "cash": str(current_cash + cash_effect), "float": str(current_float + float_effect)})
     return entry, True
 
@@ -394,6 +456,11 @@ def reverse_transaction(*, original, user, idempotency_key, reason, allow_invest
     current_cash, current_float = session_balances(session)
     if current_cash - original.cash_delta < 0 or current_float - original.float_delta < 0:
         raise ValidationError("The reversal would create a negative operational balance.")
+    if original.transaction_type in BORROWED and original.paid_by in PART_SOURCES:
+        # Part of it may already be paid back: undoing all of it would leave the agency owed money by that part.
+        part = original.paid_by.split(":")[0]
+        if owed_to_parts().get(part, Decimal("0")) < original.amount:
+            raise ValidationError("Some of this money was already returned. Undo the return first, then this.")
     reversal = MpesaTransaction.objects.create(
         internal_reference=f"MPR-{timezone.now():%y%m%d}-{uuid4().hex[:8].upper()}", idempotency_key=idempotency_key,
         outlet=original.outlet, session=session, transaction_type="REVERSAL", amount=original.amount,
@@ -424,8 +491,8 @@ def correct_transaction(*, original, user, key, reason, amount, customer_phone=N
     if existing:
         return existing
     original = MpesaTransaction.objects.select_for_update().select_related("session").get(pk=original.pk)
-    if original.transaction_type in {"REVERSAL", "ADJUSTMENT", "INVESTMENT", "COMMISSION"}:
-        raise ValidationError("Only deposits, withdrawals, airtime sales, float top-ups and cash rebalances can be corrected.")
+    if original.transaction_type in {"REVERSAL", "ADJUSTMENT", "INVESTMENT", "COMMISSION", "PART_RETURN"}:
+        raise ValidationError("Only deposits, withdrawals, airtime sales, float top-ups and cash rebalances can be corrected. Undo a return and record it again.")
     if hasattr(original, "reversal"):
         raise ValidationError("This transaction was already reversed or corrected.")
     code = (original.provider_reference if provider_reference is None else str(provider_reference or "").strip().upper()) or None

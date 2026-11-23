@@ -29,6 +29,14 @@ def part_money(key):
         where.append({"label": "Kept in investments", "amount": invested})
     if key == "MPESA" and (agency := agency_money()):
         where = [{"label": "Agency cash", "amount": agency["cash"]}, {"label": "Agency float", "amount": agency["float"]}, *where]
+    # Another part's money lent to the agency is still that part's: the agency holds it but owes it back.
+    from apps.mpesa.services import owed_to_parts
+    from apps.accounting.money_mode import part_names
+    owed = owed_to_parts()
+    if key == "MPESA":
+        where += [{"label": f"Owed to {part_names().get(part, part.title())}", "amount": -value} for part, value in owed.items()]
+    elif owed.get(key):
+        where.append({"label": "Lent to the M-Pesa agency", "amount": owed[key]})
     return {"amount": sum((row["amount"] for row in where), ZERO), "places": where}
 
 
