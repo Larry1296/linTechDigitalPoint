@@ -14,21 +14,44 @@ from .models import Sale
 METHODS = {"CASH": "Cash", "MPESA": "M-Pesa", "BANK": "Bank", "OTHER": "Other", "CASH_ON_PICKUP": "Cash on pickup", "DEPOSIT": "Paid in advance"}
 
 
-def app_url(request):
-    """Where customers open receipt links: configured, else the web app page that asked.
+def web_app_origins():
+    """The addresses the web app is served from: the separate static site(s) allowed to call the API, else the configured
+    public address. Never the API's own host (e.g. dukaflow-backend-k7de.onrender.com), which has no receipt page."""
+    origins = [o.rstrip("/") for o in getattr(settings, "CORS_ALLOWED_ORIGINS", []) if o.startswith("https://")]
+    configured = getattr(settings, "PUBLIC_APP_URL", "").rstrip("/")
+    return origins or ([configured] if configured else [])
 
-    Behind the web app's proxy the API's own host is internal, so prefer the browser's Origin
-    (sent on POST) or Referer (sent on GET) over the request host.
+
+def app_url(request):
+    """Where customers open receipt links: the web app page the staff member is using, else the web app's address.
+
+    The browser's Origin (sent on POST and on every call from a separate static site) or Referer names the page that
+    asked. It is used when it is one of the web app's own addresses, or when the app and API share one address
+    (no separate site configured, as behind Caddy or the Vite proxy). A configured PUBLIC_APP_URL that is really the
+    API's own host (as on Render) would send customers to a page with no receipt, so the static site wins over it.
     """
     from urllib.parse import urlsplit
-    configured = getattr(settings, "PUBLIC_APP_URL", "")
-    if configured:
-        return configured.rstrip("/")
+    allowed = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
     for header in ("Origin", "Referer"):
         parts = urlsplit(request.headers.get(header, ""))
         if parts.scheme in {"http", "https"} and parts.netloc:
-            return f"{parts.scheme}://{parts.netloc}"
+            origin = f"{parts.scheme}://{parts.netloc}"
+            if not allowed or origin in allowed:
+                return origin
+    origins = web_app_origins()
+    if origins:
+        return origins[0]
     return request.build_absolute_uri("/").rstrip("/")
+
+
+def forward_receipt_link(request, token):
+    """A receipt link that points at the API's own address (sent before links were fixed) opens the receipt page."""
+    from django.http import HttpResponseNotFound, HttpResponseRedirect
+    own = request.build_absolute_uri("/").rstrip("/")
+    target = next((o for o in web_app_origins() if o != own), None)
+    if not target:
+        return HttpResponseNotFound("Receipt not found.")
+    return HttpResponseRedirect(f"{target}/r/{token}")
 
 
 def api_url(request):

@@ -154,3 +154,19 @@ def test_logo_trim_ignores_a_border_line_but_keeps_a_solid_badge():
     draw.rectangle([150, 60, 209, 179], fill=(120, 200, 60, 255))  # the design itself
     assert trim(framed).size == (60, 120)
     assert trim(Image.new("RGBA", (900, 300), (29, 78, 216, 255))).size == (900, 300)
+
+
+def test_receipt_links_open_the_static_web_app_not_the_api_host(businesses, settings, client):
+    """On Render the configured public address is the API's own host; links must still open the web app."""
+    a, _ = businesses
+    sale = sell(a, "POS-6")
+    settings.CORS_ALLOWED_ORIGINS = ["https://dukaflow.co.ke"]
+    settings.PUBLIC_APP_URL = "https://dukaflow-backend-k7de.onrender.com"
+    made = a["client"].post(f"/api/v1/commerce/sales/{sale.pk}/receipt/link/", HTTP_ORIGIN="https://dukaflow.co.ke")
+    assert made.json()["link"].startswith("https://dukaflow.co.ke/r/")
+    # A page not allowed to call the API cannot choose where links point.
+    other = a["client"].get(f"/api/v1/commerce/sales/{sale.pk}/receipt/", HTTP_ORIGIN="https://evil.example")
+    assert other.json()["link"].startswith("https://dukaflow.co.ke/r/")
+    # Links already sent with the API's address are forwarded to the receipt page.
+    forwarded = client.get("/r/tok_abc")
+    assert forwarded.status_code == 302 and forwarded["Location"] == "https://dukaflow.co.ke/r/tok_abc"

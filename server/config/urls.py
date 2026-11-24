@@ -27,4 +27,5 @@ urlpatterns = [
 ]
 
 from apps.tenancy.media import private_media
-urlpatterns += [path("media/<path:path>", private_media)]
+from apps.commerce.receipts import forward_receipt_link
+urlpatterns += [path("media/<path:path>", private_media), path("r/<str:token>", forward_receipt_link)]
