@@ -20,37 +20,24 @@ it("shows a failed sign-in as a clear error below the Sign in button", async () 
   expect(alert.previousElementSibling).toBe(screen.getByRole("button", { name: "Sign in" }));
 });
 
-it("signs in with the fingerprint or face first where it is on here, and keeps the password as another choice", async () => {
-  const { rememberKey } = await import("../../core/auth/biometric");
-  rememberKey(5, "key-5", "larry");
-  window.PublicKeyCredential = { isUserVerifyingPlatformAuthenticatorAvailable: async () => true };
-  // The key was removed from another device: the page forgets it and asks for the password.
-  api.mockRejectedValue(new ApiError(400, "Fingerprint or face sign-in is no longer on for this device.", { code: "biometric_unknown" }));
-  render(<MemoryRouter><LoginPage /></MemoryRouter>);
-  expect(screen.queryByLabelText("Password")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Use your password instead" }));
-  expect(screen.getByLabelText("Password")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Use fingerprint or face instead" }));
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Sign in as larry with fingerprint or face" })); });
-  expect(api).toHaveBeenCalledWith("/api/v1/auth/biometric/sign-in/start/", expect.objectContaining({ body: JSON.stringify({ credential_id: "key-5" }) }));
-  expect(screen.getByLabelText("Password")).toBeTruthy();
-  expect(localStorage.getItem("lintech-biometric")).toBe("{}");
-  delete window.PublicKeyCredential;
-});
-
-it("opens the fingerprint or face prompt as the page opens when one person has it on here", async () => {
+it("shows the fingerprint or face and the password together to choose from, and opens nothing by itself", async () => {
   const { rememberKey } = await import("../../core/auth/biometric");
   localStorage.clear();
   rememberKey(5, "key-5", "larry");
   window.PublicKeyCredential = { isUserVerifyingPlatformAuthenticatorAvailable: async () => true };
   api.mockReset();
-  api.mockRejectedValue(new ApiError(400, "Fingerprint or face not accepted.", { code: "wrong_biometric" }));
+  // The key was removed from another device: the page forgets it and says how to turn it on again.
+  api.mockRejectedValue(new ApiError(400, "Fingerprint or face sign-in is no longer on for this device.", { code: "biometric_unknown" }));
   render(<MemoryRouter><LoginPage /></MemoryRouter>);
+  const choice = await screen.findByRole("button", { name: "Sign in as larry with fingerprint or face" });
+  expect(screen.getByLabelText("Password")).toBeTruthy();
   await act(async () => { await new Promise((done) => setTimeout(done, 10)); });
-  expect(api).toHaveBeenCalledWith("/api/v1/auth/biometric/sign-in/start/", expect.anything());
-  expect(api).toHaveBeenCalledTimes(1);
+  expect(api).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(choice); });
+  expect(api).toHaveBeenCalledWith("/api/v1/auth/biometric/sign-in/start/", expect.objectContaining({ body: JSON.stringify({ credential_id: "key-5" }) }));
+  expect(screen.getByText(/Not on for this device yet/)).toBeTruthy();
+  expect(localStorage.getItem("lintech-biometric")).toBe("{}");
   delete window.PublicKeyCredential;
-  localStorage.clear();
 });
 
 it("after a password sign-in on a device with a fingerprint, offers to turn it on with that password", async () => {

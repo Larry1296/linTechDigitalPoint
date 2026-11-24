@@ -16,48 +16,16 @@ const AUTO_TRIES = 2;
 // lock PIN; the password opens any lock, and is needed after too many wrong PINs or when the session ends. On a device
 // where the person turned on their fingerprint or face, that is the first choice for any lock (see AuthContext), and
 // the PIN and password are the other choices.
-export function SessionLockOverlay({ username, pinLength, biometric = false, askAtOnce = false, busy, error, onUnlock, onPin, onBiometric, onLogout }) {
+export function SessionLockOverlay({ username, pinLength, biometric = false, busy, error, onUnlock, onPin, onBiometric, onLogout }) {
   const panel = useRef(null);
   const { name: check, Icon: CheckIcon } = deviceCheck();
   const [password, setPassword] = useState("");
-  // What the person chose instead of the first choice: "pin" or "password".
+  // The quick ways in are on the screen together, and the person picks: their fingerprint or face (where it is on for
+  // this device) and their PIN. The device's prompt opens only when they tap that choice. The password is the other
+  // choice, and the only one when neither quick way opens this lock.
   const [choice, setChoice] = useState(null);
-  const mode = choice === "password" ? "password" : choice === "pin" && pinLength ? "pin" : biometric ? "biometric" : pinLength ? "pin" : "password";
-  const byPin = mode === "pin";
-  // Like a phone's own lock screen, the device's fingerprint or face prompt opens by itself, so a touch of the sensor
-  // (or a look) is all it takes: when the lock screen shows on a page opened or reloaded while locked (askAtOnce; not
-  // the moment the person presses Lock, when they are walking away), when they come back to the page or app, and
-  // when they tap anywhere on the lock screen. A closed or failed prompt stays closed until they leave and come
-  // back, or tap: it never asks again by itself in a loop. The button is there for browsers that need a tap.
-  const asking = useRef({ running: false, paused: false, atOnce: false });
-  useEffect(() => {
-    if (mode !== "biometric") return undefined;
-    const state = asking.current;
-    const ask = async (byTap) => {
-      if (busy || state.running || (!byTap && state.paused)) return;
-      state.running = true;
-      const opened = await onBiometric?.();
-      state.running = false;
-      if (!opened) state.paused = true;
-    };
-    const visibility = () => {
-      if (document.visibilityState === "hidden") state.paused = false;
-      else void ask(false);
-    };
-    const focus = () => void ask(false);
-    const tap = (event) => { if (!event.target.closest?.("button, a, input, select, textarea, label")) void ask(true); };
-    let soon;
-    if (askAtOnce && !state.atOnce) { state.atOnce = true; soon = setTimeout(() => void ask(false), 0); }
-    document.addEventListener("visibilitychange", visibility);
-    window.addEventListener("focus", focus);
-    document.addEventListener("pointerdown", tap);
-    return () => {
-      clearTimeout(soon);
-      document.removeEventListener("visibilitychange", visibility);
-      window.removeEventListener("focus", focus);
-      document.removeEventListener("pointerdown", tap);
-    };
-  }, [mode, busy, askAtOnce, onBiometric]);
+  const byPassword = choice === "password" || (!biometric && !pinLength);
+  const byPin = !byPassword && Boolean(pinLength);
   const auto = useRef({ tried: new Set() });
   // The workspace opens by itself once the right password is in: when it is filled in all at once (a saved password,
   // autofill or paste), or when what is typed reaches the length of the password this tab last signed in with, never
@@ -101,27 +69,25 @@ export function SessionLockOverlay({ username, pinLength, biometric = false, ask
       <span className="sessionLockIcon"><LockKeyhole size={28} /></span>
       <span className="eyebrow">{username}</span>
       <h1 id="session-lock-title">Workspace locked</h1>
-      <p id="session-lock-description">{mode === "biometric" ? `Use ${check} to continue where you left off: touch the sensor or look at the device when it asks, or tap the screen.`
-        : byPin ? "Enter your PIN to continue where you left off." : `${SESSION_EXPIRED_MESSAGE} Continue where you left off.`}</p>
-      {mode === "biometric" ? <>
-        <button type="button" className="biometricUnlock" disabled={busy} onClick={() => void onBiometric()}>
-          <CheckIcon size={22} aria-hidden="true" />{busy ? "Unlocking…" : `Unlock with ${check}`}
-        </button>
-        <FormError title="Could not unlock." message={error} />
-        {pinLength && <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("pin")}>Use your PIN instead</button>}
-        <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("password")}>Use your password instead</button>
-      </> : byPin ? <>
-        <PinField length={pinLength} busy={busy} error={error} onPin={onPin} />
-        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => { setChoice(null); void onBiometric?.(); }}>Use {check} instead</button>}
-        <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("password")}>Use your password instead</button>
-      </> : <form onSubmit={async event => { event.preventDefault(); const value = password; setPassword(""); await onUnlock(value); }}>
+      <p id="session-lock-description">{byPassword ? `${SESSION_EXPIRED_MESSAGE} Continue where you left off.`
+        : biometric && pinLength ? `Use ${check} or enter your PIN to continue where you left off.`
+        : biometric ? `Use ${check} to continue where you left off.` : "Enter your PIN to continue where you left off."}</p>
+      {byPassword ? <form onSubmit={async event => { event.preventDefault(); const value = password; setPassword(""); await onUnlock(value); }}>
         <PasswordField name="password" autoComplete="current-password" required value={password} onChange={change} readOnly={busy} />
         <button type="submit" disabled={busy}>{busy ? "Unlocking…" : "Unlock"}</button>
         <FormError title="Could not unlock." message={error} />
-        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => { setChoice(null); void onBiometric?.(); }}>Use {check} instead</button>}
-        {pinLength ? <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("pin")}>Use your PIN instead</button>
-          : !biometric && <small>Set a lock PIN in Settings to unlock with a few digits instead.</small>}
-      </form>}
+        {(biometric || pinLength) && <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice(null)}>
+          {biometric && pinLength ? `Use ${check} or your PIN instead` : biometric ? `Use ${check} instead` : "Use your PIN instead"}</button>}
+        {!pinLength && !biometric && <small>Set a lock PIN in Settings to unlock with a few digits instead.</small>}
+      </form> : <>
+        {biometric && <button type="button" className="biometricUnlock" disabled={busy} onClick={() => void onBiometric()}>
+          <CheckIcon size={22} aria-hidden="true" />{busy ? "Unlocking…" : `Unlock with ${check}`}
+        </button>}
+        {biometric && byPin && <p className="signInOr lockChoiceOr" aria-hidden="true"><span>or</span></p>}
+        {byPin ? <PinField length={pinLength} busy={busy} error={error} onPin={onPin} autoFocus={!biometric} />
+          : <FormError title="Could not unlock." message={error} />}
+        <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("password")}>Use your password instead</button>
+      </>}
       <button type="button" className="secondary" disabled={busy} onClick={onLogout}>Log out instead</button>
       <small>Your current page stays open while the workspace is locked.</small>
     </section>

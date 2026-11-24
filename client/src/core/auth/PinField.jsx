@@ -10,7 +10,14 @@ export function PinField({ label = "PIN", length, busy, error, onPin, autoFocus 
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const size = length || 6;
-  useEffect(() => { if (!busy) input.current?.focus(); }, [busy]);
+  // Focused when it shows (unless autoFocus is off, as beside the fingerprint, where a phone's keyboard would cover the
+  // screen) and again after each try.
+  const shown = useRef(false);
+  useEffect(() => {
+    const first = !shown.current;
+    shown.current = true;
+    if (!busy && (autoFocus || !first)) input.current?.focus();
+  }, [busy, autoFocus]);
   const change = async (event) => {
     const next = event.target.value.replace(/\D/g, "").slice(0, size);
     setValue(next);

@@ -25,9 +25,6 @@ export function AuthProvider({ children }) {
   const [biometric, setBiometric] = useState(false);
   // Whether this device has a fingerprint, face or eye check the browser can use: without one, none is offered.
   const [deviceCan, setDeviceCan] = useState(false);
-  // The person pressed Lock (here or in another tab): the lock screen then waits for them to come back before asking
-  // for the fingerprint or face. A page opened or reloaded while locked asks at once.
-  const [lockedByHand, setLockedByHand] = useState(false);
   useEffect(() => { void biometricAvailable().then(setDeviceCan); }, []);
   const [busy, setBusy] = useState(false);
   const [lockError, setLockError] = useState("");
@@ -53,7 +50,6 @@ export function AuthProvider({ children }) {
     if (access.current.locked) return;
     setPinLength(typeof known === "number" || known === null ? known : lockPin.current);
     if (known === undefined) setBiometric(lockBiometric.current);
-    setLockedByHand(known === undefined);
     lockGeneration.current += 1;
     access.current.locked = true;
     setWorkspaceLocked(true);
@@ -329,7 +325,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={{ user, loading, sessionExpired, locked, authState, lock, refresh, signedIn, logout }}>
     <div className="sessionWorkspace" style={lockedHere ? { visibility: "hidden" } : undefined} inert={overlay ? true : undefined} aria-hidden={overlay ? true : undefined}>{children}</div>
     {overlay && <SessionLockOverlay username={user.username} pinLength={pinLength} busy={busy} error={lockError}
-      biometric={deviceCan && Boolean(keyHere(user.id))} askAtOnce={!lockedByHand} onBiometric={unlockWithBiometric}
+      biometric={deviceCan && Boolean(keyHere(user.id))} onBiometric={unlockWithBiometric}
       onUnlock={unlock} onPin={unlockWithPin} onLogout={() => logout().catch(error => setLockError(error.message))} />}
   </AuthContext.Provider>;
 }
