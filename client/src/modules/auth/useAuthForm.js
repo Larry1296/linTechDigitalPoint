@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api, resetCsrfToken } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { rememberPasswordLength } from "../../core/auth/passwordLength";
+import { cancelled, signInWithKey } from "../../core/auth/biometric";
 
 function safeNext(search) {
   const value = new URLSearchParams(search).get("next");
@@ -21,6 +22,28 @@ export function useAuthForm() {
   const navigate = useNavigate();
   const { search } = useLocation();
   const next = safeNext(search);
+  const arrive = async (identity) => {
+    resetCsrfToken();
+    await signedIn();
+    const destination = identity.organization ? next || "/admin/dashboard" : identity.memberships?.length ? "/select-business" : "/onboarding";
+    navigate(destination, { replace: true });
+  };
+  // Signing in with the fingerprint or face this browser has on; closing the device's prompt is not an error.
+  // Returns false when the password is needed instead.
+  const signInWithBiometric = async (credentialId) => {
+    if (busy) return true;
+    setError("");
+    setBusy(true);
+    try {
+      await arrive(await signInWithKey(api, credentialId));
+      return true;
+    } catch (err) {
+      if (!cancelled(err)) setError(err.data?.code ? err.message : "This device could not check your fingerprint or face. Try again, or use your password.");
+      return err.data?.code !== "biometric_unknown";
+    } finally {
+      setBusy(false);
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -36,16 +59,13 @@ export function useAuthForm() {
           body: JSON.stringify(data),
         },
       );
-      resetCsrfToken();
       rememberPasswordLength(data.password);
-      await signedIn();
-      const destination = identity.organization ? next || "/admin/dashboard" : identity.memberships?.length ? "/select-business" : "/onboarding";
-      navigate(destination, { replace: true });
+      await arrive(identity);
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
     }
   };
-  return { error, busy, submit };
+  return { error, busy, submit, signInWithBiometric, setError };
 }

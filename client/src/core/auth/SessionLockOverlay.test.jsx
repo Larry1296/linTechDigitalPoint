@@ -62,12 +62,19 @@ it("never tries a short pasted password, the same text twice, or more than twice
   expect(onUnlock).toHaveBeenLastCalledWith("wrongpass12");
 });
 
-it("offers the fingerprint or face beside the PIN where it is on, and only there", async () => {
+it("asks for the fingerprint or face first where it is on, with the PIN and password as other choices", async () => {
   const onBiometric = vi.fn(async () => true);
   const { rerender } = render(<SessionLockOverlay username="owner" pinLength={4} biometric busy={false} error="" onUnlock={vi.fn()} onPin={vi.fn()} onBiometric={onBiometric} onLogout={vi.fn()} />);
-  expect(screen.getByLabelText("PIN")).toBeTruthy();
+  expect(screen.queryByLabelText("PIN")).toBeNull();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Unlock with fingerprint or face" })); });
   expect(onBiometric).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Use your PIN instead" }));
+  expect(screen.getByLabelText("PIN")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Use your password instead" }));
+  expect(screen.getByLabelText("Password")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Use fingerprint or face instead" }));
+  expect(screen.getByRole("button", { name: "Unlock with fingerprint or face" })).toBeTruthy();
   rerender(<SessionLockOverlay username="owner" pinLength={4} busy={false} error="" onUnlock={vi.fn()} onPin={vi.fn()} onBiometric={onBiometric} onLogout={vi.fn()} />);
   expect(screen.queryByRole("button", { name: "Unlock with fingerprint or face" })).toBeNull();
+  expect(screen.getByLabelText("PIN")).toBeTruthy();
 });

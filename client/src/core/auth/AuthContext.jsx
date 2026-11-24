@@ -4,7 +4,7 @@ import { api, ApiError, resetCsrfToken, setActiveOrganization, setActiveBranch, 
 import { useLocation, useNavigate } from "react-router-dom";
 import { SessionLockOverlay } from "./SessionLockOverlay";
 import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
-import { cancelled, keyHere, signWithKey } from "./biometric";
+import { cancelled, keyHere, signInWithKey, signWithKey } from "./biometric";
 
 const AuthContext = createContext(null);
 const SESSION_EVENT_KEY = "workspace-session-event";
@@ -230,20 +230,34 @@ export function AuthProvider({ children }) {
       return false;
     } finally { setBusy(false); }
   };
-  // The same lock opened by the device's fingerprint, face or eye check: it signs a fresh request from the server.
-  // Closing the device's prompt is not an error; the PIN and password stay offered.
+  // The lock opened by the device's fingerprint, face or eye check: it signs a fresh request from the server. A lock
+  // the PIN opens is opened as the PIN does; any other (the session's 12 hours ended, too many wrong PINs) is opened by
+  // signing in again, as the password does, so the page and anything typed on it stay. Closing the device's prompt is
+  // not an error; the PIN and password stay offered.
   const unlockWithBiometric = async () => {
     if (busy) return false;
+    const previous = userRef.current;
     setBusy(true); setAuthState("unlocking"); setLockError("");
     try {
-      const { options } = await api("/api/v1/auth/biometric/unlock/", { method: "POST" });
-      let answer;
-      try { answer = await signWithKey(options); } catch (error) {
+      let data;
+      try {
+        if (biometric) {
+          const { options } = await api("/api/v1/auth/biometric/unlock/", { method: "POST" });
+          const answer = await signWithKey(options);
+          data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ biometric: answer }) });
+        } else {
+          data = await signInWithKey(api, keyHere(previous?.id));
+          if (previous?.id && (previous.id !== data.id || (previous.organization && previous.organization.id !== data.organization?.id))) {
+            window.location.assign("/admin/dashboard");
+            return true;
+          }
+        }
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
         setAuthState("locked");
-        if (!cancelled(error)) setLockError("This device could not check your fingerprint or face. Enter your PIN instead.");
+        if (!cancelled(error)) setLockError("This device could not check your fingerprint or face. Try again, or use your PIN or password.");
         return false;
       }
-      const data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ biometric: answer }) });
       resetCsrfToken();
       applyIdentity(data, true);
       broadcast("unlocked");
@@ -308,7 +322,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={{ user, loading, sessionExpired, locked, authState, lock, refresh, signedIn, logout }}>
     <div className="sessionWorkspace" style={lockedHere ? { visibility: "hidden" } : undefined} inert={overlay ? true : undefined} aria-hidden={overlay ? true : undefined}>{children}</div>
     {overlay && <SessionLockOverlay username={user.username} pinLength={pinLength} busy={busy} error={lockError}
-      biometric={biometric && Boolean(keyHere(user.id))} onBiometric={unlockWithBiometric}
+      biometric={Boolean(keyHere(user.id))} onBiometric={unlockWithBiometric}
       onUnlock={unlock} onPin={unlockWithPin} onLogout={() => logout().catch(error => setLockError(error.message))} />}
   </AuthContext.Provider>;
 }

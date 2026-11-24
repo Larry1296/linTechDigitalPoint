@@ -503,6 +503,7 @@ function BiometricSettings() {
     setKeys(data.keys);
     // A key removed elsewhere (or by the owner resetting this sign-in) no longer works here.
     if (keyHere(user?.id) && !data.keys.some((key) => key.credential_id === keyHere(user?.id))) { forgetKey(user?.id); setHere(null); }
+    else if (keyHere(user?.id)) rememberKey(user.id, keyHere(user.id), user.username);  // the sign-in page shows the current username
     window.dispatchEvent(new CustomEvent("biometric-set", { detail: data.keys.length > 0 }));
   }).catch((e) => setError(e.message)), [user?.id]);
   useEffect(() => { void load(); void biometricAvailable().then(setSupported); }, [load]);
@@ -521,9 +522,9 @@ function BiometricSettings() {
         return;
       }
       const key = await api("/api/v1/auth/biometric/finish/", { method: "POST", body: JSON.stringify({ credential, label: deviceLabel() }) });
-      rememberKey(user.id, key.credential_id);
+      rememberKey(user.id, key.credential_id, user.username);
       setHere(key.credential_id);
-      setSaved("Fingerprint or face unlock is on for this device. Next time you lock, tap Unlock with fingerprint or face.");
+      setSaved("Fingerprint or face is on for this device: it is now the first way to sign in and to unlock here.");
       formElement.reset();
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -540,10 +541,10 @@ function BiometricSettings() {
   };
   const date = (value) => new Date(value).toLocaleDateString();
   return <section className="formCard pinSettings" aria-labelledby="biometric-heading">
-    <h2 id="biometric-heading">Fingerprint or face unlock</h2>
-    <p>Open the locked workspace with the fingerprint, face or eye check your phone or computer already uses, instead of typing your PIN.
-      Turn it on separately on each device. It opens only a lock you made: after the 12-hour session or too many wrong tries, your password is still needed,
-      and M-Pesa and investments still open only with their own PIN. Anyone whose fingerprint or face opens that device can use it, so turn it on only on a device only you open.</p>
+    <h2 id="biometric-heading">Fingerprint or face sign-in</h2>
+    <p>Sign in and open the locked workspace with the fingerprint, face or eye check your phone or computer already uses. Once it is on, it is the
+      first choice on that device's sign-in page and lock screen; your password and PIN stay there as other choices. Turn it on separately on each device.
+      M-Pesa and investments still open only with their own PIN. Anyone whose fingerprint or face opens that device can use it, so turn it on only on a device only you open.</p>
     {keys.length > 0 && <ul className="biometricKeys">
       {keys.map((key) => <li key={key.id}>
         <div><strong>{key.label}{key.credential_id === here ? " (this device)" : ""}</strong><br />

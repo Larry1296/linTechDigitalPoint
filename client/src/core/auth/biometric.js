@@ -22,10 +22,18 @@ function stored() {
 function save(all) {
   try { localStorage.setItem(STORE, JSON.stringify(all)); } catch { /* Storage may be disabled. */ }
 }
+// Each person who turned it on in this browser: their key here, and the username shown on the sign-in page.
+const entry = (value) => (typeof value === "string" ? { credentialId: value, username: "" } : value || null);
 // The key this browser made for the person, if any.
-export const keyHere = (userId) => (userId == null ? null : stored()[userId] || null);
-export function rememberKey(userId, credentialId) { save({ ...stored(), [userId]: credentialId }); }
+export const keyHere = (userId) => (userId == null ? null : entry(stored()[userId])?.credentialId || null);
+export function rememberKey(userId, credentialId, username = "") { save({ ...stored(), [userId]: { credentialId, username } }); }
 export function forgetKey(userId) { const all = stored(); delete all[userId]; save(all); }
+// The people who can sign in here with their fingerprint or face, the most recent first.
+export const signInsHere = () => Object.entries(stored()).map(([userId, value]) => ({ userId, ...entry(value) }))
+  .filter((item) => item.credentialId).reverse();
+export function forgetCredential(credentialId) {
+  save(Object.fromEntries(Object.entries(stored()).filter(([, value]) => entry(value)?.credentialId !== credentialId)));
+}
 
 // A short name for the device, shown in Settings beside each device that has it on.
 export function deviceLabel() {
@@ -61,3 +69,16 @@ export async function signWithKey(options) {
 
 // The person closed the fingerprint or face prompt, or it timed out: nothing to report.
 export const cancelled = (error) => error?.name === "NotAllowedError" || error?.name === "AbortError";
+
+// Signs in with the key this browser made: the server's request, the device's fingerprint or face check, the answer.
+// Returns what the password sign-in returns. A key the server no longer knows is forgotten here.
+export async function signInWithKey(api, credentialId) {
+  try {
+    const { options } = await api("/api/v1/auth/biometric/sign-in/start/", { method: "POST", body: JSON.stringify({ credential_id: credentialId }) });
+    const credential = await signWithKey(options);
+    return await api("/api/v1/auth/biometric/sign-in/", { method: "POST", body: JSON.stringify({ credential }) });
+  } catch (error) {
+    if (error?.data?.code === "biometric_unknown") forgetCredential(credentialId);
+    throw error;
+  }
+}

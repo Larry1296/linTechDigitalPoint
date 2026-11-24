@@ -68,6 +68,9 @@ class BiometricKey(models.Model):
     label = models.CharField(max_length=80)
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
+    # Signing in has no device session yet, so the request to sign is kept on the key: good once, for a few minutes.
+    sign_in_challenge = models.CharField(max_length=128, blank=True, default='')
+    sign_in_challenge_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]

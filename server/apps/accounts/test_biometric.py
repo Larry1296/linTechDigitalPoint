@@ -129,3 +129,49 @@ def test_removing_a_device_turns_it_off(businesses):  # noqa: F811
     assert [k['id'] for k in client.get('/api/v1/auth/biometric/').json()['keys']] == [key['id']]
     assert client.delete(f"/api/v1/auth/biometric/{key['id']}/").status_code == 204
     assert not BiometricKey.objects.exists()
+
+
+def sign_in_with(phone, credential_id=None):
+    from rest_framework.test import APIClient
+    client = APIClient(enforce_csrf_checks=True)
+    csrf = client.get('/api/v1/auth/csrf/').json()['csrfToken']
+    start = client.post('/api/v1/auth/biometric/sign-in/start/', {'credential_id': credential_id or bytes_to_base64url(phone.credential_id)},
+                        format='json', HTTP_ORIGIN=ORIGIN, HTTP_X_CSRFTOKEN=csrf)
+    if start.status_code != 200:
+        return client, start
+    answer = phone.sign(start.json()['options'])
+    return client, client.post('/api/v1/auth/biometric/sign-in/', {'credential': answer}, format='json', HTTP_ORIGIN=ORIGIN, HTTP_X_CSRFTOKEN=csrf)
+
+
+def test_signing_in_with_the_fingerprint_or_face_starts_a_fresh_session(businesses):  # noqa: F811
+    client, _ = login(businesses[0])
+    phone = Phone()
+    turn_on(client, phone)
+    signed_in, response = sign_in_with(phone)
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data['authenticated'] is True and data['access_token'] and data['session']['locked'] is False
+    session = DeviceSession.objects.get(pk=data['session']['id'])
+    assert SessionAudit.objects.filter(session=session, event='LOGIN_BIOMETRIC').exists()
+    assert (session.expires_at - timezone.now()).total_seconds() > 11 * 3600
+    signed_in.credentials(HTTP_AUTHORIZATION='Bearer ' + data['access_token'])
+    assert signed_in.get('/api/v1/auth/biometric/').status_code == 200
+
+
+def test_sign_in_refuses_an_unknown_key_a_replayed_answer_and_a_removed_device(businesses):  # noqa: F811
+    client, _ = login(businesses[0])
+    phone = Phone()
+    key = turn_on(client, phone)
+    _, unknown = sign_in_with(Phone())
+    assert unknown.status_code == 400 and unknown.json()['code'] == 'biometric_unknown'
+    signed_in, first = sign_in_with(phone)
+    assert first.status_code == 200
+    # The same request signed again (a copied answer) is refused: each request is good once.
+    from rest_framework.test import APIClient
+    again = APIClient()
+    start = again.post('/api/v1/auth/biometric/sign-in/start/', {'credential_id': key['credential_id']}, format='json', HTTP_ORIGIN=ORIGIN).json()['options']
+    answer = phone.sign(start)
+    assert again.post('/api/v1/auth/biometric/sign-in/', {'credential': answer}, format='json', HTTP_ORIGIN=ORIGIN).status_code == 200
+    assert again.post('/api/v1/auth/biometric/sign-in/', {'credential': answer}, format='json', HTTP_ORIGIN=ORIGIN).json()['code'] == 'wrong_biometric'
+    client.delete(f"/api/v1/auth/biometric/{key['id']}/")
+    assert sign_in_with(phone)[1].json()['code'] == 'biometric_unknown'

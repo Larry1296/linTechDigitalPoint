@@ -19,7 +19,7 @@ COOKIE_PATH = '/api/v1/auth/'
 # starts the session afresh) instead of a save failing because the session ended.
 LOCK_BEFORE_END = 600
 COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'biometric/unlock', 'lock', 'logout'}
-PUBLIC_ENDPOINTS = {'csrf', 'login', 'password/reset', 'password/reset/confirm'}
+PUBLIC_ENDPOINTS = {'csrf', 'login', 'biometric/sign-in/start', 'biometric/sign-in', 'password/reset', 'password/reset/confirm'}
 # Outside /auth/ but for people not signed in: a token left from an earlier sign-in must not stop someone registering.
 PUBLIC_PATHS = {'/api/v1/tenancy/register/'}
 

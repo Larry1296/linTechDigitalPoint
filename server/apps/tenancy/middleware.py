@@ -6,7 +6,7 @@ from .context import organization_context, branch_context
 from .models import Membership, BranchMembership
 
 # Authentication/account recovery and tenant selection do not read business records.
-ACCOUNT_PATHS = {"csrf", "login", "logout", "me", "refresh", "session", "unlock", "lock", "activity", "password/change", "password/reset", "password/reset/confirm"}
+ACCOUNT_PATHS = {"csrf", "login", "biometric/sign-in/start", "biometric/sign-in", "logout", "me", "refresh", "session", "unlock", "lock", "activity", "password/change", "password/reset", "password/reset/confirm"}
 MODULE_PATHS = {"catalog": "inventory", "inventory": "inventory", "locations": "locations", "commerce": "pos", "cyber": "services", "mpesa": "mpesa", "mkopa": "mkopa", "accounting": "reports", "store": "inventory", "chama": "chama", "hotel": "rooms"}
 
 def module_for_path(relative):
