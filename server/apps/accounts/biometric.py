@@ -32,6 +32,9 @@ from webauthn.helpers.structs import (AuthenticatorAttachment, AuthenticatorTran
 from .models import BiometricKey, DeviceSession, SessionAudit
 
 CHALLENGE_SECONDS = 300
+# Browsers' own password managers, by the AAGUID they put in each key they make (passkeys.dev list): Google Password
+# Manager. Windows Hello's keys have their own AAGUIDs (or none, all zeros), so they are never in this list.
+BROWSER_KEY_STORES = {'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4'}
 KEYS_PER_PERSON = 10
 
 
@@ -145,6 +148,12 @@ def biometric_finish(request):
                                                 expected_rp_id=rp_id, expected_origin=origin, require_user_verification=True)
     except (WebAuthnException, ValueError, TypeError, KeyError):
         return Response({'detail': 'This device could not turn on fingerprint or face unlock. Try again.'}, status=400)
+    if request.data.get('windows_hello') and str(verified.aaguid).lower() in BROWSER_KEY_STORES:
+        # On Windows the key belongs in Windows Hello: one saved in the browser's password manager makes the browser
+        # ask its own questions before the fingerprint, every time.
+        return Response({'detail': "That key was saved in the browser's password manager, which asks extra questions every time. "
+                         'Turn it on again and, when asked where to save it, choose Windows Hello (this device).',
+                         'code': 'browser_key_store'}, status=400)
     credential_id = bytes_to_base64url(verified.credential_id)
     if BiometricKey.objects.filter(credential_id=credential_id).exists():
         return Response({'detail': 'Fingerprint or face unlock is already on for this device.'}, status=400)

@@ -36,11 +36,13 @@ class Phone:
     def client_data(self, kind, challenge, origin=ORIGIN):
         return json.dumps({'type': kind, 'challenge': challenge, 'origin': origin}).encode()
 
+    aaguid = bytes(16)
+
     def register(self, options, origin=ORIGIN):
         numbers = self.key.public_key().public_numbers()
         cose = cbor2.dumps({1: 2, 3: -7, -1: 1, -2: numbers.x.to_bytes(32, 'big'), -3: numbers.y.to_bytes(32, 'big')})
         auth = (hashlib.sha256(options['rp']['id'].encode()).digest() + bytes([0x45]) + (0).to_bytes(4, 'big')
-                + bytes(16) + len(self.credential_id).to_bytes(2, 'big') + self.credential_id + cose)
+                + self.aaguid + len(self.credential_id).to_bytes(2, 'big') + self.credential_id + cose)
         raw = bytes_to_base64url(self.credential_id)
         return {'id': raw, 'rawId': raw, 'type': 'public-key', 'response': {
             'clientDataJSON': bytes_to_base64url(self.client_data('webauthn.create', options['challenge'], origin)),
@@ -188,3 +190,20 @@ def test_the_browser_is_told_the_key_is_on_this_device_so_it_skips_asking_where(
     start = APIClient().post('/api/v1/auth/biometric/sign-in/start/', {'credential_id': bytes_to_base64url(phone.credential_id)},
                              format='json', HTTP_ORIGIN=ORIGIN).json()['options']
     assert start['allowCredentials'][0]['transports'] == ['internal']
+
+
+def test_on_windows_only_a_windows_hello_key_is_kept_not_one_in_the_browser_password_manager(businesses):  # noqa: F811
+    import uuid
+    client, _ = login(businesses[0])
+    in_browser = Phone()
+    in_browser.aaguid = uuid.UUID('ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4').bytes
+    for windows, expected in [(True, 400), (False, 201)]:
+        start = client.post('/api/v1/auth/biometric/start/', {'password': 'Safe-pass-1848'}, format='json', HTTP_ORIGIN=ORIGIN).json()['options']
+        finish = client.post('/api/v1/auth/biometric/finish/', {'credential': in_browser.register(start), 'windows_hello': windows},
+                             format='json', HTTP_ORIGIN=ORIGIN)
+        assert finish.status_code == expected, finish.content
+    assert finish.status_code == 201
+    hello = Phone()
+    start = client.post('/api/v1/auth/biometric/start/', {'password': 'Safe-pass-1848'}, format='json', HTTP_ORIGIN=ORIGIN).json()['options']
+    assert client.post('/api/v1/auth/biometric/finish/', {'credential': hello.register(start), 'windows_hello': True},
+                       format='json', HTTP_ORIGIN=ORIGIN).status_code == 201

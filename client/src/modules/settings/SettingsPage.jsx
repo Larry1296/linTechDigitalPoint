@@ -522,7 +522,7 @@ function BiometricSettings() {
         else if (!cancelled(e)) setError(`This device could not turn on ${check}.`);
         return;
       }
-      const key = await api("/api/v1/auth/biometric/finish/", { method: "POST", body: JSON.stringify({ credential, label: deviceLabel() }) });
+      const key = await api("/api/v1/auth/biometric/finish/", { method: "POST", body: JSON.stringify({ credential, label: deviceLabel(), windows_hello: check === "Windows Hello" }) });
       rememberKey(user.id, key.credential_id, user.username);
       setHere(key.credential_id);
       setSaved(`${check[0].toUpperCase()}${check.slice(1)} is on for this device: it is now the first way to sign in and to unlock here.`);
