@@ -6,12 +6,18 @@ from django.views.decorators.csrf import csrf_protect
 from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from django.contrib.auth.hashers import check_password
 from .device_auth import (PIN_TRIES, COOKIE, COOKIE_PATH, state, valid, cookie_credential,
                           issue_credential, access_token, set_cookie)
 from .models import DeviceSession, RefreshCredential, SessionAudit
 from .protected_pages import lock_pin_of
+from .biometric import check_unlock, unlock_options
+
+
+class UnlockThrottle(AnonRateThrottle):
+    rate='20/minute'
+    scope='biometric_unlock'
 
 
 class ActivityThrottle(UserRateThrottle):
@@ -133,7 +139,19 @@ def unlock(request):
     if device.unlock_blocked_until and now < device.unlock_blocked_until:
         return Response({'detail':'Too many attempts. Wait a minute and try again.'},status=429)
     pin=request.data.get('pin')
-    if pin is not None:
+    biometric=request.data.get('biometric')
+    if biometric is not None:
+        # A fingerprint or face opens what the PIN opens, no more (see biometric.py).
+        if not state(device)['biometric']:
+            return Response({'detail':'Enter your password to unlock.','code':'password_required','session':state(device)},status=400)
+        if not check_unlock(request, device, biometric):
+            device.failed_unlocks+=1
+            device.save(update_fields=['failed_unlocks'])
+            SessionAudit.objects.create(session=device,event='UNLOCK_FAILED')
+            left=max(0,PIN_TRIES-device.failed_unlocks)
+            detail='Fingerprint or face not accepted. Try again or enter your PIN.' if left else 'Too many tries. Enter your password to unlock.'
+            return Response({'detail':detail,'code':'wrong_biometric','session':state(device)},status=400)
+    elif pin is not None:
         # A PIN opens only a lock the person made themselves, and does not lengthen the session: that needs the password.
         if not state(device)['pin_length']:
             return Response({'detail':'Enter your password to unlock.','code':'password_required','session':state(device)},status=400)
@@ -160,8 +178,24 @@ def unlock(request):
     device.save(update_fields=['locked_at','last_user_activity_at','version','expires_at','failed_unlocks','unlock_blocked_until'])
     RefreshCredential.objects.filter(session=device,consumed_at=None).update(consumed_at=now)
     raw=issue_credential(device)
-    SessionAudit.objects.create(session=device,event='UNLOCK_PIN' if pin is not None else 'UNLOCK')
+    SessionAudit.objects.create(session=device,event='UNLOCK_BIOMETRIC' if biometric is not None else 'UNLOCK_PIN' if pin is not None else 'UNLOCK')
     return set_cookie(Response(payload(request,device,True)),raw,device)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@csrf_protect
+@throttle_classes([UnlockThrottle])
+def biometric_unlock(request):
+    """The request a locked device signs with the person's fingerprint or face, then sends to unlock/."""
+    credential=cookie_credential(request)
+    if not credential or credential.consumed_at or not valid(credential.session):
+        return Response({'detail':'Your session ended. Sign in again.','code':'session_expired'},status=401)
+    device=credential.session
+    options=unlock_options(request, device) if state(device)['biometric'] else None
+    if not options:
+        return Response({'detail':'Enter your PIN or password to unlock.','code':'biometric_unavailable','session':state(device)},status=400)
+    return Response({'options':options})
 
 
 @api_view(['POST'])

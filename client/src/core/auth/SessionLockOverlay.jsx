@@ -1,6 +1,6 @@
 import { SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { useEffect, useRef, useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { Fingerprint, LockKeyhole } from "lucide-react";
 import { PasswordField } from "../../components/forms/PasswordField";
 import { FormError } from "../../components/forms/FormNotice";
 import { knownPasswordLength } from "./passwordLength";
@@ -12,8 +12,9 @@ const SHORTEST = 8;
 const AUTO_TRIES = 2;
 
 // The workspace locks only when the person locks it (or at the end of its 12 hours). A lock they made opens with their
-// lock PIN; the password opens any lock, and is needed after too many wrong PINs or when the session ends.
-export function SessionLockOverlay({ username, pinLength, busy, error, onUnlock, onPin, onLogout }) {
+// lock PIN, or with their fingerprint, face or eye on a device where they turned that on; the password opens any lock,
+// and is needed after too many wrong tries or when the session ends.
+export function SessionLockOverlay({ username, pinLength, biometric = false, busy, error, onUnlock, onPin, onBiometric, onLogout }) {
   const panel = useRef(null);
   const [password, setPassword] = useState("");
   const [usePassword, setUsePassword] = useState(false);
@@ -61,7 +62,11 @@ export function SessionLockOverlay({ username, pinLength, busy, error, onUnlock,
       <span className="sessionLockIcon"><LockKeyhole size={28} /></span>
       <span className="eyebrow">{username}</span>
       <h1 id="session-lock-title">Workspace locked</h1>
-      <p id="session-lock-description">{byPin ? "Enter your PIN to continue where you left off." : `${SESSION_EXPIRED_MESSAGE} Continue where you left off.`}</p>
+      <p id="session-lock-description">{byPin ? (biometric ? "Use your fingerprint or face, or enter your PIN, to continue where you left off." : "Enter your PIN to continue where you left off.")
+        : biometric ? "Use your fingerprint or face, or your password, to continue where you left off." : `${SESSION_EXPIRED_MESSAGE} Continue where you left off.`}</p>
+      {biometric && <button type="button" className="biometricUnlock" disabled={busy} onClick={() => void onBiometric()}>
+        <Fingerprint size={22} aria-hidden="true" />{busy ? "Unlocking…" : "Unlock with fingerprint or face"}
+      </button>}
       {byPin ? <>
         <PinField length={pinLength} busy={busy} error={error} onPin={onPin} />
         <button type="button" className="linkButton" disabled={busy} onClick={() => setUsePassword(true)}>Use your password instead</button>

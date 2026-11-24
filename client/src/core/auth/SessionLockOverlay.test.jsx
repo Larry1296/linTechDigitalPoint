@@ -61,3 +61,13 @@ it("never tries a short pasted password, the same text twice, or more than twice
   await act(async () => { fireEvent.submit(field().closest("form")); });
   expect(onUnlock).toHaveBeenLastCalledWith("wrongpass12");
 });
+
+it("offers the fingerprint or face beside the PIN where it is on, and only there", async () => {
+  const onBiometric = vi.fn(async () => true);
+  const { rerender } = render(<SessionLockOverlay username="owner" pinLength={4} biometric busy={false} error="" onUnlock={vi.fn()} onPin={vi.fn()} onBiometric={onBiometric} onLogout={vi.fn()} />);
+  expect(screen.getByLabelText("PIN")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Unlock with fingerprint or face" })); });
+  expect(onBiometric).toHaveBeenCalledTimes(1);
+  rerender(<SessionLockOverlay username="owner" pinLength={4} busy={false} error="" onUnlock={vi.fn()} onPin={vi.fn()} onBiometric={onBiometric} onLogout={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Unlock with fingerprint or face" })).toBeNull();
+});

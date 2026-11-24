@@ -4,6 +4,7 @@ import { api, ApiError, resetCsrfToken, setActiveOrganization, setActiveBranch, 
 import { useLocation, useNavigate } from "react-router-dom";
 import { SessionLockOverlay } from "./SessionLockOverlay";
 import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
+import { cancelled, keyHere, signWithKey } from "./biometric";
 
 const AuthContext = createContext(null);
 const SESSION_EVENT_KEY = "workspace-session-event";
@@ -20,6 +21,8 @@ export function AuthProvider({ children }) {
   const [authState, setAuthState] = useState("signed_out");
   const locked = ["locking", "locked", "unlocking"].includes(authState);
   const [pinLength, setPinLength] = useState(null);
+  // Whether the person's fingerprint or face opens this lock (like the PIN, only a lock they made).
+  const [biometric, setBiometric] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lockError, setLockError] = useState("");
   const userRef = useRef(null);
@@ -30,23 +33,27 @@ export function AuthProvider({ children }) {
   // The length of the person's own lock PIN, known while the workspace is open, so a lock they make shows the PIN entry
   // from its first moment instead of the password while the server confirms it.
   const lockPin = useRef(null);
+  const lockBiometric = useRef(false);
   // known: the PIN length that opens this lock (null: only the password does, as when the session's 12 hours ended).
   // Called without it (the Lock button, another tab locking), it is the person's own lock and their lock PIN opens it.
   useEffect(() => {
     const set = (event) => { lockPin.current = event.detail ?? null; };
+    const setBiometricOn = (event) => { lockBiometric.current = Boolean(event.detail); };
     window.addEventListener("lock-pin-set", set);
-    return () => window.removeEventListener("lock-pin-set", set);
+    window.addEventListener("biometric-set", setBiometricOn);
+    return () => { window.removeEventListener("lock-pin-set", set); window.removeEventListener("biometric-set", setBiometricOn); };
   }, []);
   const lock = useCallback((known) => {
     if (access.current.locked) return;
     setPinLength(typeof known === "number" || known === null ? known : lockPin.current);
+    if (known === undefined) setBiometric(lockBiometric.current);
     lockGeneration.current += 1;
     access.current.locked = true;
     setWorkspaceLocked(true);
     setAuthState("locking");
     setSessionExpired(true);
     broadcast('lock');
-    void api('/api/v1/auth/lock/', { method:'POST' }).then(data => setPinLength(data?.session?.pin_length ?? null)).catch(() => {})
+    void api('/api/v1/auth/lock/', { method:'POST' }).then(data => { setPinLength(data?.session?.pin_length ?? null); setBiometric(Boolean(data?.session?.biometric)); }).catch(() => {})
       .finally(() => { if (access.current.locked) setAuthState('locked'); });
   }, []);
   const updateAccess = useCallback((state, allowUnlock = false) => {
@@ -55,8 +62,9 @@ export function AuthProvider({ children }) {
     if (state.server_time < access.current.serverTime) return;
     access.current.serverTime = state.server_time;
     access.current.deadline = Date.now() + (state.expires_at - state.server_time) * 1000;
-    if (state.locked || access.current.deadline <= Date.now()) { setPinLength(state.pin_length ?? null); lock(state.locked ? state.pin_length ?? null : null); return; }
+    if (state.locked || access.current.deadline <= Date.now()) { setPinLength(state.pin_length ?? null); setBiometric(Boolean(state.locked && state.biometric)); lock(state.locked ? state.pin_length ?? null : null); return; }
     if ("lock_pin_length" in state) lockPin.current = state.lock_pin_length ?? null;
+    if ("lock_biometric" in state) lockBiometric.current = Boolean(state.lock_biometric);
     access.current.locked = false;
     setAuthState("authenticated");
     setSessionExpired(false);
@@ -103,6 +111,8 @@ export function AuthProvider({ children }) {
     setAuthState("signed_out");
     setPinLength(null);
     lockPin.current = null;
+    setBiometric(false);
+    lockBiometric.current = false;
     setLockError("");
     resetCsrfToken();
     setBusinessPresentation(null);
@@ -220,6 +230,34 @@ export function AuthProvider({ children }) {
       return false;
     } finally { setBusy(false); }
   };
+  // The same lock opened by the device's fingerprint, face or eye check: it signs a fresh request from the server.
+  // Closing the device's prompt is not an error; the PIN and password stay offered.
+  const unlockWithBiometric = async () => {
+    if (busy) return false;
+    setBusy(true); setAuthState("unlocking"); setLockError("");
+    try {
+      const { options } = await api("/api/v1/auth/biometric/unlock/", { method: "POST" });
+      let answer;
+      try { answer = await signWithKey(options); } catch (error) {
+        setAuthState("locked");
+        if (!cancelled(error)) setLockError("This device could not check your fingerprint or face. Enter your PIN instead.");
+        return false;
+      }
+      const data = await api("/api/v1/auth/unlock/", { method: "POST", body: JSON.stringify({ biometric: answer }) });
+      resetCsrfToken();
+      applyIdentity(data, true);
+      broadcast("unlocked");
+      return true;
+    } catch (error) {
+      if (error.status === 401) { clearIdentity(); setAuthState('expired'); navigate('/login?reason=session-expired', { replace:true }); }
+      else {
+        setAuthState('locked');
+        if (error.data?.session) { setPinLength(error.data.session.pin_length ?? null); setBiometric(Boolean(error.data.session.biometric)); }
+        setLockError(error.message);
+      }
+      return false;
+    } finally { setBusy(false); }
+  };
   // quiet: an automatic try (see SessionLockOverlay); a wrong password then shows no error and returns false.
   const unlock = async (password, { quiet = false } = {}) => {
     if (busy) return false;
@@ -270,6 +308,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={{ user, loading, sessionExpired, locked, authState, lock, refresh, signedIn, logout }}>
     <div className="sessionWorkspace" style={lockedHere ? { visibility: "hidden" } : undefined} inert={overlay ? true : undefined} aria-hidden={overlay ? true : undefined}>{children}</div>
     {overlay && <SessionLockOverlay username={user.username} pinLength={pinLength} busy={busy} error={lockError}
+      biometric={biometric && Boolean(keyHere(user.id))} onBiometric={unlockWithBiometric}
       onUnlock={unlock} onPin={unlockWithPin} onLogout={() => logout().catch(error => setLockError(error.message))} />}
   </AuthContext.Provider>;
 }

@@ -604,7 +604,7 @@ def staff_reset(request, pk):
     if membership.role == "OWNER":
         return Response({"detail": "Reset your own PINs in Settings → Lock PIN and private pages."}, status=400)
     from django.utils import timezone
-    from apps.accounts.models import DeviceSession, LockPin, PagePin
+    from apps.accounts.models import BiometricKey, DeviceSession, LockPin, PagePin
     from apps.core.models import AuditLog
     user, what = membership.user, request.data.get("what")
     if what == "sign_in":
@@ -617,6 +617,7 @@ def staff_reset(request, pk):
             user.set_password(password)
             user.save(update_fields=["password"])
             LockPin.objects.filter(user=user).delete()
+            BiometricKey.objects.filter(user=user).delete()
             Membership.objects.filter(pk=membership.pk).update(setup_pending=True)
             DeviceSession.objects.filter(user=user, revoked_at=None).update(revoked_at=timezone.now())
     elif what == "pins":

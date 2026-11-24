@@ -81,13 +81,13 @@ it("lets the owner change a role and suspend a staff member", async () => {
   expect(bodies).toEqual([{ role: "MANAGER" }, { status: "SUSPENDED" }]);
 });
 
-it("shows only the PIN and password forms to other staff", async () => {
+it("shows only the PIN, fingerprint and password forms to other staff", async () => {
   renderAs("CASHIER");
   expect(screen.getByRole("heading", { name: "Change your password" })).toBeInTheDocument();
   expect(await screen.findByRole("heading", { name: "Lock PIN and private pages" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Business details" })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Staff" })).toBeNull();
-  expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/v1/auth/lock-pin/"]);
+  expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/v1/auth/lock-pin/", "/api/v1/auth/biometric/"]);
 });
 
 it("lets anyone set their own lock PIN; a page PIN already set waits for the owner to reset it", async () => {

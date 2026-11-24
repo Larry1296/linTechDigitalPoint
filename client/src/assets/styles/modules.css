@@ -1212,6 +1212,10 @@ label:where(:has(> input[type="radio"])) {
 .sessionLockCard .sessionCountdown { font-size:48px; font-weight:750; color:var(--text); }
 .sessionCountdown small { display:block; font-size:13px; font-weight:400; color:var(--muted); }
 @media(max-width:480px) { .sessionLockBackdrop { padding:16px; } .sessionLockCard { padding:24px; } }
+.sessionLockCard .biometricUnlock { display:inline-flex; align-items:center; justify-content:center; gap:10px; min-height:52px; font-size:16px; }
+.biometricKeys { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.biometricKeys li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; }
+.biometricKeys li span { color:var(--muted); font-size:14px; }
 .tableWrap { max-width:100%; overflow-x:auto; }
 .tableWrap table { width:100%; border-collapse:collapse; }
 .tableWrap th, .tableWrap td { padding:8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }

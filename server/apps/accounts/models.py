@@ -38,6 +38,9 @@ class DeviceSession(models.Model):
     protected_open = models.JSONField(default=list, blank=True)
     protected_failures = models.PositiveIntegerField(default=0)
     protected_blocked_until = models.DateTimeField(null=True, blank=True)
+    # The last fingerprint-or-face request (BiometricKey) given out on this device: it is good once, for a few minutes.
+    biometric_challenge = models.CharField(max_length=128, blank=True, default='')
+    biometric_challenge_at = models.DateTimeField(null=True, blank=True)
 
 
 class LockPin(models.Model):
@@ -51,6 +54,23 @@ class LockPin(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "page"], name="accounts_lockpin_user_page")]
+
+
+class BiometricKey(models.Model):
+    """A fingerprint, face or eye that opens this person's workspace lock on one phone or computer: a WebAuthn key
+    the device keeps and opens only with its own fingerprint, face or eye check. The server keeps only the public half.
+    Like the lock PIN, it opens only a lock the person made, and never a private page."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="biometric_keys", on_delete=models.CASCADE)
+    credential_id = models.CharField(max_length=1400, unique=True)  # base64url, as the browser gives it
+    public_key = models.BinaryField()
+    sign_count = models.PositiveBigIntegerField(default=0)
+    rp_id = models.CharField(max_length=253)
+    label = models.CharField(max_length=80)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
 
 
 class RefreshCredential(models.Model):

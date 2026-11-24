@@ -18,7 +18,7 @@ COOKIE_PATH = '/api/v1/auth/'
 # The workspace locks this long before the session's absolute end, so the person is asked for their password (which
 # starts the session afresh) instead of a save failing because the session ended.
 LOCK_BEFORE_END = 600
-COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'lock', 'logout'}
+COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'biometric/unlock', 'lock', 'logout'}
 PUBLIC_ENDPOINTS = {'csrf', 'login', 'password/reset', 'password/reset/confirm'}
 # Outside /auth/ but for people not signed in: a token left from an earlier sign-in must not stop someone registering.
 PUBLIC_PATHS = {'/api/v1/tenancy/register/'}
@@ -40,13 +40,31 @@ def state(device):
     locked = bool(device.locked_at or now >= deadline)
     data = {'id':str(device.pk), 'expires_at':deadline.timestamp(), 'server_time':now.timestamp(),
         'absolute_expires_at':device.expires_at.timestamp(), 'idle_timeout':0,
-        'warning_seconds':0, 'locked':locked, 'pin_length':None}
+        'warning_seconds':0, 'locked':locked, 'pin_length':None, 'biometric':False}
     if locked:
         data['pin_length'] = pin_length(device, now < deadline)
+        data['biometric'] = biometric_opens(device, now < deadline)
     else:
         # The PIN that will open this device when the person locks it, so the lock screen asks for it from the first moment.
         data['lock_pin_length'] = own_lock_pin_length(device)
+        data['lock_biometric'] = device.failed_unlocks < PIN_TRIES and has_biometric(device.user)
     return data
+
+
+def is_locked(device):
+    """state(device)['locked'] without looking up the PINs, for checking every request."""
+    deadline = device.expires_at - timedelta(seconds=min(LOCK_BEFORE_END, settings.DEVICE_ABSOLUTE_SECONDS // 4))
+    return bool(device.locked_at or timezone.now() >= deadline)
+
+
+def has_biometric(user):
+    from .biometric import has_keys
+    return has_keys(user)
+
+
+def biometric_opens(device, in_time=True):
+    """Whether a fingerprint or face (see biometric.py) opens this lock: like the PIN, only a lock the person made."""
+    return bool(device.locked_at and in_time and device.failed_unlocks < PIN_TRIES and has_biometric(device.user))
 
 
 def pin_length(device, in_time=True):
@@ -149,7 +167,7 @@ class DeviceAuthenticationMiddleware:
                     if not valid(device):
                         raise ValueError
                     request.device_session=device; request.user=device.user
-                    if state(device)['locked']:
+                    if is_locked(device):
                         DeviceSession.objects.filter(pk=device.pk,locked_at=None).update(locked_at=timezone.now())
                         error=JsonResponse({'detail':'Your workspace is locked. Enter your password.', 'code':'session_locked','session':state(device)},status=423)
                     else:
@@ -157,7 +175,7 @@ class DeviceAuthenticationMiddleware:
                         error=guard(request)
                 except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
                     error=JsonResponse({'detail':'Sign in again or refresh your session.','code':'token_expired'},status=401)
-        if endpoint in COOKIE_ENDPOINTS and endpoint not in {'session','me','unlock','lock','logout','refresh'}:
+        if endpoint in COOKIE_ENDPOINTS and endpoint not in {'session','me','unlock','biometric/unlock','lock','logout','refresh'}:
             error=JsonResponse({'detail':'Authentication required.'},status=401)
         response=error or self.get_response(request)
         response['Cache-Control']='private, no-store'

@@ -11,6 +11,7 @@ import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
 import { setupProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
 import { BusinessPartsChoice, MONEY_PARTS } from "../../core/organization/MoneyModeChoice";
 import { TextBox } from "../../components/forms/TextBox";
+import { biometricAvailable, cancelled, deviceLabel, forgetKey, keyHere, makeKey, rememberKey } from "../../core/auth/biometric";
 
 const roleLabels = {
   OWNER: "Owner",
@@ -41,6 +42,7 @@ export function SettingsPage() {
     {isAdmin && <BranchSettings />}
     {isAdmin && <StaffSettings isOwner={role === "OWNER"} />}
     <PinSettings />
+    <BiometricSettings />
     <PasswordSettings />
   </>;
 }
@@ -483,6 +485,79 @@ function PinSettings() {
       <button disabled={busy}>{busy ? "Saving…" : "Save PIN"}</button>
     </form>
     <FormError title="Could not save the PIN." message={error} />
+    <FormSuccess message={saved} />
+  </section>;
+}
+
+// Fingerprint, face or eye unlock, turned on one device at a time: the device keeps a key it opens only with its own
+// check, and the lock screen there offers it beside the PIN (see core/auth/biometric.js).
+function BiometricSettings() {
+  const { user } = useAuth();
+  const [keys, setKeys] = useState(null);
+  const [supported, setSupported] = useState(null);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [here, setHere] = useState(() => keyHere(user?.id));
+  const load = useCallback(() => api("/api/v1/auth/biometric/").then((data) => {
+    setKeys(data.keys);
+    // A key removed elsewhere (or by the owner resetting this sign-in) no longer works here.
+    if (keyHere(user?.id) && !data.keys.some((key) => key.credential_id === keyHere(user?.id))) { forgetKey(user?.id); setHere(null); }
+    window.dispatchEvent(new CustomEvent("biometric-set", { detail: data.keys.length > 0 }));
+  }).catch((e) => setError(e.message)), [user?.id]);
+  useEffect(() => { void load(); void biometricAvailable().then(setSupported); }, [load]);
+  if (!keys) return error ? <ErrorState message={error} retry={load} /> : <Loading />;
+  const turnOn = async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const password = new FormData(formElement).get("password");
+    setBusy(true); setError(""); setSaved("");
+    try {
+      const { options } = await api("/api/v1/auth/biometric/start/", { method: "POST", body: JSON.stringify({ password }) });
+      let credential;
+      try { credential = await makeKey(options); } catch (e) {
+        if (e?.name === "InvalidStateError") setError("Fingerprint or face unlock is already on for this device. To set it up again, turn it off in the list above first.");
+        else if (!cancelled(e)) setError("This device could not turn on fingerprint or face unlock.");
+        return;
+      }
+      const key = await api("/api/v1/auth/biometric/finish/", { method: "POST", body: JSON.stringify({ credential, label: deviceLabel() }) });
+      rememberKey(user.id, key.credential_id);
+      setHere(key.credential_id);
+      setSaved("Fingerprint or face unlock is on for this device. Next time you lock, tap Unlock with fingerprint or face.");
+      formElement.reset();
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  const remove = async (key) => {
+    if (!await confirmAction({ title: `Turn off fingerprint or face unlock on ${key.label}?`, text: "That device then opens the lock with your PIN or password.", confirmButtonText: "Turn off" })) return;
+    setError(""); setSaved("");
+    try {
+      await api(`/api/v1/auth/biometric/${key.id}/`, { method: "DELETE" });
+      if (key.credential_id === here) { forgetKey(user.id); setHere(null); }
+      setSaved(`Turned off on ${key.label}.`);
+      await load();
+    } catch (e) { setError(e.message); }
+  };
+  const date = (value) => new Date(value).toLocaleDateString();
+  return <section className="formCard pinSettings" aria-labelledby="biometric-heading">
+    <h2 id="biometric-heading">Fingerprint or face unlock</h2>
+    <p>Open the locked workspace with the fingerprint, face or eye check your phone or computer already uses, instead of typing your PIN.
+      Turn it on separately on each device. It opens only a lock you made: after the 12-hour session or too many wrong tries, your password is still needed,
+      and M-Pesa and investments still open only with their own PIN. Anyone whose fingerprint or face opens that device can use it, so turn it on only on a device only you open.</p>
+    {keys.length > 0 && <ul className="biometricKeys">
+      {keys.map((key) => <li key={key.id}>
+        <div><strong>{key.label}{key.credential_id === here ? " (this device)" : ""}</strong><br />
+          <span>On since {date(key.created_at)}{key.last_used_at ? ` · last used ${date(key.last_used_at)}` : ""}</span></div>
+        <button type="button" className="secondary" onClick={() => void remove(key)}>Turn off</button>
+      </li>)}
+    </ul>}
+    {here ? <p>It is on for this device.</p>
+      : supported === false ? <p>This device or browser has no fingerprint or face check that LinTech can use.</p>
+      : supported && <form onSubmit={(event) => void turnOn(event)}>
+        <FormField label="Your sign-in password" name="password" type="password" required autoComplete="current-password" />
+        <button disabled={busy}>{busy ? "Turning on…" : "Turn on for this device"}</button>
+      </form>}
+    <FormError title="Could not change fingerprint or face unlock." message={error} />
     <FormSuccess message={saved} />
   </section>;
 }
