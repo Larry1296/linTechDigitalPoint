@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api, resetCsrfToken } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { rememberPasswordLength } from "../../core/auth/passwordLength";
-import { cancelled, deviceCheck, signInWithKey } from "../../core/auth/biometric";
+import { biometricAvailable, cancelled, deviceCheck, deviceLabel, keyHere, makeKey, rememberKey, signInWithKey } from "../../core/auth/biometric";
+import { confirmAction } from "../../core/ui/alerts";
 
 function safeNext(search) {
   const value = new URLSearchParams(search).get("next");
@@ -13,6 +14,23 @@ function safeNext(search) {
     !value.includes("\\")
     ? value
     : null;
+}
+
+// Signed in with the password on a device that has a fingerprint, face or eye check but no key here yet: offer to
+// turn it on now, with the password just typed, so the next sign-in is a touch of the sensor. A "no", a closed prompt
+// or any problem simply goes on to the workspace; Settings can turn it on later.
+async function offerBiometric(identity, password) {
+  try {
+    if (identity.setup_required || !identity.id || keyHere(identity.id) || !await biometricAvailable()) return;
+    const { name } = deviceCheck();
+    if (!await confirmAction({ title: `Use ${name} next time?`, icon: "question", confirmButtonText: "Yes, turn it on",
+      text: `Sign in and unlock on this device with ${name} instead of typing your password. Your password and PIN still work.` })) return;
+    const { options } = await api("/api/v1/auth/biometric/start/", { method: "POST", body: JSON.stringify({ password }) });
+    const credential = await makeKey(options);
+    const key = await api("/api/v1/auth/biometric/finish/", { method: "POST",
+      body: JSON.stringify({ credential, label: deviceLabel(), windows_hello: name === "Windows Hello" }) });
+    rememberKey(identity.id, key.credential_id, identity.username);
+  } catch { /* Not now: it can be turned on in Settings. */ }
 }
 
 export function useAuthForm() {
@@ -60,6 +78,7 @@ export function useAuthForm() {
         },
       );
       rememberPasswordLength(data.password);
+      await offerBiometric(identity, data.password);
       await arrive(identity);
     } catch (err) {
       setError(err.message);

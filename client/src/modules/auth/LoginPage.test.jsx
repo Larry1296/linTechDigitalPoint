@@ -52,3 +52,21 @@ it("opens the fingerprint or face prompt as the page opens when one person has i
   delete window.PublicKeyCredential;
   localStorage.clear();
 });
+
+it("after a password sign-in on a device with a fingerprint, offers to turn it on with that password", async () => {
+  const alerts = await import("../../core/ui/alerts");
+  const offer = vi.spyOn(alerts, "confirmAction").mockResolvedValue(false);
+  localStorage.clear();
+  window.PublicKeyCredential = { isUserVerifyingPlatformAuthenticatorAvailable: async () => true };
+  api.mockReset();
+  api.mockResolvedValue({ authenticated: true, id: 9, username: "larry", organization: { id: 1 } });
+  render(<MemoryRouter><LoginPage /></MemoryRouter>);
+  fireEvent.change(screen.getByLabelText("Username or email"), { target: { value: "larry" } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Right-pass-1" } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Sign in" })); });
+  expect(offer).toHaveBeenCalledWith(expect.objectContaining({ title: "Use fingerprint or face next time?" }));
+  // Declined: nothing more is asked of the server than the sign-in itself.
+  expect(api).toHaveBeenCalledTimes(1);
+  delete window.PublicKeyCredential;
+  offer.mockRestore();
+});
