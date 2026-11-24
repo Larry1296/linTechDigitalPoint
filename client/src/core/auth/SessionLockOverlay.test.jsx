@@ -78,3 +78,25 @@ it("asks for the fingerprint or face first where it is on, with the PIN and pass
   expect(screen.queryByRole("button", { name: "Unlock with fingerprint or face" })).toBeNull();
   expect(screen.getByLabelText("PIN")).toBeTruthy();
 });
+
+it("opens the fingerprint or face prompt by itself, like a phone, but never again in a loop once closed", async () => {
+  const onBiometric = vi.fn(async () => false);  // the person closed the prompt
+  const props = { username: "owner", pinLength: 4, biometric: true, busy: false, error: "", onUnlock: vi.fn(), onPin: vi.fn(), onBiometric, onLogout: vi.fn() };
+  const { unmount } = render(<SessionLockOverlay {...props} askAtOnce />);
+  await act(async () => { vi.advanceTimersByTime(1); });
+  expect(onBiometric).toHaveBeenCalledTimes(1);
+  // The prompt closing gives the page its focus back: that must not ask again.
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  expect(onBiometric).toHaveBeenCalledTimes(1);
+  // A tap anywhere on the lock screen asks again.
+  await act(async () => { fireEvent.pointerDown(screen.getByRole("heading", { name: "Workspace locked" })); });
+  expect(onBiometric).toHaveBeenCalledTimes(2);
+  unmount();
+  // Pressing Lock does not ask at once; coming back to the page does.
+  onBiometric.mockClear();
+  render(<SessionLockOverlay {...props} />);
+  await act(async () => { vi.advanceTimersByTime(1); });
+  expect(onBiometric).not.toHaveBeenCalled();
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  expect(onBiometric).toHaveBeenCalledTimes(1);
+});

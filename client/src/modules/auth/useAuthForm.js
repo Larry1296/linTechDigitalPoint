@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api, resetCsrfToken } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { rememberPasswordLength } from "../../core/auth/passwordLength";
-import { cancelled, signInWithKey } from "../../core/auth/biometric";
+import { cancelled, deviceCheck, signInWithKey } from "../../core/auth/biometric";
 
 function safeNext(search) {
   const value = new URLSearchParams(search).get("next");
@@ -38,7 +38,7 @@ export function useAuthForm() {
       await arrive(await signInWithKey(api, credentialId));
       return true;
     } catch (err) {
-      if (!cancelled(err)) setError(err.data?.code ? err.message : "This device could not check your fingerprint or face. Try again, or use your password.");
+      if (!cancelled(err)) setError(err.data?.code ? err.message : `This device could not check your ${deviceCheck().name}. Try again, or use your password.`);
       return err.data?.code !== "biometric_unknown";
     } finally {
       setBusy(false);

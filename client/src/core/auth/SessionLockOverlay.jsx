@@ -1,6 +1,7 @@
 import { SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { useEffect, useRef, useState } from "react";
-import { Fingerprint, LockKeyhole } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
+import { deviceCheck } from "./biometric";
 import { PasswordField } from "../../components/forms/PasswordField";
 import { FormError } from "../../components/forms/FormNotice";
 import { knownPasswordLength } from "./passwordLength";
@@ -15,21 +16,48 @@ const AUTO_TRIES = 2;
 // lock PIN; the password opens any lock, and is needed after too many wrong PINs or when the session ends. On a device
 // where the person turned on their fingerprint or face, that is the first choice for any lock (see AuthContext), and
 // the PIN and password are the other choices.
-export function SessionLockOverlay({ username, pinLength, biometric = false, busy, error, onUnlock, onPin, onBiometric, onLogout }) {
+export function SessionLockOverlay({ username, pinLength, biometric = false, askAtOnce = false, busy, error, onUnlock, onPin, onBiometric, onLogout }) {
   const panel = useRef(null);
+  const { name: check, Icon: CheckIcon } = deviceCheck();
   const [password, setPassword] = useState("");
   // What the person chose instead of the first choice: "pin" or "password".
   const [choice, setChoice] = useState(null);
   const mode = choice === "password" ? "password" : choice === "pin" && pinLength ? "pin" : biometric ? "biometric" : pinLength ? "pin" : "password";
   const byPin = mode === "pin";
-  // Coming back to a locked page (another app, another tab) asks for the fingerprint or face at once, where the
-  // browser allows it without a tap; the button is there either way.
+  // Like a phone's own lock screen, the device's fingerprint or face prompt opens by itself, so a touch of the sensor
+  // (or a look) is all it takes: when the lock screen shows on a page opened or reloaded while locked (askAtOnce; not
+  // the moment the person presses Lock, when they are walking away), when they come back to the page or app, and
+  // when they tap anywhere on the lock screen. A closed or failed prompt stays closed until they leave and come
+  // back, or tap: it never asks again by itself in a loop. The button is there for browsers that need a tap.
+  const asking = useRef({ running: false, paused: false, atOnce: false });
   useEffect(() => {
-    if (mode !== "biometric" || busy) return undefined;
-    const back = () => { if (document.visibilityState === "visible") void onBiometric?.(); };
-    document.addEventListener("visibilitychange", back);
-    return () => document.removeEventListener("visibilitychange", back);
-  }, [mode, busy, onBiometric]);
+    if (mode !== "biometric") return undefined;
+    const state = asking.current;
+    const ask = async (byTap) => {
+      if (busy || state.running || (!byTap && state.paused)) return;
+      state.running = true;
+      const opened = await onBiometric?.();
+      state.running = false;
+      if (!opened) state.paused = true;
+    };
+    const visibility = () => {
+      if (document.visibilityState === "hidden") state.paused = false;
+      else void ask(false);
+    };
+    const focus = () => void ask(false);
+    const tap = (event) => { if (!event.target.closest?.("button, a, input, select, textarea, label")) void ask(true); };
+    let soon;
+    if (askAtOnce && !state.atOnce) { state.atOnce = true; soon = setTimeout(() => void ask(false), 0); }
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("focus", focus);
+    document.addEventListener("pointerdown", tap);
+    return () => {
+      clearTimeout(soon);
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("focus", focus);
+      document.removeEventListener("pointerdown", tap);
+    };
+  }, [mode, busy, askAtOnce, onBiometric]);
   const auto = useRef({ tried: new Set() });
   // The workspace opens by itself once the right password is in: when it is filled in all at once (a saved password,
   // autofill or paste), or when what is typed reaches the length of the password this tab last signed in with, never
@@ -73,24 +101,24 @@ export function SessionLockOverlay({ username, pinLength, biometric = false, bus
       <span className="sessionLockIcon"><LockKeyhole size={28} /></span>
       <span className="eyebrow">{username}</span>
       <h1 id="session-lock-title">Workspace locked</h1>
-      <p id="session-lock-description">{mode === "biometric" ? "Use your fingerprint or face to continue where you left off."
+      <p id="session-lock-description">{mode === "biometric" ? `Use ${check} to continue where you left off: touch the sensor or look at the device when it asks, or tap the screen.`
         : byPin ? "Enter your PIN to continue where you left off." : `${SESSION_EXPIRED_MESSAGE} Continue where you left off.`}</p>
       {mode === "biometric" ? <>
         <button type="button" className="biometricUnlock" disabled={busy} onClick={() => void onBiometric()}>
-          <Fingerprint size={22} aria-hidden="true" />{busy ? "Unlocking…" : "Unlock with fingerprint or face"}
+          <CheckIcon size={22} aria-hidden="true" />{busy ? "Unlocking…" : `Unlock with ${check}`}
         </button>
         <FormError title="Could not unlock." message={error} />
         {pinLength && <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("pin")}>Use your PIN instead</button>}
         <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("password")}>Use your password instead</button>
       </> : byPin ? <>
         <PinField length={pinLength} busy={busy} error={error} onPin={onPin} />
-        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice(null)}>Use fingerprint or face instead</button>}
+        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => { setChoice(null); void onBiometric?.(); }}>Use {check} instead</button>}
         <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("password")}>Use your password instead</button>
       </> : <form onSubmit={async event => { event.preventDefault(); const value = password; setPassword(""); await onUnlock(value); }}>
         <PasswordField name="password" autoComplete="current-password" required value={password} onChange={change} readOnly={busy} />
         <button type="submit" disabled={busy}>{busy ? "Unlocking…" : "Unlock"}</button>
         <FormError title="Could not unlock." message={error} />
-        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice(null)}>Use fingerprint or face instead</button>}
+        {biometric && <button type="button" className="linkButton" disabled={busy} onClick={() => { setChoice(null); void onBiometric?.(); }}>Use {check} instead</button>}
         {pinLength ? <button type="button" className="linkButton" disabled={busy} onClick={() => setChoice("pin")}>Use your PIN instead</button>
           : !biometric && <small>Set a lock PIN in Settings to unlock with a few digits instead.</small>}
       </form>}

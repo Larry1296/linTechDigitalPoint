@@ -37,3 +37,18 @@ it("signs in with the fingerprint or face first where it is on here, and keeps t
   expect(localStorage.getItem("lintech-biometric")).toBe("{}");
   delete window.PublicKeyCredential;
 });
+
+it("opens the fingerprint or face prompt as the page opens when one person has it on here", async () => {
+  const { rememberKey } = await import("../../core/auth/biometric");
+  localStorage.clear();
+  rememberKey(5, "key-5", "larry");
+  window.PublicKeyCredential = { isUserVerifyingPlatformAuthenticatorAvailable: async () => true };
+  api.mockReset();
+  api.mockRejectedValue(new ApiError(400, "Fingerprint or face not accepted.", { code: "wrong_biometric" }));
+  render(<MemoryRouter><LoginPage /></MemoryRouter>);
+  await act(async () => { await new Promise((done) => setTimeout(done, 10)); });
+  expect(api).toHaveBeenCalledWith("/api/v1/auth/biometric/sign-in/start/", expect.anything());
+  expect(api).toHaveBeenCalledTimes(1);
+  delete window.PublicKeyCredential;
+  localStorage.clear();
+});

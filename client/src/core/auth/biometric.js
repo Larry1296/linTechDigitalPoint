@@ -2,6 +2,8 @@
 // face or eye check, and signs the server's request with it. This browser remembers which people turned it on here,
 // so the lock screen offers it only where it works.
 
+import { Fingerprint, ScanFace } from "lucide-react";
+
 const STORE = "lintech-biometric";
 
 const toBytes = (text) => {
@@ -33,6 +35,21 @@ export const signInsHere = () => Object.entries(stored()).map(([userId, value]) 
   .filter((item) => item.credentialId).reverse();
 export function forgetCredential(credentialId) {
   save(Object.fromEntries(Object.entries(stored()).filter(([, value]) => entry(value)?.credentialId !== credentialId)));
+}
+
+// What this device's own check is called, to name it on the buttons. Browsers say only that a device has a check
+// (biometricAvailable), not which kind, so the kind comes from the device: iPhones with the notch or island use Face ID
+// and the others Touch ID; Macs Touch ID; Windows Windows Hello. Android phones may use a fingerprint, the face or the
+// eyes, whichever the owner set up, so they are named by what most have.
+export function deviceCheck() {
+  const ua = navigator.userAgent || "";
+  const longSide = Math.max(window.screen?.width || 0, window.screen?.height || 0);
+  const iPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (/iPhone/.test(ua)) return longSide >= 812 ? { name: "Face ID", Icon: ScanFace } : { name: "Touch ID", Icon: Fingerprint };
+  if (iPad) return { name: "Face ID or Touch ID", Icon: ScanFace };
+  if (/Macintosh/.test(ua)) return { name: "Touch ID", Icon: Fingerprint };
+  if (/Windows/.test(ua)) return { name: "Windows Hello", Icon: ScanFace };
+  return { name: "fingerprint or face", Icon: Fingerprint };
 }
 
 // A short name for the device, shown in Settings beside each device that has it on.

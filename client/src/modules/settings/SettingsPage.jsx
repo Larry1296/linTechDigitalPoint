@@ -11,7 +11,7 @@ import { MpesaPaymentsSetup } from "./MpesaPaymentsSetup";
 import { setupProblem, toggleModule, useBusinessProfiles } from "../platform/businessSetupData";
 import { BusinessPartsChoice, MONEY_PARTS } from "../../core/organization/MoneyModeChoice";
 import { TextBox } from "../../components/forms/TextBox";
-import { biometricAvailable, cancelled, deviceLabel, forgetKey, keyHere, makeKey, rememberKey } from "../../core/auth/biometric";
+import { biometricAvailable, cancelled, deviceCheck, deviceLabel, forgetKey, keyHere, makeKey, rememberKey } from "../../core/auth/biometric";
 
 const roleLabels = {
   OWNER: "Owner",
@@ -499,6 +499,7 @@ function BiometricSettings() {
   const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState(false);
   const [here, setHere] = useState(() => keyHere(user?.id));
+  const check = deviceCheck().name;
   const load = useCallback(() => api("/api/v1/auth/biometric/").then((data) => {
     setKeys(data.keys);
     // A key removed elsewhere (or by the owner resetting this sign-in) no longer works here.
@@ -517,14 +518,14 @@ function BiometricSettings() {
       const { options } = await api("/api/v1/auth/biometric/start/", { method: "POST", body: JSON.stringify({ password }) });
       let credential;
       try { credential = await makeKey(options); } catch (e) {
-        if (e?.name === "InvalidStateError") setError("Fingerprint or face unlock is already on for this device. To set it up again, turn it off in the list above first.");
-        else if (!cancelled(e)) setError("This device could not turn on fingerprint or face unlock.");
+        if (e?.name === "InvalidStateError") setError(`${check[0].toUpperCase()}${check.slice(1)} is already on for this device. To set it up again, turn it off in the list above first.`);
+        else if (!cancelled(e)) setError(`This device could not turn on ${check}.`);
         return;
       }
       const key = await api("/api/v1/auth/biometric/finish/", { method: "POST", body: JSON.stringify({ credential, label: deviceLabel() }) });
       rememberKey(user.id, key.credential_id, user.username);
       setHere(key.credential_id);
-      setSaved("Fingerprint or face is on for this device: it is now the first way to sign in and to unlock here.");
+      setSaved(`${check[0].toUpperCase()}${check.slice(1)} is on for this device: it is now the first way to sign in and to unlock here.`);
       formElement.reset();
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -553,10 +554,11 @@ function BiometricSettings() {
       </li>)}
     </ul>}
     {here ? <p>It is on for this device.</p>
-      : supported === false ? <p>This device or browser has no fingerprint or face check that LinTech can use.</p>
+      : supported === false ? <p>This device or browser has no fingerprint, face or eye check that LinTech can use, so you sign in here with your password and unlock with your PIN.</p>
       : supported && <form onSubmit={(event) => void turnOn(event)}>
+        <p>This device can use <strong>{check}</strong>.</p>
         <FormField label="Your sign-in password" name="password" type="password" required autoComplete="current-password" />
-        <button disabled={busy}>{busy ? "Turning on…" : "Turn on for this device"}</button>
+        <button disabled={busy}>{busy ? "Turning on…" : `Turn on ${check} for this device`}</button>
       </form>}
     <FormError title="Could not change fingerprint or face unlock." message={error} />
     <FormSuccess message={saved} />
