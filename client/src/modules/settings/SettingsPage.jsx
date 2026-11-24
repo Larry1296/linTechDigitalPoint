@@ -554,6 +554,8 @@ function BiometricSettings() {
       </li>)}
     </ul>}
     {here ? <p>It is on for this device.</p>
+      : supported === false && !window.isSecureContext ? <p>Fingerprint and face sign-in work only on the secure (https) LinTech address. This page was
+        opened at {window.location.host}, where browsers do not allow them, even on a phone that has a fingerprint. Open the https address on this device, then turn it on here.</p>
       : supported === false ? <p>This device or browser has no fingerprint, face or eye check that LinTech can use, so you sign in here with your password and unlock with your PIN.</p>
       : supported && <form onSubmit={(event) => void turnOn(event)}>
         <p>This device can use <strong>{check}</strong>.</p>
