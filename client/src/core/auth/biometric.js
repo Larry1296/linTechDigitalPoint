@@ -69,15 +69,17 @@ const descriptors = (list) => (list || []).map((item) => ({ ...item, id: toBytes
 export async function makeKey(options) {
   const credential = await navigator.credentials.create({ publicKey: {
     ...options, challenge: toBytes(options.challenge), user: { ...options.user, id: toBytes(options.user.id) },
-    excludeCredentials: descriptors(options.excludeCredentials) } });
+    excludeCredentials: descriptors(options.excludeCredentials), hints: ["client-device"] } });
   return { id: credential.id, rawId: toText(credential.rawId), type: credential.type, response: {
     clientDataJSON: toText(credential.response.clientDataJSON), attestationObject: toText(credential.response.attestationObject),
     transports: credential.response.getTransports?.() || [] } };
 }
 
 export async function signWithKey(options) {
+  // "client-device": the key is on this phone or computer, so the browser goes straight to its fingerprint or face
+  // check rather than first asking where the key is (with a Continue to press).
   const credential = await navigator.credentials.get({ publicKey: {
-    ...options, challenge: toBytes(options.challenge), allowCredentials: descriptors(options.allowCredentials) } });
+    ...options, challenge: toBytes(options.challenge), allowCredentials: descriptors(options.allowCredentials), hints: ["client-device"] } });
   return { id: credential.id, rawId: toText(credential.rawId), type: credential.type, response: {
     clientDataJSON: toText(credential.response.clientDataJSON), authenticatorData: toText(credential.response.authenticatorData),
     signature: toText(credential.response.signature),

@@ -26,7 +26,7 @@ from webauthn import (generate_authentication_options, generate_registration_opt
                       verify_authentication_response, verify_registration_response)
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.exceptions import WebAuthnException
-from webauthn.helpers.structs import (AuthenticatorAttachment, AuthenticatorSelectionCriteria,
+from webauthn.helpers.structs import (AuthenticatorAttachment, AuthenticatorTransport, AuthenticatorSelectionCriteria,
                                       PublicKeyCredentialDescriptor, ResidentKeyRequirement, UserVerificationRequirement)
 
 from .models import BiometricKey, DeviceSession, SessionAudit
@@ -61,6 +61,13 @@ def keys_of(user, rp_id=None):
 
 def has_keys(user):
     return BiometricKey.objects.filter(user=user).exists()
+
+
+def _on_this_device(key):
+    """The key as the browser is told about it: kept inside this phone or computer (every key here is made there, see
+    biometric_start). Saying so sends the browser straight to the device's own fingerprint or face check, instead of
+    first asking where the key is (this device, a phone or a security key) and waiting for Continue."""
+    return PublicKeyCredentialDescriptor(id=base64url_to_bytes(key.credential_id), transports=[AuthenticatorTransport.INTERNAL])
 
 
 def _give_challenge(device, challenge):
@@ -116,7 +123,7 @@ def biometric_start(request):
             authenticator_attachment=AuthenticatorAttachment.PLATFORM,
             resident_key=ResidentKeyRequirement.DISCOURAGED,
             user_verification=UserVerificationRequirement.REQUIRED),
-        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(key.credential_id)) for key in keys])
+        exclude_credentials=[_on_this_device(key) for key in keys])
     _give_challenge(request.auth, options.challenge)
     return Response({'options': json.loads(options_to_json(options))})
 
@@ -166,7 +173,7 @@ def unlock_options(request, device):
         return None
     options = generate_authentication_options(
         rp_id=rp_id, timeout=CHALLENGE_SECONDS * 1000, user_verification=UserVerificationRequirement.REQUIRED,
-        allow_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(key.credential_id)) for key in keys])
+        allow_credentials=[_on_this_device(key) for key in keys])
     _give_challenge(device, options.challenge)
     return json.loads(options_to_json(options))
 
@@ -222,7 +229,7 @@ def biometric_sign_in_start(request):
         return _forgotten()
     options = generate_authentication_options(
         rp_id=key.rp_id, timeout=CHALLENGE_SECONDS * 1000, user_verification=UserVerificationRequirement.REQUIRED,
-        allow_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(key.credential_id))])
+        allow_credentials=[_on_this_device(key)])
     BiometricKey.objects.filter(pk=key.pk).update(sign_in_challenge=bytes_to_base64url(options.challenge), sign_in_challenge_at=timezone.now())
     return Response({'options': json.loads(options_to_json(options))})
 

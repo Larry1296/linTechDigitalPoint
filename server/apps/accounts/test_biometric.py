@@ -175,3 +175,16 @@ def test_sign_in_refuses_an_unknown_key_a_replayed_answer_and_a_removed_device(b
     assert again.post('/api/v1/auth/biometric/sign-in/', {'credential': answer}, format='json', HTTP_ORIGIN=ORIGIN).json()['code'] == 'wrong_biometric'
     client.delete(f"/api/v1/auth/biometric/{key['id']}/")
     assert sign_in_with(phone)[1].json()['code'] == 'biometric_unknown'
+
+
+def test_the_browser_is_told_the_key_is_on_this_device_so_it_skips_asking_where(businesses):  # noqa: F811
+    client, _ = login(businesses[0])
+    phone = Phone()
+    turn_on(client, phone)
+    client.post('/api/v1/auth/lock/')
+    options = client.post('/api/v1/auth/biometric/unlock/', format='json', HTTP_ORIGIN=ORIGIN).json()['options']
+    assert options['allowCredentials'][0]['transports'] == ['internal']
+    from rest_framework.test import APIClient
+    start = APIClient().post('/api/v1/auth/biometric/sign-in/start/', {'credential_id': bytes_to_base64url(phone.credential_id)},
+                             format='json', HTTP_ORIGIN=ORIGIN).json()['options']
+    assert start['allowCredentials'][0]['transports'] == ['internal']
