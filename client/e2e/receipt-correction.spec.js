@@ -49,7 +49,8 @@ for (const [width, theme] of [
       else if (path.endsWith("/auth/csrf/")) json = { csrfToken: "test" };
       else if (path.endsWith("/cart/")) json = { items: [], total: "0" };
       else if (path.endsWith("/receipts/"))
-        json = [{ ...receipt, total_units: "3.000", line_count: 1 }];
+        // The list comes a page at a time.
+        json = { results: [{ ...receipt, total_units: "3.000", line_count: 1 }], count: 1, pages: 1, page: 1 };
       else if (path.endsWith("/receipts/145/")) json = receipt;
       else if (path.includes("/variants/search/")) json = [{ ...line, id: 7 }];
       else if (path.endsWith("/correct/")) {

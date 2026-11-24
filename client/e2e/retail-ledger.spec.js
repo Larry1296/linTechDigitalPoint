@@ -17,16 +17,29 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByRole('button',{name:'Create account and continue',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Your business'})).toBeVisible();
   await page.getByLabel('Business name',{exact:true}).fill('Mama Shop');
-  await page.getByRole('button',{name:/I sell goods/}).click();
+  await page.getByLabel('Describe your business in your own words').fill('A duka selling phone accessories and household goods.');
   await page.getByRole('button',{name:'Continue'}).click();
-  // The plan comes right after the business details. Reports, used below, come with the Pro plan.
+  // What it does: the description ticks the usual tools; the test makes sure a shop's are on, whatever was suggested.
+  await expect(page.getByRole('heading',{name:'What it does'})).toBeVisible();
+  await page.getByLabel('What do you call your kind of business?').fill('Duka');
+  const tick=async(name)=>{
+    const card=page.getByRole('button',{name}).first();
+    if (await card.getAttribute('aria-pressed')!=='true') await card.click();
+  };
+  await tick(/^Sell products I keep in stock/);
+  await tick(/^Point of sale/);
+  await page.getByRole('button',{name:'Continue'}).click();
+  // A starter list may come next; then the plan. Reports, used below, come with the Pro plan.
+  if (await page.getByRole('heading',{name:'Your starter list'}).isVisible().catch(()=>false)) await page.getByRole('button',{name:'Continue'}).click();
+  await expect(page.getByRole('heading',{name:'Your plan'})).toBeVisible();
   await page.getByRole('button',{name:/^Pro · /}).click();
   await page.getByRole('button',{name:'Continue'}).click();
-  await page.getByRole('button',{name:/Duka \/ general shop/}).click();
+  // Location & money: the first branch name is filled in; one business, one drawer.
+  await expect(page.getByRole('heading',{name:'Location & money'})).toBeVisible();
+  const branch=page.getByLabel('First branch or shop name');
+  if (!(await branch.inputValue())) await branch.fill('Main shop');
   await page.getByRole('button',{name:'Continue'}).click();
-  for (const question of ['Do you run an M-Pesa agency?', 'Are you the treasurer of a chama?', 'Do you keep money in an investment, such as an MMF?'])
-    await page.getByRole('button',{name:`No: ${question}`}).click();
-  for (let step = 0; step < 4; step += 1) await page.getByRole('button',{name:'Continue'}).click();
+  await expect(page.getByRole('heading',{name:'Review'})).toBeVisible();
   await page.getByRole('button',{name:'Create business workspace'}).click();
   await page.getByRole('button',{name:'Skip for now'}).click();
   // Last set-up step: how customers pay. Manual payments are fine for this shop.
@@ -45,8 +58,7 @@ test('new business receives without shelves, sells, records rent, reconciles and
   await page.getByLabel('Quantity received').fill('1');
   await page.getByLabel('Buying price for one').fill('400');
   await page.getByLabel('Supplier',{exact:true}).fill('Charger supplier');
-  // Bought at the market: there is no invoice number to type.
-  await page.getByLabel(/^No supplier document/).check();
+  // A first delivery is taken as bought with no supplier document (the page says so), so there is no invoice number to type.
   await page.getByRole('button',{name:'Receive stock',exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:/Test charger.* added/})).toBeVisible();
   await page.goto('/admin/pos');
@@ -66,7 +78,7 @@ test('new business receives without shelves, sells, records rent, reconciles and
   // Sold at 1000, bought at 400, rent 200.
   const card=(label)=>page.locator('.reportCard').filter({has:page.getByText(label,{exact:true})});
   await expect(card('Profit before running costs')).toContainText('600.00');
-  await expect(card('Profit or loss')).toContainText('400.00');
+  await expect(card('Profit earned')).toContainText('400.00');
   const other=await context.newPage();
   await other.goto('/admin/reports');
   await expect(other.getByRole('heading',{name:'Where the business stands today'})).toBeVisible();

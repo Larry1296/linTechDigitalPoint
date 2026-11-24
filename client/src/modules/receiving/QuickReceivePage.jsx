@@ -38,8 +38,9 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
       if (!isLive()) return;
       const packOf = Math.max(1, Number(data.item.pack_size || 1));
       setItem(data.item); setQuery(data.item.product_name); setShelf(data.shelf);
-      setCost(data.unit_cost == null ? "" : String(Math.round(Number(data.unit_cost) / packOf * 100) / 100));
-      setDetails((old) => ({ ...old, supplier_name: data.supplier_name || "", document_status: data.document_status || "NO_DOCUMENT",
+      // What was typed while the item's last delivery was loading is kept: it arrives a moment after the item is picked.
+      if (data.unit_cost != null) setCost((old) => (old === "" ? String(Math.round(Number(data.unit_cost) / packOf * 100) / 100) : old));
+      setDetails((old) => ({ ...old, supplier_name: old.supplier_name || data.supplier_name || "", document_status: data.document_status || "NO_DOCUMENT",
         payment_method: data.payment_method || "" }));
       setPrefilled(picked ? { ...data, root_category_id: null, picked: true } : data); setEditing(false);
       setTimeout(() => quantityBox.current?.focus(), 0);
@@ -57,6 +58,8 @@ export function QuickReceivePage({ defaultSource = "PURCHASE" }) {
   };
   const pick = (value) => {
     setItem(value); setQuery(value.product_name); setError("");
+    // A newly picked item starts with its own buying price and supplier, not the last item's.
+    setCost(""); setDetails((old) => ({ ...old, supplier_name: "" }));
     // Opening stock asks only the count, so only its known buying price is filled in.
     if (opening) {
       api(`/api/v1/inventory/variants/${value.id}/receive-defaults/`).then((data) => {
