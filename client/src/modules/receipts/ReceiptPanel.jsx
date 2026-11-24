@@ -4,7 +4,7 @@ import { api } from "../../core/api/client";
 import { useAuth } from "../../core/auth/AuthContext";
 import { ErrorState, Loading } from "../../components/States";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
-import { ReceiptDocument } from "./ReceiptDocument";
+import { ReceiptDocument, ReceiptPrintCopy, printReceipt } from "./ReceiptDocument";
 import { whatsappLink, whatsappNumber } from "./whatsapp";
 
 // Staff view of one sale's receipt, with every way of getting it to the customer.
@@ -92,7 +92,7 @@ export function ReceiptPanel({ saleId, onClose }) {
           <button type="button" onClick={() => { setMode("whatsapp"); setNotice(null); }} disabled={busy}><MessageCircle size={18} aria-hidden="true" /> Send on WhatsApp</button>
           <button type="button" className="secondary" onClick={() => { setMode("email"); setNotice(null); }} disabled={busy}><Mail size={18} aria-hidden="true" /> Send by email</button>
           <button type="button" className="secondary" onClick={() => void copyLink()} disabled={busy}><Link2 size={18} aria-hidden="true" /> Copy link</button>
-          <button type="button" className="secondary" onClick={() => window.print()} disabled={busy}><Printer size={18} aria-hidden="true" /> Print</button>
+          <button type="button" className="secondary" onClick={() => printReceipt(data.receipt)} disabled={busy}><Printer size={18} aria-hidden="true" /> Print or save PDF</button>
         </div>
         {mode === "whatsapp" && <form className="receiptSendForm" onSubmit={sendWhatsapp}>
           <label>Customer's WhatsApp number<input name="phone" type="tel" inputMode="tel" autoComplete="off" required placeholder="0712 345 678" autoFocus /></label>
@@ -107,6 +107,7 @@ export function ReceiptPanel({ saleId, onClose }) {
         {notice?.kind === "error" && <FormError title={notice.title} message={notice.text} />}
         {notice?.kind === "success" && <FormSuccess message={notice.text} />}
         <ReceiptDocument receipt={data.receipt} />
+        <ReceiptPrintCopy receipt={data.receipt} />
         {data.link && <p className="receiptLinkNote">
           This receipt has a private link that the customer can open. <button type="button" className="linkButton" onClick={() => void turnOff()} disabled={busy}>Turn off link</button>
         </p>}

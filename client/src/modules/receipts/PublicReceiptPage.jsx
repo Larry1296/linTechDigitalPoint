@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Printer } from "lucide-react";
 import { Loading } from "../../components/States";
-import { ReceiptDocument } from "./ReceiptDocument";
+import { ReceiptDocument, ReceiptPrintCopy, printReceipt } from "./ReceiptDocument";
 import { apiUrl } from "../../core/api/client";
 
 // What the customer sees when they open the link from WhatsApp or email. No account needed.
@@ -27,8 +27,9 @@ export function PublicReceiptPage() {
       <p className="muted">Please contact the business that served you for a new link.</p>
     </section> : !receipt ? <Loading /> : <>
       <ReceiptDocument receipt={receipt} />
+      <ReceiptPrintCopy receipt={receipt} />
       <div className="publicReceiptActions">
-        <button type="button" onClick={() => window.print()}><Printer size={18} aria-hidden="true" /> Print or save as PDF</button>
+        <button type="button" onClick={() => printReceipt(receipt)}><Printer size={18} aria-hidden="true" /> Print or save as PDF</button>
       </div>
     </>}
   </main>;

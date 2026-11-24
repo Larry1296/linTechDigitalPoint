@@ -85,7 +85,8 @@ def test_receipt_email_is_sent_in_the_business_name_with_its_logo_and_link(busin
     message = mail.outbox[-1]
     assert message.to == ["customer@example.com"] and message.subject == "Your receipt POS-9 from Alpha"
     html = message.alternatives[0][0]
-    assert "https://shop.example/api/v1/tenancy/public/logos/" in html and response.json()["link"] in html
+    # The logo comes from the API itself, never the web app's address (a separate static site has no logos).
+    assert "http://testserver/api/v1/tenancy/public/logos/" in html and response.json()["link"] in html
     assert "LinTech" not in html
     assert a["client"].post(f"/api/v1/commerce/sales/{sale.pk}/receipt/email/", {"email": "nope"}, format="json").status_code == 400
 

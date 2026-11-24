@@ -248,8 +248,9 @@ FUND_RATE_MODEL = config("FUND_RATE_MODEL", default="claude-opus-5-5")
 # Public address of the web app, used in receipt links sent to customers (e.g. https://app.example.com).
 PUBLIC_APP_URL = config("PUBLIC_APP_URL", default=SITE_URL)
 # Public address of the API, for files it serves itself (business logos on receipts); differs from PUBLIC_APP_URL when
-# the web app is a separate static site (https://dukaflow.co.ke with the API at https://api.dukaflow.co.ke).
-PUBLIC_API_URL = config("PUBLIC_API_URL", default=SITE_URL)
+# the web app is a separate static site (https://dukaflow.co.ke with the API at https://api.dukaflow.co.ke). Left unset,
+# the address the request itself reached is used: that is always the API, never the static site (which has no logos).
+PUBLIC_API_URL = config("PUBLIC_API_URL", default="")
 
 # API device sessions are separate from Django admin session authentication.
 JWT_SIGNING_KEY = config('JWT_SIGNING_KEY', default=SECRET_KEY)

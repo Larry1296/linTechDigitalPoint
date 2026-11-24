@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ReceiptPanel } from "./ReceiptPanel";
 import { PublicReceiptPage } from "./PublicReceiptPage";
 import { whatsappLink, whatsappNumber } from "./whatsapp";
+import { receiptLogo } from "./ReceiptDocument";
 import { api } from "../../core/api/client";
 
 vi.mock("../../core/api/client", () => ({ api: vi.fn(), apiUrl: (path) => path }));
@@ -87,4 +88,24 @@ it("lets a customer open the receipt from the link, or explains a dead link", as
   vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This receipt link is not valid or has been turned off by the business." }), { status: 404 }));
   render(<MemoryRouter initialEntries={["/r/tok_dead_dead_dead_dead_dead"]}><Routes><Route path="/r/:token" element={<PublicReceiptPage />} /></Routes></MemoryRouter>);
   expect(await screen.findByRole("heading", { name: "Receipt unavailable" })).toBeInTheDocument();
+});
+
+it("prints one paper copy of a full receipt, placed straight under the page body, with the business's logo", async () => {
+  vi.spyOn(window, "print").mockImplementation(() => {});
+  render(<ReceiptPanel saleId={7} onClose={vi.fn()} />);
+  const doc = await screen.findByRole("article", { name: "Receipt POS-42" });
+  for (const text of ["Sales receipt", "Wanjiku", "Sukuma wiki", "Bunch", "1 item · 3 pieces in all", "Paid by M-Pesa", "Ref. QWE123", "Paid in full"]) {
+    expect(within(doc).getByText(text, { exact: false })).toBeInTheDocument();
+  }
+  const copy = document.body.querySelector(":scope > .receiptPrintCopy");
+  expect(copy).not.toBeNull();
+  expect(copy.querySelector("img")).toHaveAttribute("src", receipt.business.logo);
+  fireEvent.click(screen.getByRole("button", { name: "Print or save PDF" }));
+  expect(window.print).toHaveBeenCalled();
+  expect(document.title).toBe("Receipt POS-42 · Mama Mboga Kiandas");
+});
+
+it("loads a logo given under the web app's address from the API instead", () => {
+  expect(receiptLogo("https://dukaflow.co.ke/api/v1/tenancy/public/logos/abc.png")).toBe("/api/v1/tenancy/public/logos/abc.png");
+  expect(receiptLogo("https://cdn.example/logo.png")).toBe("https://cdn.example/logo.png");
 });

@@ -2024,6 +2024,55 @@ form a:not(.button, .pageBackLink),
   color: #9f1d1d;
   font-weight: 800;
 }
+.receiptTitle {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.receiptItemsHead {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: -6px;
+  color: #60708a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.receiptVariant {
+  color: #3a4a63;
+  font-size: 13px;
+}
+.receiptCount {
+  margin: 0;
+  color: #60708a;
+  font-size: 12px;
+  text-align: right;
+}
+.receiptPayments dt small {
+  display: block;
+  font-size: 12px;
+}
+.receiptState {
+  justify-self: center;
+  margin: 0;
+  padding: 4px 14px;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.receiptState-good { color: #0f6b3a; }
+.receiptState-due { color: #9a5b00; }
+.receiptState-bad { color: #9f1d1d; }
+.receiptKeep {
+  margin-top: 6px !important;
+  font-size: 11px;
+}
 .receiptStatus {
   margin: 0;
   padding: 8px 10px;
@@ -2180,25 +2229,31 @@ form a:not(.button, .pageBackLink),
     padding: 18px 14px;
   }
 }
-/* Printing a receipt shows only the receipt, sized for paper or a till printer. Only on a page with a receipt: other
-   pages (the To buy list) print themselves. */
+/* Printing a receipt: the paper copy (ReceiptPrintCopy) sits straight under <body>; everything else is removed, not
+   just hidden, so a one-item sale prints on one page instead of the whole app as blank pages. Its own page has no
+   margin, which also drops the browser's title and address lines from the top and bottom. Fits A4 and till paper. */
+.receiptPrintCopy { display: none; }
 @media print {
-  body:has(.receiptDocument) * {
-    visibility: hidden !important;
-  }
-  .receiptDocument,
-  .receiptDocument * {
-    visibility: visible !important;
-  }
-  .receiptDocument {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+  body:has(> .receiptPrintCopy) > :not(.receiptPrintCopy) { display: none !important; }
+  body:has(> .receiptPrintCopy) { margin: 0; padding: 0; background: #fff; min-height: 0; }
+  html:has(> body > .receiptPrintCopy) { background: #fff; }
+  .receiptPrintCopy { display: block; page: receipt; color: #000; }
+  .receiptPrintCopy .receiptDocument {
+    width: auto;
+    max-width: 80mm;
     margin: 0 auto;
+    padding: 8mm 4mm 10mm;
     border: 0;
+    border-radius: 0;
     box-shadow: none;
+    font-size: 12px;
+    gap: 10px;
+    color: #000;
   }
+  .receiptPrintCopy :is(.receiptHeader p, .receiptMeta dt, .receiptTotals dt, .receiptItems small, .receiptFooter, .receiptCount, .receiptItemsHead) { color: #222; }
+  .receiptPrintCopy .receiptItems li { break-inside: avoid; }
+  .receiptPrintCopy * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page receipt { margin: 0; }
 }
 /* The upload control is a label styled as a button; match the real buttons beside it. */
 .businessLogoActions {

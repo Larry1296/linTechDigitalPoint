@@ -32,9 +32,11 @@ def app_url(request):
 
 
 def api_url(request):
-    """Where the API's own files (logos) are fetched: configured, else the same place as the web app."""
+    """Where the API's own files (logos) are fetched: configured, else the address this request reached (the API itself).
+
+    Never the web app's address: when the app is a separate static site (dukaflow.co.ke) it has no logos to serve."""
     configured = getattr(settings, "PUBLIC_API_URL", "")
-    return configured.rstrip("/") if configured else app_url(request)
+    return configured.rstrip("/") if configured else request.build_absolute_uri("/").rstrip("/")
 
 
 def logo_url(organization, request=None, variant="logo"):
