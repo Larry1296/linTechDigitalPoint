@@ -16,7 +16,7 @@ import { ProductImport, downloadTemplate } from "./ProductImport";
 import { PhysicalLocationPicker } from "../../components/PhysicalLocationPicker";
 import { FormError, FormSuccess } from "../../components/forms/FormNotice";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
-import { FileSpreadsheet, Trash2 } from "lucide-react";
+import { Barcode, FileSpreadsheet, Trash2 } from "lucide-react";
 import { DeleteProductsDialog, ProductSelection, useProductSelection } from "./DeleteProducts";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 const count = (value) => Number(value || 0).toLocaleString();
@@ -493,8 +493,10 @@ export function ProductsPage() {
             : "Open a category to see its sub-categories and products."}</p>
           {received && <FormSuccess>{received.quantity} × {received.item} added to stock{received.unknownCost ? " (cost pending)" : ""}. <Link to={`/admin/receipts/${received.id}`}>View record {received.receipt_number}</Link></FormSuccess>}
         </div>
-        {(hasPermission(user, "catalog.add_product") || canDelete) && (
+        {(hasPermission(user, "catalog.add_product") || canDelete || hasPermission(user, "catalog.change_productvariant")) && (
           <div className="actionRow">
+            {hasPermission(user, "catalog.change_productvariant") && <Link className="button secondary" to="/admin/products/barcodes">
+              <Barcode size={17} aria-hidden="true" /> Barcode labels</Link>}
             {canDelete && !deleteMode && <button type="button" className="secondary" onClick={() => setChoosing(true)}>Delete products</button>}
             {hasPermission(user, "catalog.add_product") && <>
               <button type="button" className="secondary" title="An Excel sheet laid out like the Add Product form: fill a row per product, keep adding, then import it"

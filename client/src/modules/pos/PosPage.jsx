@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CheckCircle2, ChevronDown, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, ChevronDown, Minus, Plus, Receipt, ShoppingCart, Smartphone, Trash2, X } from "lucide-react";
 import { businessCurrency } from "../../core/organization/presentation";
 import { useAuth } from "../../core/auth/AuthContext";
 import { api } from "../../core/api/client";
@@ -18,6 +18,46 @@ import { SaleSheet } from "./SaleSheet";
 import "../admin/pos.css";
 import "./posPage.css";
 import { TextBox } from "../../components/forms/TextBox";
+import { CameraScanner, beep } from "../../core/scanner/CameraScanner";
+import { matchesCode } from "../../core/scanner/codes";
+
+// The camera stays on for the next sale once the cashier turns it on, so the till opens ready to scan.
+const CAMERA_KEY = "pos-camera";
+const cameraWanted = () => { try { return localStorage.getItem(CAMERA_KEY) === "on"; } catch { return false; } };
+const rememberCamera = (on) => { try { localStorage.setItem(CAMERA_KEY, on ? "on" : "off"); } catch { /* not kept */ } };
+const firstOf = (value) => [].concat(value ?? [])[0];
+
+// A barcode the till does not know yet: whoever may change products says which product it is, once, and it is saved on
+// that product, so every later scan finds it.
+function UnknownCode({ code, canLink, onLinked, onClose }) {
+  const [error, setError] = useState("");
+  const link = async (p, replace = false) => {
+    setError("");
+    try {
+      await api(`/api/v1/catalog/barcodes/link/${p.id}/`, { method: "POST", body: JSON.stringify({ barcode: code, replace }) });
+      onLinked({ ...p, barcode: code });
+    } catch (err) {
+      if (firstOf(err.data?.code) === "has_barcode" && !replace) {
+        if (await confirmAction({ title: `${p.product_name} already has a barcode`, text: `Its barcode is ${firstOf(err.data.current)}. Use ${code} instead? Labels printed with the old barcode will stop working.`,
+          confirmButtonText: "Use the new barcode" })) await link(p, true);
+        return;
+      }
+      setError(firstOf(err.data?.barcode) || err.message);
+    }
+  };
+  return <div className="posUnknownCode" role="alert">
+    <div className="posCartHead">
+      <b>No product has the barcode {code}</b>
+      <button type="button" className="posIconButton" onClick={onClose} aria-label="Close"><X size={16} /></button>
+    </div>
+    {canLink ? <>
+      <p className="muted">Which product is it? Pick it once and this barcode is saved on it.</p>
+      <ProductSearch endpoint="/api/v1/commerce/pos/catalog/" minLength={1} limit={8} onSelect={(p) => void link(p)} label="Product with this barcode"
+        renderResult={(p) => <VariantSummary row={p} />} placeholder="Type the product's name" />
+    </> : <p className="muted">Ask the owner to link this barcode to its product, or find the product by name.</p>}
+    <FormError title="Could not save the barcode." message={error} />
+  </div>;
+}
 
 const ALL = "All";
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -171,6 +211,11 @@ export function PosPage() {
   // whenever a checkout is open.
   const [sheet, setSheet] = useState(null);
   const [lastAdded, setLastAdded] = useState("");
+  const [camera, setCamera] = useState(cameraWanted);
+  const [unknownCode, setUnknownCode] = useState("");
+  const [scanNote, setScanNote] = useState("");
+  const canLinkCodes = Boolean(user?.permissions?.includes("catalog.change_productvariant"));
+  const toggleCamera = () => setCamera((on) => { rememberCamera(!on); return !on; });
   const setLine = (id, changes) => setCart((c) => c.map((y) => (y.p.id === id ? { ...y, ...changes } : y)));
   const removeLine = (id) => setCart((c) => c.filter((y) => y.p.id !== id));
   // One less from a tile; the last one leaves the sale.
@@ -201,6 +246,23 @@ export function PosPage() {
     });
     setQuery("");
     setLastAdded(p.product_name);
+  };
+  // A barcode read by the camera: the product goes straight into the sale, as with a till scanner.
+  const scanned = async (code) => {
+    try {
+      const found = (await api("/api/v1/commerce/pos/catalog/?q=" + encodeURIComponent(code))).find((row) => matchesCode(row, code));
+      if (!found) { beep(false); setScanNote(""); setUnknownCode(code); return; }
+      setUnknownCode("");
+      if (stockLimit(found) < 1) { beep(false); setScanNote(`${found.product_name} is out of stock.`); return; }
+      const already = cart.find((x) => x.p.id === found.id)?.q || 0;
+      if (already + 1 > stockLimit(found)) { beep(false); setScanNote(`Only ${Number(found.available).toLocaleString()} ${found.product_name} in stock.`); return; }
+      beep(true);
+      setScanNote("");
+      add(found);
+    } catch (err) {
+      beep(false);
+      setScanNote(err.message);
+    }
   };
   const groups = useMemo(() => Object.entries(Object.groupBy(rows, groupOf)).sort(([a], [b]) => byGroup(a, b)), [rows]);
   const shown = category === ALL ? groups : groups.filter(([name]) => name === category);
@@ -296,6 +358,16 @@ export function PosPage() {
         <ProductSearch value={query} onChange={setQuery} endpoint="/api/v1/commerce/pos/catalog/" minLength={1} limit={50} onSelect={add}
           exactScan isDisabled={(p) => stockLimit(p) < 1} renderResult={(p) => <VariantSummary row={p} />}
           renderActions={(p) => <ProductActions row={p} user={user} />} placeholder="Scan a barcode or type a name or item code" />
+        <div className="posScanRow">
+          <button type="button" className={camera ? "secondary posCameraOn" : "secondary"} aria-pressed={camera} onClick={toggleCamera}>
+            <Camera size={17} aria-hidden="true" /> {camera ? "Camera on" : "Scan with camera"}
+          </button>
+          {scanNote && <small className="posScanNote" role="status">{scanNote}</small>}
+        </div>
+        {camera && !step && <CameraScanner onCode={(code) => void scanned(code)} onClose={toggleCamera}
+          hint="Pass each item's barcode in front of the camera; it beeps and goes into the sale." />}
+        {unknownCode && <UnknownCode code={unknownCode} canLink={canLinkCodes} onClose={() => setUnknownCode("")}
+          onLinked={(p) => { setUnknownCode(""); void scanned(p.barcode); }} />}
         {!query.trim() && groups.length > 1 && <div className="posChips" role="group" aria-label="Categories">
           {[ALL, ...groups.map(([name]) => name)].map((name) => (
             <button type="button" key={name} aria-pressed={category === name} onClick={() => setCategory(name)}>{name}</button>

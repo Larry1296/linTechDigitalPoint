@@ -29,6 +29,7 @@ import { DigitalShopPage } from "../modules/digital-shop/DigitalShopPage";
 import { CategoriesPage } from "../modules/digital-shop/CategoriesPage";
 import { BrandsPage } from "../modules/products/BrandsPage";
 import { ProductsPage } from "../modules/products/ProductsPage";
+import { BarcodeLabelsPage } from "../modules/products/BarcodeLabelsPage";
 import { ReceivePage } from "../modules/receiving/ReceivePage";
 import { StaffProtectedRoute } from "./ProtectedRoutes";
 import { CyberDashboardPage } from "../modules/cyber/CyberDashboardPage";
@@ -84,6 +85,7 @@ export function AppRoutes() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="product-lookup" element={<ProductLookupPage />} />
         <Route path="products" element={<ProductsPage />} />
+        <Route path="products/barcodes" element={<BarcodeLabelsPage />} />
         <Route path="pos" element={<PosPage />} />
         <Route path="rooms" element={<FrontDeskPage />} />
         <Route path="rooms/guests" element={<GuestsPage />} />

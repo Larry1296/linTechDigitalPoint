@@ -1,3 +1,4 @@
+from rest_framework.views import APIView
 from apps.tenancy.permissions import has_business_permission, is_business_manager
 from django.db.models import Sum
 from django.db import transaction
@@ -658,3 +659,38 @@ class ImageViewSet(SecuredModelViewSet):
         from .image_library import PREFIX
         image = serializer.save()
         image.product.images.filter(image_url__startswith=PREFIX).exclude(pk=image.pk).delete()
+
+
+def _label_row(v):
+    return {"id": v.pk, "product_name": v.product.name, "variant_name": v.name, "sku": v.sku, "barcode": v.barcode,
+            "selling_price": v.selling_price}
+
+
+class BarcodeLabelsView(APIView):
+    """Barcodes for printing: products without one get the shop's own first (see barcodes.py)."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "catalog.change_productvariant"
+
+    def post(self, request):
+        from .barcodes import give_barcodes
+        ids = request.data.get("variant_ids") or []
+        if not isinstance(ids, list) or not ids or len(ids) > 1000:
+            return Response({"detail": "Choose the products to print labels for."}, status=400)
+        try:
+            ids = [int(i) for i in ids]
+        except (TypeError, ValueError):
+            return Response({"detail": "Choose the products to print labels for."}, status=400)
+        return Response({"labels": [_label_row(v) for v in give_barcodes(ids, user=request.user)]})
+
+
+class BarcodeLinkView(APIView):
+    """A scanned barcode saved on a product (the maker's code on the box), so every later scan finds it."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "catalog.change_productvariant"
+
+    def post(self, request, pk):
+        from django.shortcuts import get_object_or_404
+        from .barcodes import link_barcode
+        variant = link_barcode(get_object_or_404(ProductVariant, pk=pk), request.data.get("barcode"), user=request.user,
+                               replace=bool(request.data.get("replace")))
+        return Response(_label_row(variant))
