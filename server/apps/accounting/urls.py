@@ -1,6 +1,6 @@
 from .ledger_api import LedgerReportView, JournalView, ManualJournalView, JournalReverseView
 from .money_check_api import MoneyCheckView, StartingMoneyUndoView, StartingMoneyView
-from .loans_api import LoanCancelView, LoanRepayView, LoansView, RepaymentReverseView
+from .loans_api import LoanCancelView, LoanMakeOwnView, LoanRepayView, LoansView, RepaymentReverseView
 from .investments_api import FundRateCheckView, InvestmentBusinessMoneyView, InvestmentClaimView, InvestmentFundView, InvestmentMonthlyView, InvestmentMoveView, InvestmentReminderView, InvestmentRemoveView, InvestmentStatementView, InvestmentUndoView, InvestmentsView
 from .statements_api import StatementsView, AccountLedgerView, ExplainSaleItemView
 from django.urls import path, include
@@ -10,7 +10,7 @@ router = DefaultRouter()
 for route, view in [('suppliers', SupplierViewSet), ('categories', CategoryViewSet), ('accounts', AccountViewSet), ('entries', EntryViewSet), ('expenses', ExpenseViewSet), ('purchases', PurchaseViewSet), ('closings', ClosingViewSet), ('periods', PeriodViewSet)]:
     router.register(route, view)
 urlpatterns = [path("money-check/", MoneyCheckView.as_view()), path("money-check/starting/", StartingMoneyView.as_view()), path("money-check/starting/<int:pk>/undo/", StartingMoneyUndoView.as_view()),
-               path("loans/", LoansView.as_view()), path("loans/<int:pk>/repay/", LoanRepayView.as_view()), path("loans/<int:pk>/cancel/", LoanCancelView.as_view()), path("loans/repayments/<int:pk>/reverse/", RepaymentReverseView.as_view()),
+               path("loans/", LoansView.as_view()), path("loans/<int:pk>/repay/", LoanRepayView.as_view()), path("loans/<int:pk>/cancel/", LoanCancelView.as_view()), path("loans/<int:pk>/own/", LoanMakeOwnView.as_view()), path("loans/repayments/<int:pk>/reverse/", RepaymentReverseView.as_view()),
                path("investments/", InvestmentsView.as_view()), path("investments/<int:pk>/move/", InvestmentMoveView.as_view()), path("investments/<int:pk>/statement/", InvestmentStatementView.as_view()), path("investments/movements/<int:pk>/undo/", InvestmentUndoView.as_view()), path("investments/movements/<int:pk>/business/", InvestmentClaimView.as_view()), path("investments/<int:pk>/business-money/", InvestmentBusinessMoneyView.as_view()), path("investments/<int:pk>/remove/", InvestmentRemoveView.as_view()), path("investments/<int:pk>/monthly/", InvestmentMonthlyView.as_view()), path("investments/reminder/", InvestmentReminderView.as_view()), path("investments/<int:pk>/fund/", InvestmentFundView.as_view()), path("investments/funds/<str:code>/check/", FundRateCheckView.as_view()),
                path("statements/", StatementsView.as_view()), path("statements/accounts/<str:code>/", AccountLedgerView.as_view()),
                path("explain/sale-items/<int:pk>/", ExplainSaleItemView.as_view()),

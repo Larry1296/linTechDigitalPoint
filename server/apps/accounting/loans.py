@@ -4,6 +4,11 @@ Lending moves money out of cash into "Money lent out" (1150), an asset: the busi
 neither an expense nor a sale and profit does not change. A repayment moves it back into cash. Both appear in
 the cash book (kind LOAN) so daily cash counts stay right. Mistakes are corrected by cancelling the loan or
 reversing a repayment, which post the opposite entries; nothing is edited or deleted.
+
+Each loan says whose money it was (2026-11-25, owner): the business's (above) or the owner's own. Own money is kept
+on the page only so the owner remembers who owes them: no cash entry, no journal, not in what customers owe the
+business, net worth or any business figure, and seen and changed by the owner alone. A loan recorded as the
+business's that was really the owner's own money is moved over with ``make_own``.
 """
 from datetime import datetime, time
 from decimal import Decimal
@@ -17,6 +22,19 @@ from .models import CashEntry, JournalEntry, Loan, LoanRepayment
 from .services import audit, post, reverse as reverse_cash
 
 METHODS = {"CASH", "MPESA", "BANK", "OTHER"}
+WHOSE = {Loan.BUSINESS, Loan.OWN}
+
+
+def _whose(value):
+    whose = str(value or Loan.BUSINESS).upper()
+    if whose not in WHOSE:
+        raise ValidationError("Say whose money it is: the business's or your own.")
+    return whose
+
+
+def business_loans():
+    """Loans of the business's money: the only ones in the books and the business's figures."""
+    return Loan.objects.filter(whose=Loan.BUSINESS)
 
 
 def _method(value):
@@ -39,7 +57,7 @@ def still_owed(today=None):
     money owed to the business, like a credit sale not yet paid (2026-11-09, owner)."""
     today = today or timezone.localdate()
     rows = []
-    for loan in Loan.objects.filter(cancelled_at__isnull=True).prefetch_related("repayments").order_by("lent_on", "pk"):
+    for loan in business_loans().filter(cancelled_at__isnull=True).prefetch_related("repayments").order_by("lent_on", "pk"):
         left = outstanding(loan)
         if left > 0:
             rows.append({"loan": loan.pk, "borrower": loan.borrower_name, "phone": loan.borrower_phone, "lent": loan.amount,
@@ -59,7 +77,7 @@ def status(loan, today=None):
 
 
 @transaction.atomic
-def lend(*, user, borrower_name, borrower_phone="", amount, method, due_date, lent_on=None, notes="", key):
+def lend(*, user, borrower_name, borrower_phone="", amount, method, due_date, lent_on=None, notes="", key, whose=Loan.BUSINESS):
     lock_business()
     existing = Loan.objects.filter(idempotency_key=key).first()
     if existing:
@@ -67,7 +85,7 @@ def lend(*, user, borrower_name, borrower_phone="", amount, method, due_date, le
     name = " ".join(str(borrower_name or "").split())
     if len(name) < 2:
         raise ValidationError("Enter the name of the person borrowing.")
-    amount, method = money(amount), _method(method)
+    amount, method, whose = money(amount), _method(method), _whose(whose)
     if amount <= 0:
         raise ValidationError("Enter an amount above zero.")
     lent_on = lent_on or timezone.localdate()
@@ -76,6 +94,11 @@ def lend(*, user, borrower_name, borrower_phone="", amount, method, due_date, le
     if not due_date or due_date < lent_on:
         raise ValidationError("Choose the agreed payback date, on or after the day the money was lent.")
     branch = resolve_branch()
+    if whose == Loan.OWN:
+        loan = Loan.objects.create(whose=whose, borrower_name=name[:120], borrower_phone=str(borrower_phone or "").strip()[:30], amount=amount,
+                                   method=method, lent_on=lent_on, due_date=due_date, notes=notes, branch=branch, idempotency_key=key, created_by=user)
+        audit(loan, user, f"Lent {amount} of own money to {name}, due {due_date}")
+        return loan
     occurred = timezone.now() if lent_on == timezone.localdate() else timezone.make_aware(datetime.combine(lent_on, time(12)))
     entry = post(unit="SHOP", method=method, amount=-amount, kind="LOAN", reference=f"Lent to {name}"[:160], key=f"loan:{key}",
                  user=user, occurred_at=occurred, reason=notes, branch=branch, journal=False)
@@ -101,9 +124,14 @@ def repay(*, loan, user, amount, method, reference="", key):
         raise ValidationError("Enter an amount above zero.")
     if amount > outstanding(loan):
         raise ValidationError(f"Only {outstanding(loan):,.2f} is still owed on this loan.")
+    today = timezone.localdate()
+    if loan.whose == Loan.OWN:  # the owner's own money coming back: nothing enters the business's places
+        repayment = LoanRepayment.objects.create(loan=loan, amount=amount, method=method, reference=reference[:120], received_on=today,
+                                                 idempotency_key=key, created_by=user)
+        audit(repayment, user, f"{loan.borrower_name} repaid {amount} of own money")
+        return repayment
     if method == "MPESA" and not reference:
         raise ValidationError("Enter the M-Pesa code so the repayment can be checked against your M-Pesa messages.")
-    today = timezone.localdate()
     entry = post(unit="SHOP", method=method, amount=amount, kind="LOAN", reference=f"Repaid by {loan.borrower_name}"[:160],
                  key=f"loan-repayment:{key}", user=user, branch=loan.branch, journal=False)
     repayment = LoanRepayment.objects.create(loan=loan, amount=amount, method=method, reference=reference[:120], received_on=today,
@@ -116,6 +144,8 @@ def repay(*, loan, user, amount, method, reference="", key):
 
 def _undo(entry, journal_key, *, user, reason, correction_key):
     """Reverses a loan cash entry and its journal together, so the cash book and ledger stay in step."""
+    if entry is None:  # own money: never in the books
+        return
     reverse_cash(entry=entry, user=user, reason=reason, allow_loan=True)
     journal = JournalEntry.objects.filter(source_key=journal_key).first()
     if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
@@ -150,5 +180,25 @@ def cancel_loan(*, loan, user, reason):
         raise ValidationError("Part of this loan has been repaid. Reverse those repayments first, or record the rest as it is paid back.")
     _undo(loan.entry, f"loan:{loan.pk}", user=user, reason=reason, correction_key=f"loan-cancel:{loan.pk}")
     Loan.objects.filter(pk=loan.pk).update(cancelled_at=timezone.now(), cancel_reason=reason.strip())
+    loan.refresh_from_db()
+    return loan
+
+
+@transaction.atomic
+def make_own(*, loan, user):
+    """A loan recorded as the business's money that was really the owner's own: its money is put back into the business
+    place it was taken from, each repayment is taken back out of the place it came into (both undone in the cash book
+    and the books), and the loan stays on the page as the owner's own, with what is still owed to them."""
+    lock_business()
+    loan = Loan.objects.select_for_update().get(pk=loan.pk)
+    if loan.whose == Loan.OWN:
+        return loan
+    reason = "It was the owner's own money, not the business's"
+    for r in loan.repayments.filter(reversed_at__isnull=True):
+        _undo(r.entry, f"loan-repayment:{r.pk}", user=user, reason=reason, correction_key=f"loan-repayment-own:{r.pk}")
+    if not loan.cancelled_at:
+        _undo(loan.entry, f"loan:{loan.pk}", user=user, reason=reason, correction_key=f"loan-own:{loan.pk}")
+    Loan.objects.filter(pk=loan.pk).update(whose=Loan.OWN)
+    audit(loan, user, f"Loan to {loan.borrower_name} moved to the owner's own money")
     loan.refresh_from_db()
     return loan

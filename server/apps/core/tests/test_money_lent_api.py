@@ -67,3 +67,61 @@ def test_money_lent_counts_with_what_customers_owe():
         ("Sold, not yet paid", Decimal("300")), ("Money lent, not yet repaid", Decimal("200"))]
     data, _ = call(context(shop), "money_owed_to_business")
     assert (data["customers_owe_total"], data["sales_owed_total"]) == (500.0, 300.0)
+
+
+def test_owner_lends_own_money_kept_out_of_the_business():
+    # 2026-11-25, owner: lending asks whose money it is; the owner's own money never touches the business.
+    from apps.accounting.models import CashEntry, JournalEntry
+    from apps.assistant.tests.test_business_assistant import make_business
+    from apps.inventory.dashboard_summary import _customers_owe
+    shop = make_business("Ownlend", "OWN-1")
+    due = timezone.localdate() + timedelta(days=7)
+    with organization_context(shop.org):
+        entries, journals = CashEntry.objects.count(), JournalEntry.objects.count()
+    made = shop.client.post("/api/v1/accounting/loans/", {"borrower_name": "Peter Olendo", "amount": "300", "method": "MPESA", "whose": "OWN",
+                            "due_date": str(due), "idempotency_key": "own-1"}, format="json")
+    assert made.status_code == 201 and made.json()["whose"] == "OWN", made.content
+    paid = shop.client.post(f"/api/v1/accounting/loans/{made.json()['id']}/repay/", {"amount": "100", "method": "MPESA", "idempotency_key": "own-p1"},
+                            format="json")
+    assert paid.status_code == 201 and Decimal(str(paid.json()["outstanding"])) == Decimal("200"), paid.content
+    with organization_context(shop.org):
+        assert (CashEntry.objects.count(), JournalEntry.objects.count(), _customers_owe()) == (entries, journals, Decimal("0"))
+    listed = shop.client.get("/api/v1/accounting/loans/").json()
+    assert (Decimal(str(listed["total_outstanding"])), Decimal(str(listed["own_outstanding"])), listed["can_lend_own"]) == (Decimal("0"), Decimal("200"), True)
+    assert Decimal(str(shop.client.get("/api/v1/inventory/dashboard/").json()["receivables"]["lent_owed"])) == Decimal("0")
+
+
+def test_staff_cannot_lend_or_see_the_owners_own_money():
+    from apps.assistant.tests.test_business_assistant import make_business
+    shop = make_business("Ownhide", "OWN-2")
+    due = timezone.localdate() + timedelta(days=7)
+    shop.client.post("/api/v1/accounting/loans/", {"borrower_name": "Own Friend", "amount": "50", "method": "CASH", "whose": "OWN",
+                     "due_date": str(due), "idempotency_key": "own-2"}, format="json")
+    admin = User.objects.create_user("ownhide-admin", password="Safe-pass-1848")
+    Membership.objects.create(user=admin, organization=shop.org, role="ADMIN")
+    staff = APIClient()
+    staff.force_login(admin)
+    listed = staff.get("/api/v1/accounting/loans/").json()
+    assert listed["loans"] == [] and listed["can_lend_own"] is False
+    assert staff.post("/api/v1/accounting/loans/", {"borrower_name": "X Y", "amount": "10", "method": "CASH", "whose": "OWN", "due_date": str(due),
+                      "idempotency_key": "own-3"}, format="json").status_code == 403
+
+
+def test_a_business_loan_that_was_the_owners_own_money_moves_out_of_the_business():
+    from apps.accounting.statements import _debit, balances
+    from apps.assistant.tests.test_business_assistant import make_business
+    from apps.inventory.dashboard_summary import _customers_owe
+    shop = make_business("Ownmove", "OWN-4")
+    due = timezone.localdate() + timedelta(days=7)
+    made = shop.client.post("/api/v1/accounting/loans/", {"borrower_name": "Godfrey M", "amount": "100", "method": "CASH",
+                            "due_date": str(due), "idempotency_key": "biz-1"}, format="json").json()
+    shop.client.post(f"/api/v1/accounting/loans/{made['id']}/repay/", {"amount": "40", "method": "CASH", "idempotency_key": "biz-p1"}, format="json")
+    with organization_context(shop.org):
+        cash_before = _debit(balances(), ["1000"])
+        assert _customers_owe() == Decimal("60")
+    moved = shop.client.post(f"/api/v1/accounting/loans/{made['id']}/own/", {}, format="json")
+    assert moved.status_code == 200 and (moved.json()["whose"], Decimal(str(moved.json()["outstanding"]))) == ("OWN", Decimal("60")), moved.content
+    with organization_context(shop.org):
+        accounts = balances()
+        assert (_customers_owe(), _debit(accounts, ["1150"]), _debit(accounts, ["1000"]) - cash_before) == (Decimal("0"), Decimal("0"), Decimal("60"))
+    assert shop.client.post(f"/api/v1/accounting/loans/{made['id']}/own/", {}, format="json").status_code == 200  # twice is harmless

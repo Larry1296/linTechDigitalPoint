@@ -101,7 +101,7 @@ def _money(expenses):
     from apps.accounting.investments import business_value as value
     from apps.accounting.loans import outstanding
     from apps.accounting.models import Expense, Investment, Loan
-    loans = Loan.objects.filter(cancelled_at__isnull=True)
+    loans = Loan.objects.filter(cancelled_at__isnull=True, whose=Loan.BUSINESS)
     investments = list(Investment.objects.filter(removed_at__isnull=True))
     return {'expenses': Expense.objects.count(), 'expenses_value': expenses,
             'loans': loans.count(), 'loans_value': _sum(loans, 'amount'), 'loans_outstanding': sum((outstanding(loan) for loan in loans), ZERO),

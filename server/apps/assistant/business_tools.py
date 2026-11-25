@@ -665,7 +665,7 @@ def money_owed_to_business(ctx, args):
               "customers": customers[:_limit(args, 30, 200)], "refunds_the_business_owes_customers": _money(refunds_due)}
     if ctx.can("accounting.view_loan"):
         loans = []
-        for loan in Loan.objects.filter(cancelled_at__isnull=True).prefetch_related("repayments"):
+        for loan in Loan.objects.filter(cancelled_at__isnull=True, whose=Loan.BUSINESS).prefetch_related("repayments"):
             left = outstanding(loan)
             if left > 0:
                 loans.append({"borrower": loan.borrower_name, "lent": _money(loan.amount), "lent_on": loan.lent_on.isoformat(), "due": loan.due_date.isoformat(),

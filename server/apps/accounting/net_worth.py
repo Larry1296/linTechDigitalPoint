@@ -71,7 +71,7 @@ def _investments():
 def _loans():
     from .loans import outstanding
     from .models import Loan
-    return sum((outstanding(loan) for loan in Loan.objects.filter(cancelled_at__isnull=True)), ZERO)
+    return sum((outstanding(loan) for loan in Loan.objects.filter(cancelled_at__isnull=True, whose=Loan.BUSINESS)), ZERO)
 
 
 def _owed_to_you(sales, lent):

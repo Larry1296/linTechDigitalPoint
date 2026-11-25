@@ -179,7 +179,7 @@ def reconciliation():
     agency = MpesaTransaction.objects.aggregate(cash=Sum("cash_delta"), float=Sum("float_delta"))
     from .loans import outstanding
     from .models import Loan
-    lent = sum((outstanding(loan) for loan in Loan.objects.prefetch_related("repayments")), ZERO)
+    lent = sum((outstanding(loan) for loan in Loan.objects.filter(whose=Loan.BUSINESS).prefetch_related("repayments")), ZERO)
     from .investments import business_value, settle_books
     from .models import Investment
     settle_books()

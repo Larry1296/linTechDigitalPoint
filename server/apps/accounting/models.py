@@ -199,7 +199,13 @@ class JournalLine(PostedRecord):
 
 
 class Loan(TenantModel):
-    """Money lent to someone, to be paid back by an agreed date. It is owed to the business, never an expense."""
+    """Money lent to someone, to be paid back by an agreed date. Never an expense.
+
+    ``whose`` says whose money it was: BUSINESS (taken from a business place, owed to the business, in the books) or
+    OWN (the owner's own money: kept on the Money lent page as a reminder only, never in the books or the business's
+    money, and only the owner sees it). Since 2026-11-25 (owner)."""
+    BUSINESS, OWN = 'BUSINESS', 'OWN'
+    whose = models.CharField(max_length=10, default='BUSINESS')
     borrower_name = models.CharField(max_length=120)
     borrower_phone = models.CharField(max_length=30, blank=True)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
@@ -207,7 +213,7 @@ class Loan(TenantModel):
     lent_on = models.DateField()
     due_date = models.DateField()
     notes = models.TextField(blank=True)
-    entry = models.OneToOneField(CashEntry, related_name='loan', on_delete=models.PROTECT)
+    entry = models.OneToOneField(CashEntry, null=True, blank=True, related_name='loan', on_delete=models.PROTECT)  # none for OWN
     branch = models.ForeignKey('core.Store', null=True, blank=True, on_delete=models.PROTECT, editable=False)
     idempotency_key = models.CharField(max_length=100)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
@@ -229,7 +235,7 @@ class LoanRepayment(TenantModel):
     method = models.CharField(max_length=20)
     reference = models.CharField(max_length=120, blank=True)  # e.g. the M-Pesa code, required for M-Pesa
     received_on = models.DateField()
-    entry = models.OneToOneField(CashEntry, related_name='loan_repayment', on_delete=models.PROTECT)
+    entry = models.OneToOneField(CashEntry, null=True, blank=True, related_name='loan_repayment', on_delete=models.PROTECT)  # none for OWN
     idempotency_key = models.CharField(max_length=100)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
