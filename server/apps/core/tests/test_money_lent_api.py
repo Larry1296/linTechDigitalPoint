@@ -118,10 +118,15 @@ def test_a_business_loan_that_was_the_owners_own_money_moves_out_of_the_business
     shop.client.post(f"/api/v1/accounting/loans/{made['id']}/repay/", {"amount": "40", "method": "CASH", "idempotency_key": "biz-p1"}, format="json")
     with organization_context(shop.org):
         cash_before = _debit(balances(), ["1000"])
+        from apps.accounting.money_check import places
+        drawer_before = {p["label"]: p["expected"] for p in places()}["Cash in the drawer"]
         assert _customers_owe() == Decimal("60")
     moved = shop.client.post(f"/api/v1/accounting/loans/{made['id']}/own/", {}, format="json")
     assert moved.status_code == 200 and (moved.json()["whose"], Decimal(str(moved.json()["outstanding"]))) == ("OWN", Decimal("60")), moved.content
     with organization_context(shop.org):
         accounts = balances()
-        assert (_customers_owe(), _debit(accounts, ["1150"]), _debit(accounts, ["1000"]) - cash_before) == (Decimal("0"), Decimal("0"), Decimal("60"))
+        # The cash really left the drawer and the 40 really came back: the drawer stays as it is, only whose money changes.
+        assert (_customers_owe(), _debit(accounts, ["1150"]), _debit(accounts, ["1000"]) - cash_before) == (Decimal("0"), Decimal("0"), Decimal("0"))
+        from apps.accounting.money_check import places
+        assert {p["label"]: p["expected"] for p in places()}["Cash in the drawer"] == drawer_before
     assert shop.client.post(f"/api/v1/accounting/loans/{made['id']}/own/", {}, format="json").status_code == 200  # twice is harmless

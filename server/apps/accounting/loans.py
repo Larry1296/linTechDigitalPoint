@@ -8,7 +8,8 @@ reversing a repayment, which post the opposite entries; nothing is edited or del
 Each loan says whose money it was (2026-11-25, owner): the business's (above) or the owner's own. Own money is kept
 on the page only so the owner remembers who owes them: no cash entry, no journal, not in what customers owe the
 business, net worth or any business figure, and seen and changed by the owner alone. A loan recorded as the
-business's that was really the owner's own money is moved over with ``make_own``.
+business's that was really the owner's own money is moved over with ``make_own``, which keeps the cash as it
+happened (the money did leave the drawer) and only says it was the owner's.
 """
 from datetime import datetime, time
 from decimal import Decimal
@@ -147,9 +148,12 @@ def _undo(entry, journal_key, *, user, reason, correction_key):
     if entry is None:  # own money: never in the books
         return
     reverse_cash(entry=entry, user=user, reason=reason, allow_loan=True)
-    journal = JournalEntry.objects.filter(source_key=journal_key).first()
-    if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
-        reverse_journal(journal, user=user, reason=reason, key=correction_key)
+    # A loan moved to the owner's own money carries its journal under the "-own" key instead (see make_own).
+    own_key = journal_key.replace("loan:", "loan-own:", 1).replace("loan-repayment:", "loan-repayment-own:", 1)
+    for key, correction in ((journal_key, correction_key), (own_key, f"{correction_key}:own")):
+        journal = JournalEntry.objects.filter(source_key=key).first()
+        if journal and not JournalEntry.objects.filter(reversal_of=journal).exists():
+            reverse_journal(journal, user=user, reason=reason, key=correction)
 
 
 @transaction.atomic
@@ -186,19 +190,31 @@ def cancel_loan(*, loan, user, reason):
 
 @transaction.atomic
 def make_own(*, loan, user):
-    """A loan recorded as the business's money that was really the owner's own: its money is put back into the business
-    place it was taken from, each repayment is taken back out of the place it came into (both undone in the cash book
-    and the books), and the loan stays on the page as the owner's own, with what is still owed to them."""
+    """A loan recorded as the business's money that was really the owner's own. The cash really left the drawer (and
+    repayments really came into it), so the cash book stays as it is; only whose money it was changes: what was lent
+    is the owner taking it out of the business for their own loan, and each repayment that came into the business's
+    place is the owner putting it back (Dr/Cr owner's equity 3000 instead of Money lent out 1150). The business is no
+    longer owed it; what is still owed is owed to the owner."""
     lock_business()
     loan = Loan.objects.select_for_update().get(pk=loan.pk)
     if loan.whose == Loan.OWN:
         return loan
     reason = "It was the owner's own money, not the business's"
-    for r in loan.repayments.filter(reversed_at__isnull=True):
-        _undo(r.entry, f"loan-repayment:{r.pk}", user=user, reason=reason, correction_key=f"loan-repayment-own:{r.pk}")
     if not loan.cancelled_at:
-        _undo(loan.entry, f"loan:{loan.pk}", user=user, reason=reason, correction_key=f"loan-own:{loan.pk}")
+        _reclass(f"loan:{loan.pk}", f"loan-own:{loan.pk}", user=user, reason=reason, date=loan.lent_on, branch=loan.branch_id,
+                 description=f"Taken by the owner for their own loan to {loan.borrower_name}", lines=paired("3000", cash_code(loan.method), loan.amount))
+        for r in loan.repayments.filter(reversed_at__isnull=True):
+            _reclass(f"loan-repayment:{r.pk}", f"loan-repayment-own:{r.pk}", user=user, reason=reason, date=r.received_on, branch=loan.branch_id,
+                     description=f"Put back by the owner: {loan.borrower_name} repaid their own loan", lines=paired(cash_code(r.method), "3000", r.amount))
     Loan.objects.filter(pk=loan.pk).update(whose=Loan.OWN)
     audit(loan, user, f"Loan to {loan.borrower_name} moved to the owner's own money")
     loan.refresh_from_db()
     return loan
+
+
+def _reclass(old_key, new_key, *, user, reason, date, branch, description, lines):
+    journal = JournalEntry.objects.filter(source_key=old_key).first()
+    if not journal or JournalEntry.objects.filter(reversal_of=journal).exists():
+        return
+    reverse_journal(journal, user=user, reason=reason, key=f"{new_key}:undo")
+    post_journal(key=new_key, description=description[:240], branch=branch, date=date, user=user, lines=lines)
