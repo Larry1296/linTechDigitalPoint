@@ -3,10 +3,8 @@ import { useState } from "react";
 import { FormField } from "../../components/forms/FormField";
 import { FormError } from "../../components/forms/FormNotice";
 import { lookupMpesaCustomer, postMpesaTransaction } from "./api";
-import { readMpesaMessage } from "./mpesaMessage";
 import { localPhone } from "./CustomerTransactionList";
 import { CommissionBalanceField } from "./commissionBalance";
-import { TextArea } from "../../components/forms/TextBox";
 
 const transactionTypes = { CUSTOMER_DEPOSIT: { name: "deposit" }, CUSTOMER_WITHDRAWAL: { name: "withdrawal" } };
 
@@ -43,9 +41,9 @@ function BalancePreview({ deposit, cash, float, amount }) {
 const digits = (phone) => String(phone || "").replace(/\D/g, "");
 const fullNumber = (phone) => { const d = digits(phone); return (d.length === 10 && d.startsWith("0")) || (d.length === 12 && d.startsWith("254")); };
 
-// Quick to use while a customer waits: no confirmation pop-up (a mistake is fixed with Correct), a returning
-// depositor's ID fills itself in from their phone number, and a pasted M-Pesa message fills in the code, amount
-// and number, so a transaction can also be recorded after the customer has left.
+// Quick to use while a customer waits: no confirmation pop-up (a mistake is fixed with Correct). A deposit records
+// who it was for, the customer's M-Pesa number and the ID they showed, and a returning depositor's ID fills itself in
+// from their number. The M-Pesa transaction code is not asked for: the number and ID are what the agent keeps.
 export function MpesaCustomerTransactionForm({
   transactionType,
   sessionId,
@@ -56,10 +54,9 @@ export function MpesaCustomerTransactionForm({
 }) {
   const transaction = transactionTypes[transactionType];
   const isDeposit = transactionType === "CUSTOMER_DEPOSIT";
-  const blank = { phone: "", idNumber: "", amount: "", code: "", commission: "" };
+  const blank = { phone: "", idNumber: "", amount: "", commission: "" };
   const [fields, setFields] = useState(blank);
   const [known, setKnown] = useState(null);
-  const [pasted, setPasted] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,12 +72,6 @@ export function MpesaCustomerTransactionForm({
       }
     } catch { /* the operator can still type the ID */ }
   };
-  const readMessage = (text) => {
-    const read = readMpesaMessage(text);
-    setPasted({ ...read, empty: !read.code && !read.amount && !read.phone });
-    setFields((old) => ({ ...old, code: read.code || old.code, amount: read.amount || old.amount, phone: (isDeposit && read.phone) || old.phone }));
-    if (isDeposit && read.phone) void lookUp(read.phone);
-  };
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -92,17 +83,15 @@ export function MpesaCustomerTransactionForm({
         session: sessionId,
         transaction_type: transactionType,
         amount: fields.amount,
-        // A deposit may carry the customer's number and ID (both optional); a withdrawal only its amount.
-        ...(isDeposit ? { customer_phone: fields.phone, customer_id_number: fields.idNumber } : {}),
-        ...(fields.code.trim() ? { provider_reference: fields.code.trim() } : {}),
+        // A deposit carries the customer's number and ID; a withdrawal only its amount.
+        ...(isDeposit ? { customer_phone: fields.phone, customer_id_number: fields.idNumber.trim() } : {}),
         ...(fields.commission.trim() ? { commission_balance: fields.commission.trim() } : {}),
         idempotency_key: crypto.randomUUID(),
       });
       const value = `${businessCurrency()} ${Number(entry.amount).toLocaleString()}`;
-      setMessage(`Recorded ${transaction.name} of ${value}${isDeposit && entry.customer_phone ? ` to ${localPhone(entry.customer_phone)}` : ""}${entry.provider_reference ? ` (${entry.provider_reference})` : ". Add its transaction ID below once it's done"}.`);
+      setMessage(`Recorded ${transaction.name} of ${value}${isDeposit && entry.customer_phone ? ` to ${localPhone(entry.customer_phone)}` : ""}.`);
       setFields(blank);
       setKnown(null);
-      setPasted(null);
       await onPosted();
     } catch (err) {
       setError(err.message);
@@ -117,22 +106,12 @@ export function MpesaCustomerTransactionForm({
     >
       <h2>Customer {transaction.name}</h2>
       {message && <p className="success">{message}</p>}
-      <details className="pasteMessage">
-        <summary>Paste the M-Pesa message</summary>
-        <label>M-Pesa confirmation message
-          <TextArea rows={3} placeholder="Paste the message here: the transaction ID, amount and number are filled in for you"
-            onChange={(event) => readMessage(event.target.value)} />
-        </label>
-        {pasted && <p className={pasted.empty ? "formNotice formNoticeError" : "muted"} role="status">{pasted.empty
-          ? "Nothing recognisable in that message. Fill in the details below."
-          : `Found: ${[pasted.code && `transaction ID ${pasted.code}`, pasted.amount && `amount ${Number(pasted.amount).toLocaleString()}`, isDeposit && pasted.phone && `number ${pasted.phone}`].filter(Boolean).join(", ")}. Check them below.`}</p>}
-      </details>
       {isDeposit && <>
-        <FormField label="M-Pesa phone number (optional)" name="customer_phone" type="tel" inputMode="tel"
-          placeholder="e.g. 0712 345 678" autoComplete="off" autoFocus value={fields.phone}
+        <FormField label="M-Pesa phone number" name="customer_phone" type="tel" inputMode="tel"
+          placeholder="e.g. 0712 345 678" autoComplete="off" autoFocus required value={fields.phone}
           onChange={(event) => { set("phone", event.target.value); void lookUp(event.target.value); }} />
-        <FormField label="ID or passport number (optional)" name="customer_id_number" minLength={4} maxLength={20} autoComplete="off"
-          value={fields.idNumber} onChange={(event) => set("idNumber", event.target.value)} />
+        <FormField label="ID or passport number" name="customer_id_number" minLength={4} maxLength={20} autoComplete="off"
+          required value={fields.idNumber} onChange={(event) => set("idNumber", event.target.value)} />
         {known && <p className="muted returningCustomer">Returning customer: ID filled in from their last deposit ({known.visits} before).</p>}
       </>}
       <FormField
@@ -147,8 +126,6 @@ export function MpesaCustomerTransactionForm({
         value={fields.amount}
         onChange={(event) => set("amount", event.target.value)}
       />
-      <FormField label="Transaction ID (optional)" name="provider_reference" autoComplete="off" placeholder="If already done"
-        value={fields.code} onChange={(event) => set("code", event.target.value.toUpperCase())} />
       {!employee && <CommissionBalanceField sessionId={sessionId} type={transactionType} amount={fields.amount} value={fields.commission} onChange={(value) => set("commission", value)} />}
       <BalancePreview deposit={isDeposit} cash={availableCash} float={availableFloat} amount={fields.amount} />
       <button disabled={busy}>Record {transaction.name}</button>

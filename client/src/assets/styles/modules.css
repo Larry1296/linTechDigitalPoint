@@ -2433,7 +2433,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 
 /* M-Pesa deposits/withdrawals today: the Agency transactions grid with their own columns. */
 .customerLedger { margin-top: 10px; }
-.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
+.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr); }
 .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
 /* Airtime: how the customer paid, one choice per line with what it does to cash and float. */
 .airtimePaidBy { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
@@ -2441,7 +2441,7 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .airtimePaidBy small { display: block; }
 .operatorForm .airtimePaidBy input { flex: none; width: auto; min-height: 0; margin: 3px 0 0; }
 .airtimePaidBy label > span { min-width: 0; }
-.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr); }
+.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr); }
 .customerLedger > div { align-items: center; }
 .customerLedger .inlineForm { display: flex; flex-wrap: wrap; gap: 6px; }
 .customerLedger .inlineForm input, .customerLedger .inlineForm textarea.textBox { flex: 1 1 8rem; min-width: 0; }
@@ -2712,16 +2712,13 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .correctForm label { display: grid; gap: 4px; font-size: 13px; }
 .correctForm .correctReason { grid-column: 1 / -1; }
 .correctForm .actionRow { grid-column: 1 / -1; }
-.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
-.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
+.customerLedger.depositLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) auto; }
+.customerLedger.withdrawalLedger > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) auto; }
 .customerLedger.airtimeLedger > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
 /* An open correction form takes a full-width row under its transaction. */
 .table.ledgerTable > div > span:has(.correctForm) { grid-column: 1 / -1; }
 
 /* M-Pesa: paste the confirmation message to fill the form; returning customers are recognised. */
-.pasteMessage summary { cursor: pointer; font-weight: 700; color: var(--primary); }
-.pasteMessage label { display: grid; gap: 4px; margin-top: 6px; }
-.pasteMessage textarea { min-height: 70px; }
 .returningCustomer { margin: -4px 0 0; font-size: 13px; }
 
 /* Agency transactions: the same column widths on the heading row and every transaction, so they line up. */

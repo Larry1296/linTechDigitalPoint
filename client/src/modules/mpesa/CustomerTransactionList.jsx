@@ -37,8 +37,8 @@ function AddCode({ entry, onSaved }) {
   );
 }
 
-// One kind of transaction from one shift (the caller passes only that shift's), newest first: deposits with the number and ID taken to process them,
-// and each one's M-Pesa transaction ID once it is added. A closed shift's list (closed) can no longer be corrected.
+// One kind of transaction from one shift (the caller passes only that shift's), newest first: deposits with the number and ID taken to process them.
+// Airtime also shows its M-Pesa transaction ID once added; deposits and withdrawals don't ask for one. A closed shift's list (closed) can no longer be corrected.
 export function CustomerTransactionList({ title, type, transactions, onChanged, scope = "this shift", closed = false }) {
   const { user } = useAuth();
   const canCorrect = !closed && Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
@@ -65,7 +65,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
             {airtime && <b role="columnheader">Paid by</b>}
             <b role="columnheader">Commission balance</b>
             <b role="columnheader">Earned</b>
-            <b role="columnheader">Transaction ID</b>
+            {airtime && <b role="columnheader">Transaction ID</b>}
             {canCorrect && <b role="columnheader"><span className="visuallyHidden">Correct</span></b>}
           </div>
           {shown.rows.map((entry) => (
@@ -77,7 +77,7 @@ export function CustomerTransactionList({ title, type, transactions, onChanged, 
               {airtime && <span role="cell">{paidByLabel(entry.paid_by)}</span>}
               <span role="cell">{entry.commission_balance == null ? "—" : Number(entry.commission_balance).toLocaleString()}</span>
               <span role="cell" title={entry.commission_source === "learned" ? "Worked out by the app from earlier readings" : undefined}>{earnedLabel(entry)}</span>
-              <span role="cell">{entry.provider_reference || (reversed.has(entry.id) ? "—" : <AddCode entry={entry} onSaved={onChanged} />)}</span>
+              {airtime && <span role="cell">{entry.provider_reference || (reversed.has(entry.id) ? "—" : <AddCode entry={entry} onSaved={onChanged} />)}</span>}
               {canCorrect && <span role="cell">{!reversed.has(entry.id) && <CorrectTransaction entry={entry} onDone={onChanged} />}</span>}
             </div>
           ))}

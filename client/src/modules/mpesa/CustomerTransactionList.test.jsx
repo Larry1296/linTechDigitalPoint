@@ -1,17 +1,15 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 vi.mock("./api", () => ({ addMpesaReference: vi.fn(async () => ({})), correctMpesaTransaction: vi.fn() }));
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: [] } }) }));
-import { addMpesaReference } from "./api";
 import { CustomerTransactionList, localPhone } from "./CustomerTransactionList";
 
 const now = new Date().toISOString();
 const deposit = (id, name, extra = {}) => ({ id, transaction_type: "CUSTOMER_DEPOSIT", occurred_at: now, amount: "2500.00", customer_name: name,
   customer_phone: "254712345678", customer_id_number: "12345678", provider_reference: null, reversal_of: null, ...extra });
 
-it("lists today's deposits with number and ID, and the transaction ID is added afterwards", async () => {
-  const changed = vi.fn();
-  render(<CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" onChanged={changed} transactions={[
+it("lists today's deposits with the number and ID, without a transaction ID", () => {
+  render(<CustomerTransactionList title="Deposits" type="CUSTOMER_DEPOSIT" onChanged={vi.fn()} transactions={[
     deposit(2, ""),
     deposit(1, "", { provider_reference: "SJK4ABC123" }),
     { ...deposit(3, ""), transaction_type: "CUSTOMER_WITHDRAWAL" },
@@ -19,18 +17,14 @@ it("lists today's deposits with number and ID, and the transaction ID is added a
   expect(screen.getByRole("heading", { name: "Deposits this shift (2)" })).toBeInTheDocument();
   expect(screen.getAllByRole("row")[1]).toHaveTextContent("0712 345 678");
   expect(screen.getAllByRole("row")[1]).toHaveTextContent("12345678");
-  expect(screen.getByText("SJK4ABC123")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Add transaction ID" }));
-  fireEvent.change(screen.getByLabelText(/Transaction ID for the 2,500/), { target: { value: "QWE123RTY" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(changed).toHaveBeenCalled());
-  expect(addMpesaReference).toHaveBeenCalledWith(2, "QWE123RTY");
+  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "M-Pesa number", "ID number", "Amount", "Commission balance", "Earned"]);
+  expect(screen.queryByRole("button", { name: "Add transaction ID" })).not.toBeInTheDocument();
 });
 
 it("lists withdrawals by time, amount and the commission balance read after each", () => {
   render(<CustomerTransactionList title="Withdrawals" type="CUSTOMER_WITHDRAWAL" onChanged={vi.fn()} transactions={[
     { ...deposit(4, ""), transaction_type: "CUSTOMER_WITHDRAWAL", customer_phone: "", customer_id_number: "" }]} />);
-  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Commission balance", "Earned", "Transaction ID"]);
+  expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Time", "Amount", "Commission balance", "Earned"]);
 });
 
 it("shows numbers the way customers say them", () => {

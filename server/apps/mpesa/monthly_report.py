@@ -200,14 +200,14 @@ def render_pdf(data, organization):
         topups = [t for t in rows if t.transaction_type == "FLOAT_TOPUP"]
         others = [t for t in rows if t.transaction_type not in {"CUSTOMER_DEPOSIT", "CUSTOMER_WITHDRAWAL", "AIRTIME_SALE", "FLOAT_TOPUP"}]
         story += [section(f"Deposits ({len(deposits)}) — total {_money(total(deposits))}",
-                  table([["Time", "M-Pesa number", "ID number", "Amount", "Transaction ID", "Note"]] +
+                  table([["Time", "M-Pesa number", "ID number", "Amount", "Note"]] +
                         [[_time(t.occurred_at), _phone(t.customer_phone), t.customer_id_number, _money(t.amount),
-                          t.provider_reference or "", note(t)] for t in deposits], [16, 32, 28, 26, 36, 24], numeric=(3,))
+                          note(t)] for t in deposits], [16, 36, 32, 28, 46], numeric=(3,))
                   if deposits else Paragraph("None.", small))]
         story += [section(f"Withdrawals ({len(withdrawals)}) — total {_money(total(withdrawals))}",
-                  table([["Time", "Amount", "Transaction ID", "Note"]] +
-                        [[_time(t.occurred_at), _money(t.amount), t.provider_reference or "", note(t)] for t in withdrawals],
-                        [16, 26, 36, 24], numeric=(1,)) if withdrawals else Paragraph("None.", small))]
+                  table([["Time", "Amount", "Note"]] +
+                        [[_time(t.occurred_at), _money(t.amount), note(t)] for t in withdrawals],
+                        [16, 26, 60], numeric=(1,)) if withdrawals else Paragraph("None.", small))]
         if airtime:
             story += [section(f"Airtime sold ({len(airtime)}) — total {_money(total(airtime))}",
                       table([["Time", "Sent to", "Amount", "Paid by", "Transaction ID", "Note"]] +
