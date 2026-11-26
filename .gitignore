@@ -25,7 +25,7 @@ server/staticfiles/
 server/media/
 
 # React / JavaScript client
-client/node_modules/
+node_modules/
 client/dist/
 client/.vite/
 playwright-report/
