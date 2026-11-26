@@ -108,10 +108,10 @@ export function MpesaCustomerTransactionForm({
       {message && <p className="success">{message}</p>}
       {isDeposit && <>
         <FormField label="M-Pesa phone number" name="customer_phone" type="tel" inputMode="tel"
-          placeholder="e.g. 0712 345 678" autoComplete="off" autoFocus required value={fields.phone}
+          placeholder="e.g. 0712 345 678" autoComplete="off" autoFocus value={fields.phone}
           onChange={(event) => { set("phone", event.target.value); void lookUp(event.target.value); }} />
         <FormField label="ID or passport number" name="customer_id_number" minLength={4} maxLength={20} autoComplete="off"
-          required value={fields.idNumber} onChange={(event) => set("idNumber", event.target.value)} />
+          value={fields.idNumber} onChange={(event) => set("idNumber", event.target.value)} />
         {known && <p className="muted returningCustomer">Returning customer: ID filled in from their last deposit ({known.visits} before).</p>}
       </>}
       <FormField

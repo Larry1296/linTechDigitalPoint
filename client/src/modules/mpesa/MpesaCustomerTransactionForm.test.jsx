@@ -30,10 +30,10 @@ it("records a deposit straight away, with no confirmation pop-up", async () => {
   expect(screen.getByText(/Recorded deposit of KSh 100 to 0712 345 678/)).toBeInTheDocument();
 });
 
-it("a deposit needs the customer's number and ID, and no transaction ID", () => {
+it("a deposit takes the customer's number and ID, both optional, and no transaction ID", () => {
   render(<MpesaDepositForm sessionId={4} onPosted={vi.fn()} />);
-  expect(screen.getByLabelText("M-Pesa phone number")).toBeRequired();
-  expect(screen.getByLabelText("ID or passport number")).toBeRequired();
+  expect(screen.getByLabelText("M-Pesa phone number")).not.toBeRequired();
+  expect(screen.getByLabelText("ID or passport number")).not.toBeRequired();
   expect(screen.queryByLabelText(/Transaction ID/)).not.toBeInTheDocument();
   expect(screen.queryByText("Paste the M-Pesa message")).not.toBeInTheDocument();
 });
