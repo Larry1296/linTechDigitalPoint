@@ -173,3 +173,26 @@ it("still takes one total for several phones when M-KOPA's statement gives only 
   fireEvent.click(within(form).getByRole("button", { name: "Record commission" }));
   await waitFor(() => expect(posted()).toMatchObject({ amount: "2700", sales: [1, 2] }));
 });
+
+const round = { id: 7, given_on: "2026-11-10", return_by: "2026-11-20", cleared_on: null, open: true, notes: "", carried: 0, given: 3, had: 3, sold: 1,
+  returned: 0, kept: 0, sold_share: 33, days: 16, commission: "1200", paid_phones: 0, commission_paid: "0",
+  lines: [{ phone_id: 1, phone: "X30", carried: 0, given: 3, sold: 1, returned: 0, kept: 0 }] };
+
+it("shows the stock with you, overdue once its return date passes, and clears the unsold phones with the next stock given at the same visit", async () => {
+  api.mockImplementation(async (path, options) => (options?.method ? {} : reply(path, { ...owner, rounds: [round], round_days: 10, today: "2026-11-23" })));
+  permissions = [...permissions];
+  render(<MkopaPage />);
+  const now = await screen.findByRole("region", { name: "Stock with you now" });
+  expect(within(now).getByText("3 days overdue")).toBeInTheDocument();
+  expect(within(now).getByText(/1 of 3/)).toBeInTheDocument();
+  fireEvent.click(within(now).getByRole("button", { name: "Clear unsold stock" }));
+  const form = screen.getByRole("form", { name: "Clear unsold stock" });
+  expect(within(form).getByLabelText("X30 (2 unsold)")).toHaveValue(2);
+  fireEvent.change(within(form).getByLabelText("X30: how many new"), { target: { value: "6" } });
+
+  fireEvent.click(within(form).getByRole("button", { name: "Clear stock" }));
+
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/v1/mkopa/rounds/7/clear/", expect.objectContaining({ method: "POST" })));
+  const body = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/mkopa/rounds/7/clear/")[1].body);
+  expect(body).toMatchObject({ returned: { 1: 2 }, next_stock: { 1: 6 } });
+});

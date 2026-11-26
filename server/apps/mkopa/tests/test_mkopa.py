@@ -229,3 +229,65 @@ def test_phones_sold_come_a_page_at_a_time_newest_first():
     last = client.get("/api/v1/mkopa/sales/?page=9&page_size=10").json()  # past the end: the last page
     assert last["page"] == 2 and [s["customer_name"] for s in last["results"]] == ["Customer 1", "Customer 0"]
     assert overview(client)["sold"] == 12
+
+
+def test_stock_comes_in_rounds_returned_by_a_date_cleared_when_time_is_up_and_the_next_stock_given_then():
+    from datetime import date, timedelta
+    from django.utils import timezone
+    org, client = business()
+    client.post("/api/v1/mkopa/phones/", X30, format="json")
+    client.post("/api/v1/mkopa/phones/", {"name": "X4", "plans": [{"deposit": "2999", "daily_payment": "60", "days": 365}]}, format="json")
+    phones = {p["name"]: p for p in overview(client)["phones"]}
+    x30, x4 = phones["X30"], phones["X4"]
+    start = timezone.localdate() - timedelta(days=12)
+    given = client.post("/api/v1/mkopa/rounds/", {"phones": {x30["id"]: 5, x4["id"]: 3}, "given_on": start, "idempotency_key": key()}, format="json")
+    assert given.status_code == 201, given.content
+    assert given.json()["return_by"] == str(start + timedelta(days=10)) and given.json()["had"] == 8
+    # Another delivery while the round is open belongs to it; a second open round is impossible.
+    client.post("/api/v1/mkopa/rounds/", {"phones": {x4["id"]: 1}, "given_on": start + timedelta(days=1), "idempotency_key": key()}, format="json")
+    for _ in range(3):
+        assert client.post("/api/v1/mkopa/sales/", {"plan": x30["plans"][0]["id"], "customer_name": "Wanjiru", "sold_on": start + timedelta(days=2),
+                                                    "idempotency_key": key()}, format="json").status_code == 201
+    data = overview(client)
+    rnd = data["rounds"][0]
+    assert len(data["rounds"]) == 1 and rnd["open"] and rnd["given"] == 9 and rnd["sold"] == 3 and rnd["sold_share"] == 33
+    assert Decimal(rnd["commission"]) == Decimal("3600")
+    # Clearing: too many back is refused; give back 2 X30 (keep none) and 3 X4 (keep 1), and M-KOPA gives more at the same visit.
+    too_many = client.post(f"/api/v1/mkopa/rounds/{rnd['id']}/clear/", {"returned": {x30["id"]: 3}, "idempotency_key": key()}, format="json")
+    assert too_many.status_code == 400 and "in hand" in str(too_many.json())
+    cleared = client.post(f"/api/v1/mkopa/rounds/{rnd['id']}/clear/", {"returned": {x30["id"]: 2, x4["id"]: 3},
+                          "next_stock": {x30["id"]: 8}, "idempotency_key": key()}, format="json")
+    assert cleared.status_code == 200, cleared.content
+    data = overview(client)
+    new, old = data["rounds"]
+    assert not old["open"] and old["returned"] == 5 and old["kept"] == 1 and old["cleared_on"] == str(timezone.localdate())
+    assert new["open"] and new["given"] == 8 and new["carried"] == 1 and new["had"] == 9
+    assert new["return_by"] == str(timezone.localdate() + timedelta(days=10))
+    in_hand = {p["name"]: p["in_hand"] for p in data["phones"]}
+    assert in_hand == {"X30": 8, "X4": 1}
+    # Commission is untouched: the phones sold in the old round are still owed and are paid as usual.
+    assert data["summary"]["unpaid_phones"] == 3
+    paid = client.post("/api/v1/mkopa/commission/", {"amount": "3600", "method": "MPESA", "idempotency_key": key()}, format="json")
+    assert paid.status_code == 201 and overview(client)["rounds"][1]["paid_phones"] == 3
+    # A sale now comes from the new stock; the old clearing cannot be undone once newer stock was given.
+    client.post("/api/v1/mkopa/sales/", {"plan": x30["plans"][1]["id"], "customer_name": "Otieno", "idempotency_key": key()}, format="json")
+    assert overview(client)["rounds"][0]["sold"] == 1
+    refused = client.post(f"/api/v1/mkopa/rounds/{old['id']}/reopen/", {"reason": "mistake"}, format="json")
+    assert refused.status_code == 400
+
+
+def test_clearing_by_mistake_is_undone_and_the_phones_are_in_hand_again():
+    from datetime import timedelta
+    from django.utils import timezone
+    org, client = business()
+    client.post("/api/v1/mkopa/phones/", X30, format="json")
+    x30 = overview(client)["phones"][0]
+    client.post("/api/v1/mkopa/stock/", {"phone": x30["id"], "quantity": 4, "kind": "RECEIVED", "idempotency_key": key()}, format="json")
+    rnd = overview(client)["rounds"][0]  # phones received with no round open start one, to return in ten days
+    assert rnd["return_by"] == str(timezone.localdate() + timedelta(days=10))
+    assert client.patch(f"/api/v1/mkopa/rounds/{rnd['id']}/", {"return_by": timezone.localdate() + timedelta(days=7)}, format="json").status_code == 200
+    client.post(f"/api/v1/mkopa/rounds/{rnd['id']}/clear/", {"returned": {x30["id"]: 4}, "idempotency_key": key()}, format="json")
+    assert overview(client)["phones"][0]["in_hand"] == 0
+    assert client.post(f"/api/v1/mkopa/rounds/{rnd['id']}/reopen/", {"reason": "cleared too early"}, format="json").status_code == 200
+    data = overview(client)
+    assert data["phones"][0]["in_hand"] == 4 and data["rounds"][0]["open"] and data["rounds"][0]["return_by"] == str(timezone.localdate() + timedelta(days=7))

@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from apps.core.permissions import HasLinTechPermission
 from apps.tenancy.permissions import has_business_permission
 from . import services
-from .models import MkopaCommission, MkopaPhone, MkopaPlan, MkopaSale, MkopaStock
+from .models import MkopaCommission, MkopaPhone, MkopaPlan, MkopaRound, MkopaSale, MkopaStock
 
 MONEY = "mkopa.view_mkopacommission"
 
@@ -81,7 +81,7 @@ def sale_row(sale, money):
 
 
 def stock_row(move):
-    return {"id": move.pk, "phone": move.phone.name, "quantity": move.quantity, "moved_on": move.moved_on, "notes": move.notes,
+    return {"id": move.pk, "round_id": move.round_id, "clearing": move.clearing, "phone": move.phone.name, "quantity": move.quantity, "moved_on": move.moved_on, "notes": move.notes,
             "recorded_by": _name(move.created_by), "reversed_at": move.reversed_at, "reverse_reason": move.reverse_reason}
 
 
@@ -92,6 +92,15 @@ def commission_row(payment):
                            for sale in sorted(phones, key=lambda sale: (sale.sold_on, sale.pk))], "amount": payment.amount, "paid_on": payment.paid_on, "method": payment.method,
             "method_name": services.METHODS.get(payment.method, payment.method), "reference": payment.reference, "notes": payment.notes,
             "recorded_by": _name(payment.created_by), "reversed_at": payment.reversed_at, "reverse_reason": payment.reverse_reason}
+
+
+def rounds(money, limit=30):
+    rows = services.round_rows(MkopaRound.objects.order_by("-given_on", "-pk")[:limit])
+    if not money:
+        for row in rows:
+            for field in ("commission", "commission_paid", "paid_phones"):
+                row.pop(field)
+    return rows
 
 
 class OverviewView(APIView):
@@ -108,6 +117,7 @@ class OverviewView(APIView):
                 # Phones sold grow every day: the page reads them a page at a time from GET /mkopa/sales/?page=N.
                 "sold": MkopaSale.objects.filter(reversed_at__isnull=True).count(),
                 "stock": [stock_row(move) for move in MkopaStock.objects.select_related("phone", "created_by")[:200]],
+                "rounds": rounds(money), "round_days": services.ROUND_DAYS, "today": timezone.localdate(),
                 "can_see_money": money, "methods": list(services.METHODS.items()),
                 "can_set_up": has_business_permission(request.user, "mkopa.change_mkopaphone"),
                 "can_undo": has_business_permission(request.user, "mkopa.change_mkopasale")}
@@ -274,3 +284,71 @@ class CommissionUndoView(APIView):
     def post(self, request, pk):
         payment = services.undo_commission(user=request.user, payment=get_object_or_404(MkopaCommission, pk=pk), reason=request.data.get("reason"))
         return Response(commission_row(payment))
+
+
+class Counts(serializers.DictField):
+    child = serializers.IntegerField(min_value=0, max_value=10000)
+
+
+class GiveInput(serializers.Serializer):
+    phones = Counts()
+    given_on = serializers.DateField(required=False, allow_null=True)
+    return_by = serializers.DateField(required=False, allow_null=True)
+    notes = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(max_length=90)
+
+
+class RoundsView(APIView):
+    """Stock M-KOPA gave: more phones for the round now open, or a new round to sell until its return date."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "mkopa.add_mkopastock"
+
+    def post(self, request):
+        form = GiveInput(data=request.data)
+        form.is_valid(raise_exception=True)
+        d = form.validated_data
+        rnd = services.give_stock(user=request.user, phones=d["phones"], given_on=d.get("given_on"), return_by=d.get("return_by"),
+                                  notes=d["notes"], key=d["idempotency_key"])
+        return Response(rounds(has_business_permission(request.user, MONEY), limit=1)[0] if rnd else {}, status=201)
+
+
+class ClearInput(serializers.Serializer):
+    returned = Counts()
+    cleared_on = serializers.DateField(required=False, allow_null=True)
+    notes = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+    next_stock = Counts(required=False, allow_null=True, default=None)
+    next_return_by = serializers.DateField(required=False, allow_null=True)
+    idempotency_key = serializers.CharField(max_length=90)
+
+
+class RoundClearView(APIView):
+    """The round's time is up: the unsold phones go back to M-KOPA, and the next stock may be given at the same visit."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "mkopa.add_mkopastock"
+
+    def post(self, request, pk):
+        form = ClearInput(data=request.data)
+        form.is_valid(raise_exception=True)
+        d = form.validated_data
+        services.clear_round(user=request.user, rnd=get_object_or_404(MkopaRound, pk=pk), returned=d["returned"], cleared_on=d.get("cleared_on"),
+                             notes=d["notes"], key=d["idempotency_key"], next_stock=d["next_stock"], next_return_by=d.get("next_return_by"))
+        return Response({"rounds": rounds(has_business_permission(request.user, MONEY), limit=2)})
+
+
+class RoundReopenView(APIView):
+    permission_classes = [HasLinTechPermission]
+    permission_required = "mkopa.change_mkopastock"
+
+    def post(self, request, pk):
+        services.reopen_round(user=request.user, rnd=get_object_or_404(MkopaRound, pk=pk), reason=request.data.get("reason"))
+        return Response({"ok": True})
+
+
+class RoundView(APIView):
+    permission_classes = [HasLinTechPermission]
+    permission_required = "mkopa.change_mkopastock"
+
+    def patch(self, request, pk):
+        day = serializers.DateField().to_internal_value(request.data.get("return_by"))
+        services.change_round(user=request.user, rnd=get_object_or_404(MkopaRound, pk=pk), return_by=day)
+        return Response({"ok": True})

@@ -40,6 +40,8 @@ const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":
 export async function askForm({ title, text, fields, confirmButtonText = "Save" }) {
   const control = (field, id) => field.type === "select"
     ? `<select id="${id}" class="swal2-select">${field.options.map(([value, name]) => `<option value="${escape(value)}"${value === field.value ? " selected" : ""}>${escape(name)}</option>`).join("")}</select>`
+    : field.type === "date"
+    ? `<input id="${id}" class="swal2-input" type="date"${field.min ? ` min="${escape(field.min)}"` : ""} value="${escape(field.value)}">`
     : field.type === "password"
     ? `<input id="${id}" class="swal2-input" type="password" autocomplete="off" maxlength="240" placeholder="${escape(field.placeholder)}">`
     : `<input id="${id}" class="swal2-input" type="${field.type === "number" ? "number" : "text"}"${field.type === "number" ? ` step="0.01" min="${escape(field.min ?? "0.01")}"${field.max !== undefined ? ` max="${escape(field.max)}"` : ""} inputmode="decimal"` : ' maxlength="240"'} placeholder="${escape(field.placeholder)}" value="${escape(field.value)}">`;

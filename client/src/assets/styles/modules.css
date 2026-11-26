@@ -3660,3 +3660,15 @@ a.notInvested.soldTotal:hover, a.notInvested.soldTotal:focus-visible { border-co
   .barcodeLabel span { font-size: 9pt; font-weight: 700; }
   .barcodeLabel .barcodeSvg { width: 100%; height: 100%; min-height: 0; }
 }
+
+/* M-KOPA stock rounds: the stock with you now, with its return date, and the boxes for how many of each phone. */
+.mkopaNow { border-left: 4px solid var(--primary); }
+.mkopaNow.soon { border-left-color: var(--warning, #b45309); }
+.mkopaNow.due { border-left-color: var(--danger, #b42318); }
+.mkopaPill.late { color: var(--danger, #b42318); background: color-mix(in srgb, var(--danger, #b42318) 14%, transparent); }
+.mkopaNowFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 10px 16px; margin: 0 0 12px; }
+.mkopaNowFacts dt { color: var(--muted); font-size: 13px; font-weight: 600; }
+.mkopaNowFacts dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 2px 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mkopaNow .actionRow { margin-top: 12px; }
+.mkopaCountFields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 10px 12px; margin: 4px 0 8px; }
+.mkopaCheck { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-weight: 600; }

@@ -219,17 +219,104 @@ function SellForm({ phones, seeMoney, onSaved, onCancel }) {
   );
 }
 
-// Phones M-KOPA handed you, or that you gave back. They stay M-KOPA's, so they are counted here and not in your stock.
-function StockForm({ phones, onSaved, onCancel }) {
+const addDays = (day, n) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + Number(n)); return d.toLocaleDateString("en-CA"); };
+const daysBetween = (from, to) => Math.round((new Date(`${to}T12:00:00`) - new Date(`${from}T12:00:00`)) / 86400000);
+// How long the stock still has: "6 days left", "Due back today", "3 days overdue".
+export const dueWords = (returnBy, onDay) => {
+  const left = daysBetween(onDay, returnBy);
+  if (left > 0) return { text: `${count(left, "day")} left`, tone: left <= 2 ? "soon" : "" };
+  if (left === 0) return { text: "Due back today", tone: "due" };
+  return { text: `${count(-left, "day")} overdue`, tone: "due" };
+};
+
+// One number box per phone model, for how many M-KOPA gave or how many go back.
+function CountFields({ phones, values, onChange, label, max }) {
+  return (
+    <div className="mkopaCountFields">{phones.map((phone) => (
+      <FormField key={phone.id} label={label(phone)} type="number" min="0" step="1" inputMode="numeric" max={max ? max(phone) : undefined}
+        value={values[phone.id] ?? ""} placeholder="0" onChange={(event) => onChange({ ...values, [phone.id]: event.target.value })} />))}
+    </div>
+  );
+}
+const total = (values) => Object.values(values).reduce((sum, n) => sum + (Number(n) || 0), 0);
+const numbers = (values) => Object.fromEntries(Object.entries(values).filter(([, n]) => Number(n) > 0).map(([id, n]) => [id, Number(n)]));
+
+// Stock M-KOPA gave you: a new round to sell until its return date (ten days unless M-KOPA said otherwise), or more
+// phones for the round you have now. They stay M-KOPA's, so they are not your stock and do not change your money.
+function GiveStockForm({ phones, current, days, onSaved, onCancel }) {
+  const selling = phones.filter((phone) => phone.active);
+  const [counts, setCounts] = useState({});
+  const [givenOn, setGivenOn] = useState(today());
+  const [returnBy, setReturnBy] = useState(current ? current.return_by : addDays(today(), days));
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pieces = total(counts);
   const submit = async (event) => {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const notes = new FormData(event.currentTarget).get("notes") || "";
     setBusy(true);
     setError("");
     try {
-      await api("/api/v1/mkopa/stock/", { method: "POST", body: JSON.stringify({ ...values, phone: Number(values.phone), quantity: Number(values.quantity),
+      await api("/api/v1/mkopa/rounds/", { method: "POST", body: JSON.stringify({ phones: numbers(counts), given_on: givenOn, return_by: returnBy, notes, idempotency_key: crypto.randomUUID() }) });
+      await onSaved();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Stock from M-KOPA">
+      <h2>{current ? "More phones for this stock" : "Stock M-KOPA gave you"}</h2>
+      <p className="muted">{current ? `They join the stock given on ${date(current.given_on)}, to return by ${date(current.return_by)}.`
+        : `Sell them until the return date; then clear the unsold ones and M-KOPA gives you the next stock.`}</p>
+      <fieldset disabled={busy}>
+        <CountFields phones={selling} values={counts} onChange={setCounts} label={(phone) => `${phone.name}: how many`} />
+      </fieldset>
+      <fieldset disabled={busy} className="loanFields">
+        <FormField label="Date given" type="date" min={current?.given_on} max={today()} value={givenOn} required
+          onChange={(event) => { setGivenOn(event.target.value); if (!current && !touched) setReturnBy(addDays(event.target.value, days)); }} />
+        <FormField label="Return the unsold ones by" type="date" min={current?.given_on || givenOn} value={returnBy} required
+          onChange={(event) => { setReturnBy(event.target.value); setTouched(true); }} />
+        <FormField label="Note (optional)" name="notes" maxLength={300} autoComplete="off" placeholder="e.g. 5 more X30 for selling well" />
+      </fieldset>
+      {returnBy && givenOn && <p className="muted">{count(daysBetween(current?.given_on || givenOn, returnBy), "day")} to sell them.</p>}
+      <div className="actionRow">
+        <button disabled={busy || !pieces}>{pieces ? `Add ${count(pieces, "phone")}` : "Add phones"}</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      <FormError title="Could not save the stock." message={error} />
+    </form>
+  );
+}
+
+// The round's time is up: the unsold phones go back to M-KOPA. Any not given back stay with you and carry on into the
+// next stock. M-KOPA usually gives the next stock at the same visit, more or fewer phones depending on how this one sold.
+// Commission is not touched: every phone sold keeps earning what M-KOPA pays for it.
+function ClearForm({ round, phones, days, onSaved, onCancel }) {
+  const held = phones.filter((phone) => phone.in_hand > 0);
+  const [back, setBack] = useState(() => Object.fromEntries(held.map((phone) => [phone.id, String(phone.in_hand)])));
+  const [clearedOn, setClearedOn] = useState(today());
+  const [more, setMore] = useState(true);
+  const [next, setNext] = useState({});
+  const [nextBy, setNextBy] = useState(addDays(today(), days));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const returning = total(back);
+  const kept = held.reduce((sum, phone) => sum + Math.max(phone.in_hand - (Number(back[phone.id]) || 0), 0), 0);
+  const nextCount = more ? total(next) : 0;
+  const tooMany = held.find((phone) => (Number(back[phone.id]) || 0) > phone.in_hand);
+  const submit = async (event) => {
+    event.preventDefault();
+    const notes = new FormData(event.currentTarget).get("notes") || "";
+    if (!(await confirmAction({ title: `Clear the stock given on ${date(round.given_on)}?`,
+      text: `${returning ? `${count(returning, "phone")} given back to M-KOPA` : "No phones given back"}${kept ? `, ${kept} kept and carried on` : ""}.`
+        + `${nextCount ? ` Then ${count(nextCount, "new phone")} given, to return by ${date(nextBy)}.` : ""} Commission on the phones sold is not touched.`,
+      confirmButtonText: "Clear stock" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/v1/mkopa/rounds/${round.id}/clear/`, { method: "POST", body: JSON.stringify({ returned: numbers(back), cleared_on: clearedOn, notes, ...(nextCount ? { next_stock: numbers(next), next_return_by: nextBy } : {}),
         idempotency_key: crypto.randomUUID() }) });
       await onSaved();
     } catch (err) {
@@ -238,26 +325,96 @@ function StockForm({ phones, onSaved, onCancel }) {
     }
   };
   return (
-    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Phones received">
-      <h2>Phones from M-KOPA</h2>
-      <fieldset disabled={busy} className="loanFields">
-        <FormField label="What happened">
-          <select name="kind" defaultValue="RECEIVED"><option value="RECEIVED">M-KOPA gave me phones</option><option value="RETURNED">I gave phones back</option></select>
-        </FormField>
-        <FormField label="Phone">
-          <select name="phone">{phones.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.in_hand} in hand)</option>)}</select>
-        </FormField>
-        <FormField label="How many" name="quantity" type="number" min="1" step="1" required defaultValue="1" />
-        <FormField label="Date" name="moved_on" type="date" max={today()} defaultValue={today()} required />
-        <FormField label="Note (optional)" name="notes" maxLength={300} autoComplete="off" />
+    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Clear unsold stock">
+      <h2>Clear unsold stock</h2>
+      <p className="muted">Stock given on {date(round.given_on)}: {count(round.sold, "phone")} sold out of {round.had}{round.sold_share != null ? ` (${round.sold_share}%)` : ""}.
+        The phones not sold go back to M-KOPA. Keep any M-KOPA lets you keep: they carry on into the next stock.</p>
+      <fieldset disabled={busy} className="mkopaCovers">
+        <legend>Given back to M-KOPA</legend>
+        {held.length ? <CountFields phones={held} values={back} onChange={setBack} max={(phone) => phone.in_hand}
+          label={(phone) => `${phone.name} (${phone.in_hand} unsold)`} /> : <p className="muted">Every phone was sold: nothing to give back.</p>}
+        {kept > 0 && <p className="muted">{count(kept, "phone")} kept with you.</p>}
       </fieldset>
-      <p className="muted">The phones are M-KOPA's until customers pay them off, so they are not your stock and do not change your money.</p>
+      <fieldset disabled={busy} className="loanFields">
+        <FormField label="Date cleared" type="date" min={round.given_on} max={today()} value={clearedOn} required
+          onChange={(event) => { setClearedOn(event.target.value); setNextBy(addDays(event.target.value, days)); }} />
+        <FormField label="Note (optional)" name="notes" maxLength={300} autoComplete="off" placeholder="e.g. what M-KOPA said about sales and payments" />
+      </fieldset>
+      <fieldset disabled={busy} className="mkopaCovers">
+        <legend>The next stock</legend>
+        <label className="mkopaCheck"><input type="checkbox" checked={more} onChange={(event) => setMore(event.target.checked)} /> M-KOPA gave me new stock now</label>
+        {more && <>
+          <CountFields phones={phones.filter((phone) => phone.active)} values={next} onChange={setNext} label={(phone) => `${phone.name}: how many new`} />
+          <div className="loanFields"><FormField label="Return the unsold ones by" type="date" min={clearedOn} value={nextBy} required
+            onChange={(event) => setNextBy(event.target.value)} /></div>
+          {!nextCount && <p className="muted">Type how many of each M-KOPA gave you, or untick this to record the new stock later.</p>}
+        </>}
+      </fieldset>
       <div className="actionRow">
-        <button disabled={busy}>Save</button>
+        <button disabled={busy || Boolean(tooMany) || (more && !nextCount)}>Clear stock</button>
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
-      <FormError title="Could not save." message={error} />
+      {tooMany && <p className="formNotice formNoticeError">You have only {tooMany.in_hand} {tooMany.name} unsold.</p>}
+      <FormError title="Could not clear the stock." message={error} />
     </form>
+  );
+}
+
+// The stock with you now: when it was given, when the unsold phones go back, and how it is selling, model by model.
+function StockNow({ round, today: onDay, phones, seeMoney, canClear, canChange, onClear, onMore, onReturnBy }) {
+  const due = dueWords(round.return_by, onDay);
+  const inHand = Object.fromEntries(phones.map((phone) => [phone.id, phone.in_hand]));
+  return (
+    <Card id="mkopa-now-heading" title="Stock with you now" className={`mkopaNow ${due.tone}`}
+      aside={<span className={`mkopaPill ${due.tone === "due" ? "late" : due.tone === "soon" ? "unknown" : "due"}`}>{due.text}</span>}>
+      <dl className="mkopaNowFacts">
+        <div><dt>Given</dt><dd>{date(round.given_on)}</dd></div>
+        <div><dt>Return unsold by</dt><dd>{date(round.return_by)}{canChange && <button type="button" className="linkButton mkopaLink" onClick={onReturnBy}>Change</button>}</dd></div>
+        <div><dt>Sold so far</dt><dd>{round.sold} of {round.had}{round.sold_share != null ? ` · ${round.sold_share}%` : ""}</dd></div>
+        {seeMoney && <div><dt>Commission from it</dt><dd>{money(round.commission)}</dd></div>}
+      </dl>
+      {due.tone === "due" && <p className="formNotice formNoticeError">Time is up: clear the unsold phones with M-KOPA and record the new stock it gives you.</p>}
+      {round.lines.length > 0 && <div className="mkopaTableWrap"><table className="mkopaTable">
+        <thead><tr><th scope="col">Phone</th>{round.carried > 0 && <th scope="col" className="num">Kept from before</th>}<th scope="col" className="num">Given</th>
+          <th scope="col" className="num">Sold</th><th scope="col" className="num">Unsold in hand</th></tr></thead>
+        <tbody>{round.lines.map((line) => (
+          <tr key={line.phone_id}><th scope="row">{line.phone}</th>{round.carried > 0 && <td className="num">{line.carried}</td>}<td className="num">{line.given}</td>
+            <td className="num">{line.sold}</td><td className="num">{inHand[line.phone_id] ?? 0}</td></tr>))}</tbody>
+      </table></div>}
+      {canClear && <div className="actionRow">
+        <button type="button" onClick={onClear}>Clear unsold stock</button>
+        <button type="button" className="secondary" onClick={onMore}>More phones for this stock</button>
+      </div>}
+    </Card>
+  );
+}
+
+// Every round of stock: how long it ran, what you had, sold, gave back and kept, and how well it sold, which is what
+// M-KOPA looks at to decide the next stock.
+function Rounds({ rounds, seeMoney, canUndo, onUndo }) {
+  const pages = usePages(rounds);
+  return (
+    <Card id="mkopa-rounds-heading" title="Stock rounds" className="mkopaQuiet" aside={<span className="muted">{count(rounds.length, "round")}</span>}>
+      <div className="mkopaTableWrap"><table className="mkopaTable">
+        <thead><tr><th scope="col">Given</th><th scope="col">Cleared</th><th scope="col" className="num">Had</th><th scope="col" className="num">Sold</th>
+          <th scope="col" className="num">Given back</th><th scope="col" className="num">Kept</th>
+          {seeMoney && <th scope="col" className="num">Commission</th>}{canUndo && <th scope="col" className="actions"><span className="visuallyHidden">Actions</span></th>}</tr></thead>
+        <tbody>{pages.rows.map((round) => (
+          <tr key={round.id}>
+            <td><Two main={date(round.given_on)} sub={`Return by ${date(round.return_by)}`} /></td>
+            <td><Two main={round.open ? <span className="mkopaPill due">With you now</span> : date(round.cleared_on)}
+              sub={`${count(round.days, "day")}${round.notes ? ` · ${round.notes}` : ""}`} /></td>
+            <td className="num"><Two main={round.had} sub={round.carried ? `${round.carried} kept from before` : ""} /></td>
+            <td className="num"><Two main={round.sold} sub={round.sold_share != null ? `${round.sold_share}% sold` : ""} /></td>
+            <td className="num">{round.open ? "—" : round.returned}</td>
+            <td className="num">{round.open ? "—" : round.kept}</td>
+            {seeMoney && <td className="num"><Two main={money(round.commission)} sub={round.sold ? `${round.paid_phones} of ${round.sold} paid` : ""} /></td>}
+            {canUndo && <td className="actions">{!round.open && round.id === rounds[0].id && <button type="button" className="secondary mkopaSmall"
+              onClick={() => onUndo(round)}>Undo clearing</button>}</td>}
+          </tr>))}</tbody>
+      </table></div>
+      <Pager {...pages} noun="rounds" />
+    </Card>
   );
 }
 
@@ -459,7 +616,7 @@ export function MkopaPage() {
   const { user } = useAuth();
   const [data, setData] = useState();
   const [error, setError] = useState("");
-  const [open, setOpen] = useState(null);  // which form: sell, stock, commission, phone, or a phone being changed
+  const [open, setOpen] = useState(null);  // which form: sell, give (stock), clear, commission, phone, or a phone being changed
   const [problem, setProblem] = useState("");
   const [payFor, setPayFor] = useState(null);  // one phone sold whose commission is being recorded from its row
   // Phones sold grow every day, so they come from the server a page at a time; each reload of the page reloads its page too.
@@ -500,6 +657,20 @@ export function MkopaPage() {
   const can = (permission) => Boolean(user?.permissions?.includes(permission));
   const editing = typeof open === "number" ? phonesById[open] : null;
   const live = data.sold;
+  const rounds = data.rounds || [];
+  const current = rounds.find((round) => round.open);
+  const changeReturnBy = async () => {
+    const values = await askForm({ title: "Return the unsold phones by", confirmButtonText: "Save",
+      fields: [{ name: "return_by", label: "Date", type: "date", required: true, value: current.return_by, min: current.given_on }] });
+    if (!values) return;
+    setProblem("");
+    try {
+      await api(`/api/v1/mkopa/rounds/${current.id}/`, { method: "PATCH", body: JSON.stringify({ return_by: values.return_by }) });
+      await load();
+    } catch (err) {
+      setProblem(err.message);
+    }
+  };
   return (
     <div className="mkopaPage">
       <header className="mkopaHead">
@@ -511,7 +682,8 @@ export function MkopaPage() {
         {!open && <div className="mkopaActions">
           {can("mkopa.add_mkopasale") && data.phones.some((p) => p.active && p.plans.length) && <button type="button" onClick={() => setOpen("sell")}>Sell a phone</button>}
           {data.can_record_commission && <button type="button" className="secondary" onClick={() => { setPayFor(null); setOpen("commission"); }}>Commission M-KOPA paid</button>}
-          {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && <button type="button" className="secondary" onClick={() => setOpen("stock")}>Phones from M-KOPA</button>}
+          {can("mkopa.add_mkopastock") && data.phones.some((p) => p.active) && !current && <button type="button" className="secondary" onClick={() => setOpen("give")}>Stock from M-KOPA</button>}
+          {can("mkopa.add_mkopastock") && current && <button type="button" className="secondary" onClick={() => setOpen("clear")}>Clear unsold stock</button>}
           {data.can_set_up && <button type="button" className="secondary" onClick={() => setOpen("phone")}>Add phones</button>}
         </div>}
       </header>
@@ -526,12 +698,17 @@ export function MkopaPage() {
       </dl>}
 
       {open === "sell" && <SellForm phones={data.phones} seeMoney={seeMoney} onSaved={saved} onCancel={() => setOpen(null)} />}
-      {open === "stock" && <StockForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {open === "give" && <GiveStockForm phones={data.phones} current={current} days={data.round_days} onSaved={saved} onCancel={() => setOpen(null)} />}
+      {open === "clear" && current && <ClearForm round={current} phones={data.phones} days={data.round_days} onSaved={saved} onCancel={() => setOpen(null)} />}
       {open === "commission" && <CommissionForm key={payFor ?? "all"} methods={data.methods} unpaid={data.unpaid || []} only={payFor}
         onSaved={async () => { setPayFor(null); await saved(); }} onCancel={() => { setPayFor(null); setOpen(null); }} />}
       {open === "phone" && <AddPhonesForm phones={data.phones} onSaved={saved} onCancel={() => setOpen(null)} />}
       {editing && <PhoneForm key={editing.id} phone={editing} onSaved={saved} onCancel={() => setOpen(null)} />}
       <FormError title="Could not undo." message={problem} />
+
+      {current && !open && <StockNow round={current} today={data.today || today()} phones={data.phones} seeMoney={seeMoney}
+        canClear={can("mkopa.add_mkopastock")} canChange={data.can_set_up} onReturnBy={() => void changeReturnBy()}
+        onClear={() => setOpen("clear")} onMore={() => setOpen("give")} />}
 
       <Card id="mkopa-phones-heading" title="Phones and plans" aside={data.phones.length ? <span className="muted">{count(data.phones.length, "phone")}</span> : null}>
         {data.phones.length ? <div className="mkopaPhones">{data.phones.map((phone) => <PhonePlans key={phone.id} phone={phone} seeMoney={seeMoney}
@@ -583,6 +760,10 @@ export function MkopaPage() {
         </table></div> : <Empty>No commission recorded yet. When M-KOPA pays you, record it here.</Empty>}
         <Pager {...commissionPages} noun="payments" />
       </Card>}
+
+      {rounds.length > 0 && <Rounds rounds={rounds} seeMoney={seeMoney} canUndo={data.can_set_up}
+        onUndo={(round) => void undo(`Undo clearing the stock given on ${date(round.given_on)}?`,
+          "The phones given back are in hand again and this stock is open again, to clear later.", `/api/v1/mkopa/rounds/${round.id}/reopen/`)} />}
 
       {data.stock.length > 0 && <Card id="mkopa-stock-heading" title="Phones received and given back" className="mkopaQuiet"
         aside={<span className="muted">{count(data.stock.length, "entry", "entries")}</span>}>

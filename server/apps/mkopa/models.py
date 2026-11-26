@@ -59,10 +59,34 @@ class MkopaPlan(TenantModel):
         default_manager_name = "objects"
 
 
+class MkopaRound(TenantModel):
+    """One allocation of phones from M-KOPA: given on a day, to be sold until ``return_by`` (about ten days), then the
+    unsold phones are cleared (given back) and M-KOPA gives the next stock, more or less depending on how this one sold.
+    Only one round is open at a time. Phones received or given back while it is open, and phones sold, belong to it."""
+    given_on = models.DateField()
+    return_by = models.DateField()
+    cleared_on = models.DateField(null=True, blank=True)
+    # At clearing: {phone id: phones kept (not given back)}; they carry on into the next round, still in hand.
+    kept = models.JSONField(default=dict, blank=True)
+    notes = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    cleared_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        ordering = ["-given_on", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["organization"], condition=Q(cleared_on__isnull=True), name="mkopa_one_open_round"),
+                       models.CheckConstraint(condition=Q(return_by__gte=models.F("given_on")), name="mkopa_round_return_after_given")]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+
+
 class MkopaStock(TenantModel):
     """Phones M-KOPA handed to the dealer (``quantity`` above zero) or the dealer gave back (below zero)."""
     RECEIVED, RETURNED = "RECEIVED", "RETURNED"
     phone = models.ForeignKey(MkopaPhone, related_name="stock", on_delete=models.PROTECT)
+    round = models.ForeignKey(MkopaRound, null=True, blank=True, related_name="moves", on_delete=models.PROTECT)
+    clearing = models.BooleanField(default=False)  # given back when the round was cleared
     quantity = models.IntegerField()
     moved_on = models.DateField()
     notes = models.CharField(max_length=300, blank=True)
@@ -84,6 +108,7 @@ class MkopaSale(TenantModel):
     """A phone sold to a customer on a plan, with the plan's terms and commission as they were on the day."""
     phone = models.ForeignKey(MkopaPhone, related_name="sales", on_delete=models.PROTECT)
     plan = models.ForeignKey(MkopaPlan, related_name="sales", on_delete=models.PROTECT)
+    round = models.ForeignKey(MkopaRound, null=True, blank=True, related_name="sales", on_delete=models.PROTECT)  # the stock it was sold from
     customer_name = models.CharField(max_length=120)
     customer_phone = models.CharField(max_length=30, blank=True)
     imei = models.CharField(max_length=30, blank=True)

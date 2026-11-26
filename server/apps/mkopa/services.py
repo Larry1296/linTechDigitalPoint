@@ -5,7 +5,7 @@ profit only when paid), into the place it was paid to, as a cash-book entry of t
 journal crediting 4050. What a sale is expected to earn is worked out from the sales, never booked, so the page can
 say how much M-KOPA still owes without the books counting money that has not arrived.
 """
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -17,9 +17,10 @@ from apps.accounting.ledger import cash_code, money, paired, post_journal, resol
 from apps.accounting.models import JournalEntry
 from apps.accounting.services import audit, post, reverse as reverse_cash
 from apps.tenancy.transactions import lock_business
-from .models import MkopaCommission, MkopaPhone, MkopaPlan, MkopaSale, MkopaStock
+from .models import MkopaCommission, MkopaPhone, MkopaPlan, MkopaRound, MkopaSale, MkopaStock
 
 ZERO = Decimal("0")
+ROUND_DAYS = 10  # M-KOPA's usual time to sell a round of stock before the unsold phones go back
 UNIT, ACCOUNT = "MKOPA", "4050"
 METHODS = {"CASH": "Cash", "MPESA": "M-Pesa", "BANK": "Bank", "OTHER": "Other"}
 
@@ -138,8 +139,154 @@ def on_hand(phone):
     return received - sold
 
 
+def open_round():
+    return MkopaRound.objects.filter(cleared_on__isnull=True).first()
+
+
+def _return_by(value, given_on):
+    day = value or given_on + timedelta(days=ROUND_DAYS)
+    if day < given_on:
+        raise ValidationError("The return date cannot be before the day the stock was given.")
+    if day > given_on + timedelta(days=120):
+        raise ValidationError("Choose a return date within 120 days of the day the stock was given.")
+    return day
+
+
+def _start_round(*, user, given_on, return_by=None, notes=""):
+    """A new round of stock. The phones kept from the last round carry on into it, still in hand."""
+    last = MkopaRound.objects.order_by("-given_on", "-pk").first()
+    if last and last.cleared_on and given_on < last.cleared_on:
+        raise ValidationError(f"The last stock was cleared on {last.cleared_on:%d %b %Y}, so new stock cannot be given before that day.")
+    rnd = MkopaRound.objects.create(given_on=given_on, return_by=_return_by(return_by, given_on), notes=str(notes or "").strip()[:300], created_by=user)
+    audit(rnd, user, f"M-KOPA stock given on {given_on:%d %b %Y}, to return by {rnd.return_by:%d %b %Y}")
+    return rnd
+
+
+def _receive(*, user, rnd, phone, quantity, moved_on, notes, key, kind=MkopaStock.RECEIVED, clearing=False):
+    move = MkopaStock.objects.create(phone=phone, round=rnd, quantity=quantity, moved_on=moved_on, notes=str(notes or "").strip()[:300],
+                                     idempotency_key=key, created_by=user, clearing=clearing)
+    audit(move, user, f"{abs(quantity)} {phone.name} {'received from' if quantity > 0 else 'given back to'} M-KOPA")
+    return move
+
+
+def _counts(values, what):
+    """{phone id: how many} from what was typed, leaving out the zeros."""
+    counts = {}
+    for pk, value in (values or {}).items():
+        try:
+            n = int(value or 0)
+        except (TypeError, ValueError):
+            raise ValidationError(f"Enter how many phones {what} as whole numbers.")
+        if n < 0 or n > 10000:
+            raise ValidationError(f"Enter how many phones {what} (0 or more).")
+        if n:
+            counts[int(pk)] = n
+    return counts
+
+
+@transaction.atomic
+def give_stock(*, user, phones, given_on=None, return_by=None, notes="", key):
+    """M-KOPA gave phones ({phone id: how many}): into the open round (more of this round's stock), else as a new round
+    to sell until ``return_by`` (ten days on unless said)."""
+    lock_business()
+    if MkopaStock.objects.filter(idempotency_key__startswith=f"{key}:").exists():
+        return open_round()
+    counts = _counts(phones, "M-KOPA gave you")
+    if not counts:
+        raise ValidationError("Enter how many phones M-KOPA gave you of at least one model.")
+    known = {phone.pk: phone for phone in MkopaPhone.objects.select_for_update().filter(pk__in=counts)}
+    if len(known) != len(counts):
+        raise ValidationError("One of those phones is not in your list. Refresh the page.")
+    given_on = _day(given_on, "date the stock was given")
+    rnd = open_round()
+    if rnd:
+        if given_on < rnd.given_on:
+            raise ValidationError(f"This stock was given on {rnd.given_on:%d %b %Y}; phones added to it cannot be dated before that.")
+        if return_by:
+            rnd.return_by = _return_by(return_by, rnd.given_on)
+            rnd.save(update_fields=["return_by"])
+    else:
+        rnd = _start_round(user=user, given_on=given_on, return_by=return_by, notes=notes)
+    for pk, n in counts.items():
+        _receive(user=user, rnd=rnd, phone=known[pk], quantity=n, moved_on=given_on, notes=notes, key=f"{key}:{pk}")
+    return rnd
+
+
+@transaction.atomic
+def clear_round(*, user, rnd, returned, cleared_on=None, notes="", key, next_stock=None, next_return_by=None):
+    """The round's time is up: the unsold phones go back to M-KOPA (``returned``, {phone id: how many}; any not given back
+    are kept and carry on into the next round, still in hand) and the round closes. When M-KOPA gives the next stock at the
+    same visit, ``next_stock`` ({phone id: how many}) starts the next round on the same day. Commission is not touched:
+    phones sold keep earning what M-KOPA pays for them."""
+    lock_business()
+    rnd = MkopaRound.objects.select_for_update().get(pk=rnd.pk)
+    if rnd.cleared_on:
+        return rnd  # cleared already (the same clearing sent twice)
+    cleared_on = _day(cleared_on, "date the stock was cleared")
+    if cleared_on < rnd.given_on:
+        raise ValidationError(f"This stock was given on {rnd.given_on:%d %b %Y}, so it cannot be cleared before that.")
+    counts = _counts(returned, "given back")
+    phones = {phone.pk: phone for phone in MkopaPhone.objects.select_for_update()}
+    held = {pk: on_hand(phone) for pk, phone in phones.items()}
+    for pk, n in counts.items():
+        if pk not in phones:
+            raise ValidationError("One of those phones is not in your list. Refresh the page.")
+        if n > max(held[pk], 0):
+            raise ValidationError(f"You have {max(held[pk], 0)} {phones[pk].name} in hand, so you cannot give back {n}.")
+    for pk, n in counts.items():
+        _receive(user=user, rnd=rnd, phone=phones[pk], quantity=-n, moved_on=cleared_on, notes=notes, key=f"{key}:{pk}",
+                 kind=MkopaStock.RETURNED, clearing=True)
+    rnd.cleared_on, rnd.cleared_by = cleared_on, user
+    rnd.kept = {str(pk): held[pk] - counts.get(pk, 0) for pk in phones if held[pk] - counts.get(pk, 0) > 0}
+    if notes:
+        rnd.notes = (f"{rnd.notes} · {notes}" if rnd.notes else str(notes)).strip()[:300]
+    rnd.save()
+    audit(rnd, user, f"M-KOPA stock cleared on {cleared_on:%d %b %Y}: {sum(counts.values())} phone(s) given back")
+    if next_stock and _counts(next_stock, "M-KOPA gave you"):
+        give_stock(user=user, phones=next_stock, given_on=cleared_on, return_by=next_return_by, key=f"{key}:next")
+    return rnd
+
+
+@transaction.atomic
+def reopen_round(*, user, rnd, reason):
+    """Clearing recorded by mistake: the phones given back are in hand again and the round is open again. Only the last
+    round, and only while no newer stock was given."""
+    lock_business()
+    rnd = MkopaRound.objects.select_for_update().get(pk=rnd.pk)
+    reason = _words(reason, 500, "why the clearing is being undone")
+    if not rnd.cleared_on:
+        return rnd
+    if MkopaRound.objects.filter(Q(given_on__gt=rnd.given_on) | Q(given_on=rnd.given_on, pk__gt=rnd.pk)).exists():
+        raise ValidationError("Newer stock was given after this one was cleared. Undo the newer stock's phones first.")
+    MkopaStock.objects.filter(round=rnd, clearing=True, reversed_at__isnull=True).update(reversed_at=timezone.now(), reverse_reason=reason)
+    rnd.cleared_on, rnd.cleared_by, rnd.kept = None, None, {}
+    rnd.save()
+    audit(rnd, user, reason)
+    return rnd
+
+
+@transaction.atomic
+def change_round(*, user, rnd, return_by):
+    lock_business()
+    rnd = MkopaRound.objects.select_for_update().get(pk=rnd.pk)
+    if rnd.cleared_on:
+        raise ValidationError("This stock is already cleared.")
+    rnd.return_by = _return_by(return_by, rnd.given_on)
+    rnd.save(update_fields=["return_by"])
+    audit(rnd, user, f"M-KOPA stock to return by {rnd.return_by:%d %b %Y}")
+    return rnd
+
+
+def _drop_if_empty(rnd):
+    """An open round left with no phones received and none sold (its stock undone) is no round at all."""
+    if rnd and not rnd.cleared_on and not rnd.moves.filter(reversed_at__isnull=True).exists() and not rnd.sales.exists():
+        rnd.moves.all().update(round=None)
+        rnd.delete()
+
+
 @transaction.atomic
 def move_stock(*, user, phone, quantity, kind, moved_on=None, notes="", key):
+    """One model received or given back. It belongs to the open round; phones received with no round open start one."""
     lock_business()
     existing = MkopaStock.objects.filter(idempotency_key=key).first()
     if existing:
@@ -153,15 +300,18 @@ def move_stock(*, user, phone, quantity, kind, moved_on=None, notes="", key):
     if kind not in (MkopaStock.RECEIVED, MkopaStock.RETURNED):
         raise ValidationError("Say whether the phones were received from M-KOPA or given back.")
     phone = MkopaPhone.objects.select_for_update().get(pk=phone.pk)
+    moved_on = _day(moved_on, "date")
+    rnd = open_round()
     if kind == MkopaStock.RETURNED:
         held = on_hand(phone)
         if quantity > held:
             raise ValidationError(f"You have {max(held, 0)} {phone.name} in hand, so you cannot give back {quantity}.")
         quantity = -quantity
-    move = MkopaStock.objects.create(phone=phone, quantity=quantity, moved_on=_day(moved_on, "date"), notes=str(notes or "").strip()[:300],
-                                     idempotency_key=key, created_by=user)
-    audit(move, user, f"{abs(quantity)} {phone.name} {'received from' if quantity > 0 else 'given back to'} M-KOPA")
-    return move
+    elif not rnd:
+        rnd = _start_round(user=user, given_on=moved_on)
+    if rnd and moved_on < rnd.given_on:
+        raise ValidationError(f"The stock now with you was given on {rnd.given_on:%d %b %Y}; phones added to it cannot be dated before that.")
+    return _receive(user=user, rnd=rnd, phone=phone, quantity=quantity, moved_on=moved_on, notes=notes, key=key)
 
 
 @transaction.atomic
@@ -173,10 +323,62 @@ def undo_stock(*, user, move, reason):
         return move
     if move.quantity > 0 and on_hand(move.phone) - move.quantity < 0:
         raise ValidationError(f"Those phones have been sold already, so the {move.quantity} received cannot be undone. Undo the sales first.")
+    if move.clearing and move.round and move.round.cleared_on:
+        raise ValidationError("These phones were given back when the stock was cleared. Undo the clearing instead.")
     MkopaStock.objects.filter(pk=move.pk).update(reversed_at=timezone.now(), reverse_reason=reason)
     move.refresh_from_db()
     audit(move, user, reason)
+    _drop_if_empty(move.round)
     return move
+
+
+def round_for(day):
+    """The round a phone sold on ``day`` came from: the open one if the day is in it, else the one whose time covers it."""
+    rnd = open_round()
+    if rnd and day >= rnd.given_on:
+        return rnd
+    return (MkopaRound.objects.filter(given_on__lte=day).filter(Q(cleared_on__gte=day) | Q(cleared_on__isnull=True))
+            .order_by("-given_on", "-pk").first())
+
+
+def round_rows(rounds=None):
+    """Each round in numbers: phones given (and kept from the round before), sold from it, given back, kept, and how
+    well it sold (sold out of all it had), with what its sales earn. Newest first."""
+    rounds = list(rounds if rounds is not None else MkopaRound.objects.order_by("-given_on", "-pk"))
+    names = dict(MkopaPhone.objects.values_list("pk", "name"))
+    moves = MkopaStock.objects.filter(round__in=rounds, reversed_at__isnull=True)
+    sales = list(MkopaSale.objects.filter(round__in=rounds, reversed_at__isnull=True).select_related("plan", "paid_by"))
+    ordered = sorted(rounds, key=lambda r: (r.given_on, r.pk))
+    before = {r.pk: (ordered[i - 1] if i else None) for i, r in enumerate(ordered)}
+    rows = []
+    for rnd in rounds:
+        per = {}
+        def line(pk):
+            return per.setdefault(pk, {"phone_id": pk, "phone": names.get(pk, "?"), "carried": 0, "given": 0, "sold": 0, "returned": 0, "kept": 0})
+        last = before[rnd.pk]
+        for pk, n in ((last.kept or {}) if last else {}).items():
+            line(int(pk))["carried"] += n
+        for move in moves:
+            if move.round_id == rnd.pk:
+                line(move.phone_id)["given" if move.quantity > 0 else "returned"] += abs(move.quantity)
+        mine = [sale for sale in sales if sale.round_id == rnd.pk]
+        for sale in mine:
+            line(sale.phone_id)["sold"] += 1
+        for pk, n in (rnd.kept or {}).items():
+            line(int(pk))["kept"] = n
+        lines = sorted(per.values(), key=lambda row: row["phone"])
+        had = sum(row["carried"] + row["given"] for row in lines)
+        sold = len(mine)
+        earned = [expected(sale) for sale in mine]
+        rows.append({"id": rnd.pk, "given_on": rnd.given_on, "return_by": rnd.return_by, "cleared_on": rnd.cleared_on, "open": not rnd.cleared_on,
+                     "notes": rnd.notes, "lines": lines, "carried": sum(r["carried"] for r in lines), "given": sum(r["given"] for r in lines),
+                     "had": had, "sold": sold, "returned": sum(r["returned"] for r in lines), "kept": sum(r["kept"] for r in lines),
+                     "sold_share": round(sold * 100 / had) if had else None,
+                     "days": ((rnd.cleared_on or timezone.localdate()) - rnd.given_on).days,
+                     "commission": sum((value for value in earned if value is not None), ZERO),
+                     "paid_phones": sum(1 for sale in mine if sale.paid_by_id and not sale.paid_by.reversed_at),
+                     "commission_paid": sum((sale.commission_received or ZERO for sale in mine if sale.paid_by_id and not sale.paid_by.reversed_at), ZERO)})
+    return rows
 
 
 # Sales ---------------------------------------------------------------------------------------------------------------
@@ -198,8 +400,9 @@ def sell(*, user, plan, customer_name, customer_phone="", imei="", sold_on=None,
     if received and on_hand(phone) < 1:
         raise ValidationError(f"You have no {phone.name} in hand. Record the phones M-KOPA gave you first.")
     rate = plan.rate
-    sale = MkopaSale.objects.create(phone=phone, plan=plan, customer_name=_words(customer_name, 120, "the customer's name"),
-                                    customer_phone=str(customer_phone or "").strip()[:30], imei=imei, sold_on=_day(sold_on, "date of the sale"),
+    sold_on = _day(sold_on, "date of the sale")
+    sale = MkopaSale.objects.create(phone=phone, plan=plan, round=round_for(sold_on), customer_name=_words(customer_name, 120, "the customer's name"),
+                                    customer_phone=str(customer_phone or "").strip()[:30], imei=imei, sold_on=sold_on,
                                     deposit=plan.deposit, daily_payment=plan.daily_payment, days=plan.days, commission=rate or ZERO,
                                     notes=str(notes or "").strip()[:300], idempotency_key=key, created_by=user)
     audit(sale, user, f"{phone.name} sold to {sale.customer_name}")
