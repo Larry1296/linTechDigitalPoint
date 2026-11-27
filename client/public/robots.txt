@@ -1,0 +1,13 @@
+# DukaFlow: the public pages are open to all crawlers; the business workspace and private links are not.
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /onboarding
+Disallow: /select-business
+Disallow: /reset-password
+Disallow: /password-reset
+Disallow: /forgot-password
+# Customers' receipt links are private to each customer.
+Disallow: /r/
+
+Sitemap: https://dukaflow.co.ke/sitemap.xml

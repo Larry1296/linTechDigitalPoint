@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Design source for og-image.png (the link-preview picture). Re-export at 1200x630 after changing it. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6" /><stop offset="0.55" stop-color="#1d4ed8" /><stop offset="1" stop-color="#0e7490" />
+    </linearGradient>
+    <linearGradient id="arc" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#93c5fd" /><stop offset="1" stop-color="#4ade80" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#93c5fd" /><stop offset="1" stop-color="#4ade80" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.85" cy="0.1" r="0.7">
+      <stop offset="0" stop-color="#1d4ed8" stop-opacity="0.45" /><stop offset="1" stop-color="#081d3a" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#081d3a" />
+  <rect width="1200" height="630" fill="url(#glow)" />
+
+  <!-- The platform mark (src/components/Brand.jsx), scaled from 48 to 144 -->
+  <g transform="translate(96 150) scale(3)">
+    <rect width="48" height="48" rx="14" fill="url(#tile)" />
+    <path d="M0 14C0 6.3 6.3 0 14 0h20c7.7 0 14 6.3 14 14v2C34 9 16 9 0 20z" fill="#fff" opacity="0.12" />
+    <rect x="11" y="27" width="6" height="10" rx="3" fill="#fff" opacity="0.7" />
+    <rect x="21" y="21" width="6" height="16" rx="3" fill="#fff" opacity="0.85" />
+    <rect x="31" y="15" width="6" height="22" rx="3" fill="#fff" />
+    <path d="M9 22C16 20 25 15 33 9" fill="none" stroke="url(#arc)" stroke-width="2.5" stroke-linecap="round" />
+    <circle cx="35.5" cy="7.5" r="3" fill="#4ade80" stroke="#fff" stroke-width="1.5" />
+  </g>
+
+  <text x="276" y="252" font-family="Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="-2">
+    <tspan fill="#ffffff">Duka</tspan><tspan fill="url(#accent)">Flow</tspan>
+  </text>
+
+  <text x="96" y="390" fill="#ffffff" font-family="Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="-0.5">POS, inventory &amp; M-Pesa for Kenyan businesses</text>
+
+  <g font-family="Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="600" fill="#cbd5e1">
+    <rect x="96" y="440" width="196" height="52" rx="26" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" />
+    <text x="194" y="475" text-anchor="middle">Point of sale</text>
+    <rect x="308" y="440" width="120" height="52" rx="26" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" />
+    <text x="368" y="475" text-anchor="middle">Stock</text>
+    <rect x="444" y="440" width="226" height="52" rx="26" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" />
+    <text x="557" y="475" text-anchor="middle">M-Pesa agency</text>
+    <rect x="686" y="440" width="146" height="52" rx="26" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" />
+    <text x="759" y="475" text-anchor="middle">Reports</text>
+  </g>
+
+  <text x="96" y="566" fill="#93c5fd" font-family="Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="600">dukaflow.co.ke  ·  First month free</text>
+</svg>

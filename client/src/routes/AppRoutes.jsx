@@ -4,6 +4,7 @@ import { LedgerPage, ExpensesPage } from "../modules/admin/LedgerPage";
 import { AccountingReportsPage } from "../modules/admin/AccountingReportsPage";
 import { ProductLookupPage } from "../modules/products/ProductLookupPage";
 import { PublicHome } from "../modules/platform/PublicSite";
+import { PUBLIC_PATHS } from "../seo/publicPages";
 import { PublicReceiptPage } from "../modules/receipts/PublicReceiptPage";
 import { RegisterPage, OnboardingPage, SelectBusinessPage, ForgotPasswordPage, ResetPasswordPage } from "../modules/platform/Onboarding";
 import { SubscriptionPage } from "../modules/billing/SubscriptionPage";
@@ -47,8 +48,7 @@ import { KitchenPage, MenuPage } from "../modules/hotel/MenuKitchenPages";
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<PublicHome />} />
-      {["features", "pricing", "about", "contact"].map(path => <Route key={path} path={`/${path}`} element={<PublicHome />} />)}
+      {PUBLIC_PATHS.map(path => <Route key={path} path={path} element={<PublicHome />} />)}
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/select-business" element={<SelectBusinessPage />} />
