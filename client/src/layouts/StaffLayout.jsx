@@ -200,7 +200,7 @@ export function StaffLayout() {
           {switchers}
           <div className="workspaceActions">{lockButton}
             <Link className="workspacePlan" to="/admin/subscription">{planLabel}</Link>
-            <Link className="workspaceHelp" to="/#contact">Help</Link>
+            <Link className="workspaceHelp" to="/contact/">Help</Link>
             {language}<ThemePicker />
           </div>
         </>}
@@ -233,7 +233,7 @@ export function StaffLayout() {
               {switchers}
               <div className="sidebarQuickLinks">
                 <Link className="workspacePlan" to="/admin/subscription"><CreditCard size={16} aria-hidden="true" />{planLabel}</Link>
-                <Link className="workspaceHelp" to="/#contact">Help</Link>
+                <Link className="workspaceHelp" to="/contact/">Help</Link>
               </div>
               <div className="sidebarPreferences">{language}<ThemePicker /></div>
             </div>}

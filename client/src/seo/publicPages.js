@@ -59,7 +59,17 @@ export const PUBLIC_PAGES = [
 
 export const PUBLIC_PATHS = PUBLIC_PAGES.map((page) => page.path);
 
-export const pageUrl = (path) => SITE_URL + (path === "/" ? "/" : path);
+// Every page but the home page is linked with a trailing slash (/pricing/): the host answers /pricing/ with that page's
+// own HTML, but sends /pricing (no slash) to the home page's. The router accepts both.
+export const pageHref = (path) => (path === "/" ? "/" : `${path}/`);
+
+export const pageUrl = (path) => SITE_URL + pageHref(path);
+
+// The public pages other than home are sections of the one public page: /pricing/ opens it at #pricing.
+export function sectionOf(pathname) {
+  const path = pathname.replace(/\/+$/, "");
+  return path && PUBLIC_PATHS.includes(path) ? path.slice(1) : null;
+}
 
 const escape = (value) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 

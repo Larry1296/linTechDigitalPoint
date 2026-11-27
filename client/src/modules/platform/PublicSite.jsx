@@ -1,7 +1,8 @@
 import { ThemePicker } from "../../components/ThemePicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { sectionOf } from "../../seo/publicPages";
 import { ArrowDownRight, ArrowUpRight, Boxes, MessageCircle, Building2, ChartNoAxesCombined, CircleCheck, LogIn, Menu, ReceiptText, ShieldCheck, Store, UserPlus, Users, Wrench, X } from "lucide-react";
 import { usePlatform } from "./PlatformContext";
 import { PlatformLogo } from "../../components/Brand";
@@ -56,7 +57,7 @@ function PublicMenuOverlay({ onClose, returnFocus }) {
   return createPortal(<div ref={overlay} id="saas-navigation" className="saasMenuOverlay" role="dialog" aria-modal="true" aria-label="Menu">
     <button type="button" className="saasMenuClose" aria-label="Close navigation" onClick={() => { onClose(); returnFocus.current?.focus(); }}><X size={26} aria-hidden="true" /></button>
     <div className="saasMenuOverlayBody">
-      <nav aria-label="Main navigation" onClick={onClose}><a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a></nav>
+      <nav aria-label="Main navigation" onClick={onClose}><Link to="/features/">Features</Link><a href="/#business">Business management</a><Link to="/pricing/">Pricing</Link><Link to="/contact/">Contact</Link></nav>
       <div className="saasMenuOverlayActions">
         <Link className="saasMenuStart" to="/register" onClick={onClose}>Get started <ArrowUpRight size={18} aria-hidden="true" /></Link>
         <Link className="saasMenuLogin" to="/login" onClick={onClose}><LogIn size={18} aria-hidden="true" />Login</Link>
@@ -78,7 +79,7 @@ export function PublicNavbar({ accountMenu, accountMenuRef } = {}) {
   </header>;
   return <header className="saasNav">
     <Link className="saasBrand" to="/"><PlatformLogo /></Link>
-    {!collapsed && <nav aria-label="Main navigation"><a href="/#features">Features</a><a href="/#business">Business management</a><a href="/#pricing">Pricing</a><a href="/#contact">Contact</a></nav>}
+    {!collapsed && <nav aria-label="Main navigation"><Link to="/features/">Features</Link><a href="/#business">Business management</a><Link to="/pricing/">Pricing</Link><Link to="/contact/">Contact</Link></nav>}
     <div className="saasNavActions">
       {!collapsed && <><Link className="button saasGetStarted" to="/register">Get started <ArrowUpRight size={16} aria-hidden="true" /></Link><Link className="saasLogin" to="/login"><LogIn size={16} aria-hidden="true" />Login</Link><ThemePicker /></>}
       <button ref={menuButton} type="button" className="saasMenu" aria-expanded={open} aria-controls="saas-navigation" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
@@ -90,9 +91,9 @@ export function PublicFooter() {
   const platform = usePlatform();
   return <footer className="saasFooter">
     <div><PlatformLogo /></div>
-    <div><b>Product</b><a href="/#features">Features</a><a href="/#pricing">Subscriptions</a><Link to="/login">Login</Link><Link to="/register">Register a business</Link></div>
+    <div><b>Product</b><Link to="/features/">Features</Link><Link to="/pricing/">Subscriptions</Link><Link to="/login">Login</Link><Link to="/register">Register a business</Link></div>
     <div><b>Features</b><a href="/#inventory">Inventory</a><a href="/#pos">Point of sale</a><a href="/#services">Services</a><a href="/#analytics">Reports</a></div>
-    <div><b>Company & support</b><a href="/#about">About</a><a href="/#contact">Contact</a><Link to="/forgot-password">Account recovery</Link>{platform.contact_email && <a href={`mailto:${platform.contact_email}`}>{platform.contact_email}</a>}</div>
+    <div><b>Company & support</b><Link to="/about/">About</Link><Link to="/contact/">Contact</Link><Link to="/forgot-password">Account recovery</Link>{platform.contact_email && <a href={`mailto:${platform.contact_email}`}>{platform.contact_email}</a>}</div>
   </footer>;
 }
 // Sections fade up as they scroll into view. Without IntersectionObserver, or with reduced
@@ -114,12 +115,30 @@ function useRevealOnScroll() {
   return root;
 }
 
+// /features/, /pricing/, /about/ and /contact/ open the one public page at their section, as #features once did.
+// A fresh link (even to the page already open) scrolls there again; the first load jumps without gliding. The jump
+// waits a frame, so the phone menu (which holds the page still while open) has let go of the page first.
+function useScrollToSection() {
+  const { pathname, key } = useLocation();
+  const reduced = usePrefersReducedMotion();
+  const first = useRef(true);
+  useEffect(() => {
+    const id = sectionOf(pathname);
+    const instant = first.current || reduced;
+    first.current = false;
+    if (!id) return undefined;
+    const frame = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: instant ? "instant" : "smooth", block: "start" }));
+    return () => cancelAnimationFrame(frame);
+  }, [pathname, key]);
+}
+
 export function PublicHome() {
   const platform = usePlatform();
   const page = useRevealOnScroll();
+  useScrollToSection();
   return <div className="saasSite" ref={page}><PublicNavbar /><main>
     <section className="saasHero" id="home">
-      <div><span className="eyebrow">One business. One clear view.</span><h1>Keep your business<br /><em>moving forward.</em></h1><p>Bring your stock, sales, services and business records into a workspace that belongs to you.</p><div className="saasActions"><Link className="button" to="/register">Set up your business <ArrowUpRight size={18} /></Link><a className="button secondary" href="#features">Explore the platform</a></div><p className="saasNote">For business owners and the people who help them run each day.</p><button type="button" className="homeAskLink" onClick={() => openHelpChat()}><MessageCircle size={18} aria-hidden="true" /> Questions? Ask our assistant</button></div>
+      <div><span className="eyebrow">One business. One clear view.</span><h1>Keep your business<br /><em>moving forward.</em></h1><p>Bring your stock, sales, services and business records into a workspace that belongs to you.</p><div className="saasActions"><Link className="button" to="/register">Set up your business <ArrowUpRight size={18} /></Link><Link className="button secondary" to="/features/">Explore the platform</Link></div><p className="saasNote">For business owners and the people who help them run each day.</p><button type="button" className="homeAskLink" onClick={() => openHelpChat()}><MessageCircle size={18} aria-hidden="true" /> Questions? Ask our assistant</button></div>
       <div className="homeVisual">
         <PhotoCarousel slides={HERO_SLIDES} label="The platform at work" className="homeHeroPhoto">
           {(slide) => <div className="homePhotoCaption" key={slide.src}><span className="homeStatusDot" /> {slide.caption}</div>}

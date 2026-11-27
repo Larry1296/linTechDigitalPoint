@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { usePrefersReducedMotion } from "../../components/PhotoCarousel";
 import "./liveCharts.css";
@@ -27,7 +27,12 @@ export function useLiveTick(interval) {
 }
 
 // Glides a list of numbers to new values over `duration` ms, so SVG shapes morph instead of jumping.
-function useTween(target, duration = 900) {
+// It moves when the numbers change, not when a caller passes a new array holding the same numbers: callers build
+// the list as they render, and following the array itself set state on every render, without end (with reduced
+// motion as fast as React could go, which left no time for a page change: links on the home page stopped working).
+function useTween(values, duration = 900) {
+  const key = values.join(",");
+  const target = useMemo(() => values, [key]);
   const [shown, setShown] = useState(target);
   const from = useRef(target);
   const reduced = usePrefersReducedMotion();

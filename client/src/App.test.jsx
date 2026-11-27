@@ -64,6 +64,6 @@ describe("authentication experience", () => {
     ).not.toBeInTheDocument();
     expect(within(navigation).queryByText("Dashboard")).not.toBeInTheDocument();
     expect(within(navigation).queryByText("Point of Sale")).not.toBeInTheDocument();
-    expect(within(navigation).getByText("Features")).toHaveAttribute("href", "/#features");
+    expect(within(navigation).getByText("Features")).toHaveAttribute("href", "/features/");
   });
 });
