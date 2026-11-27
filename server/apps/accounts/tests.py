@@ -222,3 +222,32 @@ def test_password_reset_sends_email_with_link_to_the_app(settings):
     assert f"{settings.FRONTEND_URL}/reset-password?uid=" in message.body
     token = message.body.split("token=")[1].split()[0]
     assert default_token_generator.check_token(user, token)
+
+
+@pytest.mark.django_db
+def test_reset_email_names_the_account_and_a_mail_server_failure_is_said_plainly(settings, monkeypatch):
+    from django.core import mail
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    User.objects.create_user("shopkeeper", "keeper@lintech.test", "Strong-pass-1296")
+    assert APIClient().post("/api/v1/auth/password/reset/", {"email": "keeper@lintech.test"}, format="json").status_code == 200
+    assert "Your username is shopkeeper." in mail.outbox[0].body
+    assert "expires in one hour" in mail.outbox[0].body
+
+    def refused(*args, **kwargs):
+        raise OSError("Connection refused")
+    monkeypatch.setattr("django.core.mail.backends.locmem.EmailBackend.send_messages", refused)
+    response = APIClient().post("/api/v1/auth/password/reset/", {"email": "keeper@lintech.test"}, format="json")
+    assert response.status_code == 503
+    assert "could not be sent" in response.json()["detail"]
+
+
+def test_a_live_server_that_only_logs_email_is_flagged(settings):
+    from apps.accounts.checks import email_sending_check
+    settings.DEBUG = False
+    settings.EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    assert [w.id for w in email_sending_check(None)] == ["accounts.W001"]
+    settings.EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    settings.DEFAULT_FROM_EMAIL = "webmaster@localhost"
+    assert [w.id for w in email_sending_check(None)] == ["accounts.W002"]
+    settings.DEFAULT_FROM_EMAIL = "DukaFlow <noreply@dukaflow.co.ke>"
+    assert email_sending_check(None) == []

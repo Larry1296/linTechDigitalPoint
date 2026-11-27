@@ -6,7 +6,6 @@ def access_state(request):
 
 from django.views.decorators.csrf import csrf_protect
 from django.contrib.auth import authenticate,login,logout,password_validation
-from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.encoding import force_str
@@ -116,7 +115,15 @@ def account_login(request): return login_account(request)
 def sign_out(request): logout(request); return Response(status=204)
 @api_view(["PATCH"])
 def profile(request):
-    user=request.user; user.first_name=request.data.get("first_name",user.first_name); user.email=request.data.get("email",user.email); user.save(update_fields=["first_name","email"]); p,_=CustomerProfile.objects.get_or_create(user=user); p.phone=request.data.get("phone",p.phone); p.save(); return Response(identity(user, request))
+    from apps.tenancy.models import Membership
+    from .emails import clean_email
+    user=request.user
+    if "email" in request.data:
+        try: email=clean_email(request.data.get("email"),user)
+        except DjangoValidationError as exc: return Response({"email":exc.messages},status=400)
+        if not email and Membership.objects.filter(user=user,role="OWNER").exists(): return Response({"email":["The business owner's account needs an email address, for password resets."]},status=400)
+        user.email=email
+    user.first_name=request.data.get("first_name",user.first_name); user.save(update_fields=["first_name","email"]); p,_=CustomerProfile.objects.get_or_create(user=user); p.phone=request.data.get("phone",p.phone); p.save(); return Response(identity(user, request))
 @api_view(["POST"])
 def change_password(request):
     if not request.user.check_password(request.data.get("current_password","")):return Response({"detail":"Current password is incorrect."},status=400)
@@ -134,8 +141,14 @@ def change_password(request):
 @csrf_protect
 def password_reset(request):
     from django.conf import settings
-    form=PasswordResetForm({"email":request.data.get("email","")})
-    if form.is_valid():form.save(request=request,use_https=request.is_secure(),subject_template_name="accounts/password_reset_subject.txt",email_template_name="accounts/password_reset_email.txt", extra_email_context={"platform_name":settings.PLATFORM_NAME,"frontend_url":settings.FRONTEND_URL})
+    import logging
+    from .emails import reset_form_class
+    form=reset_form_class()({"email":request.data.get("email","")})
+    if form.is_valid():
+        try:form.save(request=request,use_https=request.is_secure(),subject_template_name="accounts/password_reset_subject.txt",email_template_name="accounts/password_reset_email.txt", extra_email_context={"platform_name":settings.PLATFORM_NAME,"frontend_url":settings.FRONTEND_URL})
+        except Exception:  # noqa: BLE001 - the mail server refused or could not be reached: say so instead of crashing
+            logging.getLogger("apps.errors").exception("Password reset email could not be sent")
+            return Response({"detail":"The email could not be sent just now. Try again in a few minutes; if it keeps failing, ask support."},status=503)
     return Response({"detail":"If the account exists, reset instructions have been sent."})
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])

@@ -502,8 +502,14 @@ class StaffInput(serializers.Serializer):
         return _work_pages_value(value)
 
     def validate(self, data):
+        from apps.accounts.emails import clean_email
         if User.objects.filter(username=data["username"]).exists():
             raise serializers.ValidationError({"username": "This username is already taken."})
+        # Optional: with it, they reset a forgotten password by email themselves; without it, the owner resets it.
+        try:
+            data["email"] = clean_email(data["email"])
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"email": exc.messages})
         try:
             password_validation.validate_password(data["password"], User(username=data["username"], email=data["email"]))
         except DjangoValidationError as exc:

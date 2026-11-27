@@ -122,3 +122,35 @@ def test_single_shelf_creation_validates_zone(businesses):
     with organization_context(a["org"]):
         assert Shelf.objects.filter(display_name="Wall shelf", zone=a["zone"]).exists()
     assert a["client"].post("/api/v1/locations/stacks/", {"zone": 999999}, format="json").status_code == 400
+
+
+def test_each_employee_needs_their_own_email_address(businesses):
+    """A password reset goes to every account with the address: a shared or mistyped one would let that inbox take
+    over the employee's account. The address is optional; without it the owner resets their sign-in."""
+    a, b = businesses
+    owner = a["org"].owner
+    owner.email = "alpha-owner@example.com"
+    owner.save(update_fields=["email"])
+    taken = a["client"].post("/api/v1/tenancy/staff/", {"username": "alpha-twin", "email": "ALPHA-OWNER@example.com", "password": PASSWORD}, format="json")
+    assert taken.status_code == 400 and "already used by another account" in str(taken.json()["email"])
+    assert add_staff(a["client"], "alpha-one", "EMPLOYEE").status_code == 201
+    again = a["client"].post("/api/v1/tenancy/staff/", {"username": "alpha-two", "email": " Alpha-One@Example.com ", "password": PASSWORD}, format="json")
+    assert again.status_code == 400
+    assert a["client"].post("/api/v1/tenancy/staff/", {"username": "alpha-bad", "email": "not-an-email", "password": PASSWORD}, format="json").status_code == 400
+    without = a["client"].post("/api/v1/tenancy/staff/", {"username": "alpha-none", "email": "", "password": PASSWORD}, format="json")
+    assert without.status_code == 201 and User.objects.get(username="alpha-none").email == ""
+
+
+def test_profile_email_must_be_valid_and_not_another_accounts(businesses):
+    a, b = businesses
+    b["org"].owner.email = "beta-owner@example.com"
+    b["org"].owner.save(update_fields=["email"])
+    client = a["client"]
+    taken = client.patch("/api/v1/auth/profile/", {"email": "Beta-Owner@Example.com"}, format="json")
+    assert taken.status_code == 400, taken.content
+    assert client.patch("/api/v1/auth/profile/", {"email": "nonsense"}, format="json").status_code == 400
+    assert client.patch("/api/v1/auth/profile/", {"email": ""}, format="json").status_code == 400  # an owner keeps one
+    assert client.patch("/api/v1/auth/profile/", {"email": " alpha.new@example.com "}, format="json").status_code == 200
+    a["org"].owner.refresh_from_db()
+    assert a["org"].owner.email == "alpha.new@example.com"
+    assert client.patch("/api/v1/auth/profile/", {"email": "alpha.new@example.com", "first_name": "Al"}, format="json").status_code == 200
