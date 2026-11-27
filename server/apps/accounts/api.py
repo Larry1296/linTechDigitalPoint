@@ -135,7 +135,7 @@ def change_password(request):
 def password_reset(request):
     from django.conf import settings
     form=PasswordResetForm({"email":request.data.get("email","")})
-    if form.is_valid():form.save(request=request,use_https=request.is_secure(),email_template_name="registration/password_reset_email.html", extra_email_context={"platform_name":settings.PLATFORM_NAME,"frontend_url":settings.FRONTEND_URL})
+    if form.is_valid():form.save(request=request,use_https=request.is_secure(),subject_template_name="accounts/password_reset_subject.txt",email_template_name="accounts/password_reset_email.txt", extra_email_context={"platform_name":settings.PLATFORM_NAME,"frontend_url":settings.FRONTEND_URL})
     return Response({"detail":"If the account exists, reset instructions have been sent."})
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])

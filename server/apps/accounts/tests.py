@@ -203,3 +203,22 @@ def test_session_locks_before_its_end_and_unlocking_starts_it_afresh(settings):
     device.refresh_from_db()
     assert device.expires_at > timezone.now() + timedelta(seconds=settings.DEVICE_ABSOLUTE_SECONDS - 60)
     assert response.data["session"]["locked"] is False
+
+
+@pytest.mark.django_db
+def test_password_reset_sends_email_with_link_to_the_app(settings):
+    """Django's admin ships its own registration/password_reset_email.html that links to a page this app has not got;
+    the reset must use the app's own email (it once crashed every reset with a server error)."""
+    from django.core import mail
+    from django.contrib.auth.tokens import default_token_generator
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    user = User.objects.create_user("forgetful", "forgetful@lintech.test", "Strong-pass-1296")
+    response = APIClient().post("/api/v1/auth/password/reset/", {"email": "forgetful@lintech.test"}, format="json")
+    assert response.status_code == 200, response.content
+    assert len(mail.outbox) == 1
+    message = mail.outbox[0]
+    assert message.to == ["forgetful@lintech.test"]
+    assert settings.PLATFORM_NAME in message.subject
+    assert f"{settings.FRONTEND_URL}/reset-password?uid=" in message.body
+    token = message.body.split("token=")[1].split()[0]
+    assert default_token_generator.check_token(user, token)
