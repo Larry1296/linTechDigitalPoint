@@ -17,6 +17,7 @@ import {
   postMpesaTransaction,
   reconcileMpesaSession,
   recordMpesaCommissionBalance,
+  recordMpesaMoneyCheck,
   reverseMpesaTransaction,
 } from "./api";
 import { MpesaDepositForm } from "./MpesaDepositForm";
@@ -35,6 +36,7 @@ import { CashCounter, countFrom, countPayload, countTotal, emptyCount } from "./
 import { OpeningCheck, emptyOpening, openingGaps } from "./OpeningCheck";
 import { useLiveRefresh } from "../../core/data/liveRefresh";
 import { sourceChoices } from "./topUp";
+import { MoneyCheckForm, MoneyChecks, weekState, when } from "./MoneyCheck";
 
 const figure = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Money in shows as +, money out as −, no change as —.
@@ -88,8 +90,8 @@ function OutletForm({ outlet, onSave, onCancel }) {
   );
 }
 
-// Every outlet with its numbers and the money in operation last recorded. Each day except Sunday needs a
-// fresh figure (a shift opened or closed that day); until then the figures show in red as due.
+// Every outlet with its numbers and the money in operation last recorded. A shift runs the working week, so while it
+// is open the figures are live; with none open, each working day (not Sunday) shows in red as due until one opens.
 function OutletCards({ outlets, canChange, canDelete, canRead, onChanged, employee = false }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
@@ -149,8 +151,8 @@ function OutletCards({ outlets, canChange, canDelete, canRead, onChanged, employ
               </dl>
               {!employee && commissionSince(money) && <p className="muted">{commissionSince(money)}</p>}
               {money.due && outlet.active
-                ? <p className="outletDue" role="status">Update due: today's cash and float are not recorded yet{money.updated_on ? ` (last recorded ${money.updated_on})` : ""}. Open or close a shift to record them.</p>
-                : money.updated_on && <p className="muted">Recorded {money.updated_on}</p>}
+                ? <p className="outletDue" role="status">Update due: no shift is open{money.updated_on ? ` (cash and float last recorded ${money.updated_on})` : ""}. Open this week's shift to record them.</p>
+                : money.updated_on && <p className="muted">{money.open_session ? "Last counted" : "Recorded"} {money.updated_on}</p>}
               {canRead && !employee && money.open_session && <div className="actionRow">
                 <button type="button" className="secondary" onClick={() => void readCommission(outlet)}>Record commission balance</button>
               </div>}
@@ -268,6 +270,15 @@ function CorrectMoney({ dashboard, onDone, onCancel }) {
     </form>
   );
 }
+// The Saturday a shift opened today runs until (next week's when today is Saturday or Sunday), as YYYY-MM-DD.
+function nextSaturday() {
+  const [year, month, day] = businessDate().split("-").map(Number);
+  const today = new Date(Date.UTC(year, month - 1, day));
+  const weekday = today.getUTCDay(); // 0 Sunday … 6 Saturday
+  const ahead = weekday === 6 ? 7 : weekday === 0 ? 6 : 6 - weekday;
+  return new Date(today.getTime() + ahead * 86400000).toISOString().slice(0, 10);
+}
+
 export function MpesaDashboardPage() {
   const { user } = useAuth();
   // A new business day starts at 00:00: reload everything so today's lists, balances and warnings start fresh.
@@ -299,6 +310,7 @@ export function MpesaDashboardPage() {
   const canRecordCommission = Boolean(user?.permissions?.includes("mpesa.add_mpesacommissionentry"));
   const [closing, setClosing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
+  const [checking, setChecking] = useState(false);
   const canCorrect = Boolean(user?.permissions?.includes("mpesa.reverse_mpesa_transaction"));
   const load = async () => {
     try {
@@ -447,13 +459,21 @@ export function MpesaDashboardPage() {
     setClosing(false);
     await load();
   };
+  const countMoney = async (body) => {
+    await recordMpesaMoneyCheck(dashboard.session.id, body);
+    setChecking(false);
+    await load();
+  };
+  // The shift runs the working week; a surprise money check comes due on random days and times nobody is shown.
+  const week = weekState(dashboard.session);
+  const surprise = dashboard.session?.money_check_due;
   return (
     <>
       <span className="eyebrow">{employee ? "Your shift" : "The agency's own money only"}</span>
       <h1>M-Pesa Agent</h1>
       {employee ? <p className="privacyNotice">
-        The business owner opens the shift. Record each deposit, withdrawal and airtime sale as you do it, and close the shift at
-        the end of the day by counting the cash and entering the float. The business owner checks the count.
+        The business owner opens the week's shift. Record each deposit, withdrawal and airtime sale as you do it. When a money
+        check comes up, count the cash and enter the float. On the shift's last day, Saturday, close it the same way. The business owner checks each count.
       </p> : <p className="privacyNotice">
         Agency deposits, withdrawals and airtime sales move cash and electronic float. The cash and float are your
         business's stock for the agency, like goods on the shelves, and the amounts customers deposit or withdraw are
@@ -476,13 +496,13 @@ export function MpesaDashboardPage() {
           {commissionNow.value == null ? "Not recorded yet" : amount(commissionNow.value)}
           {commissionNow.detail && <small className="muted"> · {commissionNow.detail}</small>}
         </MetricCard>}
-        <MetricCard label="Today's deposits">
+        <MetricCard label="Deposits this shift">
           {businessCurrency()} {dashboard.deposits}
         </MetricCard>
-        <MetricCard label="Today's withdrawals">
+        <MetricCard label="Withdrawals this shift">
           {businessCurrency()} {dashboard.withdrawals}
         </MetricCard>
-        <MetricCard label="Today's airtime sold">
+        <MetricCard label="Airtime sold this shift">
           {businessCurrency()} {dashboard.airtime ?? 0}
         </MetricCard>
         <MetricCard label="Transactions">
@@ -513,14 +533,15 @@ export function MpesaDashboardPage() {
         {canAddOutlet && addingOutlet && <OutletForm onSave={addOutlet} onCancel={() => setAddingOutlet(false)} />}
       </section>
       {!dashboard.session && employee ? (
-        <p className="formNotice" role="status">No shift is open. The business owner opens the day's shift; then record each transaction here and close the shift at the end of the day.</p>
+        <p className="formNotice" role="status">No shift is open. The business owner opens the week's shift; then record each transaction here, count the money when a check comes up, and close the shift on its last day.</p>
       ) : !dashboard.session ? (
         <>
         <form
           className="formCard shiftForm"
           onSubmit={(event) => void open(event)}
         >
-          <h2>Open M-Pesa shift</h2>
+          <h2>Open this week's M-Pesa shift</h2>
+          <p className="muted">The shift runs the working week, to {weekState({ opened_at: new Date().toISOString(), runs_until: nextSaturday() }).label}. Two surprise money checks fall on random days in between.</p>
           {!outlets.length && (
             <p>
               {canAddOutlet
@@ -576,11 +597,22 @@ export function MpesaDashboardPage() {
         </>
       ) : (
         <>
-          {businessDate(dashboard.session.opened_at) !== businessDate() && !closing && (
+          {week.state === "over" && !closing && (
             <div className="subscriptionBanner warn staleShift" role="alert">
-              <span>This shift was opened on {businessDate(dashboard.session.opened_at)} and is still open. Count the cash and
-                float and close it; today's shift can be opened straight after.</span>
+              <span>This shift ran until {week.label} and is still open. Count the cash and float and close it; this
+                week's shift can be opened straight after.</span>
               <button type="button" onClick={() => setClosing(true)}>Close previous shift</button>
+            </div>
+          )}
+          {week.state === "last-day" && !closing && (
+            <p className="formNotice" role="status">Today is the last day of this week's shift. Count the cash and float and close it at the end of the day.</p>
+          )}
+          {week.state === "running" && <p className="muted">This week's shift: opened {when(dashboard.session.opened_at)}, runs until {week.label}.</p>}
+          {surprise && !checking && !closing && (
+            <div className="subscriptionBanner warn moneyCheckDue" role="alert">
+              <span>Surprise money check{businessDate(surprise.due_at) !== businessDate() ? `, due since ${when(surprise.due_at)}` : ""}: count the agency's cash and
+                read the float now. It takes a minute and the shift carries on.</span>
+              <button type="button" onClick={() => setChecking(true)}>Count now</button>
             </div>
           )}
           <div className="deskActions">
@@ -596,6 +628,9 @@ export function MpesaDashboardPage() {
                 {owedParts.length === 1 ? `Return money to ${owedParts[0].label}` : "Return money to another part"}
               </button>}
             </>}
+            {!employee && <button className="secondary" onClick={() => setChecking(true)}>
+              Check money now
+            </button>}
             {canCorrect && !employee && <button className="secondary" onClick={() => setCorrecting(true)}>
               Correct money in operation
             </button>}
@@ -605,6 +640,8 @@ export function MpesaDashboardPage() {
           </div>
           {correcting && <CorrectMoney dashboard={dashboard} onCancel={() => setCorrecting(false)} onDone={async () => { setCorrecting(false); await load(); }} />}
           {closing && <CloseShift dashboard={dashboard} onClose={close} onCancel={() => setClosing(false)} />}
+          {checking && !closing && <MoneyCheckForm dashboard={dashboard} surprise={surprise} onCount={countMoney} onCancel={() => setChecking(false)} />}
+          {!employee && <MoneyChecks session={dashboard.session} />}
           <div className="deskGrid mpesaDesk">
             <MpesaDepositForm
               sessionId={dashboard.session.id}

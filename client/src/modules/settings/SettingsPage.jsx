@@ -380,7 +380,7 @@ function StaffSettings({ isOwner }) {
   return <section className="formCard">
     <h2>Staff</h2>
     <p>Give each person who works here their own employee account. They sign in on the same sign-in page, with their own password and lock PIN.
-      {isOwner && " An employee sees only the pages you tick, and their own dashboard: never the business's takings, profit, buying prices, money spent or lent, chama, subscription or settings. Investments only if you tick them. On M-Pesa you open the shift; they record transactions and close it at the end of the day, counting the cash and float without seeing what was expected. The commission and money in operation stay yours."}</p>
+      {isOwner && " An employee sees only the pages you tick, and their own dashboard: never the business's takings, profit, buying prices, money spent or lent, chama, subscription or settings. Investments only if you tick them. On M-Pesa you open the shift; they record transactions, count the money when a surprise check comes up, and close it on Saturday, counting the cash and float without seeing what was expected. The commission and money in operation stay yours."}</p>
     <div className="tableWrap"><table>
       <thead><tr><th>Name</th><th>Account</th><th>Pages</th><th>Sign-in and PINs</th><th>Status</th><th /></tr></thead>
       <tbody>{data.staff.map((member) => {

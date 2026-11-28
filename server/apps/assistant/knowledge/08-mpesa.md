@@ -11,6 +11,9 @@ It is built for M-Pesa agents. You set up your agent outlets, open a shift with 
 ## How do I reconcile M-Pesa?
 In the M-Pesa agency module, use the Reconciliation page to compare the cash and float you actually hold with what the system expects from the recorded transactions, and see any difference.
 
+## How long does a shift run, and what are money checks?
+A shift runs the working week: open it on Monday (or the week's first working day) and close it on Saturday with a full count of the cash and float. The agency is closed on Sundays. In between, the money is checked by surprise: when the shift opens, {platform} picks two working days at random, each at a random time in working hours, and nobody is told when they fall. When one comes due, the page asks whoever is on the desk to count the cash and read the float. The total money in operation (cash plus float) is compared with what the records say. An employee counts blind and the owner sees any difference. The owner can also press "Check money now" at any time. If the total agrees but the cash and float split does not, a deposit or withdrawal was probably not recorded or was recorded the wrong way round.
+
 ## Why does opening a shift ask why the cash or float differs?
 A new shift should open with the cash and float the last shift closed with. When the counts differ, {platform} shows the difference and asks why (for example cash taken to the bank overnight). If the float is higher because Safaricom paid commission into it after the last shift closed, tick that option and enter the month and amount: it is recorded as that month's commission, and the float is not counted twice.
 

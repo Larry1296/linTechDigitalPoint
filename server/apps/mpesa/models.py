@@ -56,6 +56,9 @@ class MpesaSession(TimeStamped):
     # the agent line when it opened. The count was these plus opening_cash and opening_float, which are the agency's part.
     business_cash_at_open = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     business_line_at_open = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    # A shift runs a working week: it opens on the week's first working day and is closed on its Saturday (week_shift.py).
+    # Empty on shifts opened before weekly shifts, which ran a day.
+    runs_until = models.DateField(null=True, blank=True)
 
     def balance_readings(self):
         """Every commission balance read in this shift apart from its transactions, oldest first: [(moment, balance)]."""
@@ -72,6 +75,37 @@ class MpesaSession(TimeStamped):
                 condition=Q(opening_cash__gte=0) & Q(opening_float__gte=0), name="nonnegative_mpesa_opening_balances"
             ),
         ]
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+
+
+class MpesaMoneyCheck(TimeStamped):
+    """A count of the agency's cash and float in the middle of a weekly shift, compared with what the records say.
+
+    Surprise checks are set when the shift opens, on random working days at random times nobody is shown (``due_at``);
+    the owner can also check at any time (``due_at`` empty). The total, cash plus float, is what must agree: deposits and
+    withdrawals only swap one for the other. Counted figures stay empty until the count is done.
+    """
+    session = models.ForeignKey(MpesaSession, related_name="money_checks", on_delete=models.PROTECT)
+    due_at = models.DateTimeField(null=True, blank=True)
+    counted_at = models.DateTimeField(null=True, blank=True)
+    counted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name="mpesa_money_checks", on_delete=models.PROTECT)
+    cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    float = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    expected_cash = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    expected_float = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    cash_count = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True)
+
+    @property
+    def difference(self):
+        """Counted total less the total the records give; None until counted."""
+        if self.counted_at is None:
+            return None
+        return (self.cash + self.float) - (self.expected_cash + self.expected_float)
+
+    class Meta:
+        ordering = ["due_at", "pk"]
         base_manager_name = "objects"
         default_manager_name = "objects"
 

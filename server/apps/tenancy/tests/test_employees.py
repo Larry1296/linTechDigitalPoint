@@ -140,7 +140,7 @@ def test_on_the_agent_desk_an_employee_records_and_counts_blind_without_seeing_m
     for path in ['/api/v1/mpesa/analysis/', '/api/v1/mpesa/commission/', '/api/v1/mpesa/sessions/past/', '/api/v1/mpesa/reconciliation/',
                  f"/api/v1/mpesa/transactions/commission-advice/?session={shift}&type=CUSTOMER_DEPOSIT&amount=500"]:
         assert jane.get(path).status_code == 403, path
-    # They close it at the end of the day with a blind count; the owner sees any difference with what was expected.
+    # They close it on its last day with a blind count; the owner sees any difference with what was expected.
     closed = jane.post(f"/api/v1/mpesa/sessions/{shift}/reconcile/", {'actual_cash': '5400', 'actual_float': '19500'}, format='json')
     assert closed.status_code == 201 and closed.json()['closed'] is True and 'cash_variance' not in closed.json()
     from apps.tenancy.context import organization_context

@@ -20,7 +20,8 @@ def money_in_operation(outlet):
     counted and the commission balance now (last read, plus what the app worked out since), so the next shift opens
     with them filled in.
 
-    A shift opened or closed today is today's update. Updates are expected every day except Sunday.
+    A shift runs the working week, so while one is open its figures are live, and the last time they were counted is
+    its opening or its latest money check. With no shift open, one is due every working day (not Sunday) until it is opened.
     """
     from .commission_learning import balance_now
     today = timezone.localdate()
@@ -30,12 +31,14 @@ def money_in_operation(outlet):
     if not session:
         cash = electronic_float = updated = None
     elif session.status == MpesaSession.OPEN:
-        (cash, electronic_float), updated = session_balances(session), timezone.localdate(session.opened_at)
+        last_check = session.money_checks.filter(counted_at__isnull=False).order_by("-counted_at").first()
+        (cash, electronic_float), updated = session_balances(session), timezone.localdate(last_check.counted_at if last_check else session.opened_at)
     else:
         cash, electronic_float, updated = session.closing_cash_actual, session.closing_float_actual, timezone.localdate(session.closed_at)
         count = getattr(MpesaReconciliation.objects.filter(session=session).first(), "cash_count", None) or {}
     return {"cash": cash, "float": electronic_float, "total": None if cash is None else cash + electronic_float,
-            "updated_on": updated, "due": today.weekday() != 6 and updated != today, "cash_count": count,
+            "updated_on": updated,
+            "due": today.weekday() != 6 and updated != today and not (session and session.status == MpesaSession.OPEN), "cash_count": count,
             "commission_balance": commission["value"], "commission_read": commission["read"],
             "commission_worked_out": commission["worked_out"], "commission_paid_out": commission["paid_out"], "commission_unknown": commission["unknown"],
             "open_session": session.pk if session and session.status == MpesaSession.OPEN else None}
@@ -106,9 +109,15 @@ class SessionSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def to_representation(self, session):
+        from .week_shift import check_row, checks_left, due_check
         data = super().to_representation(session)
+        due = due_check(session)
+        # A surprise money check that has come due: everyone on the desk is asked to count. When the rest fall is never shown.
+        data["money_check_due"] = {"id": due.pk, "due_at": due.due_at} if due else None
         if not _sees_money(self):
-            data = {key: value for key, value in data.items() if key not in SHIFT_MONEY}
+            return {key: value for key, value in data.items() if key not in SHIFT_MONEY}
+        data["money_checks"] = [check_row(check) for check in session.money_checks.filter(counted_at__isnull=False).select_related("counted_by")]
+        data["money_checks_left"] = checks_left(session)
         return data
 
     def get_current_cash(self, obj):
@@ -176,6 +185,16 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         result = record_commission_balance(session=self.get_object(), user=request.user, value=request.data.get("commission_balance"))
         return Response(self.get_serializer(result).data, status=201)
 
+    @action(detail=True, methods=["post"], url_path="money-check")
+    def money_check(self, request, pk=None):
+        """Count the cash and float in the middle of the week: the surprise check that is due, or the owner's own check."""
+        if not has_business_permission(request.user, "mpesa.add_mpesatransaction"):
+            return Response({"detail": "M-Pesa posting permission required."}, status=403)
+        from .week_shift import check_row, count
+        check = count(session=self.get_object(), user=request.user, actual_cash=request.data.get("actual_cash"), actual_float=request.data.get("actual_float"),
+                      cash_count=request.data.get("cash_count"), reason=request.data.get("reason", ""), check_id=request.data.get("check"))
+        return Response(check_row(check, money=not is_employee(request.user)), status=201)
+
     @action(detail=True, methods=["post"])
     def reconcile(self, request, pk=None):
         if not has_business_permission(request.user, "mpesa.add_mpesareconciliation"):
@@ -193,6 +212,8 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
         if is_employee(request.user):
             return Response({"detail": "Past shifts' money and commission are the business owner's to see."}, status=403)
         from .commission_learning import earned, forecast, learn, summary
+        from .week_shift import check_row
+        rows = rows.prefetch_related("money_checks__counted_by")
         learned = learn() if rows else None
         # Each shift's own commission: what its deposits, withdrawals and airtime earned, worked out like the open shift's.
         results = earned(*learned) if learned else {}
@@ -202,7 +223,8 @@ class SessionViewSet(viewsets.ReadOnlyModelViewSet):
                 if row.standing:
                     by_shift[row.session_id].append(row)
         return Response([{"id": s.pk, "outlet": s.outlet.display_name, "month_forecast": forecast(s.closed_at, learned), "operator": s.operator.get_full_name() or s.operator.username,
-                          "commission": summary(by_shift[s.pk], results),
+                          "commission": summary(by_shift[s.pk], results), "runs_until": s.runs_until,
+                          "money_checks": [check_row(check) for check in s.money_checks.all()],
                           "opened_at": s.opened_at, "closed_at": s.closed_at, "records": s.records,
                           "opening_cash": s.opening_cash, "opening_float": s.opening_float,
                           "closing_cash": s.closing_cash_actual, "closing_float": s.closing_float_actual,

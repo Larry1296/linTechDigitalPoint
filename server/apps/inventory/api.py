@@ -147,6 +147,7 @@ STAFF_UNDOS = {
     "MPESA_TRANSACTION_REVERSED": "Cancelled an M-Pesa transaction",
     "MPESA_TRANSACTION_CORRECTED": "Corrected an M-Pesa transaction",
     "MPESA_RECONCILIATION": "Closed an M-Pesa shift with a different count",
+    "MPESA_MONEY_CHECK": "M-Pesa money check came out different",
     "SALE_RETURNED": "Took back a whole sale",
     "SALE_ITEMS_RETURNED": "Took back items from a sale",
     "SALE_CREDIT_NOTE": "Lowered a sale's price",
@@ -166,6 +167,8 @@ def _undo_detail(log, sales):
         return f"{before.get('reference', '')}: {before.get('amount', '')} changed to {after.get('amount', '')}"
     if log.action == "MPESA_RECONCILIATION":
         return f"cash {after.get('cash_variance')}, float {after.get('float_variance')} against what was expected"
+    if log.action == "MPESA_MONEY_CHECK":
+        return f"money in operation {after.get('difference')} against the records (cash {after.get('cash_variance')}, float {after.get('float_variance')})"
     if log.object_type == "Sale":
         return " · ".join(str(part) for part in [sales.get(log.object_id), after.get("return"), after.get("amount")] if part)
     if log.object_type == "Payment":
@@ -189,6 +192,7 @@ def staff_undos(request):
     logs = list(AuditLog.objects.filter(action__in=STAFF_UNDOS, user_id__in=list(staff), created_at__gte=timezone.now() - timedelta(days=30))
                 .exclude(Q(action="MPESA_TRANSACTION_REVERSED") & Q(after__reason__startswith="Corrected:"))  # shown as the correction
                 .exclude(action="MPESA_RECONCILIATION", after__cash_variance="0.00", after__float_variance="0.00")
+                .exclude(action="MPESA_MONEY_CHECK", after__cash_variance="0.00", after__float_variance="0.00")
                 .select_related("user").order_by("-created_at")[:50])
     sales = dict(Sale.objects.filter(pk__in=[int(log.object_id) for log in logs if log.object_type == "Sale" and log.object_id.isdigit()]).values_list("pk", "number"))
     sales = {str(key): value for key, value in sales.items()}
@@ -236,7 +240,7 @@ def work_dashboard(request):
         data["rooms"] = {"in_house": Stay.objects.filter(status=Stay.IN).count(), "arriving": Stay.objects.filter(status=Stay.BOOKED, arrival=today).count(),
                          "leaving": Stay.objects.filter(status=Stay.IN, departure=today).count()}
     if "mpesa" in enabled and can("mpesa.view_mpesasession"):
-        # The owner opens the shift; the employee records on it and closes it at the end of the day.
+        # The owner opens the week's shift; the employee records on it, counts at surprise checks and closes it on Saturday.
         shift = MpesaSession.objects.filter(status="OPEN").first()
         data["mpesa"] = {"shift_open": bool(shift), "transactions": shift.transactions.exclude(transaction_type="REVERSAL").filter(reversal__isnull=True, performed_by=user).count() if shift else 0}
     return Response(data)

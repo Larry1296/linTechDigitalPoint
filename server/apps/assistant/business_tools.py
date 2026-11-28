@@ -565,6 +565,15 @@ def _shift(session, limit):
              "transactions": [_mpesa_row(t) for t in tx.select_related("performed_by", "reversal_of", "reversal").order_by("-occurred_at", "-id")[:limit]]}
     if session.status != "OPEN":
         shift.update(counted_cash=_money(session.closing_cash_actual), counted_float=_money(session.closing_float_actual))
+    # A shift runs the working week, with surprise money checks inside it: each counted one against the records, and
+    # how many were missed (came due, never counted). When future ones fall is never told.
+    shift["runs_until"] = session.runs_until.isoformat() if session.runs_until else None
+    checks = list(session.money_checks.select_related("counted_by"))
+    shift["money_checks"] = [{"counted": timezone.localtime(c.counted_at).strftime("%Y-%m-%d %H:%M"), "surprise": c.due_at is not None,
+                              "by": _customer_name(c.counted_by), "counted_total": _money(c.cash + c.float),
+                              "records_total": _money(c.expected_cash + c.expected_float), "difference": _money(c.difference),
+                              "reason": c.reason} for c in checks if c.counted_at]
+    shift["money_checks_missed"] = sum(1 for c in checks if not c.counted_at and c.due_at and c.due_at <= timezone.now())
     return shift
 
 

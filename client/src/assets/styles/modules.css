@@ -2410,6 +2410,11 @@ h3.productGroup, h4.productGroup, h5.productGroup { font-size: 15px; color: var(
 .outletCard.due .outletMoney, .outletDue { color: var(--danger, #b42318); font-weight: 700; }
 .outletDue { margin: 8px 0 0; font-size: 13px; }
 [data-theme="dark"] .outletCard.due, [data-theme="dark"] .outletCard.due .outletMoney, [data-theme="dark"] .outletDue { --danger: #f97066; }
+/* Money checks in the middle of the weekly shift: one that did not agree shows in red. */
+.moneyChecks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.moneyChecks li { padding: 8px 10px; border: 1px solid var(--border, #d0d5dd); border-radius: 8px; font-size: 14px; overflow-wrap: anywhere; }
+.moneyChecks li.due { border-color: var(--danger, #b42318); color: var(--danger, #b42318); }
+[data-theme="dark"] .moneyChecks li.due { --danger: #f97066; }
 
 /* M-Pesa deposit/withdrawal: cash and float now, the change, and after, in aligned columns. */
 /* Side by side only when each form has room for its balance table; otherwise they stack. */

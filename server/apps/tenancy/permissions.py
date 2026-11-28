@@ -37,7 +37,7 @@ WORK_NEEDS = {
     "rooms": lambda app, code: f"{app}.{code}" in CUSTOMERS,
 }
 # The agency's commission, its shift reconciliations (expected against counted), outlet set-up and opening the shift
-# are the owner's: the owner opens the day's shift, the employee records on it and closes it.
+# are the owner's: the owner opens the week's shift, the employee records on it and closes it.
 OWNERS_AGENCY = ("mpesacommissionentry", "mpesareconciliation", "add_mpesaoutlet", "change_mpesaoutlet", "delete_mpesaoutlet", "add_mpesasession")
 # M-KOPA: an employee receives phones and sells them; the phones' plans, the commission M-KOPA pays (the business's
 # money) and undoing a sale are the owner's.

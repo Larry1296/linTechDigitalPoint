@@ -20,7 +20,7 @@ OWNERS_MOVES = {"FLOAT_TOPUP", "CASH_REBALANCE", "PART_RETURN"}
 
 def on_shift(user, session):
     """Whether ``user`` works on ``session``: its operator, an owner or manager, or an employee, who records on the
-    shift the owner opened and closes it at the end of the day."""
+    shift the owner opened and closes it at the end of the week."""
     return session.operator_id == user.id or is_business_manager(user) or is_employee(user)
 
 
@@ -117,7 +117,7 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     the commission balance on the agent line now, the reading the shift's first transaction is measured from.
 
     The business has one shift open at a time: everyone on the agent desk, the owner and the employee, carries on with
-    it until it is closed."""
+    it until it is closed. It runs the working week, to Saturday, with surprise money checks inside it (week_shift.py)."""
     lock_business()  # two people pressing Open at once still open one shift
     current = MpesaSession.objects.select_for_update().select_related("operator").filter(status=MpesaSession.OPEN).first()
     if current:
@@ -151,6 +151,8 @@ def open_session(*, outlet, operator, opening_cash, opening_float, notes="", cas
     session = MpesaSession.objects.create(outlet=outlet, operator=operator, opening_cash=cash, opening_float=electronic_float, opened_at=timezone.now(), notes=notes,
                                      opening_cash_count=count, carried_cash=carried_cash, carried_float=carried_float,
                                      opening_difference_reason=difference_reason, opening_commission_balance=reading)
+    from .week_shift import schedule
+    schedule(session)  # the shift runs the working week, with surprise money checks inside it
     audit("MPESA_SESSION_OPENED", session, operator, after={"cash": str(cash), "float": str(electronic_float), "carried_cash": str(carried_cash),
                                                            "carried_float": str(carried_float), "reason": difference_reason,
                                                            "commission_balance": None if reading is None else str(reading)})

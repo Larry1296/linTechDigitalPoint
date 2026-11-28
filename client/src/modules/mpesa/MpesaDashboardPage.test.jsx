@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("../../core/auth/AuthContext", () => ({ useAuth: () => ({ user: { permissions: ["mpesa.add_mpesaoutlet", "mpesa.change_mpesaoutlet", "mpesa.delete_mpesaoutlet", "mpesa.reverse_mpesa_transaction", "mpesa.add_mpesatransaction"] } }) }));
 vi.mock("./api", () => ({
   getMpesaDashboard: vi.fn(), getMpesaAnalysis: vi.fn(async () => ({ days: [], hours: [], sizes: [], commission_by_kind: [], working_days: 30, unknown: 0 })), getCommissionAdvice: vi.fn(async () => ({ earned: null, ask: true, reason: "new" })), getMpesaOutlets: vi.fn(), getMpesaTransactions: vi.fn(), createMpesaOutlet: vi.fn(),
-  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), getPastMpesaShifts: vi.fn(async () => []), getMpesaShiftTransactions: vi.fn(), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), recordMpesaCommissionBalance: vi.fn(), reverseMpesaTransaction: vi.fn(),
+  updateMpesaOutlet: vi.fn(), deleteMpesaOutlet: vi.fn(), getMpesaReportMonths: vi.fn(async () => []), getPastMpesaShifts: vi.fn(async () => []), getMpesaShiftTransactions: vi.fn(), downloadMpesaReport: vi.fn(), openMpesaSession: vi.fn(), postMpesaTransaction: vi.fn(), reconcileMpesaSession: vi.fn(), recordMpesaMoneyCheck: vi.fn(), recordMpesaCommissionBalance: vi.fn(), reverseMpesaTransaction: vi.fn(),
 }));
 import * as api from "./api";
 vi.mock("../../core/ui/alerts", () => ({ confirmAction: vi.fn(async () => true), askForm: vi.fn(), showError: vi.fn() }));
@@ -214,7 +214,49 @@ it("never offers an employee the opening form: the owner opens the business's on
   api.getMpesaDashboard.mockResolvedValue({ employee: true, session: null, transaction_count: 0, sources: [] });
   api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { updated_on: "2026-09-26", due: false, open_session: null })]);
   render(<MpesaDashboardPage />);
-  expect(await screen.findByText(/The business owner opens the day's shift/)).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Open M-Pesa shift" })).toBeNull();
+  expect(await screen.findByText(/No shift is open. The business owner opens the week's shift/)).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Open this week's M-Pesa shift" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Open shift" })).toBeNull();
+});
+
+it("asks an employee to count blind when a surprise money check comes due, without showing the records", async () => {
+  const now = new Date().toISOString();
+  api.getMpesaDashboard.mockResolvedValue({ employee: true, transaction_count: 3,
+    session: { id: 8, opened_at: now, runs_until: "2999-01-02", money_check_due: { id: 41, due_at: now } } });
+  api.getMpesaOutlets.mockResolvedValue([outlet(1, "Main till", { updated_on: "2026-09-26", due: false, open_session: 8 })]);
+  api.recordMpesaMoneyCheck.mockResolvedValue({ id: 41 });
+  render(<MpesaDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Count now" }));
+  expect(screen.getByRole("heading", { name: "Surprise money check" })).toBeInTheDocument();
+  expect(screen.queryByText(/counted vs records/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Check money now" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("The agency's float on the M-Pesa line"), { target: { value: "7000" } });
+  fireEvent.click(screen.getByRole("button", { name: "Record the count" }));
+  await waitFor(() => expect(api.recordMpesaMoneyCheck).toHaveBeenCalledWith(8, expect.objectContaining({ actual_float: "7000", check: 41 })));
+});
+
+it("lets the owner check the money any time, comparing the total, and lists the week's checks", async () => {
+  const opened = new Date().toISOString();
+  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, cash: "3000", float: "7000", in_operation: { total: 10000, opening: 10000 },
+    session: { id: 9, opened_at: opened, runs_until: "2999-01-02", money_check_due: null, money_checks_left: 1,
+      money_checks: [{ id: 1, counted_at: opened, surprise: true, counted_by: "Jane", total: "9900", expected_total: "10000", difference: "-100", split_off: "0", reason: "short" }] } });
+  render(<MpesaDashboardPage />);
+  const list = (await screen.findByRole("heading", { name: "Money checks this week" })).closest("section");
+  expect(list).toHaveTextContent("1 surprise check is still to come");
+  expect(list).toHaveTextContent("-100");
+  expect(screen.getByText(/runs until/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Check money now" }));
+  fireEvent.change(screen.getByLabelText("The agency's float on the M-Pesa line"), { target: { value: "10000" } });
+  // No cash counted but 10,000 of float: the total agrees with the records, the split does not.
+  expect(screen.queryByLabelText(/Why is the total different/)).toBeNull();
+  expect(screen.getByText(/split differently from the records/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("The agency's float on the M-Pesa line"), { target: { value: "9000" } });
+  expect(screen.getByText(/Money in operation: counted vs records/).nextSibling).toHaveTextContent("-1,000");
+  expect(screen.getByLabelText(/Why is the total different/)).toBeInTheDocument();
+});
+
+it("asks for the week's shift to be closed once its Saturday has passed", async () => {
+  api.getMpesaDashboard.mockResolvedValue({ ...dashboard, session: { id: 9, opened_at: "2026-11-16T05:00:00Z", runs_until: "2026-11-21", money_checks: [] } });
+  render(<MpesaDashboardPage />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("This shift ran until Saturday");
 });

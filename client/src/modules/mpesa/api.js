@@ -28,6 +28,12 @@ export const recordMpesaCommissionBalance = (id, commissionBalance) =>
     method: "POST",
     body: JSON.stringify({ commission_balance: commissionBalance }),
   });
+// A mid-week count of the cash and float: the surprise check that is due, or the owner's own check.
+export const recordMpesaMoneyCheck = (id, body) =>
+  api(`/api/v1/mpesa/sessions/${id}/money-check/`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 export const reconcileMpesaSession = (id, body) =>
   api(`/api/v1/mpesa/sessions/${id}/reconcile/`, {
     method: "POST",
