@@ -476,6 +476,16 @@ def undo(*, movement, user, reason):
         raise ValidationError("Say why this is being undone.")
     if movement.reversed_at:
         return movement
+    pair = _transfer_pair(movement)
+    if pair:
+        # One half of money moved between two accounts: both halves are undone together, the money going back first.
+        out, came = pair
+        if value(came.investment) - came.amount < 0 or (came.business_amount and business_value(came.investment) - came.business_amount < 0):
+            raise ValidationError(f"Money has since been taken out of {came.investment.name}. Undo that first.")
+        InvestmentMovement.objects.filter(pk__in=[out.pk, came.pk]).update(reversed_at=timezone.now(), reverse_reason=reason)
+        audit(out, user, f"Move from {out.investment.name} to {came.investment.name} undone: {reason}")
+        movement.refresh_from_db()
+        return movement
     partner = _partner(movement)
     if partner and not partner.reversed_at:
         # One half of "the business's money is in here": both halves go together, the owner's half first.
@@ -1022,3 +1032,64 @@ def invest_sold(*, business_fund, own_fund=None, user, key, occurred_on=None, pr
                                   place=place, unit=unit, key=f"{SOLD}{key}:business", occurred_on=day,
                                   note="Cost of the goods sold: kept to buy the stock again")
     return result
+
+
+MOVE = "transfer:"  # transfer(): transfer:<key>:out from one account, transfer:<key>:in to the other
+
+
+def _transfer_pair(movement):
+    """(out, in) when the movement is one half of a transfer() between two accounts, neither undone; else None."""
+    key = movement.idempotency_key
+    if not key.startswith(MOVE) or not key.endswith((":out", ":in")):
+        return None
+    base = key.rpartition(":")[0]
+    out = InvestmentMovement.objects.filter(idempotency_key=f"{base}:out", reversed_at__isnull=True).select_related("investment").first()
+    came = InvestmentMovement.objects.filter(idempotency_key=f"{base}:in", reversed_at__isnull=True).select_related("investment").first()
+    return (out, came) if out and came else None
+
+
+@transaction.atomic
+def transfer(*, source, target, user, amount, whose, key, occurred_on=None, note="", make_own=False):
+    """Money moved from one investment account to another (2026-11-28, owner: business and own money were in one CIC
+    account; now the business has its own and its money moves there). Whose it is stays the same: the business's money
+    stays the business's (no place is touched and the books do not change: it is in investments either way), the
+    owner's own stays the owner's. Recorded as money taken out of ``source`` and put into ``target`` on the same day,
+    linked, so undoing one undoes both. ``make_own``: afterwards ``source`` becomes the owner's own account (only when
+    no business money is left in it)."""
+    lock_business()
+    done = InvestmentMovement.objects.filter(idempotency_key=f"{MOVE}{key}:in").select_related("investment").first()
+    if done:
+        return done
+    if source.pk == target.pk:
+        raise ValidationError("Choose a different account to move the money to.")
+    source = Investment.objects.select_for_update().get(pk=source.pk)
+    target = Investment.objects.select_for_update().get(pk=target.pk)
+    if source.removed_at or target.removed_at:
+        raise ValidationError("That account was removed.")
+    whose = str(whose or "").upper()
+    if whose not in SOURCES:
+        raise ValidationError("Say whose money is moving: the business's or your own.")
+    business = whose == BUSINESS_MONEY
+    amount, day = _amount(amount), _day(occurred_on)
+    holds = business_value(source) if business else own_value(source)
+    if amount > holds:
+        raise ValidationError(f"{source.name} only holds {max(holds, Decimal('0')):,.2f} {'of the business' + chr(39) + 's money' if business else 'of your own money'} "
+                              "as far as the app knows. If the statement shows more, record the interest first.")
+    if business and target.holder == Investment.OWN:
+        raise ValidationError(f"{target.name} is your own account: the business's money goes to a business account.")
+    words = "the business's money" if business else "your own money"
+    note = str(note or "").strip()
+    share = amount if business else Decimal("0")
+    branch = resolve_branch()
+    out = InvestmentMovement.objects.create(investment=source, kind=InvestmentMovement.WITHDRAWAL, amount=amount, business_amount=share,
+                                            whose=whose, occurred_on=day, source=OWNER if not business else "", branch=branch,
+                                            note=f"Moved to {target.name}: {words}{f' · {note}' if note else ''}"[:1000],
+                                            idempotency_key=f"{MOVE}{key}:out", created_by=user)
+    came = InvestmentMovement.objects.create(investment=target, kind=InvestmentMovement.DEPOSIT, amount=amount, business_amount=share,
+                                             whose=whose, occurred_on=day, source=OWNER if not business else "", branch=branch,
+                                             note=f"Moved from {source.name}: {words}{f' · {note}' if note else ''}"[:1000],
+                                             idempotency_key=f"{MOVE}{key}:in", created_by=user)
+    audit(came, user, f"Moved {amount} ({words}) from {source.name} to {target.name}")
+    if make_own:
+        set_holder(investment=source, user=user, holder=Investment.OWN)
+    return came

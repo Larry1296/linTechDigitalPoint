@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, business_split, invest_sold, set_holder, split, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, business_split, invest_sold, set_holder, split, transfer, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -61,7 +61,8 @@ def investment_row(investment):
                            "reference": m.reference, "note": m.note, "statement_balance": m.statement_balance,
                            "recorded_by": _name(m.created_by), "reversed_at": m.reversed_at, "reverse_reason": m.reverse_reason,
                            "purchase": _purchase(m.purchase) if m.purchase_id else None,
-                           "switch": switch_half(m), "speed": m.speed, "charge_of": m.charge_of_id}
+                           "switch": switch_half(m), "speed": m.speed, "charge_of": m.charge_of_id,
+                           "transfer": m.idempotency_key.startswith("transfer:")}
                           for m in investment.movements.select_related("created_by", "purchase__receipt", "purchase__supplier")
                           .order_by("-occurred_on", "-pk")]}
 
@@ -382,3 +383,31 @@ class InvestSoldView(APIView):
         result = invest_sold(business_fund=business, own_fund=own, user=request.user, key=d["idempotency_key"],
                              occurred_on=d.get("occurred_on"), profit=d.get("profit"))
         return Response({half: (m.amount if m else None) for half, m in result.items()}, status=201)
+
+
+class TransferInput(serializers.Serializer):
+    to = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
+    whose = serializers.ChoiceField(choices=sorted(SOURCES))
+    occurred_on = serializers.DateField(required=False, allow_null=True)
+    note = serializers.CharField(required=False, allow_blank=True, default="")
+    make_own = serializers.BooleanField(required=False, default=False)
+    idempotency_key = serializers.CharField(max_length=60)
+
+
+class InvestmentTransferView(APIView):
+    """Money moved from this account to another one, staying whose it was."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investmentmovement"
+
+    def post(self, request, pk):
+        form = TransferInput(data=request.data)
+        form.is_valid(raise_exception=True)
+        d = form.validated_data
+        if d["make_own"]:
+            _require(request, "accounting.add_investment")
+        source = get_object_or_404(Investment, pk=pk, removed_at__isnull=True)
+        target = get_object_or_404(Investment, pk=d["to"], removed_at__isnull=True)
+        transfer(source=source, target=target, user=request.user, amount=d["amount"], whose=d["whose"], key=d["idempotency_key"],
+                 occurred_on=d.get("occurred_on"), note=d["note"], make_own=d["make_own"])
+        return Response(investment_row(Investment.objects.get(pk=pk)), status=201)

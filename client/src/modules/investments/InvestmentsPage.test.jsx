@@ -494,3 +494,21 @@ it("splits the business's money in its investments into cost of goods and profit
   expect(card).toHaveTextContent("Cost of goods KSh 7,000 · buys the stock again");
   expect(card).toHaveTextContent("Profit KSh 5,150 · with KSh 150 interest");
 });
+
+it("moves the business's money to its own account and can make the old one your own", async () => {
+  const fresh = { ...mmf, id: 6, name: "CIC MMF BUSINESS ACCOUNT", holder: "BUSINESS", value: "0.00", shop_value: "0.00", owner_value: "0.00", movements: [] };
+  api.mockImplementation(async (path, options) => {
+    if (options?.method === "POST") return {};
+    const listed = listing(mmf);
+    return { ...listed, investments: [{ ...listed.investments[0], holder: "BUSINESS" }, fresh] };
+  });
+  render(<InvestmentsPage />);
+  const card = (await screen.findByRole("heading", { name: "Sanlam MMF" })).closest("li");
+  fireEvent.click(within(card).getByRole("button", { name: "Move to another account" }));
+  const form = within(card).getByRole("form", { name: "Move to another account" });
+  expect(within(form).getByLabelText(/Amount/)).toHaveValue(12150);
+  expect(within(form).getByLabelText(/Then make Sanlam MMF my own account/)).toBeChecked();
+  await act(async () => { fireEvent.submit(form); });
+  const sent = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/accounting/investments/3/transfer/")[1].body);
+  expect(sent).toMatchObject({ to: 6, amount: "12150", whose: "BUSINESS", make_own: true });
+});

@@ -692,7 +692,78 @@ function InvestSoldForm({ split, investments, onSaved, onCancel, onAddOwn }) {
   );
 }
 
-function InvestmentCard({ investment, funds, places = [], preset, month, canMove, canCorrect, canRemove, canRename, onChanged }) {
+// Money moved from this account to another, staying whose it was: the business's money to the business's new account,
+// or your own to yours. Moving all the business's money out can make this one your own account in the same step.
+function TransferForm({ investment, others, canRename, onSaved, onCancel }) {
+  const business = Number(investment.shop_value) > 0.004;
+  const [whose, setWhose] = useState(business ? BUSINESS : OWNER);
+  const targets = others.filter((i) => whose === OWNER || !isOwn(i));
+  const [to, setTo] = useState(targets[0] ? String(targets[0].id) : "");
+  const holds = Math.max(Number(whose === BUSINESS ? investment.shop_value : investment.owner_value) || 0, 0);
+  const [amount, setAmount] = useState(String(holds));
+  const [makeOwn, setMakeOwn] = useState(canRename && whose === BUSINESS && !isOwn(investment));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const all = whose === BUSINESS && Math.abs(Number(amount) - holds) < 0.005;
+  const choose = (next) => {
+    setWhose(next);
+    const left = others.filter((i) => next === OWNER || !isOwn(i));
+    if (!left.some((i) => String(i.id) === to)) setTo(left[0] ? String(left[0].id) : "");
+    setAmount(String(Math.max(Number(next === BUSINESS ? investment.shop_value : investment.owner_value) || 0, 0)));
+  };
+  const target = others.find((i) => String(i.id) === to);
+  const submit = async (event) => {
+    event.preventDefault();
+    const day = new FormData(event.currentTarget).get("occurred_on");
+    const own = makeOwn && all;
+    if (!(await confirmAction({ title: `Move ${money(amount)} of ${whose === BUSINESS ? "the business's" : "your own"} money from ${investment.name} to ${target?.name}?`,
+      text: `It stays ${whose === BUSINESS ? "the business's money: its money, sales and profit do not change" : "your own money, out of the business's books"}.`
+        + (own ? ` ${investment.name} then becomes your own account: the interest it earns from now on is yours.` : ""),
+      confirmButtonText: "Move it" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/v1/accounting/investments/${investment.id}/transfer/`, { method: "POST", body: JSON.stringify({
+        to: Number(to), amount, whose, occurred_on: day, make_own: own, idempotency_key: crypto.randomUUID() }) });
+      await onSaved();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label="Move to another account">
+      <fieldset disabled={busy} className="loanFields">
+        <fieldset className="investWhose">
+          <legend>Whose money is moving?</legend>
+          <label><input type="radio" name="transfer-whose" checked={whose === BUSINESS} disabled={!business} onChange={() => choose(BUSINESS)} /> The business's money
+            <small> · {money(investment.shop_value)} in it, with its interest</small></label>
+          <label><input type="radio" name="transfer-whose" checked={whose === OWNER} onChange={() => choose(OWNER)} /> My own money
+            <small> · {money(investment.owner_value)} in it</small></label>
+        </fieldset>
+        <FormField label="Move it to">
+          <select value={to} onChange={(event) => setTo(event.target.value)} required>
+            {targets.map((i) => <option key={i.id} value={i.id}>{i.name}{isOwn(i) ? " (your own)" : " (business)"}</option>)}
+          </select>
+        </FormField>
+        <FormField label={`Amount (${businessCurrency()})`} type="number" min="0.01" max={String(holds)} step="0.01" value={amount}
+          onChange={(event) => setAmount(event.target.value)} required />
+        <FormField label="Date it moved" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+        {canRename && whose === BUSINESS && !isOwn(investment) && <label className="checkRow">
+          <input type="checkbox" checked={makeOwn && all} disabled={!all} onChange={(event) => setMakeOwn(event.target.checked)} />
+          Then make {investment.name} my own account{!all ? " (only when all the business's money moves)" : ""}</label>}
+      </fieldset>
+      {!targets.length && <p className="investWarning">{whose === BUSINESS ? "Add the business's other account first." : "Add the other account first."}</p>}
+      <div className="actionRow">
+        <button disabled={busy || !targets.length}>Move it</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      <FormError title="Could not move it." message={error} />
+    </form>
+  );
+}
+
+function InvestmentCard({ investment, others = [], funds, places = [], preset, month, canMove, canCorrect, canRemove, canRename, onChanged }) {
   const [form, setForm] = useState(null);
   // Entries undone by mistake stay on record but are folded away, so the history reads like the fund's statement.
   const [showUndone, setShowUndone] = useState(false);
@@ -820,16 +891,18 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           <tbody>{shown.map((m) => (
             <tr key={m.id} className={m.reversed_at ? "muted" : undefined}>
               <td data-label="Date">{date(m.occurred_on)}</td>
-              <td data-label="What">{m.switch ? "Marked as the business's money" : m.charge_of ? "Instant withdrawal charge" : KIND[m.kind]}
+              <td data-label="What">{m.switch ? "Marked as the business's money" : m.charge_of ? "Instant withdrawal charge"
+                : m.transfer ? (m.kind === "DEPOSIT" ? "Moved in" : "Moved out") : KIND[m.kind]}
                 {m.speed && <small> · {m.speed === "INSTANT" ? "instant" : "standard, to the bank"}</small>}{m.statement_balance ? <small> · statement {money(m.statement_balance)}</small> : null}
                 {m.purchase && <small className="investPurchase"> · paid for stock {m.purchase.receipt_number}{m.purchase.supplier && ` (${m.purchase.supplier})`}</small>}</td>
               <td data-label="Amount">{money(m.amount)}{m.switch && <small> · already in it</small>}
                 {m.reversed_at && <small> · undone ({m.reverse_reason})</small>}</td>
-              <td data-label="From / to">{m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? <>Business<small> · {placeName(m.source)}</small></> : "Business")
+              <td data-label="From / to">{m.transfer ? <>{m.whose === BUSINESS ? "Business" : "My own"}<small> · {m.note.split(":")[0].replace(/^Moved (to|from) /, "")}</small></>
+                : m.whose === BUSINESS ? (m.kind === "DEPOSIT" || m.kind === "WITHDRAWAL" ? <>Business<small> · {placeName(m.source)}</small></> : "Business")
                 : m.source === OWNER ? (m.kind === "DEPOSIT" ? "My own money" : "Me") : "—"}</td>
               <td data-label="Reference"><span className="investRef" title={m.reference || m.note || undefined}>{m.reference || m.note || "—"}</span></td>
               <td className="stackActions">{!m.reversed_at && canCorrect && <div className="actionRow">
-                {m.kind === "DEPOSIT" && m.whose !== BUSINESS && !m.purchase && <button type="button" className="secondary" onClick={() => void markBusiness(m)}>It was the business's money</button>}
+                {m.kind === "DEPOSIT" && m.whose !== BUSINESS && !m.purchase && !m.transfer && <button type="button" className="secondary" onClick={() => void markBusiness(m)}>It was the business's money</button>}
                 <button type="button" className="secondary" onClick={() => void undo(m)}>Undo</button></div>}</td>
             </tr>
           ))}</tbody>
@@ -859,6 +932,8 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
           preset={form === "DEPOSIT" ? preset : null} places={places} onCancel={() => setForm(null)} onSaved={done} />
         : form === "STATEMENT"
           ? <StatementForm investment={investment} onCancel={() => setForm(null)} onSaved={done} />
+        : form === "TRANSFER"
+          ? <TransferForm investment={investment} others={others} canRename={canRename} onCancel={() => setForm(null)} onSaved={done} />
         : form === "BUSINESS"
           ? <BusinessMoneyForm investment={investment} places={places} onCancel={() => setForm(null)} onSaved={done} />
           : canMove && <div className="actionRow">
@@ -866,6 +941,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
             <button type="button" onClick={() => setForm("DEPOSIT")}>Add money</button>
             <button type="button" className="secondary" disabled={Number(investment.value) <= 0} onClick={() => setForm("WITHDRAWAL")}>Take money out</button>
             <button type="button" className="secondary" onClick={() => setForm("STATEMENT")}>Update from statement</button>
+            {others.length > 0 && Number(investment.value) > 0 && <button type="button" className="secondary" onClick={() => setForm("TRANSFER")}>Move to another account</button>}
             {places.length > 0 && !isOwn(investment) && <button type="button" className="secondary" onClick={() => setForm("BUSINESS")}>Put in the business's money</button>}
           </div>}
       {!form && (canRemove || canRename) && <div className="actionRow">
@@ -963,7 +1039,7 @@ export function InvestmentsPage() {
           if (deposit && row?.id) setPreset({ id: row.id, kind: "DEPOSIT", nonce: Date.now() });
         }} />}
       {data.investments.length
-        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} places={data.business_places || []}
+        ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} others={data.investments.filter((o) => o.id !== i.id)} funds={funds} places={data.business_places || []}
           preset={preset?.id === i.id ? preset : null} month={data.this_month}
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
           canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} canRename={can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>

@@ -1030,3 +1030,38 @@ def test_the_businesss_money_splits_into_cost_of_goods_and_profit_with_its_inter
     assert D(str(whole["total"])) == D("1250")  # 1,050 in the fund + 200 in the drawer
     kept = whole["in_investments"]
     assert (D(str(kept["cost"])), D(str(kept["profit"]))) == (D("600"), D("450"))
+
+
+def test_the_businesss_money_moves_to_its_own_account_and_the_old_one_becomes_yours(shop):
+    """2026-11-28, owner: business and own money were in one CIC account; the business now has its own account."""
+    client, org, owner, *_ = shop
+    mixed = _mmf(client)
+    made = client.post("/api/v1/accounting/investments/", {"name": "CIC MMF BUSINESS ACCOUNT"}, format="json")
+    business = made.json()["id"]
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("3000"), cogs=D("2000"), kind="INCOME", reference="Sales", key="s", user=owner)
+    assert _move(client, mixed, "DEPOSIT", "3000", "BUSINESS", "biz", place="CASH").status_code == 201
+    assert _move(client, mixed, "DEPOSIT", "10000", "OWNER", "mine").status_code == 201
+    assert client.post(f"/api/v1/accounting/investments/{mixed}/statement/", {"balance": "13100", "idempotency_key": "st"}, format="json").status_code == 201
+    before = _books(org)[0]["1400"]["balance"]
+    too_much = client.post(f"/api/v1/accounting/investments/{mixed}/transfer/", {"to": business, "amount": "3200", "whose": "BUSINESS",
+                           "idempotency_key": "big"}, format="json")
+    assert too_much.status_code == 400
+    moved = client.post(f"/api/v1/accounting/investments/{mixed}/transfer/", {"to": business, "amount": "3100", "whose": "BUSINESS",
+                        "make_own": True, "idempotency_key": "t1"}, format="json")
+    assert moved.status_code == 201, moved.content
+    rows = {i["id"]: i for i in client.get("/api/v1/accounting/investments/").json()["investments"]}
+    assert (D(str(rows[mixed]["value"])), D(str(rows[mixed]["shop_value"])), rows[mixed]["holder"]) == (D("10000"), D("0"), "OWN")
+    assert (D(str(rows[business]["value"])), D(str(rows[business]["shop_value"]))) == (D("3100"), D("3100"))
+    assert _books(org)[0]["1400"]["balance"] == before  # still the business's money in investments
+    assert not any(_places(client).values())  # no place was touched
+    # Own money can't go to the business, and the business's can't go into an own account.
+    assert client.post(f"/api/v1/accounting/investments/{business}/transfer/", {"to": mixed, "amount": "100", "whose": "BUSINESS",
+                       "idempotency_key": "back"}, format="json").status_code == 400
+    # Undoing either half undoes both.
+    came = next(m for m in rows[business]["movements"] if m["transfer"])
+    client.post(f"/api/v1/accounting/investments/{mixed}/holder/", {"holder": "BUSINESS"}, format="json")
+    assert client.post(f"/api/v1/accounting/investments/movements/{came['id']}/undo/", {"reason": "Mistake"}, format="json").status_code == 200
+    rows = {i["id"]: i for i in client.get("/api/v1/accounting/investments/").json()["investments"]}
+    assert (D(str(rows[mixed]["shop_value"])), D(str(rows[business]["value"]))) == (D("3100"), D("0"))
