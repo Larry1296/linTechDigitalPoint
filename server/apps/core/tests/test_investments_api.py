@@ -920,3 +920,94 @@ def test_money_put_in_earlier_from_the_till_while_the_drawer_held_sales_is_taken
         from apps.accounting.investments import undo
         undo(movement=InvestmentMovement.objects.get(idempotency_key="old-2"), user=owner, reason="test")
     assert _places(client) == {"CASH": D("350"), "MPESA": 0}
+
+
+def _own(client, name="My own MMF"):
+    made = client.post("/api/v1/accounting/investments/", {"name": name, "holder": "OWN"}, format="json")
+    assert made.status_code == 201 and made.json()["holder"] == "OWN", made.content
+    return made.json()["id"]
+
+
+def test_what_was_sold_splits_into_cost_for_the_business_account_and_profit_for_your_own(shop):
+    """2026-11-28, owner: "the profit to go to my personal account and the cost of sale to go to the business account",
+    and the money not invested yet shows both. Each sale's cost stays the business's; services are all profit; running
+    costs come off the profit, suppliers paid off the cost."""
+    client, org, owner, *_ = shop
+    business = _mmf(client)
+    own = _own(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("1000"), cogs=D("600"), kind="INCOME", reference="Sales", key="s1", user=owner)
+        post(unit="SHOP", method="MPESA", amount=D("500"), cogs=D("300"), kind="INCOME", reference="Sales", key="s2", user=owner)
+        post(unit="CYBER", method="CASH", amount=D("300"), kind="INCOME", reference="Printing", key="s3", user=owner)
+        post(unit="SHOP", method="CASH", amount=D("-100"), kind="EXPENSE", reference="Tea", key="e1", user=owner)
+    split = client.get("/api/v1/accounting/investments/").json()["not_invested_split"]
+    # Held 1,700: cost 900 (600 + 300), profit 400 + 200 + 300 − 100 running costs = 800.
+    assert {k: D(str(split[k])) for k in ("held", "cost", "profit", "gross_profit", "running_costs")} == \
+        {"held": D("1700"), "cost": D("900"), "profit": D("800"), "gross_profit": D("900"), "running_costs": D("100")}
+    # The business's money cannot go into an own account, and the profit cannot go to the business's account.
+    assert _move(client, own, "DEPOSIT", "1700", "BUSINESS", "wrong", place="CASH").status_code == 400
+    wrong = client.post("/api/v1/accounting/investments/sold/", {"business_fund": own, "own_fund": business, "idempotency_key": "w"}, format="json")
+    assert wrong.status_code == 400
+    put = client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "own_fund": own, "idempotency_key": "sold-1"}, format="json")
+    assert put.status_code == 201, put.content
+    assert (D(str(put.json()["own"])), D(str(put.json()["business"]))) == (D("800"), D("900"))
+    # The same click again records nothing new.
+    assert client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "own_fund": own, "idempotency_key": "sold-1"},
+                       format="json").status_code == 201
+    listed = {i["id"]: i for i in client.get("/api/v1/accounting/investments/").json()["investments"]}
+    assert (D(str(listed[business]["shop_value"])), D(str(listed[business]["owner_value"]))) == (D("900"), D("0"))
+    assert (D(str(listed[own]["value"])), D(str(listed[own]["shop_value"]))) == (D("800"), D("0"))
+    assert _places(client) == {"CASH": 0, "MPESA": 0}
+    accounts, checks, _ = _books(org)
+    # The profit was taken by the owner (out of their stake), the cost is the business's money in the investment.
+    assert accounts["3000"]["balance"] == D("800") and accounts["1400"]["balance"] == D("900")
+    money_check = client.get("/api/v1/accounting/money-check/").json()
+    cash = next(p for p in money_check["places"] if p["method"] == "CASH")
+    assert any(part["key"] == "taken" and D(str(part["amount"])) < 0 for part in cash["parts"])
+    # Undoing the own deposit puts the profit back where it was taken from.
+    deposit = next(m for m in listed[own]["movements"] if m["kind"] == "DEPOSIT")
+    assert client.post(f"/api/v1/accounting/investments/movements/{deposit['id']}/undo/", {"reason": "Mistake"}, format="json").status_code == 200
+    assert sum(_places(client).values()) == D("800")
+    assert D(str(client.get("/api/v1/accounting/investments/").json()["not_invested_split"]["profit"])) == D("800")
+    assert _books(org)[0].get("3000", {"balance": D("0")})["balance"] == 0
+
+
+def test_less_profit_may_be_taken_and_the_rest_stays_with_the_business(shop):
+    client, org, owner, *_ = shop
+    business = _mmf(client)
+    own = _own(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("1000"), cogs=D("700"), kind="INCOME", reference="Sales", key="s1", user=owner)
+    too_much = client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "own_fund": own, "profit": "1200",
+                           "idempotency_key": "big"}, format="json")
+    assert too_much.status_code == 400
+    put = client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "own_fund": own, "profit": "100",
+                      "idempotency_key": "some"}, format="json")
+    assert put.status_code == 201 and (D(str(put.json()["own"])), D(str(put.json()["business"]))) == (D("100"), D("900"))
+    # All of it is the cost of goods: no own account is needed.
+    with organization_context(org):
+        post(unit="SHOP", method="CASH", amount=D("50"), cogs=D("50"), kind="INCOME", reference="Sales", key="s2", user=owner)
+    only = client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "idempotency_key": "cost"}, format="json")
+    assert only.status_code == 201 and only.json()["own"] is None and D(str(only.json()["business"])) == D("50")
+    empty = client.post("/api/v1/accounting/investments/sold/", {"business_fund": business, "idempotency_key": "none"}, format="json")
+    assert empty.status_code == 400 and "Nothing sold" in str(empty.json())
+
+
+def test_interest_in_your_own_account_is_yours_and_an_account_with_business_money_cannot_become_yours(shop):
+    client, org, owner, *_ = shop
+    business = _mmf(client)
+    own = _own(client)
+    assert _move(client, own, "DEPOSIT", "10000", "OWNER", "mine").status_code == 201
+    assert client.post(f"/api/v1/accounting/investments/{own}/statement/", {"balance": "10100", "idempotency_key": "st"}, format="json").status_code == 201
+    row = next(i for i in client.get("/api/v1/accounting/investments/").json()["investments"] if i["id"] == own)
+    assert (D(str(row["owner_value"])), D(str(row["shop_value"]))) == (D("10100"), D("0"))
+    _untouched(org)  # not the business's profit
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("500"), kind="INCOME", reference="Sales", key="s", user=owner)
+    assert _move(client, business, "DEPOSIT", "500", "BUSINESS", "biz", place="CASH").status_code == 201
+    refused = client.post(f"/api/v1/accounting/investments/{business}/holder/", {"holder": "OWN"}, format="json")
+    assert refused.status_code == 400 and "business's money" in str(refused.json())
+    assert client.post(f"/api/v1/accounting/investments/{own}/holder/", {"holder": "BUSINESS"}, format="json").json()["holder"] == "BUSINESS"

@@ -23,7 +23,8 @@ PARTS = [("OPENING", "starting", "Starting money"), ("INCOME", "received", "Rece
          ("EXPENSE", "expenses", "Spent on running costs"), ("PURCHASE", "suppliers", "Paid to suppliers"),
          ("LOAN", "loans", "Money lent, less repayments"),
          ("TRANSFER", "to_agency", "Moved to the M-Pesa agency, less returned"),
-         ("INVESTMENT", "invested", "Kept in investments, less taken back")]
+         ("INVESTMENT", "invested", "Kept in investments, less taken back"),
+         ("DRAWING", "taken", "Profit taken to your own account")]
 ZERO = Decimal("0")
 
 

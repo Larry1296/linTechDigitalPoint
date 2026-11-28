@@ -149,8 +149,10 @@ def _moment(day):
 
 
 @transaction.atomic
-def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal("15"), kind="MMF"):
+def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal("15"), kind="MMF", holder=Investment.BUSINESS):
     lock_business()
+    if holder not in (Investment.BUSINESS, Investment.OWN):
+        raise ValidationError("Say whose account it is: the business's or your own.")
     name = " ".join(str(name or "").split())
     if kind not in KINDS:
         raise ValidationError("Choose what kind of investment it is.")
@@ -162,8 +164,27 @@ def open_investment(*, user, name, account_number="", notes="", tax_rate=Decimal
     for old in Investment.objects.filter(name__iexact=name, removed_at__isnull=False):
         Investment.objects.filter(pk=old.pk).update(name=f"{old.name[:90]} (removed #{old.pk})")
     investment = Investment.objects.create(name=name[:120], account_number=str(account_number or "").strip()[:60],
-                                           notes=str(notes or "").strip(), tax_rate=tax_rate, kind=kind, created_by=user)
-    audit(investment, user, f"Investment account {name} added")
+                                           notes=str(notes or "").strip(), tax_rate=tax_rate, kind=kind, holder=holder, created_by=user)
+    audit(investment, user, f"Investment account {name} added ({'your own' if holder == Investment.OWN else 'the business'+chr(39)+'s'})")
+    return investment
+
+
+@transaction.atomic
+def set_holder(*, investment, user, holder):
+    """Whose account it is. It becomes the owner's own only while it holds none of the business's money: that money
+    (and the interest it earned) is the business's and must be taken out, or moved, first."""
+    lock_business()
+    investment = Investment.objects.select_for_update().get(pk=investment.pk)
+    if holder not in (Investment.BUSINESS, Investment.OWN):
+        raise ValidationError("Say whose account it is: the business's or your own.")
+    if holder == investment.holder:
+        return investment
+    if holder == Investment.OWN and business_value(investment):
+        raise ValidationError(f"{investment.name} holds {business_value(investment):,.2f} of the business's money. Only an account "
+                              "holding none of it can be your own: keep it as the business's and add your own account beside it.")
+    Investment.objects.filter(pk=investment.pk).update(holder=holder)
+    investment.refresh_from_db()
+    audit(investment, user, f"{investment.name} is now {'your own account' if holder == Investment.OWN else 'the business' + chr(39) + 's account'}")
     return investment
 
 
@@ -200,6 +221,9 @@ def move(*, investment, user, kind, amount, source=OWNER, place=None, unit=None,
     if source not in SOURCES:
         raise ValidationError(APART)
     business = source == BUSINESS_MONEY
+    if business and investment.holder == Investment.OWN:
+        raise ValidationError(f"{investment.name} is your own account: the business's money goes into the business's account. "
+                              "The profit from sales comes here with “Invest what was sold”.")
     place = str(place or "").upper()
     if business and place not in BUSINESS:
         raise ValidationError("Choose where the business's money " + ("comes from" if kind == InvestmentMovement.DEPOSIT else "goes")
@@ -375,14 +399,18 @@ def record_statement(*, investment, user, key, balance=None, interest=None, occu
     from .investment_interest import estimate
     guess = estimate(investment, today=day)
     # All of what it earned (or lost) is the business's: its profit, kept in the investment as the business's money.
-    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=amount, whose=BUSINESS_MONEY, occurred_on=day,
+    # In the owner's own account it is the owner's own, out of the business's books.
+    own = investment.holder == Investment.OWN
+    movement = InvestmentMovement.objects.create(investment=investment, kind=kind, amount=amount, business_amount=Decimal("0") if own else amount,
+                                                 whose=OWNER if own else BUSINESS_MONEY, occurred_on=day,
                                                  note=str(note or "").strip(), statement_balance=balance, branch=resolve_branch(),
                                                  predicted_interest=guess["net"] if guess else None,
                                                  predicted_since=guess["since"] if guess else None,
                                                  idempotency_key=key, created_by=user)
     words = f"{'Interest earned on' if kind == InvestmentMovement.INTEREST else 'Fees or loss on'} {investment.name}"
     audit(movement, user, f"{words}: {amount} (statement {balance} on {day})")
-    book_earned(movement, user)
+    if not own:
+        book_earned(movement, user)
     return movement
 
 
@@ -422,7 +450,8 @@ def _reverse(key, user, reason, undo_key):
 def book_earnings():
     """Interest and fees recorded before they counted as the business's are counted once: profit, and the business's
     money in the investment. Those counted on 2026-10-31 as held by the owner (3000) are moved to the investment."""
-    live = InvestmentMovement.objects.filter(kind__in=[InvestmentMovement.INTEREST, InvestmentMovement.FEE], reversed_at__isnull=True)
+    live = InvestmentMovement.objects.filter(kind__in=[InvestmentMovement.INTEREST, InvestmentMovement.FEE], reversed_at__isnull=True,
+                                             investment__holder=Investment.BUSINESS)
     booked = {int(key.rpartition(":")[2]) for key in JournalEntry.objects.filter(source_key__startswith=f"{EARNED}:").values_list("source_key", flat=True)
               if key.rpartition(":")[2].isdigit()}
     missing = [pk for pk in live.values_list("pk", flat=True) if pk not in booked]
@@ -468,6 +497,12 @@ def undo(*, movement, user, reason):
         reverse_cash(entry=movement.entry, user=user, reason=reason, allow_investment=True)
     if movement.whose == BUSINESS_MONEY:
         ungather(movement.idempotency_key, user, reason)
+    if movement.idempotency_key.startswith(SOLD) and movement.idempotency_key.endswith(":own"):
+        # The profit taken to the owner's own account goes back to the places it was taken from.
+        base = movement.idempotency_key.removeprefix(SOLD).removesuffix(":own")
+        for entry in CashEntry.objects.filter(source_key__startswith=f"{TAKEN}{base}:", kind="DRAWING", reversal_of__isnull=True):
+            if not CashEntry.objects.filter(reversal_of=entry).exists():
+                reverse_cash(entry=entry, user=user, reason=reason, allow_investment=True)
     uncover([movement.idempotency_key, f"claim:{movement.pk}", f"{movement.idempotency_key}{GATHERED}"], user, reason)
     for prefix in (MOVED, EARNED, OWNER_HELD):
         _reverse(f"{prefix}:{movement.pk}", user, reason, f"{prefix}-undo:{movement.pk}")
@@ -854,3 +889,93 @@ def _separate():
             first = "from" if m.kind == InvestmentMovement.DEPOSIT else "into"
             changes.update(source=OWNER, note=f"{m.note} · first recorded {first} {WORDS.get(m.source, m.source)}; kept apart from the business".lstrip(" ·")[:1000])
         InvestmentMovement.objects.filter(pk=m.pk).update(**changes)
+
+
+SOLD = "sold:"  # invest_sold(): its two deposits, sold:<key>:own and sold:<key>:business
+TAKEN = "profit-taken:"  # the profit taken out of a place to the owner's own account, profit-taken:<key>:<place>:<part>
+
+
+def split(at=None):
+    """The business's money not invested yet (what its drawer, till and bank hold), split into what the goods sold had
+    cost, which stays the business's to buy the stock again, and the profit, which is the owner's to take.
+
+    The cash book is read in order. Money from a sale brings its goods' cost (each payment carries its share of the
+    sale's cost) and the profit on it; services and commission are all profit. Running costs paid out come off the
+    profit; suppliers paid come off the cost (the stock is bought again); profit taken comes off the profit; anything
+    else (loans, money put into or back from an investment, starting money) is the business's money, on the cost side.
+    When one side runs below zero, the other covers it, so the two always add up to what the places hold.
+    {"held", "cost", "profit", "gross_profit", "running_costs"}: the last two since the places were last emptied."""
+    rows = CashEntry.objects.filter(account__payment_method__in=BUSINESS)
+    if at:
+        rows = rows.filter(occurred_at__lte=at)
+    cost = profit = gross = spent = Decimal("0")
+    for kind, amount, cogs in rows.order_by("occurred_at", "pk").values_list("kind", "amount", "cogs").iterator():
+        if kind == "INCOME":
+            cost += cogs
+            profit += amount - cogs
+            gross += amount - cogs
+        elif kind == "EXPENSE":
+            profit += amount
+            spent -= amount
+        elif kind == "DRAWING":
+            profit += amount
+        else:
+            cost += amount
+        if cost < 0 < profit:
+            profit, cost = profit + cost, Decimal("0")
+        elif profit < 0 < cost:
+            cost, profit = cost + profit, Decimal("0")
+        if cost + profit <= 0:
+            gross = spent = Decimal("0")
+    held = cost + profit
+    if held <= 0:
+        return {"held": held, "cost": held, "profit": Decimal("0"), "gross_profit": Decimal("0"), "running_costs": Decimal("0")}
+    # Above zero in all, neither side is left below zero by the covering above.
+    return {"held": held, "cost": cost, "profit": profit, "gross_profit": gross, "running_costs": spent}
+
+
+@transaction.atomic
+def invest_sold(*, business_fund, own_fund=None, user, key, occurred_on=None, profit=None):
+    """Everything sold and not invested yet goes in, in two parts (2026-11-28, owner: "the profit to go to my personal
+    account and the cost of sale to go to the business account"):
+    - the profit (``profit``, or all of it as split() works it out) is taken by the owner out of the drawer, till and
+      bank (Dr owner 3000 / Cr place, a DRAWING) and put into their own account ``own_fund`` as their own money, out of
+      the books from then on;
+    - the rest, what the goods had cost, goes into the business's account ``business_fund`` as the business's money,
+      like any business deposit, so it is there to buy the stock again.
+    Profit taken is not a cost: profit stays as it is, and the business's money goes down by it. Undoing the own deposit
+    puts the profit back in its places. Returns {"own": movement or None, "business": movement or None}."""
+    lock_business()
+    done = {half: InvestmentMovement.objects.filter(idempotency_key=f"{SOLD}{key}:{half}").first() for half in ("own", "business")}
+    if any(done.values()):
+        return done
+    day = _day(occurred_on)
+    at = _day_end(day)
+    parts = split(at)
+    held = parts["held"]
+    if held <= 0:
+        raise ValidationError("Nothing sold is waiting to be invested: the drawer, till and bank hold none of the business's money.")
+    take = parts["profit"] if profit in (None, "") else money(profit)
+    if take < 0 or take > held:
+        raise ValidationError(f"The profit taken can be from 0 up to {held:,.2f}, everything not invested yet.")
+    if not business_fund or business_fund.holder != Investment.BUSINESS or business_fund.removed_at:
+        raise ValidationError("Choose the business's account for what the goods cost.")
+    if take and (not own_fund or own_fund.holder != Investment.OWN or own_fund.removed_at):
+        raise ValidationError("Choose your own account for the profit. Add it first, marked as your own, if it is not here yet.")
+    from .services import post as post_cash
+    moment = _moment(day)
+    result = {"own": None, "business": None}
+    if take:
+        for m, u, v in _capped(_others(None, None, at), take):
+            post_cash(unit=u, method=m, amount=-v, kind="DRAWING", key=f"{TAKEN}{key}:{m}:{u}"[:180], user=user, occurred_at=moment,
+                      reference=f"Profit taken to your own account, {own_fund.name}, from {PLACE_WORDS[m]}"[:160], branch=resolve_branch())
+        result["own"] = move(investment=own_fund, user=user, kind=InvestmentMovement.DEPOSIT, amount=take, key=f"{SOLD}{key}:own",
+                             occurred_on=day, note="Profit from sales: what was sold less what the goods cost")
+    rest = held - take
+    if rest > 0:
+        left = [row for row in _others(None, None, at) if row[2] > 0]
+        place, unit = (left[0][0], left[0][1]) if left else ("CASH", None)
+        result["business"] = move(investment=business_fund, user=user, kind=InvestmentMovement.DEPOSIT, amount=rest, source=BUSINESS_MONEY,
+                                  place=place, unit=unit, key=f"{SOLD}{key}:business", occurred_on=day,
+                                  note="Cost of the goods sold: kept to buy the stock again")
+    return result

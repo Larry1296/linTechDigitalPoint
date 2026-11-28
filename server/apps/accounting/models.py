@@ -64,7 +64,8 @@ class CashEntry(PostedRecord):
     account = models.ForeignKey(CashAccount, on_delete=models.PROTECT)
     business_unit = models.CharField(max_length=5, choices=BusinessUnit.choices)
     occurred_at = models.DateTimeField(default=timezone.now)
-    kind = models.CharField(max_length=20, choices=[(x, x) for x in ['INCOME', 'EXPENSE', 'PURCHASE', 'PRINCIPAL', 'OPENING', 'LOAN', 'INVESTMENT', 'TRANSFER']])
+    # DRAWING: the owner taking the profit out of the business's place, to their own account (investments.invest_sold).
+    kind = models.CharField(max_length=20, choices=[(x, x) for x in ['INCOME', 'EXPENSE', 'PURCHASE', 'PRINCIPAL', 'OPENING', 'LOAN', 'INVESTMENT', 'TRANSFER', 'DRAWING']])
     amount = models.DecimalField(max_digits=16, decimal_places=2)
     cogs = models.DecimalField(max_digits=16, decimal_places=2, default=0)
     reference = models.CharField(max_length=160)
@@ -284,6 +285,10 @@ class Investment(TenantModel):
     fund = models.CharField(max_length=40, blank=True, default='')
     # What kind of investment it is (see investments.KINDS): it says how risky the money is.
     kind = models.CharField(max_length=20, default='MMF')
+    # Whose account it is: the business's (its money waits here to buy stock again) or the owner's own (the profit
+    # taken out goes here, and its interest is the owner's, never in the business's books).
+    BUSINESS, OWN = 'BUSINESS', 'OWN'
+    holder = models.CharField(max_length=10, choices=[(BUSINESS, 'The business'), (OWN, 'The owner')], default=BUSINESS)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     # Set when an account recorded by mistake is removed: everything in it was undone and it no longer shows.

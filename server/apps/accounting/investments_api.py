@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, invest_sold, set_holder, split, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -46,6 +46,7 @@ def investment_row(investment):
     guess = estimate(investment)
     share = shares(investment)
     return {"id": investment.pk, "name": investment.name, "account_number": investment.account_number, "notes": investment.notes,
+            "holder": investment.holder,
             "value": value(investment), "put_in": sums["DEPOSIT"], "taken_out": sums["WITHDRAWAL"], "interest": sums["INTEREST"],
             "fees": sums["FEE"],
             # Whose the money is: shop_* the business's (put in less taken back, and all the interest less fees: in the books
@@ -78,6 +79,8 @@ class InvestmentInput(serializers.Serializer):
     # A fund whose published rate the app follows; left out, it is guessed from the name ("CIC MMF"); "" means typed in.
     fund = serializers.ChoiceField(choices=["", *fund_rates.FUNDS], required=False, allow_null=True, allow_blank=True)
     kind = serializers.ChoiceField(choices=sorted(KINDS), required=False, default="MMF")
+    # Whose account: BUSINESS (its money waits to buy stock again) or OWN (the owner's: the profit taken goes here).
+    holder = serializers.ChoiceField(choices=[Investment.BUSINESS, Investment.OWN], required=False, default=Investment.BUSINESS)
 
 
 def business_breakdown(rows):
@@ -128,6 +131,8 @@ class InvestmentsView(APIView):
                          # The business's money the app expects in its drawer, till, bank and other money, not in investments.
                          "business_in_places": in_places,
                          "business_places": each,
+                         # The same money split into what the goods cost (for the business's account) and the profit (for yours).
+                         "not_invested_split": split(),
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),
@@ -338,3 +343,40 @@ class FundRateCheckView(APIView):
         if started:
             transaction.on_commit(lambda: fund_rates.start_refresh(code))
         return Response({"started": started, "fund": fund_rates.summary(code)})
+
+
+class InvestmentHolderView(APIView):
+    """Whose account it is: the business's or the owner's own."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investment"
+
+    def post(self, request, pk):
+        holder = serializers.ChoiceField(choices=[Investment.BUSINESS, Investment.OWN]).run_validation(request.data.get("holder"))
+        investment = set_holder(investment=get_object_or_404(Investment, pk=pk, removed_at__isnull=True), user=request.user, holder=holder)
+        return Response(investment_row(investment))
+
+
+class SoldInput(serializers.Serializer):
+    business_fund = serializers.IntegerField()
+    own_fund = serializers.IntegerField(required=False, allow_null=True)
+    # The profit taken to the owner's own account; left out, all of it as worked out.
+    profit = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    occurred_on = serializers.DateField(required=False, allow_null=True)
+    idempotency_key = serializers.CharField(max_length=60)
+
+
+class InvestSoldView(APIView):
+    """Everything sold and not invested yet goes in: the cost of the goods to the business's account, the profit to the
+    owner's own account."""
+    permission_classes = [HasLinTechPermission]
+    permission_required = "accounting.add_investmentmovement"
+
+    def post(self, request):
+        form = SoldInput(data=request.data)
+        form.is_valid(raise_exception=True)
+        d = form.validated_data
+        business = get_object_or_404(Investment, pk=d["business_fund"])
+        own = Investment.objects.filter(pk=d.get("own_fund")).first() if d.get("own_fund") else None
+        result = invest_sold(business_fund=business, own_fund=own, user=request.user, key=d["idempotency_key"],
+                             occurred_on=d.get("occurred_on"), profit=d.get("profit"))
+        return Response({half: (m.amount if m else None) for half, m in result.items()}, status=201)

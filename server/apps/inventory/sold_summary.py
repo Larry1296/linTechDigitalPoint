@@ -131,13 +131,16 @@ def money_bridge(sold_total, interest):
     lines = [("not_received", -(sold_total - interest - received)), ("starting", starting), ("own_for_suppliers", own),
              ("found", found), ("agency", by_kind.get("TRANSFER", ZERO)), ("suppliers", by_kind.get("PURCHASE", ZERO)),
              ("expenses", by_kind.get("EXPENSE", ZERO)), ("loans", by_kind.get("LOAN", ZERO)),
-             ("other", sum((v for k, v in by_kind.items() if k not in {"INCOME", "OPENING", "TRANSFER", "PURCHASE", "EXPENSE", "LOAN", "INVESTMENT"}), ZERO))]
+             ("taken_by_owner", by_kind.get("DRAWING", ZERO)),
+             ("other", sum((v for k, v in by_kind.items() if k not in {"INCOME", "OPENING", "TRANSFER", "PURCHASE", "EXPENSE", "LOAN", "INVESTMENT", "DRAWING"}), ZERO))]
     in_places = sum(by_kind.values(), ZERO)
     kept = kept_in_investments()
     invested = kept["total"]
-    from apps.accounting.investments import business_places
+    from apps.accounting.investments import business_places, split
     return {"lines": [{"key": key, "amount": amount} for key, amount in lines if amount],
             "money_now": in_places + invested, "in_places": in_places, "in_investments": invested, "interest": interest,
             "funds": [row["name"] for row in kept["accounts"]],
             # Not invested yet, place by place (the drawer, till, bank): what each should hold of the business's money.
-            "places": [{"label": row["label"], "amount": row["expected"]} for row in business_places()]}
+            "places": [{"label": row["label"], "amount": row["expected"]} for row in business_places()],
+            # The same money, split into what the goods cost (stays the business's) and the profit (the owner's to take).
+            "split": split()}

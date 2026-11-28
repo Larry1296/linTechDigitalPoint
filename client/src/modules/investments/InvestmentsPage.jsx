@@ -19,6 +19,10 @@ import { TextArea } from "../../components/forms/TextBox";
 // are. The owner's own money never touches the business. All the interest is the business's profit.
 const OWNER = "OWNER";
 const BUSINESS = "BUSINESS";
+// Whose account an investment is: the business's (its cost of goods waits there) or the owner's own (the profit goes there).
+const BUSINESS_ACCOUNT = "BUSINESS";
+const OWN_ACCOUNT = "OWN";
+const isOwn = (investment) => investment.holder === OWN_ACCOUNT;
 const PLACES = [["MPESA", "Lipa na M-Pesa till"], ["CASH", "Cash drawer"], ["BANK", "Bank"], ["OTHER", "Other money"]];
 const placeName = (key) => (PLACES.find(([value]) => value === key)?.[1] || key).toLowerCase();
 const APART = "The M-Pesa agency's cash and float are never used.";
@@ -89,7 +93,8 @@ function Risk({ kind }) {
 }
 
 // Where the money goes: a fund the app follows (its rate comes in by itself) or another account whose rate is typed in.
-function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
+function NewInvestmentForm({ funds, kinds, thenAdd, holder: startHolder = BUSINESS_ACCOUNT, onSaved, onCancel }) {
+  const [holder, setHolder] = useState(startHolder);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
@@ -110,7 +115,7 @@ function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
       const row = await api("/api/v1/accounting/investments/", { method: "POST",
-        body: JSON.stringify({ ...values, fund: chosen, kind: chosen ? "MMF" : kind, annual_rate: chosen ? null : values.annual_rate || null }) });
+        body: JSON.stringify({ ...values, holder, fund: chosen, kind: chosen ? "MMF" : kind, annual_rate: chosen ? null : values.annual_rate || null }) });
       await onSaved(row);
     } catch (err) {
       setError(err.message);
@@ -121,6 +126,13 @@ function NewInvestmentForm({ funds, kinds, thenAdd, onSaved, onCancel }) {
     <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="New investment">
       <h2>{thenAdd ? "Add money to a new investment" : "Add an investment account"}</h2>
       <fieldset disabled={busy} className="loanFields">
+        <fieldset className="investWhose">
+          <legend>Whose account is it?</legend>
+          <label><input type="radio" name="holder-choice" checked={holder === BUSINESS_ACCOUNT} onChange={() => setHolder(BUSINESS_ACCOUNT)} /> The business's
+            <small> · the cost of goods sold waits here to buy the stock again</small></label>
+          <label><input type="radio" name="holder-choice" checked={holder === OWN_ACCOUNT} onChange={() => setHolder(OWN_ACCOUNT)} /> My own
+            <small> · the profit from sales comes here; its interest is yours, not the business's</small></label>
+        </fieldset>
         <FormField label="Where are you investing?">
           <select value={chosen} onChange={(event) => pick(event.target.value)}>
             {funds.map((f) => <option key={f.code} value={f.code}>
@@ -190,7 +202,8 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
   const { user } = useAuth();
   const parts = businessParts(user?.organization);
   const putIn = kind === "DEPOSIT";
-  const [whose, setWhose] = useState(preset?.whose ?? (putIn || Number(investment.shop_value) > 0 ? BUSINESS : OWNER));
+  const ownAccount = isOwn(investment) && Number(investment.shop_value) <= 0;
+  const [whose, setWhose] = useState(ownAccount ? OWNER : preset?.whose ?? (putIn || Number(investment.shop_value) > 0 ? BUSINESS : OWNER));
   const business = whose === BUSINESS;
   const holds = business ? investment.shop_value : investment.owner_value;
   const [amount, setAmount] = useState(preset?.amount ?? (putIn ? "" : String(Math.max(Number(holds) || 0, 0))));
@@ -242,13 +255,14 @@ function MoveForm({ investment, kind, preset, places = [], onSaved, onCancel }) 
   return (
     <form className="loanRepay" onSubmit={(event) => void submit(event)} aria-label={putIn ? "Add money" : "Take money out"}>
       <fieldset disabled={busy} className="loanFields">
-        <fieldset className="investWhose">
+        {ownAccount ? <p className="muted">Your own account: only your own money goes in or comes out. The profit from sales comes in with
+          “Invest what was sold” at the top of the page.</p> : <fieldset className="investWhose">
           <legend>Whose money {putIn ? "is it" : "is coming out"}?</legend>
           <label><input type="radio" name="whose" checked={business} onChange={() => choose(BUSINESS)} /> The business's money
             {!putIn && <small> · {money(investment.shop_value)} in it</small>}</label>
           <label><input type="radio" name="whose" checked={!business} onChange={() => choose(OWNER)} /> My own money
             {!putIn && <small> · {money(investment.owner_value)} in it</small>}</label>
-        </fieldset>
+        </fieldset>}
         {business && <FormField label={putIn ? "Sent from" : "Put back into"}>
           <select value={place} onChange={(event) => setPlace(event.target.value)}>
             {PLACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -594,7 +608,81 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
   );
 }
 
-function InvestmentCard({ investment, funds, places = [], preset, month, canMove, canCorrect, canRemove, onChanged }) {
+// Everything sold and not invested yet goes in, in two parts: what the goods had cost into the business's account (to
+// buy the stock again) and the profit into your own. The profit is worked out from each sale's cost; you may take less
+// of it, and the rest stays with the business. Services and commission are all profit; running costs paid from the
+// drawer come off the profit.
+function InvestSoldForm({ split, investments, onSaved, onCancel, onAddOwn }) {
+  const businessFunds = investments.filter((i) => !isOwn(i));
+  const ownFunds = investments.filter(isOwn);
+  const held = Number(split?.held || 0);
+  const [business, setBusiness] = useState(businessFunds[0] ? String(businessFunds[0].id) : "");
+  const [own, setOwn] = useState(ownFunds[0] ? String(ownFunds[0].id) : "");
+  const [profit, setProfit] = useState(String(Number(split?.profit || 0)));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const taken = Math.min(Math.max(Number(profit) || 0, 0), held);
+  const cost = Math.round((held - taken) * 100) / 100;
+  const name = (list, id) => list.find((i) => String(i.id) === id)?.name;
+  const submit = async (event) => {
+    event.preventDefault();
+    const day = new FormData(event.currentTarget).get("occurred_on");
+    const parts = [taken > 0 && `${money(taken)} profit into ${name(ownFunds, own)}`, cost > 0 && `${money(cost)} cost of goods into ${name(businessFunds, business)}`].filter(Boolean);
+    if (!(await confirmAction({ title: `Invest ${money(held)}: ${parts.join(" and ")}?`,
+      text: "The drawer, till and bank are emptied. The cost of goods stays the business's money, kept to buy the stock again. "
+        + (taken > 0 ? "The profit becomes your own money: the business's money goes down by it, its profit stays as it is." : ""),
+      confirmButtonText: "Invest it" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/v1/accounting/investments/sold/", { method: "POST", body: JSON.stringify({ business_fund: Number(business),
+        own_fund: own ? Number(own) : null, profit: taken, occurred_on: day, idempotency_key: crypto.randomUUID() }) });
+      await onSaved();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  if (!businessFunds.length) return <section className="formCard" aria-label="Invest what was sold">
+    <h2>Invest what was sold</h2>
+    <p>Add the business's account first: the cost of goods sold goes there.</p>
+    <div className="actionRow"><button type="button" className="secondary" onClick={onCancel}>Close</button></div>
+  </section>;
+  const needOwn = taken > 0 && !ownFunds.length;
+  return (
+    <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Invest what was sold">
+      <h2>Invest what was sold</h2>
+      <p className="muted">{money(held)} was sold and is not invested yet. Of it, the goods had cost {money(split.cost)} and the profit is {money(split.profit)}
+        {Number(split.running_costs) > 0.004 ? ` (after ${money(split.running_costs)} running costs paid from it)` : ""}.</p>
+      <fieldset disabled={busy} className="loanFields">
+        <FormField label={`Profit to your own account (${businessCurrency()})`} type="number" min="0" max={String(held)} step="0.01" value={profit}
+          onChange={(event) => setProfit(event.target.value)} required />
+        {taken < Number(split.profit) - 0.004 && <p className="muted">Taking less: the other {money(Number(split.profit) - taken)} stays with the business, with the cost of goods.</p>}
+        {ownFunds.length > 0 && taken > 0 && <FormField label="Your own account">
+          <select value={own} onChange={(event) => setOwn(event.target.value)}>
+            {ownFunds.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+        </FormField>}
+        <FormField label={`Cost of goods to the business's account: ${money(cost)}`}>
+          <select value={business} onChange={(event) => setBusiness(event.target.value)}>
+            {businessFunds.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+        </FormField>
+        <FormField label="Date the money went in" name="occurred_on" type="date" max={today()} defaultValue={today()} required />
+      </fieldset>
+      <dl className="investSoldParts">
+        <div><dt>Profit → your own account<small>Yours: out of the business's books from now on</small></dt><dd>{money(taken)}</dd></div>
+        <div><dt>Cost of goods → the business's account<small>Still the business's money, to buy the stock again</small></dt><dd>{money(cost)}</dd></div>
+      </dl>
+      {needOwn && <p className="investWarning">You have no account marked as your own yet. Add it, then come back here.</p>}
+      <div className="actionRow">
+        {needOwn ? <button type="button" onClick={onAddOwn}>Add my own account</button> : <button disabled={busy}>Invest it</button>}
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      <FormError title="Could not invest it." message={error} />
+    </form>
+  );
+}
+
+function InvestmentCard({ investment, funds, places = [], preset, month, canMove, canCorrect, canRemove, canRename, onChanged }) {
   const [form, setForm] = useState(null);
   // Entries undone by mistake stay on record but are folded away, so the history reads like the fund's statement.
   const [showUndone, setShowUndone] = useState(false);
@@ -630,6 +718,21 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
     setError("");
     try {
       await api(`/api/v1/accounting/investments/${investment.id}/remove/`, { method: "POST", body: JSON.stringify({ reason: values.reason }) });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  // Whose account it is. It becomes your own only while it holds none of the business's money (the server says so).
+  const switchHolder = async () => {
+    const own = !isOwn(investment);
+    if (!(await confirmAction({ title: own ? `Make ${investment.name} your own account?` : `Make ${investment.name} the business's account?`,
+      text: own ? "The profit from sales can then go into it, and the interest it earns from now on is yours, not the business's profit."
+        : "The cost of goods sold can then go into it, and the interest it earns from now on is the business's profit.",
+      confirmButtonText: own ? "Make it my own" : "Make it the business's" }))) return;
+    setError("");
+    try {
+      await api(`/api/v1/accounting/investments/${investment.id}/holder/`, { method: "POST", body: JSON.stringify({ holder: own ? OWN_ACCOUNT : BUSINESS_ACCOUNT }) });
       await onChanged();
     } catch (err) {
       setError(err.message);
@@ -671,6 +774,7 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
       <header className="loanCardHead">
         <div>
           <h3>{investment.name}</h3>
+          <span className={`investHolder${isOwn(investment) ? " own" : ""}`}>{isOwn(investment) ? "Your own account" : "Business account"}</span>
           {investment.account_number && <p className="muted">Account {investment.account_number}</p>}
         </div>
         {published
@@ -752,10 +856,12 @@ function InvestmentCard({ investment, funds, places = [], preset, month, canMove
             <button type="button" onClick={() => setForm("DEPOSIT")}>Add money</button>
             <button type="button" className="secondary" disabled={Number(investment.value) <= 0} onClick={() => setForm("WITHDRAWAL")}>Take money out</button>
             <button type="button" className="secondary" onClick={() => setForm("STATEMENT")}>Update from statement</button>
-            {places.length > 0 && <button type="button" className="secondary" onClick={() => setForm("BUSINESS")}>Put in the business's money</button>}
+            {places.length > 0 && !isOwn(investment) && <button type="button" className="secondary" onClick={() => setForm("BUSINESS")}>Put in the business's money</button>}
           </div>}
-      {!form && canRemove && <div className="actionRow">
-        <button type="button" className="linkButton" onClick={() => void removeAll()}>Remove this investment</button>
+      {!form && (canRemove || canRename) && <div className="actionRow">
+        {canRename && <button type="button" className="linkButton" onClick={() => void switchHolder()}>
+          {isOwn(investment) ? "Make it the business's account" : "Make it my own account"}</button>}
+        {canRemove && <button type="button" className="linkButton" onClick={() => void removeAll()}>Remove this investment</button>}
       </div>}
       <FormError title="Could not do it." message={error} />
     </li>
@@ -770,6 +876,7 @@ export function InvestmentsPage() {
   const [adding, setAdding] = useState(false); // true, or "deposit" when money goes in once it is added
   const [choosing, setChoosing] = useState(false);
   const [preset, setPreset] = useState(null);
+  const [investing, setInvesting] = useState(false);
   const load = async () => {
     try {
       setData(await api("/api/v1/accounting/investments/"));
@@ -789,17 +896,20 @@ export function InvestmentsPage() {
   const ratedFrom = rated ? (rated.fund?.annual_rate != null ? `${rated.fund.short}'s published rate as of ${date(rated.fund.as_of)}` : `${rated.name}, ${rated.current_rate?.label}`) : "";
   const funds = data.funds || [];
   const earning = data.earning;
+  const split = data.not_invested_split;
   return (
     <>
       <div className="loanSummary">
         <h1>Investments</h1>
-        {!adding && !choosing && <div className="actionRow">
-          {canMove && <button type="button" onClick={() => setChoosing(true)}>Add money</button>}
+        {!adding && !choosing && !investing && <div className="actionRow">
+          {canMove && Number(split?.held) > 0.004 && <button type="button" onClick={() => setInvesting(true)}>Invest what was sold</button>}
+          {canMove && <button type="button" className={Number(split?.held) > 0.004 ? "secondary" : undefined} onClick={() => setChoosing(true)}>Add money</button>}
           {can("accounting.add_investment") && <button type="button" className="secondary" onClick={() => setAdding(true)}>Add investment account</button>}
         </div>}
       </div>
       <p className="muted">Money kept earning in a fund such as an MMF until it is needed. Say whose it is each time: the business's
-        stays the business's, yours stays out of its books. All interest is the business's profit.</p>
+        stays the business's, yours stays out of its books. Interest in the business's accounts is its profit; in your own account it is yours.
+        “Invest what was sold” sends the cost of goods to the business's account and the profit to yours.</p>
       <div className="metrics investMetrics">
         <article><span>Total invested</span><strong>{money(data.total_value)}</strong>
           <small>{money(data.invested)} put in + {money(data.interest_earned)} interest; matches the statement</small></article>
@@ -813,7 +923,7 @@ export function InvestmentsPage() {
             <small>Kept out of the business's books</small></article>
         </>}
         {data.business_in_places != null && <NotInvested total={data.business_in_places}
-          places={(data.business_places || []).map((place) => ({ label: place.label, amount: place.expected }))} money={money} />}
+          places={(data.business_places || []).map((place) => ({ label: place.label, amount: place.expected }))} split={split} money={money} />}
       </div>
       {Number(data.shop_value) > 0 && <BusinessSources total={data.shop_value} breakdown={data.business_breakdown} />}
       {due.length > 0 && <section className="investReminder" role="status" aria-label="Monthly check due">
@@ -825,21 +935,27 @@ export function InvestmentsPage() {
         {canMove && <button type="button" onClick={() => setPreset({ id: due[0].id, kind: "MONTHLY", nonce: Date.now() })}>
           Do the check{due.length > 1 ? ` for ${due[0].name}` : ""}</button>}
       </section>}
+      {investing && <InvestSoldForm split={split} investments={data.investments} onCancel={() => setInvesting(false)}
+        onAddOwn={() => { setInvesting(false); setAdding("own"); }}
+        onSaved={async () => { setInvesting(false); await load(); }} />}
       {choosing && <AddMoneyChooser investments={data.investments} onCancel={() => setChoosing(false)}
         onPick={(id) => { setChoosing(false); setPreset({ id, kind: "DEPOSIT", nonce: Date.now() }); }}
         onNew={() => { setChoosing(false); setAdding("deposit"); }} />}
-      {adding && <NewInvestmentForm funds={funds} kinds={data.kinds || []} thenAdd={adding === "deposit"} onCancel={() => setAdding(false)}
+      {adding && <NewInvestmentForm funds={funds} kinds={data.kinds || []} thenAdd={adding === "deposit"} holder={adding === "own" ? OWN_ACCOUNT : BUSINESS_ACCOUNT}
+        onCancel={() => setAdding(false)}
         onSaved={async (row) => {
           const deposit = adding === "deposit";
+          const own = adding === "own";
           setAdding(false);
           await load();
+          if (own) setInvesting(true);
           if (deposit && row?.id) setPreset({ id: row.id, kind: "DEPOSIT", nonce: Date.now() });
         }} />}
       {data.investments.length
         ? <ul className="loanList investList">{data.investments.map((i) => <InvestmentCard key={i.id} investment={i} funds={funds} places={data.business_places || []}
           preset={preset?.id === i.id ? preset : null} month={data.this_month}
           canMove={canMove} canCorrect={can("accounting.reverse_cashentry")}
-          canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
+          canRemove={can("accounting.reverse_cashentry") && can("accounting.add_investment")} canRename={can("accounting.add_investment")} onChanged={async () => { setPreset(null); await load(); }} />)}</ul>
         : <Empty>No investment accounts yet. Add your MMF to start tracking what you put in, take out and earn.</Empty>}
       {data.investments.length > 0 && <InvestmentAnalysis investments={data.investments} earningYear={Number(earning?.year) || 0} />}
       <InterestCalculator defaultRate={ratedAt != null ? Number(ratedAt) : ""} defaultTax={rated ? Number(rated.tax_rate) : 15} rateSource={ratedFrom} />

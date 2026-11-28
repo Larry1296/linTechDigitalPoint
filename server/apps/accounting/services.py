@@ -171,7 +171,7 @@ def reverse(*, entry, user, reason, allow_loan=False, allow_investment=False, al
         raise ValidationError('Correct a customer refund from the sale it belongs to, not from the cash book.')
     if entry.kind == 'LOAN' and not allow_loan:
         raise ValidationError('Correct money lent or repaid from the Money lent page, not from the cash book.')
-    if entry.kind == 'INVESTMENT' and not allow_investment:
+    if entry.kind in ('INVESTMENT', 'DRAWING') and not allow_investment:
         raise ValidationError('Correct money put into or taken out of an investment from the Investments page, not from the cash book.')
     if entry.source_key.startswith('mkopa:') and not allow_mkopa:
         raise ValidationError('Correct commission M-KOPA paid from the M-KOPA phones page, not from the cash book.')

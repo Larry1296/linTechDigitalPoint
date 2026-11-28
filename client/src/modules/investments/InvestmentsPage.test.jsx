@@ -450,3 +450,38 @@ it("puts in everything sold and not invested yet from the drawer, till and bank 
   expect(within(form).getByLabelText(/Amount/)).toHaveAttribute("min", "3490");
   expect(within(form).getByText(/cash in the drawer KSh 3,290, bank KSh 200, KSh 3,490 in all/)).toBeInTheDocument();
 });
+
+it("splits what was sold into cost of goods for the business's account and profit for your own, and invests both", async () => {
+  const own = { ...mmf, id: 5, name: "My CIC", holder: "OWN", movements: [] };
+  const split = { held: "1700.00", cost: "900.00", profit: "800.00", gross_profit: "900.00", running_costs: "100.00" };
+  api.mockImplementation(async (path, options) => {
+    if (options?.method === "POST") return {};
+    const listed = listing(mmf);
+    return { ...listed, investments: [{ ...listed.investments[0], holder: "BUSINESS" }, own], business_in_places: "1700.00",
+      business_places: [{ key: "CASH", method: "CASH", label: "Cash drawer", expected: "1700.00" }], not_invested_split: split };
+  });
+  render(<InvestmentsPage />);
+  const card = (await screen.findByText("Not invested yet")).closest("article");
+  expect(card).toHaveTextContent("Cost of goods KSh 900 → business account");
+  expect(card).toHaveTextContent("Profit KSh 800 → your own account (after KSh 100 running costs paid from it)");
+  expect(screen.getByText("Your own account")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Invest what was sold" }));
+  const form = screen.getByRole("form", { name: "Invest what was sold" });
+  expect(within(form).getByText("Profit → your own account").closest("div")).toHaveTextContent("KSh 800");
+  // Taking less profit leaves the rest with the business.
+  fireEvent.change(within(form).getByLabelText(/Profit to your own account/), { target: { value: "500" } });
+  expect(within(form).getByText("Cost of goods → the business's account").closest("div")).toHaveTextContent("KSh 1,200");
+  await act(async () => { fireEvent.submit(form); });
+  const sent = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/accounting/investments/sold/")[1].body);
+  expect(sent).toMatchObject({ business_fund: 3, own_fund: 5, profit: 500 });
+});
+
+it("asks for your own account first when there is profit to take and none is marked as yours", async () => {
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : { ...listing(mmf), business_in_places: "100.00",
+    business_places: [], not_invested_split: { held: "100.00", cost: "60.00", profit: "40.00", gross_profit: "40.00", running_costs: "0.00" } }));
+  render(<InvestmentsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Invest what was sold" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add my own account" }));
+  const form = screen.getByRole("form", { name: "New investment" });
+  expect(within(form).getByLabelText(/My own/)).toBeChecked();
+});

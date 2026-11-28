@@ -43,9 +43,9 @@ function lineNote(line, money) {
 
 // Each step of the cash book in a few plain words, as money that came in from elsewhere (above 0) or was paid out (below).
 const CAME_IN = { starting: "the money it started with", found: "already in the investment before the app saw it", agency: "moved in from the M-Pesa agency",
-  suppliers: "supplier refunds", expenses: "running costs refunded", loans: "loans repaid", other: "other money in", not_received: "paid ahead for later sales" };
+  suppliers: "supplier refunds", expenses: "running costs refunded", loans: "loans repaid", taken_by_owner: "profit put back", other: "other money in", not_received: "paid ahead for later sales" };
 const PAID_OUT = { suppliers: "paid to suppliers", expenses: "running costs", loans: "money lent out", agency: "moved to the M-Pesa agency",
-  other: "other money out", found: "counted twice: already in the investment" };
+  taken_by_owner: "profit taken to your own account", other: "other money out", found: "counted twice: already in the investment" };
 
 // The simple sum from what was earned to the money the business has: earned, plus money that came from elsewhere, less
 // what was paid out, less what customers still owe. Stock the owner paid for from their own pocket never came out of the
@@ -112,7 +112,7 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
           : "In the drawer, till and bank"}</small>
       </a>}
       {bridge && Number(bridge.in_investments) !== 0 && <NotInvested as="a" href="/admin/money-check" className="soldTotal" total={bridge.in_places}
-        places={bridge.places} money={money} />}
+        places={bridge.places} split={bridge.split} money={money} />}
     </div>
 
     {/* Each part's share of the total. Every share is also written in its card below, so colour is never the only key. */}
