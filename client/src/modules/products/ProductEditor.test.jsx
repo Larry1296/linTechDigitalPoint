@@ -159,3 +159,19 @@ it("asks before taking a product that has stock off the till", async () => {
   expect(patches()).toEqual([]);
   expect(saved).not.toHaveBeenCalled();
 });
+
+it("warns when a service's price and cost look the wrong way round, and saves nothing if you go back", async () => {
+  const { confirmAction } = await import("../../core/ui/alerts");
+  api.mockImplementation(lookups);
+  const saved = vi.fn();
+  const service = { ...cable, product_type: "SERVICE", variants: [{ id: 4, name: "Mix tape", sku: "MIX", barcode: null, selling_price: "10", minimum_price: "0", service_cost: "0", active: true, images: [] }] };
+  render(<ProductEditor product={service} onSaved={saved} onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText("Selling price"), { target: { value: "0" } });
+  fireEvent.change(screen.getByLabelText("Service cost"), { target: { value: "10" } });
+  expect(screen.getByRole("status")).toHaveTextContent("Were they typed the wrong way round?");
+  confirmAction.mockResolvedValueOnce(false);
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({ title: "Check the price and the cost", confirmButtonText: "Save as it is" })));
+  expect(patches()).toEqual([]);
+  expect(saved).not.toHaveBeenCalled();
+});

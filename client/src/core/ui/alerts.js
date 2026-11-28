@@ -6,6 +6,7 @@ export async function confirmAction({
   title,
   text,
   confirmButtonText = "Confirm",
+  cancelButtonText = "Cancel",
   icon = "warning",
 }) {
   const result = await Swal.fire({
@@ -14,7 +15,7 @@ export async function confirmAction({
     icon,
     showCancelButton: true,
     confirmButtonText,
-    cancelButtonText: "Cancel",
+    cancelButtonText,
     reverseButtons: true,
     focusCancel: true,
   });

@@ -553,6 +553,14 @@ def test_service_cost_is_saved_on_a_service(client, shop, branch):
     assert (variant.service_cost, variant.sku, variant.name) == (Decimal("200.00"), "WI-SERVICE", "Standard")
 
 
+def test_a_service_costing_as_much_as_its_price_is_noted(client, shop, branch):
+    """2026-11-28: a service saved with its price and cost the wrong way round counted every sale as all cost."""
+    ShelfStackCategory.objects.create(stack=shop["rack"], category=Category.objects.create(name="Services", slug="services"))
+    swapped = {"name": "Mix tape", "category": "Services", "product_type": "SERVICE", "selling_price": 5, "service_cost": 10}
+    body = post(client, workbook(swapped)).json()
+    assert any("wrong way round" in note for note in body["rows"][0]["notes"])
+
+
 def test_an_empty_sku_is_the_one_the_form_suggests_and_a_reupload_skips_it(client, shop):
     from apps.catalog.product_import import suggested_sku
     assert suggested_sku("Oraimo Type-C cable", "Oraimo", "1m") == "ORAIMO-TCC-1M"

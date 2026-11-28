@@ -148,6 +148,12 @@ label:where(:has(> input[type="radio"])) {
   border-color: #a9c1e8;
   border-left-color: #2f64c4;
 }
+.formNoticeWarning {
+  color: #7a4a00;
+  background: #fff6e0;
+  border-color: #f0cf85;
+  border-left-color: #d08a00;
+}
 .formNoticeSuccess {
   color: #1d5e33;
   background: #e8f6ec;

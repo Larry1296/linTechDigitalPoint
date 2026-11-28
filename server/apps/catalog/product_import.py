@@ -472,6 +472,9 @@ class _Check:
                 row.error("preferred_shelf", "must be empty for a SERVICE: services are not kept on a shelf.")
             if row.barcode:
                 row.error("barcode", "must be empty for a SERVICE: services have no barcode.")
+            if row.service_cost and row.selling_price and row.service_cost >= row.selling_price:
+                row.notes.append(f"service_cost ({row.service_cost}) is {'the same as' if row.service_cost == row.selling_price else 'more than'} "
+                                 f"selling_price ({row.selling_price}), so each sale makes no profit. Check they are not the wrong way round.")
         else:
             if row.service_cost:
                 row.error("service_cost", "is only for SERVICE rows. Leave it empty for stock items.")

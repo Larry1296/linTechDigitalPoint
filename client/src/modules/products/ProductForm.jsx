@@ -9,6 +9,8 @@ import { api } from "../../core/api/client";
 import { FormError } from "../../components/forms/FormNotice";
 import { useAuth } from "../../core/auth/AuthContext";
 import { TextArea, TextBox } from "../../components/forms/TextBox";
+import { confirmAction } from "../../core/ui/alerts";
+import { serviceCostWarning } from "./serviceCost";
 // `defaults` come from where the form was opened (e.g. the category being browsed); every field stays editable.
 export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults = {} }) {
   const { user } = useAuth();
@@ -44,6 +46,9 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
   const [type, setType] = useState(defaults.product_type || "STOCK_ITEM");
   const [shelf, setShelf] = useState(preferredShelf ?? (defaults.shelf ? Number(defaults.shelf) : undefined));
   const [error, setError] = useState("");
+  // Shown as soon as a service's price and cost look the wrong way round, and asked again before saving.
+  const [costWarning, setCostWarning] = useState("");
+  const checkCost = (form) => setCostWarning(type === "SERVICE" ? serviceCostWarning(form.elements.selling_price?.value, form.elements.service_cost?.value) : "");
   const [brandId, setBrandId] = useState(defaults.brand || "");
   const [newBrand, setNewBrand] = useState(null);
   const [brandError, setBrandError] = useState("");
@@ -77,6 +82,8 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
   const save = async (e) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
+    const warning = type === "SERVICE" ? serviceCostWarning(data.get("selling_price"), data.get("service_cost")) : "";
+    if (warning && !(await confirmAction({ title: "Check the price and the cost", text: warning, confirmButtonText: "Save as it is", cancelButtonText: "Go back and fix it" }))) return;
     data.set("preferred_shelf_id", type === "STOCK_ITEM" && shelf ? shelf : "");
     data.set("ecommerce_visible", "true");
     data.set("online_orderable", "true");
@@ -100,7 +107,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
     }
   };
   return (
-    <form className="formCard productForm" onSubmit={save}>
+    <form className="formCard productForm" onSubmit={save} onInput={(e) => checkCost(e.currentTarget)}>
       {onClose && <button type="button" className="pageBackLink" onClick={onClose}>← Back</button>}
       <h2>Add Product</h2>
       {defaults.similarTo ? <p className="muted">Filled in from {defaults.similarTo}. Change what is different about the product you received (at least its name), then receive it.</p>
@@ -235,6 +242,7 @@ export function ProductForm({ zones, onSaved, preferredShelf, onClose, defaults 
             step=".01"
             defaultValue="0"
           />
+          {costWarning && <p className="formNotice formNoticeWarning" role="status">{costWarning}</p>}
           <p className="muted serviceHint">
             Examples: Windows installation, Microsoft Office setup, drivers,
             antivirus, printing, scanning, typing or application installation.

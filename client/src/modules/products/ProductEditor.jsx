@@ -7,6 +7,7 @@ import { businessCurrency } from "../../core/organization/presentation";
 import { ProductPhotos } from "./ProductPhotos";
 import { hasPermission } from "./VariantSummary";
 import { TextArea, TextBox } from "../../components/forms/TextBox";
+import { serviceCostWarning } from "./serviceCost";
 
 const labels = {
   name: "Product name",
@@ -166,6 +167,10 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
         return;
       }
     }
+    const costWarnings = isService && canVariant ? rows.map((v) => [v, serviceCostWarning(v.selling_price, v.service_cost)]).filter(([v, w]) => w && "service_cost" in v) : [];
+    if (costWarnings.length && !(await confirmAction({ title: "Check the price and the cost",
+      text: costWarnings.map(([v, w]) => `${multiple ? `${v.name || "Standard"}: ` : ""}${w}`).join(" "),
+      confirmButtonText: "Save as it is", cancelButtonText: "Go back and fix it" }))) return;
     if (changedBp.length || changedQty.length) {
       const name = (v) => (multiple ? `${v.name}: ` : "");
       const lines = [
@@ -259,6 +264,8 @@ export function ProductEditor({ product, focusVariantId, onSaved, onDeleted, onC
                 {input(field, variant, (value) => setVariants((rows) => rows.map((r) => (r.id === variant.id ? { ...r, [field]: value } : r))))}
               </label>
             ))}
+            {isService && "service_cost" in variant && serviceCostWarning(variant.selling_price, variant.service_cost) &&
+              <p className="formNotice formNoticeWarning" role="status">{serviceCostWarning(variant.selling_price, variant.service_cost)}</p>}
             {!isService && canSeeCost && variant.id in latestLot && (
               <label>
                 Buying price (BP)

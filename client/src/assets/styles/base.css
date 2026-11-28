@@ -47,6 +47,12 @@
   border-color: #2d4f86;
   border-left-color: #60a5fa;
 }
+[data-theme="dark"] .formNoticeWarning {
+  color: #fde68a;
+  background: #33270c;
+  border-color: #7a5a17;
+  border-left-color: #f59e0b;
+}
 [data-theme="dark"] .formNoticeSuccess {
   color: #bbf7d0;
   background: #12301d;
