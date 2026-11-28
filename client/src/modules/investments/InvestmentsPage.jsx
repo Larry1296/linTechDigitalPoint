@@ -622,7 +622,7 @@ function BusinessMoneyForm({ investment, places, onSaved, onCancel }) {
 // buy the stock again) and the profit into your own. The profit is worked out from each sale's cost; you may take less
 // of it, and the rest stays with the business. Services and commission are all profit; running costs paid from the
 // drawer come off the profit.
-function InvestSoldForm({ split, investments, onSaved, onCancel, onAddOwn }) {
+function InvestSoldForm({ split, investments, canRename, onSaved, onChanged, onCancel, onAddOwn }) {
   const businessFunds = investments.filter((i) => !isOwn(i));
   const ownFunds = investments.filter(isOwn);
   const held = Number(split?.held || 0);
@@ -659,6 +659,30 @@ function InvestSoldForm({ split, investments, onSaved, onCancel, onAddOwn }) {
     <div className="actionRow"><button type="button" className="secondary" onClick={onCancel}>Close</button></div>
   </section>;
   const needOwn = taken > 0 && !ownFunds.length;
+  // An account that already holds your own money (business and own money kept together) becomes your own: its business
+  // money moves to the business's other account first, then it is marked as yours, in one step.
+  const mixed = needOwn && canRename ? businessFunds.filter((i) => Number(i.owner_value) > 0.004
+    && (Number(i.shop_value) <= 0.004 || businessFunds.some((other) => other.id !== i.id))) : [];
+  const makeOwn = async (account) => {
+    const target = businessFunds.find((i) => i.id !== account.id);
+    const business = Number(account.shop_value) > 0.004;
+    if (business && !target) { setError(`Add the business's own account first: the business's ${money(account.shop_value)} in ${account.name} moves there.`); return; }
+    if (!(await confirmAction({ title: `Make ${account.name} your own account?`,
+      text: (business ? `The business's ${money(account.shop_value)} in it (with its interest) moves to ${target.name}, staying the business's money. ` : "")
+        + `${account.name} keeps your own ${money(account.owner_value)}, and the interest it earns from now on is yours.`,
+      confirmButtonText: "Make it my own" }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (business) await api(`/api/v1/accounting/investments/${account.id}/transfer/`, { method: "POST", body: JSON.stringify({
+        to: target.id, amount: String(Number(account.shop_value)), whose: BUSINESS, make_own: true, idempotency_key: crypto.randomUUID() }) });
+      else await api(`/api/v1/accounting/investments/${account.id}/holder/`, { method: "POST", body: JSON.stringify({ holder: OWN_ACCOUNT }) });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
   return (
     <form className="formCard" onSubmit={(event) => void submit(event)} aria-label="Invest what was sold">
       <h2>Invest what was sold</h2>
@@ -682,9 +706,15 @@ function InvestSoldForm({ split, investments, onSaved, onCancel, onAddOwn }) {
         <div><dt>Profit → your own account<small>Yours: out of the business's books from now on</small></dt><dd>{money(taken)}</dd></div>
         <div><dt>Cost of goods → the business's account<small>Still the business's money, to buy the stock again</small></dt><dd>{money(cost)}</dd></div>
       </dl>
-      {needOwn && <p className="investWarning">You have no account marked as your own yet. Add it, then come back here.</p>}
+      {needOwn && (mixed.length
+        ? <p className="investWarning">No account is marked as your own yet. {mixed.map((i) => i.name).join(" and ")} already {mixed.length > 1 ? "hold" : "holds"} your
+          own money: make it your own{Number(mixed[0].shop_value) > 0.004 ? `, and the business's ${money(mixed[0].shop_value)} in it moves to ${businessFunds.find((i) => i.id !== mixed[0].id)?.name || "the business's other account"}` : ""}.</p>
+        : <p className="investWarning">You have no account marked as your own yet. Add it, then come back here.</p>)}
       <div className="actionRow">
-        {needOwn ? <button type="button" onClick={onAddOwn}>Add my own account</button> : <button disabled={busy}>Invest it</button>}
+        {needOwn ? <>
+          {mixed.map((i) => <button key={i.id} type="button" disabled={busy} onClick={() => void makeOwn(i)}>Make {i.name} my own</button>)}
+          <button type="button" className={mixed.length ? "secondary" : undefined} onClick={onAddOwn}>Add {mixed.length ? "another" : "my own"} account</button>
+        </> : <button disabled={busy}>Invest it</button>}
         <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
       </div>
       <FormError title="Could not invest it." message={error} />
@@ -1022,7 +1052,8 @@ export function InvestmentsPage() {
         {canMove && <button type="button" onClick={() => setPreset({ id: due[0].id, kind: "MONTHLY", nonce: Date.now() })}>
           Do the check{due.length > 1 ? ` for ${due[0].name}` : ""}</button>}
       </section>}
-      {investing && <InvestSoldForm split={split} investments={data.investments} onCancel={() => setInvesting(false)}
+      {investing && <InvestSoldForm key={data.investments.map((i) => `${i.id}${i.holder}`).join()} split={split} investments={data.investments}
+        canRename={can("accounting.add_investment")} onChanged={load} onCancel={() => setInvesting(false)}
         onAddOwn={() => { setInvesting(false); setAdding("own"); }}
         onSaved={async () => { setInvesting(false); await load(); }} />}
       {choosing && <AddMoneyChooser investments={data.investments} onCancel={() => setChoosing(false)}

@@ -512,3 +512,16 @@ it("moves the business's money to its own account and can make the old one your 
   const sent = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/accounting/investments/3/transfer/")[1].body);
   expect(sent).toMatchObject({ to: 6, amount: "12150", whose: "BUSINESS", make_own: true });
 });
+
+it("makes the account already holding your own money yours, moving its business money to the business's account", async () => {
+  const fresh = { ...mmf, id: 6, name: "CIC MMF BUSINESS ACCOUNT", holder: "BUSINESS", value: "0.00", shop_value: "0.00", owner_value: "0.00", movements: [] };
+  api.mockImplementation(async (path, options) => (options?.method === "POST" ? {} : { ...listing(mmf),
+    investments: [{ ...listing(mmf).investments[0], holder: "BUSINESS" }, fresh], business_in_places: "80.00", business_places: [],
+    not_invested_split: { held: "80.00", cost: "18.47", profit: "61.53", gross_profit: "61.53", running_costs: "0.00" } }));
+  render(<InvestmentsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Invest what was sold" }));
+  expect(screen.getByText(/Sanlam MMF already holds your own money/)).toHaveTextContent("the business's KSh 12,150 in it moves to CIC MMF BUSINESS ACCOUNT");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Make Sanlam MMF my own" })); });
+  const sent = JSON.parse(api.mock.calls.find(([path]) => path === "/api/v1/accounting/investments/3/transfer/")[1].body);
+  expect(sent).toMatchObject({ to: 6, amount: "12150", whose: "BUSINESS", make_own: true });
+});
