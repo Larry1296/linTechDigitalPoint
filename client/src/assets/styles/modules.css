@@ -3677,3 +3677,7 @@ a.notInvested.soldTotal:hover, a.notInvested.soldTotal:focus-visible { border-co
 .mkopaNow .actionRow { margin-top: 12px; }
 .mkopaCountFields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 10px 12px; margin: 4px 0 8px; }
 .mkopaCheck { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-weight: 600; }
+
+/* The 30-second warning before a lock: the page stays dimly in view behind it, and the count is the first thing read. */
+.sessionLockBackdrop.lockWarningBackdrop { background:#071426b8; backdrop-filter:blur(4px); }
+.lockWarningCard > button { justify-self:stretch; }

@@ -6,6 +6,7 @@ import { PasswordField } from "../../components/forms/PasswordField";
 import { FormError } from "../../components/forms/FormNotice";
 import { Loading } from "../../components/States";
 import { PinField } from "./PinField";
+import { LockCountdown, WARNING_MS } from "./LockCountdown";
 
 const STATUS = "/api/v1/auth/protected/";
 // A private page left untouched this long locks again, so figures are not left on a screen customers can see.
@@ -39,12 +40,15 @@ export function ProtectedPages() {
     };
   }, [check]);
   const open = Boolean(state?.pages[page]?.unlocked);
-  useIdleLock(open, lockNow);
+  const [warnEnds, keepOpen] = useIdleLock(open, lockNow);
   if (!state) return error ? <FormError message={error} /> : <Loading />;
   if (open) return <>
     <p className="protectedBar"><ShieldCheck size={16} aria-hidden="true" /> Private page. It locks after 5 minutes untouched.
       <button type="button" className="linkButton" onClick={() => void lockNow()}>Lock now</button></p>
     <Outlet />
+    {warnEnds != null && <LockCountdown endsAt={warnEnds} title={`${state.pages[page].label || "This page"} is about to lock`}
+      message="Nobody has touched this private page for a while. It locks when the count reaches 0, and then opens again only with the PIN."
+      onStay={keepOpen} onLockNow={() => void lockNow()} />}
   </>;
   return <LockArea><PrivatePageLock page={page} state={state} onOpen={setState} /></LockArea>;
 }
@@ -72,17 +76,26 @@ function LockArea({ children }) {
 }
 
 // Locks the open private page once nobody has touched the screen or keyboard for PRIVATE_IDLE_MS, also while the tab
-// was hidden or the computer asleep (the time is measured, not counted down).
+// was hidden or the computer asleep (the time is measured, not counted down). For the last 30 seconds a warning counts
+// down; then only its "Keep it open" keeps the page open (touching elsewhere does not), so nobody answering locks it.
+// Gives the time the page locks while the warning shows, or null.
 function useIdleLock(open, lockNow) {
   const last = useRef(0);
+  const warned = useRef(false);
+  const [warnEnds, setWarnEnds] = useState(null);
+  const keepOpen = useCallback(() => { last.current = Date.now(); warned.current = false; setWarnEnds(null); }, []);
   useEffect(() => {
-    if (!open) return;
+    if (!open) { warned.current = false; setWarnEnds(null); return; }
     last.current = Date.now();
-    const touched = (event) => { if (event.isTrusted) last.current = Date.now(); };
-    const check = () => { if (Date.now() - last.current >= PRIVATE_IDLE_MS) void lockNow(); };
+    const touched = (event) => { if (event.isTrusted && !warned.current) last.current = Date.now(); };
+    const check = () => {
+      const idle = Date.now() - last.current;
+      if (idle >= PRIVATE_IDLE_MS) { warned.current = false; setWarnEnds(null); void lockNow(); }
+      else if (idle >= PRIVATE_IDLE_MS - WARNING_MS && !warned.current) { warned.current = true; setWarnEnds(last.current + PRIVATE_IDLE_MS); }
+    };
     const events = ["pointerdown", "keydown", "wheel", "touchstart"];
     for (const event of events) window.addEventListener(event, touched, { passive: true, capture: true });
-    const timer = window.setInterval(check, 5000);
+    const timer = window.setInterval(check, 1000);
     document.addEventListener("visibilitychange", check);
     return () => {
       for (const event of events) window.removeEventListener(event, touched, { capture: true });
@@ -90,6 +103,7 @@ function useIdleLock(open, lockNow) {
       document.removeEventListener("visibilitychange", check);
     };
   }, [open, lockNow]);
+  return [warnEnds, keepOpen];
 }
 
 function PrivatePageLock({ page, state, onOpen }) {

@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { api, ApiError, resetCsrfToken, setActiveOrganization, setActiveBranch, setWorkspaceLocked, clearAccessToken, refreshAccess, accessNeedsRefresh } from "../api/client";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SessionLockOverlay } from "./SessionLockOverlay";
+import { LockCountdown, WARNING_MS } from "./LockCountdown";
 import { forgetPasswordLength, rememberPasswordLength } from "./passwordLength";
 import { biometricAvailable, cancelled, deviceCheck, keyHere, signInWithKey, signWithKey } from "./biometric";
 
@@ -32,6 +33,9 @@ export function AuthProvider({ children }) {
   const access = useRef({ deadline: null, locked: false, serverTime: 0 });
   const lockGeneration = useRef(0);
   const lastRefreshAttempt = useRef(0);
+  // When the session's 12 hours are about to end: the time the workspace locks, shown 30 seconds before as a countdown.
+  const [endsSoon, setEndsSoon] = useState(null);
+  const [keeping, setKeeping] = useState(false);
 
   // The length of the person's own lock PIN, known while the workspace is open, so a lock they make shows the PIN entry
   // from its first moment instead of the password while the server confirms it.
@@ -171,8 +175,10 @@ export function AuthProvider({ children }) {
     // before it runs out, so the session stays open for its 12 hours and a customer's question is answered at once.
     // It locks only when the person locks it, or when those 12 hours end (then the password starts it afresh).
     const tick = () => {
-      if (access.current.locked || access.current.deadline == null) return;
-      if (access.current.deadline <= Date.now()) lock(null);
+      if (access.current.locked || access.current.deadline == null) { setEndsSoon(null); return; }
+      const left = access.current.deadline - Date.now();
+      setEndsSoon(left > 0 && left <= WARNING_MS ? access.current.deadline : null);
+      if (left <= 0) lock(null);
       else if (accessNeedsRefresh() && Date.now() - lastRefreshAttempt.current >= 15000) {
         lastRefreshAttempt.current = Date.now();
         void refreshAccess().catch(() => {});
@@ -317,6 +323,19 @@ export function AuthProvider({ children }) {
     broadcast("logout");
     navigate("/", { replace: true });
   };
+  // "Keep it open" on the warning before the session's 12 hours end: the person is here, so it runs a fresh 12 hours.
+  // Other tabs pick up the new end through the shared session event.
+  const keepOpen = async () => {
+    if (keeping) return;
+    setKeeping(true);
+    try {
+      const data = await api("/api/v1/auth/keep-open/", { method: "POST" });
+      updateAccess(data.session);
+      setEndsSoon(null);
+      broadcast("kept-open");
+    } catch { /* The lock comes at its time; the password then opens a fresh session. */ }
+    finally { setKeeping(false); }
+  };
   // The lock only ever applies to the authenticated workspace (/admin and business set-up): a valid
   // device session picked up while browsing the public site must never hide or
   // overlay-lock public pages like the homepage, /login, or /register.
@@ -324,6 +343,10 @@ export function AuthProvider({ children }) {
   const overlay = Boolean(user) && lockedHere;
   return <AuthContext.Provider value={{ user, loading, sessionExpired, locked, authState, lock, refresh, signedIn, logout }}>
     <div className="sessionWorkspace" style={lockedHere ? { visibility: "hidden" } : undefined} inert={overlay ? true : undefined} aria-hidden={overlay ? true : undefined}>{children}</div>
+    {Boolean(user) && inWorkspace && !locked && endsSoon != null && <LockCountdown endsAt={endsSoon} busy={keeping}
+      title="The app is about to lock"
+      message="You signed in 12 hours ago. It locks when the count reaches 0, and then opens again with your password. Keep it open if you are still working."
+      onStay={() => void keepOpen()} onLockNow={() => lock()} />}
     {overlay && <SessionLockOverlay username={user.username} pinLength={pinLength} busy={busy} error={lockError}
       biometric={deviceCan && Boolean(keyHere(user.id))} onBiometric={unlockWithBiometric}
       onUnlock={unlock} onPin={unlockWithPin} onLogout={() => logout().catch(error => setLockError(error.message))} />}

@@ -110,6 +110,34 @@ it("locks an open private page after five minutes untouched", async () => {
   expect(api).toHaveBeenCalledWith("/api/v1/auth/protected/lock/", { method: "POST" });
 });
 
+it("warns 30 seconds before a private page locks, and only Keep it open keeps it open", async () => {
+  vi.useFakeTimers();
+  let open = true;
+  api.mockImplementation(async (path) => {
+    if (path.endsWith("protected/lock/")) open = false;
+    return { protected: status({ pages: pages({ unlocked: open }) }) };
+  });
+  page();
+  await act(async () => {});
+  await act(async () => { vi.advanceTimersByTime(PRIVATE_IDLE_MS - 29000); });
+  const warning = screen.getByRole("alertdialog");
+  expect(warning).toHaveTextContent("M-Pesa is about to lock");
+  expect(warning).toHaveTextContent("29");
+  fireEvent.click(screen.getByRole("button", { name: "Keep it open" }));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  await act(async () => { vi.advanceTimersByTime(PRIVATE_IDLE_MS - 31000); });
+  expect(screen.getByText("M-Pesa records")).toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith("/api/v1/auth/protected/lock/", { method: "POST" });
+  // Nobody answers this time: a touch elsewhere does not stop it, and at 0 it locks.
+  await act(async () => { vi.advanceTimersByTime(5000); });
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  fireEvent.pointerDown(window);
+  await act(async () => { vi.advanceTimersByTime(31000); });
+  await act(async () => {});
+  expect(screen.getByLabelText("PIN")).toBeInTheDocument();
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+});
+
 it("keeps letters out of a new PIN as it is typed", async () => {
   api.mockImplementation(async () => ({ protected: status({ pages: pages({ pin_set: false, pin_length: null }) }) }));
   page();

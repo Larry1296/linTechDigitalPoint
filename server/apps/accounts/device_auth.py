@@ -18,7 +18,7 @@ COOKIE_PATH = '/api/v1/auth/'
 # The workspace locks this long before the session's absolute end, so the person is asked for their password (which
 # starts the session afresh) instead of a save failing because the session ended.
 LOCK_BEFORE_END = 600
-COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'biometric/unlock', 'lock', 'logout'}
+COOKIE_ENDPOINTS = {'me', 'session', 'refresh', 'unlock', 'biometric/unlock', 'lock', 'logout', 'keep-open'}
 PUBLIC_ENDPOINTS = {'csrf', 'login', 'biometric/sign-in/start', 'biometric/sign-in', 'password/reset', 'password/reset/confirm'}
 # Outside /auth/ but for people not signed in: a token left from an earlier sign-in must not stop someone registering.
 PUBLIC_PATHS = {'/api/v1/tenancy/register/'}
@@ -175,7 +175,7 @@ class DeviceAuthenticationMiddleware:
                         error=guard(request)
                 except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
                     error=JsonResponse({'detail':'Sign in again or refresh your session.','code':'token_expired'},status=401)
-        if endpoint in COOKIE_ENDPOINTS and endpoint not in {'session','me','unlock','biometric/unlock','lock','logout','refresh'}:
+        if endpoint in COOKIE_ENDPOINTS and endpoint not in {'session','me','unlock','biometric/unlock','lock','logout','refresh','keep-open'}:
             error=JsonResponse({'detail':'Authentication required.'},status=401)
         response=error or self.get_response(request)
         response['Cache-Control']='private, no-store'

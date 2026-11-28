@@ -125,6 +125,32 @@ def lock(request):
 @permission_classes([permissions.AllowAny])
 @csrf_protect
 @transaction.atomic
+def keep_open(request):
+    """"Keep it open" on the 30-second warning before the session's 12 hours end: the person is at the screen and
+    chose to stay, so the session starts a fresh 12 hours, as a sign-in does. Only an open session can be kept open;
+    once it has locked, only the password (or fingerprint) opens it."""
+    credential=cookie_credential(request)
+    if not credential or credential.consumed_at or not valid(credential.session):
+        return Response({'detail':'Your session ended. Sign in again.','code':'session_expired'},status=401)
+    device=DeviceSession.objects.select_for_update().select_related('user').get(pk=credential.session_id)
+    credential.refresh_from_db()
+    if credential.consumed_at:
+        return Response({'detail':'Session changed. Please try again.','code':'refresh_conflict'},status=409)
+    if state(device)['locked']:
+        return locked_response(device)
+    now=timezone.now()
+    device.expires_at=now+timedelta(seconds=settings.DEVICE_ABSOLUTE_SECONDS);device.last_user_activity_at=now
+    device.save(update_fields=['expires_at','last_user_activity_at'])
+    credential.consumed_at=now;credential.save(update_fields=['consumed_at'])
+    raw=issue_credential(device)
+    SessionAudit.objects.create(session=device,event='KEEP_OPEN')
+    return set_cookie(Response(payload(request,device,True)),raw,device)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@csrf_protect
+@transaction.atomic
 def unlock(request):
     credential=cookie_credential(request)
     if not credential or credential.consumed_at:

@@ -130,3 +130,27 @@ it("a fresh password login replaces a stale locked session instead of showing th
   expect(screen.getByText("Dashboard")).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+it("counts down 30 seconds before the 12 hours end, and Keep it open starts a fresh 12 hours", async () => {
+  await mount();
+  api.mockImplementation(async (path) => {
+    if (path.endsWith("/keep-open/")) deadline = Date.now() / 1000 + TWELVE_HOURS - 600;
+    return identity();
+  });
+  await advance((TWELVE_HOURS - 600 - 31) * 1000);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  await advance(2000);
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("The app is about to lock");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Keep it open" })); });
+  expect(api).toHaveBeenCalledWith("/api/v1/auth/keep-open/", { method: "POST" });
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  await advance(60 * 1000);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+it("locks at 0 when nobody keeps it open", async () => {
+  await mount();
+  await advance((TWELVE_HOURS - 600 - 20) * 1000);
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  await advance(21 * 1000);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toHaveTextContent("Workspace locked");
+});

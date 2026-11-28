@@ -206,6 +206,30 @@ def test_session_locks_before_its_end_and_unlocking_starts_it_afresh(settings):
 
 
 @pytest.mark.django_db
+def test_keep_open_gives_an_open_session_a_fresh_twelve_hours_but_never_opens_a_lock(settings):
+    from datetime import timedelta
+    from apps.accounts.device_auth import COOKIE, create_device
+    user = User.objects.create_user("staying-user", password="Strong-pass-1296")
+    device, raw = create_device(user)
+    # 30 seconds before the lock (the lock comes 10 minutes before the absolute end).
+    device.expires_at = timezone.now() + timedelta(seconds=630)
+    device.save(update_fields=["expires_at"])
+    client = APIClient()
+    client.cookies[COOKIE] = raw
+    response = client.post("/api/v1/auth/keep-open/", {}, format="json")
+    assert response.status_code == 200
+    assert response.data["session"]["locked"] is False
+    assert response.data["access_token"]
+    device.refresh_from_db()
+    assert device.expires_at > timezone.now() + timedelta(seconds=settings.DEVICE_ABSOLUTE_SECONDS - 60)
+    # Too late: once the session has locked, keeping it open does not open it.
+    device.expires_at = timezone.now() + timedelta(minutes=5)
+    device.save(update_fields=["expires_at"])
+    assert client.post("/api/v1/auth/keep-open/", {}, format="json").status_code == 423
+    assert APIClient().post("/api/v1/auth/keep-open/", {}, format="json").status_code == 401
+
+
+@pytest.mark.django_db
 def test_password_reset_sends_email_with_link_to_the_app(settings):
     """Django's admin ships its own registration/password_reset_email.html that links to a page this app has not got;
     the reset must use the app's own email (it once crashed every reset with a server error)."""
