@@ -94,3 +94,12 @@ test("shows nothing is left to invest when every place is empty", () => {
   expect(tile).not.toHaveClass("below");
   expect(tile).toHaveTextContent("Everything is invested");
 });
+
+test("shows the business's money now split into cost of goods and profit, with the interest in it", () => {
+  const bridge = { money_now: "34814.08", in_places: "80.00", in_investments: "34734.08", interest: "911.08", funds: ["CIC MMF"], lines: [],
+    money_split: { total: "34814.08", cost: "19930.02", profit: "14884.06", interest: "911.08" } };
+  render(<SoldSummary sold={{ ...sold, total: "30000.00" }} bridge={bridge} money={money} />);
+  const card = screen.getByRole("link", { name: /The business's money now/ });
+  expect(card).toHaveTextContent("Cost of goods KES 19,930.02 · buys the stock again");
+  expect(card).toHaveTextContent("Profit KES 14,884.06 · with KES 911.08 interest");
+});

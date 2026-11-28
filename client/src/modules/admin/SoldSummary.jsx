@@ -110,6 +110,10 @@ export function SoldSummary({ sold, since, owedSales, bridge, money }) {
         <small>{!Number(bridge.in_places) && Number(bridge.in_investments) ? "All of it kept in investments"
           : Number(bridge.in_investments) ? `${money(bridge.in_investments)} in ${bridge.funds?.length === 1 ? bridge.funds[0] : "investments"} · ${money(bridge.in_places)} sold, not invested yet`
           : "In the drawer, till and bank"}</small>
+        {bridge.money_split && Number(bridge.money_split.total) > 0.004 && <small className="notInvestedSplit">
+          <span>Cost of goods <b>{money(bridge.money_split.cost)}</b> · buys the stock again</span>
+          <span>Profit <b>{money(bridge.money_split.profit)}</b>{Number(bridge.money_split.interest) > 0.004 ? ` · with ${money(bridge.money_split.interest)} interest` : ""}</span>
+        </small>}
       </a>}
       {bridge && Number(bridge.in_investments) !== 0 && <NotInvested as="a" href="/admin/money-check" className="soldTotal" total={bridge.in_places}
         places={bridge.places} split={bridge.split} money={money} />}

@@ -1011,3 +1011,22 @@ def test_interest_in_your_own_account_is_yours_and_an_account_with_business_mone
     refused = client.post(f"/api/v1/accounting/investments/{business}/holder/", {"holder": "OWN"}, format="json")
     assert refused.status_code == 400 and "business's money" in str(refused.json())
     assert client.post(f"/api/v1/accounting/investments/{own}/holder/", {"holder": "BUSINESS"}, format="json").json()["holder"] == "BUSINESS"
+
+
+def test_the_businesss_money_splits_into_cost_of_goods_and_profit_with_its_interest(shop):
+    """2026-11-28, owner: the business's money card shows what was profit and what was cost of goods. Money moved into
+    an investment is the same money; its interest is profit; it all adds up to the money in places and investments."""
+    client, org, owner, *_ = shop
+    business = _mmf(client)
+    with organization_context(org):
+        from apps.accounting.services import post
+        post(unit="SHOP", method="CASH", amount=D("1000"), cogs=D("600"), kind="INCOME", reference="Sales", key="s1", user=owner)
+    assert _move(client, business, "DEPOSIT", "1000", "BUSINESS", "in", place="CASH").status_code == 201
+    assert client.post(f"/api/v1/accounting/investments/{business}/statement/", {"balance": "1050", "idempotency_key": "st"}, format="json").status_code == 201
+    with organization_context(org):
+        post(unit="CYBER", method="CASH", amount=D("200"), kind="INCOME", reference="Printing", key="s2", user=owner)
+    whole = client.get("/api/v1/accounting/investments/").json()["business_money_split"]
+    assert (D(str(whole["cost"])), D(str(whole["profit"])), D(str(whole["interest"]))) == (D("600"), D("650"), D("50"))
+    assert D(str(whole["total"])) == D("1250")  # 1,050 in the fund + 200 in the drawer
+    kept = whole["in_investments"]
+    assert (D(str(kept["cost"])), D(str(kept["profit"]))) == (D("600"), D("450"))

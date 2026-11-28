@@ -934,6 +934,49 @@ def split(at=None):
     return {"held": held, "cost": cost, "profit": profit, "gross_profit": gross, "running_costs": spent}
 
 
+def _bucket(cost, profit, kind, amount, cogs):
+    """One cash-book line into (cost, profit), as split() reads them; one side below zero is covered by the other."""
+    if kind == "INCOME":
+        cost, profit = cost + cogs, profit + amount - cogs
+    elif kind in ("EXPENSE", "DRAWING", "EARNED"):
+        profit += amount
+    else:
+        cost += amount
+    if cost < 0 < profit:
+        profit, cost = profit + cost, Decimal("0")
+    elif profit < 0 < cost:
+        cost, profit = cost + profit, Decimal("0")
+    return cost, profit
+
+
+def business_split():
+    """All of the business's money (its drawer, till and bank and its money in investments) split the way split() does:
+    what the goods sold had cost (the money that buys the stock again) and the profit, with the interest its
+    investments earned (less fees) counted in the profit. Money moved between a place and an investment is the same
+    money, so it is left out; stock paid from an investment comes off the cost. {"total", "cost", "profit", "interest",
+    "in_investments": {"cost", "profit"}} where in_investments is the part kept in investments (the rest is in places)."""
+    rows = CashEntry.objects.filter(account__payment_method__in=BUSINESS).exclude(kind="INVESTMENT")
+    lines = [(at, pk, kind, amount, cogs) for at, pk, kind, amount, cogs in
+             rows.values_list("occurred_at", "pk", "kind", "amount", "cogs").iterator()]
+    earned = InvestmentMovement.objects.filter(kind__in=(InvestmentMovement.INTEREST, InvestmentMovement.FEE), reversed_at__isnull=True,
+                                               investment__holder=Investment.BUSINESS)
+    interest = Decimal("0")
+    for day, pk, kind, amount in earned.values_list("occurred_on", "pk", "kind", "business_amount"):
+        signed = SIGN[kind] * (amount or Decimal("0"))
+        interest += signed
+        lines.append((timezone.make_aware(datetime.combine(day, time.max)), -pk, "EARNED", signed, Decimal("0")))
+    cost = profit = Decimal("0")
+    for *_, kind, amount, cogs in sorted(lines, key=lambda line: (line[0], line[1])):
+        cost, profit = _bucket(cost, profit, kind, amount, cogs)
+    places = split()
+    kept = {"cost": cost - max(places["cost"], Decimal("0")), "profit": profit - places["profit"]}
+    if kept["cost"] < 0 < kept["profit"]:
+        kept = {"cost": Decimal("0"), "profit": kept["profit"] + kept["cost"]}
+    elif kept["profit"] < 0 < kept["cost"]:
+        kept = {"cost": kept["cost"] + kept["profit"], "profit": Decimal("0")}
+    return {"total": cost + profit, "cost": cost, "profit": profit, "interest": interest, "in_investments": kept}
+
+
 @transaction.atomic
 def invest_sold(*, business_fund, own_fund=None, user, key, occurred_on=None, profit=None):
     """Everything sold and not invested yet goes in, in two parts (2026-11-28, owner: "the profit to go to my personal

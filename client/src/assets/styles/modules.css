@@ -3688,8 +3688,8 @@ a.notInvested.soldTotal:hover, a.notInvested.soldTotal:focus-visible { border-co
 .sessionLockBackdrop.lockWarningBackdrop { background:#071426b8; backdrop-filter:blur(4px); }
 .lockWarningCard > button { justify-self:stretch; }
 /* What the money not invested yet is: the goods' cost for the business's account, the profit for the owner's own. */
-.notInvested .notInvestedSplit { display: grid; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-.notInvested .notInvestedSplit b { color: var(--text); }
+.notInvestedSplit { display: grid; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.notInvestedSplit b { color: var(--text); }
 .investHolder { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700;
   color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .investHolder.own { color: #067647; background: color-mix(in srgb, #12b76a 16%, transparent); }

@@ -12,7 +12,7 @@ from apps.tenancy.permissions import has_business_permission
 from . import fund_rates
 from .investment_interest import (current_rate, day_by_day, due, earnings, estimate, first_rate, month_label, month_of, rate_now, record_month,
                                   statement_checks)
-from .investments import KINDS, SOURCES, business_money_in, invest_sold, set_holder, split, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
+from .investments import KINDS, SOURCES, business_money_in, business_split, invest_sold, set_holder, split, business_sources, business_places, claim, kind_row, move, open_investment, record_statement, remove, settle_books, shares, switch_half, totals, undo, value
 from .models import Investment, InvestmentMovement
 
 
@@ -133,6 +133,8 @@ class InvestmentsView(APIView):
                          "business_places": each,
                          # The same money split into what the goods cost (for the business's account) and the profit (for yours).
                          "not_invested_split": split(),
+                         # All the business's money split the same way, and the part of it kept in investments.
+                         "business_money_split": business_split(),
                          "from_shop": sum((r["from_shop"] for r in rows), Decimal("0")),
                          "from_owner": sum((r["from_owner"] for r in rows), Decimal("0")),
                          "invested": sum((r["invested"] for r in rows), Decimal("0")),

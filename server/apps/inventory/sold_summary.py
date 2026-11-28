@@ -136,11 +136,13 @@ def money_bridge(sold_total, interest):
     in_places = sum(by_kind.values(), ZERO)
     kept = kept_in_investments()
     invested = kept["total"]
-    from apps.accounting.investments import business_places, split
+    from apps.accounting.investments import business_places, business_split, split
     return {"lines": [{"key": key, "amount": amount} for key, amount in lines if amount],
             "money_now": in_places + invested, "in_places": in_places, "in_investments": invested, "interest": interest,
             "funds": [row["name"] for row in kept["accounts"]],
             # Not invested yet, place by place (the drawer, till, bank): what each should hold of the business's money.
             "places": [{"label": row["label"], "amount": row["expected"]} for row in business_places()],
             # The same money, split into what the goods cost (stays the business's) and the profit (the owner's to take).
-            "split": split()}
+            "split": split(),
+            # The business's money now, split the same way: what the goods cost and the profit (interest in it).
+            "money_split": business_split()}

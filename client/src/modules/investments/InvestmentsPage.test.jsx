@@ -485,3 +485,12 @@ it("asks for your own account first when there is profit to take and none is mar
   const form = screen.getByRole("form", { name: "New investment" });
   expect(within(form).getByLabelText(/My own/)).toBeChecked();
 });
+
+it("splits the business's money in its investments into cost of goods and profit", async () => {
+  api.mockImplementation(async () => ({ ...listing(mmf), business_money_split: { total: "12230", cost: "7000", profit: "5150", interest: "150",
+    in_investments: { cost: "7000", profit: "5150" } } }));
+  render(<InvestmentsPage />);
+  const card = (await screen.findByText("The business's money")).closest("article");
+  expect(card).toHaveTextContent("Cost of goods KSh 7,000 · buys the stock again");
+  expect(card).toHaveTextContent("Profit KSh 5,150 · with KSh 150 interest");
+});

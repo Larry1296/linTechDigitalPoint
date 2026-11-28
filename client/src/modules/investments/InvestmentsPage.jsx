@@ -29,6 +29,16 @@ const APART = "The M-Pesa agency's cash and float are never used.";
 const KIND = { DEPOSIT: "Put in", WITHDRAWAL: "Taken out", INTEREST: "Interest", FEE: "Fees or loss" };
 const money = (value) => `${businessCurrency()} ${Number(value || 0).toLocaleString()}`;
 
+// What the business's money is: what the goods sold had cost (it buys the stock again, with the money the business
+// started with) and the profit, with the interest in it. The two add up to the figure above them.
+export function MoneySplit({ split, interest }) {
+  if (!split || Number(split.cost) + Number(split.profit) <= 0.004) return null;
+  return <small className="notInvestedSplit moneySplit">
+    <span>Cost of goods <b>{money(split.cost)}</b> · buys the stock again</span>
+    <span>Profit <b>{money(split.profit)}</b>{Number(interest) > 0.004 ? ` · with ${money(interest)} interest` : ""}</span>
+  </small>;
+}
+
 // Where the business's money in its investments came from, line by line, so the owner sees it at a glance: each part's
 // money put in (the shop's sales, services, the M-Pesa agency's commission) and the interest the investments earned.
 // The shop's money is split, at its own figures since it started, into what the goods it sold had cost (the money that
@@ -918,7 +928,8 @@ export function InvestmentsPage() {
             <small>+ {money(data.estimated_interest)} interest since the statement</small></article>}
         {Number(data.total_value) > 0 && <>
           <article><span>The business's money</span><strong>{money(data.shop_value)}</strong>
-            <small>From its parts, plus all interest; the lines are below</small></article>
+            <small>From its parts, plus all interest; the lines are below</small>
+            <MoneySplit split={data.business_money_split?.in_investments} interest={data.business_money_split?.interest} /></article>
           <article><span>Your own money</span><strong>{money(data.owner_value)}</strong>
             <small>Kept out of the business's books</small></article>
         </>}
